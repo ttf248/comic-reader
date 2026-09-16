@@ -1,5 +1,10 @@
 import { useEffect, useMemo } from "react";
-import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { LibraryRevisionChangedError, libraryApi } from "../api/library";
 import { ACTIVITY_CHANGED_EVENT } from "../api/activity";
 
@@ -110,10 +115,13 @@ export function useLibraryChildren(
 }
 
 export function useAlbumMedia(albumId: string, expectedRevision?: number) {
-  return useQuery({
+  // 详情页只先取首屏媒体；调用方在虚拟网格接近末尾时继续取下一页。
+  // 阅读器仍可使用 libraryApi.allMedia 一次性建立跨页导航上下文。
+  return useInfiniteQuery({
     queryKey: [...libraryQueryKeys.media(albumId), expectedRevision],
-    queryFn: async () => {
-      const page = await libraryApi.allMedia(albumId);
+    queryFn: async ({ pageParam }) => {
+      const response = await libraryApi.mediaPage(albumId, pageParam);
+      const page = response.page;
       if (
         expectedRevision !== undefined &&
         page.revision !== expectedRevision
@@ -122,6 +130,8 @@ export function useAlbumMedia(albumId: string, expectedRevision?: number) {
       }
       return page;
     },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor,
     enabled: albumId.length > 0,
   });
 }

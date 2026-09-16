@@ -6,7 +6,7 @@ import { useFavorites } from "../hooks/useFavorites";
 import { useGalleryContextSync } from "../hooks/useGalleryContextSync";
 import { historyApi } from "../api/prefs";
 import { thumbUrl } from "../api/thumbs";
-import { getVideoInfo } from "../api/videos";
+import { getVideoInfoBatch } from "../api/videos";
 import { useUIStore } from "../store/uiStore";
 import type { CardData } from "../components/album/AlbumGrid";
 import AlbumGrid from "../components/album/AlbumGrid";
@@ -15,7 +15,7 @@ import { groupAlbumsAndCollectionsByYear } from "../utils/albumGrouping";
 import EmptyState from "../components/common/EmptyState";
 import { decodeFavPath } from "../utils/path";
 import { formatRelative } from "../utils/date";
-import { formatSize, formatDuration } from "../utils/format";
+import { formatSize } from "../utils/format";
 import {
   ChevronLeftIcon,
   ReaderIcon,
@@ -37,6 +37,8 @@ import { useAlbumActions } from "../hooks/useAlbumActions";
 import PropertiesDialog from "../components/common/PropertiesDialog";
 import ContextMenu, { type AnyMenuItem } from "../components/album/ContextMenu";
 import VideoCoverImage from "../components/common/VideoCoverImage";
+import MediaThumbnailGrid from "../components/album/MediaThumbnailGrid";
+import VideoThumbnailGrid from "../components/album/VideoThumbnailGrid";
 import { fsCapabilities } from "../api/fs";
 import type { GalleryContextEntry } from "../utils/galleryContext";
 import {
@@ -166,11 +168,16 @@ export default function Album() {
     if (revisionChanged) void refetchNode();
   }, [refetchNode, revisionChanged]);
 
+  const mediaItems = useMemo<LibraryMediaItem[]>(
+    () => mediaQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [mediaQuery.data],
+  );
+
   const detail = useMemo<Detail | null>(() => {
     if (!node) return null;
     if (node.kind === "album") {
       if (!mediaQuery.data) return null;
-      return albumDetailFromSummary(node, mediaQuery.data.items);
+      return albumDetailFromSummary(node, mediaItems);
     }
     if (!childrenQuery.data) return null;
     const albums: AlbumDetail[] = [];
@@ -184,7 +191,7 @@ export default function Album() {
       albums,
       collections,
     };
-  }, [childrenQuery.data, mediaQuery.data, node]);
+  }, [childrenQuery.data, mediaItems, node]);
 
   const isDetailLoading =
     revisionChanged ||
@@ -258,18 +265,40 @@ export default function Album() {
 
   // 纯视频专辑：imageCount=0 且 videoCount>0，走视频列表视图
   if (detail.imageCount === 0 && (detail.videoCount ?? 0) > 0) {
-    return <VideoAlbumView detail={detail} onBack={() => navigate(-1)} />;
+    return (
+      <VideoAlbumView
+        detail={detail}
+        onBack={() => navigate(-1)}
+        hasNextPage={mediaQuery.hasNextPage ?? false}
+        isLoadingMore={mediaQuery.isFetchingNextPage}
+        onLoadMore={() => void mediaQuery.fetchNextPage()}
+      />
+    );
   }
-  return <AlbumView detail={detail} onBack={() => navigate(-1)} />;
+  return (
+    <AlbumView
+      detail={detail}
+      onBack={() => navigate(-1)}
+      hasNextPage={mediaQuery.hasNextPage ?? false}
+      isLoadingMore={mediaQuery.isFetchingNextPage}
+      onLoadMore={() => void mediaQuery.fetchNextPage()}
+    />
+  );
 }
 
 // Album 详情页:大封面 hero + 进度条 + 动态 CTA + 缩略图网格
 function AlbumView({
   detail,
   onBack,
+  hasNextPage,
+  isLoadingMore,
+  onLoadMore,
 }: {
   detail: AlbumDetail;
   onBack: () => void;
+  hasNextPage: boolean;
+  isLoadingMore: boolean;
+  onLoadMore: () => void;
 }) {
   const navigate = useNavigate();
   const [gridSize, setGridSize] = useState<"sm" | "md" | "lg">("md");
@@ -278,9 +307,7 @@ function AlbumView({
   const { add: addFav, toggle: toggleFav, favorites } = useFavorites();
   const isFav = favorites.includes(detail.path);
   const startIndex =
-    progress &&
-    progress.pageIndex > 0 &&
-    progress.pageIndex < detail.imageFiles.length
+    progress && progress.pageIndex > 0 && progress.pageIndex < detail.imageCount
       ? progress.pageIndex
       : 0;
 
@@ -373,7 +400,7 @@ function AlbumView({
   // 防御：API 可能返回 null
   const imageFiles = detail.imageFiles ?? [];
 
-  if (imageFiles.length === 0) {
+  if (detail.imageCount === 0) {
     return (
       <div className="p-6">
         <EmptyState
@@ -391,7 +418,7 @@ function AlbumView({
         ? "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
         : "grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6";
 
-  const currentPageCount = detail.imageFiles.length;
+  const currentPageCount = detail.imageCount;
   const progressPct =
     progress && currentPageCount > 0
       ? currentPageCount === 1
@@ -633,43 +660,20 @@ function AlbumView({
       </div>
 
       <div className="flex-1 overflow-auto">
-        <div
-          className={`grid ${gridCls} gap-2 px-6 lg:px-10 pb-10 max-w-[1400px] mx-auto`}
-        >
-          {imageFiles.map((img, i) => {
-            const isCurrent = progress && i === progress.pageIndex;
-            const isPast = progress && i < progress.pageIndex;
-            return (
-              <button
-                key={img}
-                onClick={() => openGallery(i)}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  setContextMenu({ x: e.clientX, y: e.clientY, index: i });
-                }}
-                className={`group relative aspect-[3/4] bg-bg-subtle rounded overflow-hidden transition-all ${
-                  isCurrent ? "ring-2 ring-accent" : isPast ? "opacity-70" : ""
-                }`}
-                title={`第 ${i + 1} 张`}
-              >
-                <img
-                  src={thumbUrl(img)}
-                  alt={`第 ${i + 1} 张`}
-                  loading="lazy"
-                  className="w-full h-full object-cover"
-                />
-                {isCurrent && (
-                  <div className="absolute top-1.5 left-1.5 bg-accent text-accent-fg text-[10px] font-medium px-1.5 py-0.5 rounded">
-                    当前
-                  </div>
-                )}
-                <div className="absolute bottom-1.5 right-1.5 text-[10px] bg-bg-elevated/85 backdrop-blur px-1.5 py-0.5 rounded text-fg-muted tabular-nums">
-                  {i + 1}
-                </div>
-              </button>
-            );
-          })}
-        </div>
+        <MediaThumbnailGrid
+          files={imageFiles}
+          total={detail.imageCount}
+          gridClassName={gridCls}
+          progressIndex={progress?.pageIndex}
+          hasNextPage={hasNextPage}
+          isLoadingMore={isLoadingMore}
+          onLoadMore={onLoadMore}
+          onOpen={openGallery}
+          onContextMenu={(index, event) => {
+            event.preventDefault();
+            setContextMenu({ x: event.clientX, y: event.clientY, index });
+          }}
+        />
       </div>
 
       {contextMenu && (
@@ -909,16 +913,21 @@ function CollectionView({
 function VideoAlbumView({
   detail,
   onBack,
+  hasNextPage,
+  isLoadingMore,
+  onLoadMore,
 }: {
   detail: AlbumDetail;
   onBack: () => void;
+  hasNextPage: boolean;
+  isLoadingMore: boolean;
+  onLoadMore: () => void;
 }) {
   const navigate = useNavigate();
   const { add: addFav, toggle: toggleFav, favorites } = useFavorites();
   const pushToast = useUIStore((s) => s.pushToast);
   const isFav = favorites.includes(detail.path);
   const videos = detail.videoFiles ?? [];
-  const isFinished = false; // 视频专辑进度按"全部看完"算；v1 暂不显示
 
   // 解析 file ID → 真实文件名（视频列表项展示需要）
   //
@@ -930,18 +939,7 @@ function VideoAlbumView({
   // 顺带在卡片上展示时长,而不是只有"视频 1 / 视频 2"序号。
   const videoInfos = useQuery({
     queryKey: ["video-infos", detail.path, videos],
-    queryFn: async () => {
-      const results = await Promise.all(
-        videos.map(async (vid) => {
-          try {
-            return await getVideoInfo(vid);
-          } catch {
-            return null;
-          }
-        }),
-      );
-      return results;
-    },
+    queryFn: () => getVideoInfoBatch(videos),
     enabled: videos.length > 0,
     staleTime: 5 * 60_000,
   });
@@ -1012,7 +1010,9 @@ function VideoAlbumView({
                     <span className="text-fg-subtle/50">·</span>
                   </>
                 )}
-                <span className="tabular-nums">{videos.length} 个视频</span>
+                <span className="tabular-nums">
+                  {detail.videoCount ?? videos.length} 个视频
+                </span>
                 {detail.folderSize > 0 && (
                   <>
                     <span className="text-fg-subtle/50">·</span>
@@ -1027,15 +1027,6 @@ function VideoAlbumView({
                     <span className="text-fg-subtle inline-flex items-center gap-1">
                       <ClockIcon size={11} />
                       {formatRelative(detail.modTime)}
-                    </span>
-                  </>
-                )}
-                {isFinished && (
-                  <>
-                    <span className="text-fg-subtle/50">·</span>
-                    <span className="inline-flex items-center gap-1 text-success text-[12px]">
-                      <CheckIcon size={11} />
-                      已看完
                     </span>
                   </>
                 )}
@@ -1074,47 +1065,20 @@ function VideoAlbumView({
           全部视频
         </h2>
         <span className="text-[11px] text-fg-subtle tabular-nums">
-          {videos.length} 个
+          {detail.videoCount ?? videos.length} 个
         </span>
       </div>
 
       <div className="flex-1 overflow-auto">
-        <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 px-6 lg:px-10 pb-10 max-w-[1400px] mx-auto">
-          {videos.map((video, i) => {
-            const info = videoInfos.data?.[i];
-            const name = info?.name ?? video;
-            const duration = info?.duration;
-            return (
-              <button
-                key={video}
-                onClick={() => openVideo(i)}
-                className="group relative aspect-[3/4] bg-bg-subtle rounded overflow-hidden transition-all hover:ring-1 hover:ring-border-strong"
-                title={name}
-              >
-                <VideoCoverImage videoPath={video} alt={name} loading="lazy" />
-                {/* ▶ 角标（hover 时加强） */}
-                <div className="absolute top-1.5 right-1.5 bg-bg-elevated/90 backdrop-blur rounded-md p-1 shadow-sm group-hover:scale-110 transition-transform">
-                  <PlayFilledIcon size={10} className="text-accent" />
-                </div>
-                {/* 序号 */}
-                <div className="absolute bottom-1.5 right-1.5 text-[10px] bg-bg-elevated/85 backdrop-blur px-1.5 py-0.5 rounded text-fg-muted tabular-nums">
-                  {i + 1}
-                </div>
-                {/* 标题条（文件名 + 时长,基于服务端 info 解析） */}
-                <div className="absolute bottom-0 inset-x-0 px-1.5 py-1 bg-gradient-to-t from-black/60 to-transparent">
-                  <div className="text-[10px] text-white/90 truncate flex items-center gap-1.5">
-                    <span className="truncate">{name}</span>
-                    {duration && duration > 0 && (
-                      <span className="shrink-0 text-white/70 tabular-nums">
-                        {formatDuration(duration)}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </button>
-            );
-          })}
-        </div>
+        <VideoThumbnailGrid
+          videos={videos}
+          total={detail.videoCount ?? videos.length}
+          infos={videoInfos.data ?? {}}
+          hasNextPage={hasNextPage}
+          isLoadingMore={isLoadingMore}
+          onLoadMore={onLoadMore}
+          onOpen={openVideo}
+        />
       </div>
     </div>
   );

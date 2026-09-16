@@ -1,4 +1,4 @@
-import { API_BASE } from "./client";
+import { api, API_BASE } from "./client";
 
 // 视频原始流 URL（供 <video src=...> 使用）。
 //
@@ -31,20 +31,45 @@ export interface VideoInfo {
   codec?: string;
   container?: string;
   bitRate?: number;
-  probeError?: string;
   // 服务端转码状态(可选,Phase 2 新增)
   transcode?: TranscodeStatus;
 }
 
 export async function getVideoInfo(fileId: string): Promise<VideoInfo> {
-  const url = API_BASE
-    ? `${API_BASE}/api/videos/${encodeURIComponent(fileId)}/info`
-    : `/api/videos/${encodeURIComponent(fileId)}/info`;
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) {
-    throw new Error(`video info failed: HTTP ${res.status}`);
+  return api<VideoInfo>(`/api/videos/${encodeURIComponent(fileId)}/info`);
+}
+
+export const VIDEO_INFO_BATCH_LIMIT = 100;
+
+export interface VideoInfoBatchItem {
+  id: string;
+  info?: VideoInfo;
+  code?: string;
+}
+
+/**
+ * 批量读取视频元数据。调用方可以传入超过服务端上限的数组，函数会
+ * 自动拆成多个请求并合并为按资源 ID 索引的结果。
+ */
+export async function getVideoInfoBatch(
+  fileIds: string[],
+): Promise<Record<string, VideoInfo>> {
+  const ids = Array.from(new Set(fileIds.filter(Boolean)));
+  const result: Record<string, VideoInfo> = {};
+  for (let offset = 0; offset < ids.length; offset += VIDEO_INFO_BATCH_LIMIT) {
+    const response = await api<{
+      ok: boolean;
+      items: VideoInfoBatchItem[];
+    }>("/api/videos/info/batch", {
+      method: "POST",
+      body: { ids: ids.slice(offset, offset + VIDEO_INFO_BATCH_LIMIT) },
+      nonIdempotent: true,
+    });
+    for (const item of response.items) {
+      if (item.info) result[item.id] = item.info;
+    }
   }
-  return (await res.json()) as VideoInfo;
+  return result;
 }
 
 // ---- 服务端转码 (Phase 2) ----

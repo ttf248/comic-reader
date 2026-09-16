@@ -1,0 +1,102 @@
+import { useMemo, type MouseEvent } from "react";
+import { VirtuosoGrid } from "react-virtuoso";
+import { thumbUrl } from "../../api/thumbs";
+
+interface Props {
+  /** 已加载的图片资源 ID，顺序与相册媒体索引一致。 */
+  files: string[];
+  /** 当前媒体类型的服务端总数。 */
+  total: number;
+  /** Tailwind grid-cols 类名。 */
+  gridClassName: string;
+  progressIndex?: number;
+  hasNextPage: boolean;
+  isLoadingMore: boolean;
+  onLoadMore: () => void;
+  onOpen: (index: number) => void;
+  onContextMenu: (index: number, event: MouseEvent<HTMLButtonElement>) => void;
+}
+
+/**
+ * 相册图片缩略图网格。
+ *
+ * 用轻量占位槽保留服务端总长度，VirtuosoGrid 只挂载视口附近的真实
+ * 图片；滚动接近尾部时由父级继续加载媒体页。这样首屏不需要等待整本
+ * 相册，也不会为数千张图片创建完整 DOM 树。
+ */
+export default function MediaThumbnailGrid({
+  files,
+  total,
+  gridClassName,
+  progressIndex,
+  hasNextPage,
+  isLoadingMore,
+  onLoadMore,
+  onOpen,
+  onContextMenu,
+}: Props) {
+  const slots = useMemo(
+    () =>
+      Array.from(
+        { length: Math.max(total, files.length) },
+        (_, index) => files[index] ?? null,
+      ),
+    [files, total],
+  );
+
+  return (
+    <VirtuosoGrid
+      style={{ height: "100%" }}
+      data={slots}
+      overscan={720}
+      listClassName={`grid gap-2 px-6 lg:px-10 pb-10 max-w-[1400px] mx-auto ${gridClassName}`}
+      itemClassName="min-w-0"
+      computeItemKey={(index, item) => item ?? `media-placeholder-${index}`}
+      endReached={() => {
+        if (hasNextPage && !isLoadingMore) onLoadMore();
+      }}
+      itemContent={(index, file) => {
+        if (!file) return <ThumbnailPlaceholder />;
+        const isCurrent = progressIndex === index;
+        const isPast = progressIndex !== undefined && index < progressIndex;
+        return (
+          <button
+            type="button"
+            onClick={() => onOpen(index)}
+            onContextMenu={(event) => onContextMenu(index, event)}
+            className={`group relative w-full aspect-[3/4] bg-bg-subtle rounded overflow-hidden transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+              isCurrent ? "ring-2 ring-accent" : isPast ? "opacity-70" : ""
+            }`}
+            title={`第 ${index + 1} 张`}
+            aria-label={`打开第 ${index + 1} 张`}
+          >
+            <img
+              src={thumbUrl(file)}
+              alt={`第 ${index + 1} 张`}
+              loading="lazy"
+              decoding="async"
+              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+            />
+            {isCurrent && (
+              <div className="absolute top-1.5 left-1.5 bg-accent text-accent-fg text-[10px] font-medium px-1.5 py-0.5 rounded">
+                当前
+              </div>
+            )}
+            <div className="absolute bottom-1.5 right-1.5 text-[10px] bg-bg-elevated/85 backdrop-blur px-1.5 py-0.5 rounded text-fg-muted tabular-nums">
+              {index + 1}
+            </div>
+          </button>
+        );
+      }}
+    />
+  );
+}
+
+function ThumbnailPlaceholder() {
+  return (
+    <div
+      className="w-full aspect-[3/4] rounded bg-bg-subtle animate-pulse"
+      aria-hidden="true"
+    />
+  );
+}
