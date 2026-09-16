@@ -313,6 +313,7 @@ func main() {
 	api.Get("/images/:id/info", resourceParam, handlers.ImageInfoHandler(resourceCatalog))
 	// 视频流 + 元信息（前端 <video> 元素 / HoverPreview / 时长显示使用）
 	api.Get("/videos/:id/info", resourceParam, handlers.VideoInfoHandler(videoInfo, transcode, resourceCatalog))
+	api.Post("/videos/info/batch", handlers.VideoInfoBatchHandler(videoInfo, transcode, resourceCatalog))
 	// 转码进度（轮询；SSE）
 	api.Get("/videos/:id/transcode/status", resourceParam, handlers.TranscodeStatusHandler(transcode))
 	api.Get("/videos/:id/transcode/events", resourceParam, handlers.TranscodeEventsHandler(transcode))

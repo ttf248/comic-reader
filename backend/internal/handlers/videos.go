@@ -3,10 +3,12 @@ package handlers
 import (
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -136,41 +138,122 @@ func VideoInfoHandler(infoSvc *services.VideoInfoService, transcode *services.Tr
 			publicPath = resourceID
 			publicDir = catalog.RelativeLabel(resourceID)
 		}
-		resp := fiber.Map{
-			"path":   publicPath,
-			"name":   filepath.Base(path),
-			"dir":    publicDir,
-			"size":   info.Size(),
-			"mtime":  info.ModTime().UTC().Format("2006-01-02T15:04:05Z"),
-			"format": strings.ToLower(filepath.Ext(path)),
-		}
-		// 可选:ffprobe 元数据。失败也不报错(前端 <video> 可兜底)
-		if infoSvc != nil && infoSvc.Available() {
-			if meta, err := infoSvc.Probe(path); err == nil && meta != nil {
-				resp["duration"] = meta.DurationSec
-				resp["width"] = meta.Width
-				resp["height"] = meta.Height
-				resp["codec"] = meta.Codec
-				resp["container"] = meta.Container
-				resp["bitRate"] = meta.BitRate
-			} else if err != nil && !errors.Is(err, services.ErrProbeUnavailable) {
-				// 解析错误:记日志但仍返回基础元数据
-				// (避免单文件坏掉让整个接口 5xx)
-				resp["probeError"] = err.Error()
-			}
-		}
-		// 转码状态(可选):仅在 service 可用 + ffmpeg 装好时填
-		if transcode != nil && transcode.Available() {
-			ts := transcode.GetStatus(path)
-			// not_needed / unavailable 字段仍带,前端可以"知道自己被服务端认作不需要转"
-			resp["transcode"] = fiber.Map{
-				"status":   ts.Status.String(),
-				"progress": ts.Progress,
-				"error":    ts.Error,
-			}
-		}
+		resp := videoInfoResponse(infoSvc, transcode, resourceID, publicPath, publicDir, path, info)
 		return c.JSON(resp)
 	}
+}
+
+const maxVideoInfoBatch = 100
+
+// VideoInfoBatchHandler 批量返回视频元数据，避免视频相册为每个卡片各发一次请求。
+//
+// POST /api/videos/info/batch
+//
+// 请求只接受资源 ID；路径解析仍然来自当前 ResourceCatalog 快照，响应中的
+// path/dir 也只使用资源 ID 和根别名，不把本地绝对路径带回浏览器。
+func VideoInfoBatchHandler(infoSvc *services.VideoInfoService, transcode *services.TranscodeService, catalog *services.ResourceCatalog) fiber.Handler {
+	type request struct {
+		IDs []string `json:"ids"`
+	}
+	type item struct {
+		ID   string    `json:"id"`
+		Info fiber.Map `json:"info,omitempty"`
+		Code string    `json:"code,omitempty"`
+	}
+	return func(c *fiber.Ctx) error {
+		var body request
+		if err := c.BodyParser(&body); err != nil || len(body.IDs) == 0 {
+			return httputil.BadRequest(c, "invalid_video_ids", "ids must be a non-empty array")
+		}
+		if len(body.IDs) > maxVideoInfoBatch {
+			return httputil.BadRequest(c, "too_many_video_ids", "ids exceeds the batch limit")
+		}
+		if catalog == nil {
+			return httputil.Internal(c, "video_info_unavailable", "video info catalog is unavailable")
+		}
+
+		snapshot := catalog.Acquire()
+		ids := make([]string, len(body.IDs))
+		for i, id := range body.IDs {
+			ids[i] = strings.TrimSpace(id)
+		}
+		items := make([]item, len(ids))
+		var wg sync.WaitGroup
+		semaphore := make(chan struct{}, 4)
+		for index, id := range ids {
+			index, id := index, id
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				items[index].ID = id
+				ref, ok := snapshot.Lookup(id)
+				if !ok {
+					items[index].Code = "resource_not_found"
+					return
+				}
+				if ref.Kind != services.ResourceFile || !models.IsVideoFile(filepath.Base(ref.AbsolutePath)) {
+					items[index].Code = "unsupported_video_format"
+					return
+				}
+				info, err := os.Stat(ref.AbsolutePath)
+				if err != nil {
+					if os.IsNotExist(err) {
+						items[index].Code = "video_not_found"
+					} else {
+						items[index].Code = "video_info_failed"
+					}
+					return
+				}
+				semaphore <- struct{}{}
+				items[index].Info = videoInfoResponse(infoSvc, transcode, id, id, snapshot.RelativeLabel(id), ref.AbsolutePath, info)
+				<-semaphore
+			}()
+		}
+		wg.Wait()
+		return c.JSON(fiber.Map{"ok": true, "items": items})
+	}
+}
+
+func videoInfoResponse(
+	infoSvc *services.VideoInfoService,
+	transcode *services.TranscodeService,
+	resourceID string,
+	publicPath string,
+	publicDir string,
+	path string,
+	info os.FileInfo,
+) fiber.Map {
+	resp := fiber.Map{
+		"path":   publicPath,
+		"name":   filepath.Base(path),
+		"dir":    publicDir,
+		"size":   info.Size(),
+		"mtime":  info.ModTime().UTC().Format("2006-01-02T15:04:05Z"),
+		"format": strings.ToLower(filepath.Ext(path)),
+	}
+	// ffprobe 失败时保留基础文件信息，但不把底层 stderr/命令路径返回给客户端。
+	if infoSvc != nil && infoSvc.Available() {
+		if meta, err := infoSvc.Probe(path); err == nil && meta != nil {
+			resp["duration"] = meta.DurationSec
+			resp["width"] = meta.Width
+			resp["height"] = meta.Height
+			resp["codec"] = meta.Codec
+			resp["container"] = meta.Container
+			resp["bitRate"] = meta.BitRate
+		} else if err != nil && !errors.Is(err, services.ErrProbeUnavailable) {
+			// 详细错误只留在服务端日志；前端用缺失元数据的降级展示。
+			log.Printf("视频元数据探测失败 id=%s: %v", resourceID, err)
+		}
+	}
+	if transcode != nil && transcode.Available() {
+		ts := transcode.GetStatus(path)
+		resp["transcode"] = fiber.Map{
+			"status":   ts.Status.String(),
+			"progress": ts.Progress,
+			"error":    ts.Error,
+		}
+	}
+	return resp
 }
 
 // videoMime 按扩展名返回常见视频 MIME。

@@ -1,11 +1,21 @@
 package handlers
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/gofiber/fiber/v2"
+
+	"github.com/tianlongxiang/local-gallery/internal/models"
+	"github.com/tianlongxiang/local-gallery/internal/services"
 )
 
 // TestVideoETagQuoted 验证 videoETag 派生出的 ETag 用双引号包裹。
@@ -82,5 +92,59 @@ func TestVideoETagChanges(t *testing.T) {
 	ic, _ := os.Stat(c)
 	if videoETag(ia) == videoETag(ic) {
 		t.Fatalf("expected different ETag for different size, both = %q", videoETag(ia))
+	}
+}
+
+func TestVideoInfoBatchUsesResourceIDsAndHidesAbsolutePaths(t *testing.T) {
+	root := t.TempDir()
+	albumDir := filepath.Join(root, "album")
+	if err := os.Mkdir(albumDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	videoPath := filepath.Join(albumDir, "clip.mp4")
+	if err := os.WriteFile(videoPath, []byte("fake video"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	catalog := services.NewResourceCatalog()
+	catalog.Publish(&models.ScanResult{
+		Roots: []string{root},
+		Albums: []models.Album{{
+			Path:       albumDir,
+			Name:       "album",
+			ImageFiles: []string{},
+			VideoFiles: []string{videoPath},
+		}},
+	}, []string{root})
+	videoID := catalog.ExternalID(videoPath, services.ResourceFile)
+	if videoID == "" {
+		t.Fatal("catalog did not create a video resource id")
+	}
+
+	app := fiber.New()
+	app.Post("/api/videos/info/batch", VideoInfoBatchHandler(nil, nil, catalog))
+	payload, err := json.Marshal(map[string]any{"ids": []string{videoID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "/api/videos/info/batch", bytes.NewReader(payload))
+	request.Header.Set("Content-Type", "application/json")
+	res, err := app.Test(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(res.Body)
+		t.Fatalf("status = %d, body = %s", res.StatusCode, body)
+	}
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), root) || strings.Contains(string(body), videoPath) {
+		t.Fatalf("batch response leaked an absolute path: %s", body)
+	}
+	if !strings.Contains(string(body), videoID) {
+		t.Fatalf("batch response does not contain resource id %q: %s", videoID, body)
 	}
 }

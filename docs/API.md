@@ -156,6 +156,14 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 返回视频基础信息、ffprobe 元数据和转码状态，不返回绝对路径。
 
+### `POST /api/videos/info/batch`
+
+批量返回视频基础信息、ffprobe 元数据和转码状态，避免视频列表为每个卡片
+单独请求。请求体为 `{ "ids": ["f_...", "f_..."] }`，单次最多 100 个
+文件 ID。响应为 `{ "ok": true, "items": [{ "id": "f_...", "info": {...} }] }`；
+单个 ID 无效、文件不存在或不是视频时，该项返回稳定的 `code`，不会使整批失败。
+`info.path` 与 `info.dir` 仍只包含资源 ID 或根别名/相对路径。
+
 ### 视频转码
 
 - `GET /api/videos/:fileId/transcode/status`
