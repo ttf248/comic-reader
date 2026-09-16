@@ -96,6 +96,32 @@ func TestLibraryManifestIsLightweightAndPathSafe(t *testing.T) {
 	assertNoAbsolutePathInJSON(t, manifest)
 }
 
+func TestLibraryManifestIncludesBoundedWarningDetails(t *testing.T) {
+	root := t.TempDir()
+	warnings := make([]models.ScanWarning, 120)
+	for i := range warnings {
+		warnings[i] = models.ScanWarning{
+			Code:    "metadata_unavailable",
+			Path:    "library/album/page.jpg",
+			Message: "无法读取媒体元数据",
+		}
+	}
+	catalog := NewResourceCatalog()
+	catalog.Publish(&models.ScanResult{Roots: []string{root}, Warnings: warnings}, []string{root})
+
+	manifest, err := BuildLibraryManifest(catalog.Acquire())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if manifest.Statistics.WarningCount != len(warnings) {
+		t.Fatalf("warning count = %d, want %d", manifest.Statistics.WarningCount, len(warnings))
+	}
+	if len(manifest.Warnings) != libraryManifestWarningLimit {
+		t.Fatalf("warning details = %d, want %d", len(manifest.Warnings), libraryManifestWarningLimit)
+	}
+	assertNoAbsolutePathInJSON(t, manifest)
+}
+
 func TestLibraryChildrenUsesRevisionBoundCursorAndNaturalOrder(t *testing.T) {
 	fixture := newLibraryPageFixture(t)
 	snapshot := fixture.catalog.Acquire()

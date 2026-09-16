@@ -34,6 +34,7 @@ type LibraryManifest struct {
 	Duration   int64                `json:"duration"`
 	Roots      []LibraryRootSummary `json:"roots"`
 	Statistics LibraryStatistics    `json:"statistics"`
+	Warnings   []models.ScanWarning `json:"warnings,omitempty"`
 }
 
 type LibraryStatistics struct {
@@ -49,6 +50,8 @@ type LibraryRootSummary struct {
 	Name       string `json:"name"`
 	ChildCount int    `json:"childCount"`
 }
+
+const libraryManifestWarningLimit = 100
 
 // LibraryNodeSummary 是 root/collection 直属子节点的统一卡片 DTO。
 // CoverImages 最多四项，可直接用于 collection 的拼贴封面。
@@ -332,11 +335,16 @@ func buildIndexedLibraryManifest(state *resourceCatalogState, index *libraryPage
 			ID: root.ID, Name: snapshot.RelativeLabel(root.ID), ChildCount: len(index.children[root.ID]),
 		})
 	}
+	warnings := result.Warnings
+	if len(warnings) > libraryManifestWarningLimit {
+		warnings = warnings[:libraryManifestWarningLimit]
+	}
 	return LibraryManifest{
 		Revision:  state.revision,
 		ScannedAt: result.ScannedAt,
 		Duration:  result.Duration,
 		Roots:     roots,
+		Warnings:  append([]models.ScanWarning(nil), warnings...),
 		Statistics: LibraryStatistics{
 			RootCount:       len(roots),
 			AlbumCount:      result.AlbumCount,
@@ -353,6 +361,7 @@ func BuildLibraryManifest(snapshot CatalogSnapshot) (LibraryManifest, error) {
 	}
 	manifest := snapshot.state.library.manifest
 	manifest.Roots = append([]LibraryRootSummary(nil), manifest.Roots...)
+	manifest.Warnings = append([]models.ScanWarning(nil), manifest.Warnings...)
 	return manifest, nil
 }
 

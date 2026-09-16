@@ -11,6 +11,12 @@ export interface LibraryStatistics {
   warningCount: number;
 }
 
+export interface ScanWarning {
+  code: string;
+  path?: string;
+  message: string;
+}
+
 export interface LibraryRootSummary {
   id: string;
   name: string;
@@ -23,6 +29,7 @@ export interface LibraryManifest {
   duration: number;
   roots: LibraryRootSummary[];
   statistics: LibraryStatistics;
+  warnings?: ScanWarning[];
 }
 
 export interface LibraryNodeSummary {

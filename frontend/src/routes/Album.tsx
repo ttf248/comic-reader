@@ -191,7 +191,7 @@ export default function Album() {
       albums,
       collections,
     };
-  }, [childrenQuery.data, mediaItems, node]);
+  }, [childrenQuery.data, mediaItems, mediaQuery.data, node]);
 
   const isDetailLoading =
     revisionChanged ||

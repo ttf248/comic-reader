@@ -9,6 +9,7 @@ import { libraryQueryKeys, useLibraryManifest } from "../hooks/useLibrary";
 import { ACCENT_SWATCHES } from "../hooks/useTheme";
 import { useTheme } from "../hooks/useTheme";
 import ServerConfigPanel from "../components/settings/ServerConfigPanel";
+import ScanWarnings from "../components/common/ScanWarnings";
 import {
   RefreshIcon,
   TrashIcon,
@@ -249,49 +250,57 @@ export default function Settings() {
 
       <Section title="数据" icon={<LibraryIcon size={13} />}>
         <Row label="图像库缓存">
-          <div className="flex items-center gap-3">
-            <span className="text-xs text-fg-muted">
-              {manifest
-                ? `${manifest.statistics.albumCount} 文件夹 · ${manifest.statistics.tagCount} 标签${
-                    manifest.scannedAt
-                      ? ` · ${new Date(manifest.scannedAt).toLocaleString("zh-CN", { hour12: false })}`
-                      : " · 尚未扫描"
-                  }`
-                : "尚未加载"}
-            </span>
-            <button
-              onClick={() =>
-                void qc.invalidateQueries({ queryKey: libraryQueryKeys.root })
-              }
-              className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border-faint hover:bg-bg-subtle text-xs transition-colors"
-            >
-              <RefreshIcon size={11} />
-              <span>刷新</span>
-            </button>
-            <button
-              onClick={() => startScan.mutate()}
-              disabled={startScan.isPending || sse.isRunning}
-              className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border-faint hover:bg-bg-subtle text-xs transition-colors disabled:opacity-50"
-              title="扫描 (Ctrl+S)"
-            >
-              <RefreshIcon size={11} />
-              <span>
-                {sse.isRunning
-                  ? "扫描中…"
-                  : startScan.isPending
-                    ? "启动中…"
-                    : "重新扫描"}
+          <div className="flex min-w-0 flex-1 flex-col items-end gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <span className="text-xs text-fg-muted">
+                {manifest
+                  ? `${manifest.statistics.albumCount} 文件夹 · ${manifest.statistics.tagCount} 标签${
+                      manifest.scannedAt
+                        ? ` · ${new Date(manifest.scannedAt).toLocaleString("zh-CN", { hour12: false })}`
+                        : " · 尚未扫描"
+                    }`
+                  : "尚未加载"}
               </span>
-            </button>
-            <button
-              onClick={() => clearScanCache.mutate()}
-              disabled={clearScanCache.isPending}
-              className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-danger/40 text-danger hover:bg-danger/5 text-xs transition-colors disabled:opacity-50"
-              title="清空图像库缓存（不会立即重新扫描）"
-            >
-              <TrashIcon size={11} />
-              <span>{clearScanCache.isPending ? "清空中…" : "清空缓存"}</span>
-            </button>
+              <button
+                onClick={() =>
+                  void qc.invalidateQueries({ queryKey: libraryQueryKeys.root })
+                }
+                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border-faint hover:bg-bg-subtle text-xs transition-colors"
+              >
+                <RefreshIcon size={11} />
+                <span>刷新</span>
+              </button>
+              <button
+                onClick={() => startScan.mutate()}
+                disabled={startScan.isPending || sse.isRunning}
+                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border-faint hover:bg-bg-subtle text-xs transition-colors disabled:opacity-50"
+                title="扫描 (Ctrl+S)"
+              >
+                <RefreshIcon size={11} />
+                <span>
+                  {sse.isRunning
+                    ? "扫描中…"
+                    : startScan.isPending
+                      ? "启动中…"
+                      : "重新扫描"}
+                </span>
+              </button>
+              <button
+                onClick={() => clearScanCache.mutate()}
+                disabled={clearScanCache.isPending}
+                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-danger/40 text-danger hover:bg-danger/5 text-xs transition-colors disabled:opacity-50"
+                title="清空图像库缓存（不会立即重新扫描）"
+              >
+                <TrashIcon size={11} />
+                <span>{clearScanCache.isPending ? "清空中…" : "清空缓存"}</span>
+              </button>
+            </div>
+            {manifest && (
+              <ScanWarnings
+                warnings={manifest.warnings}
+                total={manifest.statistics.warningCount}
+              />
+            )}
           </div>
         </Row>
         <Row label="缓存占用">

@@ -48,6 +48,14 @@ export default function StatusBar() {
     <footer className="h-7 px-4 flex items-center justify-between text-[11px] text-fg-subtle border-t border-border-faint glass">
       <div className="flex items-center gap-3 truncate">
         <span>{leftLabel}</span>
+        {manifest && manifest.statistics.warningCount > 0 && (
+          <span
+            className="shrink-0 text-warning"
+            title="扫描完成但有部分目录或媒体未能完整读取"
+          >
+            ⚠ {manifest.statistics.warningCount} 个扫描问题
+          </span>
+        )}
         {query && (
           <span className="px-1.5 py-0.5 rounded bg-bg-subtle text-fg-muted truncate">
             搜索: {query}

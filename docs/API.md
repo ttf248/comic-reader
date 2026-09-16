@@ -93,7 +93,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 媒体库浏览只使用下列 revision 分页接口：
 
-- `GET /api/library/manifest`：返回根列表、扫描时间和相册/集合/标签/告警统计，不包含目录树或媒体数组。
+- `GET /api/library/manifest`：返回根列表、扫描时间和相册/集合/标签/告警统计，不包含目录树或媒体数组；`warnings` 最多返回前 100 条脱敏告警详情，完整数量见 `statistics.warningCount`。
 - `GET /api/library/activity-summary`：返回当前 revision 的 `albumCount` 与 `unreadCount`，供常驻导航显示未读 badge；不返回相册清单或活动详情。
 - `GET /api/library/dashboard`：返回首页所需的 `albumCount`、`unreadCount`、最多 6 本 `unread` 相册摘要与全部 `inProgress` 阅读摘要；不返回全量相册列表。每条在读摘要的 `pageCount` 始终以当前扫描结果为准。
 - `GET /api/library/unread?limit=60&cursor=...`：分页返回尚未保存图片阅读活动的相册摘要；已读和在读相册不会传输。当前没有图片页的相册始终视为未读。

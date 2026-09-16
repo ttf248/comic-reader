@@ -13,7 +13,7 @@
 | 扫描排除 | 隐藏目录、系统文件和 basename glob                 | `services.ExcludeConfig`            |
 | 层级识别 | 纯媒体目录为相册；混合目录保留集合和“本目录媒体”   | `Scanner.scanDirectoryTree`         |
 | 自然排序 | 文件和目录按数字片段排序（`2` 在 `10` 前）         | `naturalLess`                       |
-| 扫描告警 | 不可读目录、元数据失败和符号链接不会静默丢失       | `ScanResult.warnings`               |
+| 扫描告警 | 不可读目录、元数据失败和符号链接不会静默丢失，并在 manifest/设置页展示脱敏详情 | `ScanResult.warnings`、`ScanWarnings` |
 | 智能合集 | 从目录名提取标签并聚合                             | `services.BuildSmartCollections`    |
 | 快照缓存 | 版本化相对引用、原子替换、深拷贝；根集合变化时失效 | `services.ScanResultCache`          |
 | 大库分页 | 预计算目录/相册/媒体/标签顺序及节点映射，游标绑定 revision | `services.libraryPageIndex`         |
