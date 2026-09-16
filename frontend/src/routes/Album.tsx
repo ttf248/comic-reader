@@ -322,6 +322,9 @@ function AlbumView({
   // 用 key 强制 PropertiesDialog 重新挂载（重新打开时）
   const [propsKey, setPropsKey] = useState(0);
   const moreRef = useRef<HTMLDivElement>(null);
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
+  const moreMenuRef = useRef<HTMLDivElement>(null);
+  const wasMoreOpenRef = useRef(false);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -347,6 +350,19 @@ function AlbumView({
       window.removeEventListener("mousedown", onClick);
       window.removeEventListener("keydown", onKey);
     };
+  }, [moreOpen]);
+
+  useEffect(() => {
+    if (!moreOpen) {
+      if (wasMoreOpenRef.current) moreButtonRef.current?.focus();
+      wasMoreOpenRef.current = false;
+      return;
+    }
+    wasMoreOpenRef.current = true;
+    const firstItem = moreMenuRef.current?.querySelector<HTMLButtonElement>(
+      '[role="menuitem"]:not(:disabled)',
+    );
+    firstItem?.focus();
   }, [moreOpen]);
 
   const openGallery = (idx: number) => {
@@ -614,16 +630,27 @@ function AlbumView({
 
                 <div ref={moreRef} className="relative">
                   <button
+                    ref={moreButtonRef}
+                    type="button"
                     onClick={() => setMoreOpen((v) => !v)}
                     className="inline-flex items-center justify-center w-10 h-10 rounded-lg text-fg-muted hover:text-fg hover:bg-bg-subtle border border-border-faint transition-colors"
                     title="更多"
                     aria-label="更多操作"
+                    aria-haspopup="menu"
+                    aria-expanded={moreOpen}
                   >
                     <MoreHorizontalIcon size={15} />
                   </button>
                   {moreOpen && (
-                    <div className="absolute right-0 top-full mt-1.5 min-w-[180px] bg-bg-elevated border border-border rounded-lg shadow-lg py-1 z-40 fade-up">
+                    <div
+                      ref={moreMenuRef}
+                      role="menu"
+                      aria-label="相册更多操作"
+                      className="absolute right-0 top-full mt-1.5 min-w-[180px] bg-bg-elevated border border-border rounded-lg shadow-lg py-1 z-40 fade-up"
+                    >
                       <button
+                        type="button"
+                        role="menuitem"
                         onClick={() => {
                           setMoreOpen(false);
                           openInExplorer();
@@ -635,6 +662,8 @@ function AlbumView({
                         <span>在资源管理器中打开</span>
                       </button>
                       <button
+                        type="button"
+                        role="menuitem"
                         onClick={() => {
                           setMoreOpen(false);
                           copyPath();

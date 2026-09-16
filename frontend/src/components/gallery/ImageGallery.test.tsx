@@ -13,6 +13,21 @@ const virtuosoMocks = vi.hoisted(() => ({
   scrollToIndex: vi.fn(),
 }));
 
+function dispatchPointerEvent(
+  target: Element,
+  type: string,
+  init: Record<string, string | number>,
+) {
+  const event = new Event(type, { bubbles: true, cancelable: true });
+  for (const [key, value] of Object.entries(init)) {
+    Object.defineProperty(event, key, {
+      configurable: true,
+      value,
+    });
+  }
+  target.dispatchEvent(event);
+}
+
 vi.mock("react-virtuoso", async () => {
   const React = await import("react");
   interface MockVirtuosoProps {
@@ -84,5 +99,82 @@ describe("ImageGallery 连续模式", () => {
         align: "start",
       });
     });
+  });
+});
+
+describe("ImageGallery 单页触摸手势", () => {
+  beforeEach(() => {
+    useGalleryStore.setState({
+      index: 0,
+      mode: "single",
+      zoom: 1,
+      rotation: 0,
+      fit: "fit",
+      direction: "ltr",
+    });
+  });
+
+  it("左滑翻到下一张且不会再被合成 click 重复触发", () => {
+    const onClickNavigate = vi.fn();
+    render(
+      <ImageGallery
+        images={["/1.jpg", "/2.jpg", "/3.jpg"]}
+        onClickNavigate={onClickNavigate}
+      />,
+    );
+    const container = document.querySelector("[data-image-gallery]");
+    if (!container) throw new Error("image gallery container not found");
+
+    dispatchPointerEvent(container, "pointerdown", {
+      pointerId: 1,
+      pointerType: "touch",
+      clientX: 300,
+      clientY: 200,
+    });
+    dispatchPointerEvent(container, "pointermove", {
+      pointerId: 1,
+      pointerType: "touch",
+      clientX: 100,
+      clientY: 205,
+    });
+    dispatchPointerEvent(container, "pointerup", {
+      pointerId: 1,
+      pointerType: "touch",
+      clientX: 100,
+      clientY: 205,
+    });
+
+    expect(onClickNavigate).toHaveBeenCalledTimes(1);
+    expect(onClickNavigate).toHaveBeenCalledWith(1);
+
+    fireEvent.click(container, { clientX: 300, clientY: 200 });
+    expect(onClickNavigate).toHaveBeenCalledTimes(1);
+  });
+
+  it("右滑翻到上一张", () => {
+    const onClickNavigate = vi.fn();
+    render(
+      <ImageGallery
+        images={["/1.jpg", "/2.jpg", "/3.jpg"]}
+        onClickNavigate={onClickNavigate}
+      />,
+    );
+    const container = document.querySelector("[data-image-gallery]");
+    if (!container) throw new Error("image gallery container not found");
+
+    dispatchPointerEvent(container, "pointerdown", {
+      pointerId: 2,
+      pointerType: "touch",
+      clientX: 100,
+      clientY: 200,
+    });
+    dispatchPointerEvent(container, "pointerup", {
+      pointerId: 2,
+      pointerType: "touch",
+      clientX: 280,
+      clientY: 205,
+    });
+
+    expect(onClickNavigate).toHaveBeenCalledWith(-1);
   });
 });

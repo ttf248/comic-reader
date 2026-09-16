@@ -46,7 +46,9 @@ export default function ImageGallery({
     px: number;
     py: number;
     moved: boolean;
+    pointerType: string;
   } | null>(null);
+  const suppressClickRef = useRef(false);
 
   // 预加载前后各 2 张
   useEffect(() => {
@@ -111,36 +113,62 @@ export default function ImageGallery({
     return () => el.removeEventListener("wheel", onWheel);
   }, []);
 
-  // 拖拽平移
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      if (!dragRef.current) return;
-      const dx = e.clientX - dragRef.current.x;
-      const dy = e.clientY - dragRef.current.y;
-      if (Math.abs(dx) + Math.abs(dy) > 3) dragRef.current.moved = true;
-      setPan({ x: dragRef.current.px + dx, y: dragRef.current.py + dy });
-    };
-    const onUp = () => {
-      dragRef.current = null;
-    };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-    return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-  }, []);
-
-  const onMouseDown = (e: React.MouseEvent) => {
+  // 单页模式下统一用 Pointer Events 处理鼠标拖拽和触摸手势：
+  // - 放大时拖动图片；
+  // - 原始大小时横向滑动翻页；
+  // - 连续/双页模式保留浏览器原生滚动，不抢占手势。
+  const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (mode !== "single") return;
-    if (zoom <= 1) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
     dragRef.current = {
       x: e.clientX,
       y: e.clientY,
       px: pan.x,
       py: pan.y,
       moved: false,
+      pointerType: e.pointerType,
     };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
+
+  const onPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const gesture = dragRef.current;
+    if (!gesture) return;
+    const dx = e.clientX - gesture.x;
+    const dy = e.clientY - gesture.y;
+    if (Math.abs(dx) + Math.abs(dy) > 3) gesture.moved = true;
+    if (zoom > 1) {
+      setPan({ x: gesture.px + dx, y: gesture.py + dy });
+    }
+  };
+
+  const finishPointer = (e: React.PointerEvent<HTMLDivElement>) => {
+    const gesture = dragRef.current;
+    if (!gesture) return;
+    const dx = e.clientX - gesture.x;
+    const dy = e.clientY - gesture.y;
+    dragRef.current = null;
+    e.currentTarget.releasePointerCapture?.(e.pointerId);
+
+    if (gesture.moved) suppressClickRef.current = true;
+    const isTouch = gesture.pointerType !== "mouse";
+    const isSwipe =
+      isTouch &&
+      zoom <= 1 &&
+      Math.abs(dx) >= 48 &&
+      Math.abs(dx) > Math.abs(dy) * 1.2;
+    if (isSwipe && onClickNavigate) {
+      e.preventDefault();
+      onClickNavigate(dx < 0 ? 1 : -1);
+    }
+  };
+
+  const cancelPointer = (e: React.PointerEvent<HTMLDivElement>) => {
+    const gesture = dragRef.current;
+    if (!gesture) return;
+    dragRef.current = null;
+    if (gesture.moved) suppressClickRef.current = true;
+    e.currentTarget.releasePointerCapture?.(e.pointerId);
   };
 
   // 点击翻页：根据 clickX 在容器宽度的左/中/右决定 -1/0/+1
@@ -149,7 +177,10 @@ export default function ImageGallery({
   // - 双击是独立事件，不会触发 click；拖拽距离 > 3px 时 click 也不触发
   const onContainerClick = (e: React.MouseEvent) => {
     if (!onClickNavigate) return;
-    if (dragRef.current?.moved) return;
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
     if (mode === "single" && zoom > 1) return;
     const el = containerRef.current;
     if (!el) return;
@@ -177,6 +208,9 @@ export default function ImageGallery({
   const containerCls = isSingle
     ? "relative flex-1 overflow-auto flex items-center justify-center min-h-0"
     : "relative flex-1 overflow-auto min-h-0";
+  const containerStyle: React.CSSProperties | undefined = isSingle
+    ? { touchAction: zoom > 1 ? "none" : "pan-y" }
+    : undefined;
   // data-image-gallery 让外部（Gallery 路由）能定位连续模式下的单图
   // （用于 Home/End 跳到首/尾图片的 scrollIntoView）。
   const dataImageGalleryProps = { "data-image-gallery": "" } as const;
@@ -222,6 +256,11 @@ export default function ImageGallery({
       <div
         ref={containerRef}
         className={containerCls}
+        style={containerStyle}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={finishPointer}
+        onPointerCancel={cancelPointer}
         onContextMenu={(e) => e.preventDefault()}
         onClick={onContainerClick}
         {...dataImageGalleryProps}
@@ -232,7 +271,6 @@ export default function ImageGallery({
             src={imageUrl(current)}
             alt={`第 ${index + 1} 张`}
             draggable={false}
-            onMouseDown={onMouseDown}
             onDoubleClick={() => {
               const store = useGalleryStore.getState();
               if (store.zoom > 1) {
