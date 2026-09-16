@@ -52,6 +52,11 @@ type ThumbnailService struct {
 	// 同时 miss）特别有用。
 	flight singleflight.Group
 
+	// 视频抽帧比图片缩放更吃 CPU/IO；即使不同视频 key 不同，也不能让
+	// 一个视口同时启动几十个 ffmpeg。singleflight 负责同文件去重，
+	// 这个槽位限制不同文件的并发数。
+	videoCoverSlots chan struct{}
+
 	// videoCover 用于服务端 FFmpeg 抽帧（可选）。为 nil 时,
 	// 视频封面维持原"客户端抽帧 + 上传"流程(见 getVideoCover)。
 	// FFmpeg 抽帧失败时同样回退到 ErrVideoCoverMissing,
@@ -104,13 +109,14 @@ func NewThumbnailService(opts ThumbnailOptions) (*ThumbnailService, error) {
 	}
 
 	return &ThumbnailService{
-		cacheDir:   opts.CacheDir,
-		width:      w,
-		height:     h,
-		maxAgeDays: days,
-		lruSize:    lruSize,
-		memCache:   cache,
-		videoCover: opts.VideoCover,
+		cacheDir:        opts.CacheDir,
+		width:           w,
+		height:          h,
+		maxAgeDays:      days,
+		lruSize:         lruSize,
+		memCache:        cache,
+		videoCover:      opts.VideoCover,
+		videoCoverSlots: make(chan struct{}, 2),
 	}, nil
 }
 
@@ -269,10 +275,30 @@ func (s *ThumbnailService) getVideoCover(absPath string) ([]byte, error) {
 		return data, nil
 	}
 
-	// 缓存都未命中:尝试服务端 FFmpeg 抽帧
-	if s.videoCover != nil && s.videoCover.Available() {
-		data, err := s.videoCover.Extract(absPath)
-		if err == nil && len(data) > 0 {
+	// 缓存都未命中：同一文件只允许一个抽帧任务，不同文件最多两个
+	// ffmpeg 并行，避免滚动视频网格时把 CPU/进程表打满。
+	v, err, _ := s.flight.Do("video:"+key, func() (interface{}, error) {
+		if data, ok := s.memCache.Get(key); ok {
+			return data, nil
+		}
+		if data, err := os.ReadFile(diskPath); err == nil {
+			s.memCache.Add(key, data)
+			return data, nil
+		}
+
+		s.mu.Lock()
+		extractor := s.videoCover
+		s.mu.Unlock()
+		if extractor == nil || !extractor.Available() {
+			return nil, ErrVideoCoverMissing
+		}
+
+		if s.videoCoverSlots != nil {
+			s.videoCoverSlots <- struct{}{}
+			defer func() { <-s.videoCoverSlots }()
+		}
+		data, extractErr := extractor.Extract(absPath)
+		if extractErr == nil && len(data) > 0 {
 			if werr := os.WriteFile(diskPath, data, 0o644); werr != nil {
 				// 写盘失败不影响返回
 				fmt.Fprintf(os.Stderr, "write video cover cache key=%s: %v\n", key, werr)
@@ -280,14 +306,21 @@ func (s *ThumbnailService) getVideoCover(absPath string) ([]byte, error) {
 			s.memCache.Add(key, data)
 			return data, nil
 		}
-		// 抽帧失败(包括 ErrFFmpegUnavailable),回退到原契约:
+		// 抽帧失败(包括 ErrFFmpegUnavailable),回退到原契约：
 		// 返回 ErrVideoCoverMissing,让前端继续用浏览器抽帧。
-		if err != nil && !errors.Is(err, ErrFFmpegUnavailable) {
-			fmt.Fprintf(os.Stderr, "video cover extract failed key=%s: %v\n", key, err)
+		if extractErr != nil && !errors.Is(extractErr, ErrFFmpegUnavailable) {
+			fmt.Fprintf(os.Stderr, "video cover extract failed key=%s: %v\n", key, extractErr)
 		}
+		return nil, ErrVideoCoverMissing
+	})
+	if err != nil {
+		return nil, err
 	}
-
-	return nil, ErrVideoCoverMissing
+	data, ok := v.([]byte)
+	if !ok {
+		return nil, ErrVideoCoverMissing
+	}
+	return data, nil
 }
 
 // SaveVideoCover 接收前端浏览器抽帧得到的封面字节，写入缓存。

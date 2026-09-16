@@ -35,7 +35,7 @@
 | 能力         | 当前行为                                        | 主要实现                                     |
 | ------------ | ----------------------------------------------- | -------------------------------------------- |
 | 图片缩略图   | 内存 LRU + JPEG 磁盘缓存，mtime 参与失效        | `services.ThumbnailService`                  |
-| 视频封面     | 优先 ffmpeg 抽帧；不可用时浏览器 canvas 回填    | `VideoCoverExtractor`、`useVideoCover`       |
+| 视频封面     | 优先 ffmpeg 抽帧；同文件去重、全局最多两个抽帧任务；不可用时浏览器 canvas 回填 | `VideoCoverExtractor`、`useVideoCover`       |
 | 图片发送     | ETag、304、24 小时浏览器缓存                    | `handlers.ImageHandler`                      |
 | 统一媒体路由 | `GET /api/media/:fileId` 按白名单分派图片或视频 | `handlers.MediaHandler`                      |
 | 元数据       | 图片尺寸/checksum；视频 ffprobe 元数据          | `ImageInfoHandler`、`VideoInfoHandler`       |
