@@ -62,6 +62,7 @@
 | 视频播放器 | 原生 controls 与播放、跳转、音量、静音快捷键 | `VideoPlayer.tsx`                                  |
 | 搜索       | 名称、标签模糊搜索；`/` 聚焦                 | `GlobalSearch.tsx`                         |
 | 主题       | light/dark/system 和六套强调色               | `useTheme`、`themeStore`                   |
+| 动效与触摸 | 尊重系统减少动态效果设置；触摸设备直接显示关键操作 | `global.css`、`useReducedMotion`、各卡片组件 |
 | 键盘       | 阅读、导航、显示模式和帮助快捷键             | [SHORTCUTS.md](./SHORTCUTS.md)             |
 
 ## 用户数据

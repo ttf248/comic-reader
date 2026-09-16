@@ -149,8 +149,21 @@ function MoreMenu({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const wasOpenRef = useRef(false);
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      if (wasOpenRef.current) {
+        ref.current
+          ?.querySelector<HTMLButtonElement>(
+            'button[aria-haspopup="menu"], button',
+          )
+          ?.focus();
+      }
+      wasOpenRef.current = false;
+      return;
+    }
+    wasOpenRef.current = true;
     const onClick = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node))
         setOpen(false);
@@ -158,11 +171,15 @@ function MoreMenu({
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
-    setTimeout(() => {
+    const timer = window.setTimeout(() => {
       window.addEventListener("mousedown", onClick);
       window.addEventListener("keydown", onKey);
     }, 0);
+    menuRef.current
+      ?.querySelector<HTMLButtonElement>("button:not(:disabled)")
+      ?.focus();
     return () => {
+      window.clearTimeout(timer);
       window.removeEventListener("mousedown", onClick);
       window.removeEventListener("keydown", onKey);
     };
@@ -172,15 +189,25 @@ function MoreMenu({
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((v) => !v)}
+        type="button"
         className="inline-flex items-center justify-center w-8 h-8 rounded-md text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors"
         title="更多"
         aria-label="更多"
+        aria-haspopup="menu"
+        aria-expanded={open}
       >
         <MoreHorizontalIcon size={16} />
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-1.5 min-w-[180px] bg-bg-elevated border border-border rounded-lg shadow-lg py-1 z-40 fade-up">
+        <div
+          ref={menuRef}
+          role="menu"
+          aria-label="更多操作"
+          className="absolute right-0 top-full mt-1.5 min-w-[180px] bg-bg-elevated border border-border rounded-lg shadow-lg py-1 z-40 fade-up"
+        >
           <button
+            type="button"
+            role="menuitem"
             onClick={() => {
               setOpen(false);
               onScan();
@@ -195,6 +222,8 @@ function MoreMenu({
             </span>
           </button>
           <button
+            type="button"
+            role="menuitem"
             onClick={() => {
               setOpen(false);
               onRefresh();

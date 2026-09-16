@@ -13,13 +13,15 @@ body,
 
 html {
   font-family: var(--font-sans);
-  font-feature-settings: 'cv11', 'ss01', 'ss03';
+  font-feature-settings: "cv11", "ss01", "ss03";
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   background: var(--bg);
   color: var(--fg);
-  transition: background var(--dur) var(--ease), color var(--dur) var(--ease);
+  transition:
+    background var(--dur) var(--ease),
+    color var(--dur) var(--ease);
 }
 
 body {
@@ -86,8 +88,8 @@ body {
 /* 在已带 border 的元素上避免双线 */
 button:focus-visible,
 a:focus-visible,
-[role='button']:focus-visible,
-[role='link']:focus-visible {
+[role="button"]:focus-visible,
+[role="link"]:focus-visible {
   outline-offset: 1px;
 }
 
@@ -146,7 +148,8 @@ button:not(:disabled):active {
 
 /* 软浮起：极轻的 hover 浮起，去掉厚重的 lift 动画 */
 .lift-soft {
-  transition: transform var(--dur-fast) var(--ease-out),
+  transition:
+    transform var(--dur-fast) var(--ease-out),
     background var(--dur-fast) var(--ease-out),
     box-shadow var(--dur-fast) var(--ease-out);
 }
@@ -156,7 +159,8 @@ button:not(:disabled):active {
 
 /* 卡片浮起：中等的 hover 抬升 + 阴影 */
 .lift-card {
-  transition: transform var(--dur) var(--ease-out),
+  transition:
+    transform var(--dur) var(--ease-out),
     box-shadow var(--dur) var(--ease-out),
     border-color var(--dur) var(--ease-out);
 }
@@ -199,7 +203,8 @@ button:not(:disabled):active {
 
 /* === 输入框聚焦时的微妙 inset 高光（与组件 focus-within 配合） === */
 .input-focus-ring {
-  transition: background var(--dur-fast) var(--ease-out),
+  transition:
+    background var(--dur-fast) var(--ease-out),
     border-color var(--dur-fast) var(--ease-out),
     box-shadow var(--dur-fast) var(--ease-out);
 }
@@ -209,7 +214,8 @@ button:not(:disabled):active {
 
 /* === 主按钮（带 accent 填充）按下的微反馈 === */
 .btn-primary {
-  transition: background var(--dur-fast) var(--ease-out),
+  transition:
+    background var(--dur-fast) var(--ease-out),
     transform var(--dur-fast) var(--ease-out),
     box-shadow var(--dur-fast) var(--ease-out);
 }
@@ -257,4 +263,19 @@ button:not(:disabled):active {
 }
 .scale-fade {
   animation: scaleFade 240ms var(--ease-out) both;
+}
+
+/* 尊重系统的减少动态效果设置，同时保留状态变化本身。 */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

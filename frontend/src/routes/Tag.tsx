@@ -18,6 +18,7 @@ import { thumbUrl } from "../api/thumbs";
 import type { GalleryContextEntry } from "../utils/galleryContext";
 import { useTagAlbums } from "../hooks/useLibrary";
 import { nodeSummaryToCard } from "../utils/libraryCard";
+import { useReducedMotion } from "../hooks/useReducedMotion";
 
 // 标签页：展示一个标签下的全部文件夹，支持排序、阅读进度、收藏。
 export default function Tag() {
@@ -35,6 +36,7 @@ export default function Tag() {
 
   const [coverIdx, setCoverIdx] = useState(0);
   const albumsQuery = useTagAlbums(tag);
+  const reducedMotion = useReducedMotion();
   const albums = useMemo(
     () => albumsQuery.data?.items ?? [],
     [albumsQuery.data],
@@ -101,13 +103,13 @@ export default function Tag() {
 
   // 头图：随机从 6 张里挑（每隔 4s 切一张，类似走马灯）
   useEffect(() => {
-    if (albums.length <= 1) return;
+    if (reducedMotion || albums.length <= 1) return;
     const id = setInterval(
       () => setCoverIdx((i) => (i + 1) % Math.min(albums.length, 6)),
       5000,
     );
     return () => clearInterval(id);
-  }, [albums.length]);
+  }, [albums.length, reducedMotion]);
 
   const cover = albums.length > 0 ? albums[coverIdx % albums.length] : null;
   const isFav = favorites.includes(`smart:${tag}`);

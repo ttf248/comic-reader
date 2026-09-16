@@ -20,10 +20,10 @@
 //   - progress === null → 不渲染
 //   - status === 'running' / 'pending' → 显示
 //   - status === 'complete' / 'cancelled' / 'error' → 继续显示 FADE_DELAY_MS 后滑出
-const FADE_DELAY_MS = 5000
+const FADE_DELAY_MS = 5000;
 
-import { useEffect, useState } from 'react'
-import { ProgressEvent } from '../../api/scan'
+import { useEffect, useState } from "react";
+import { ProgressEvent } from "../../api/scan";
 import {
   CloseIcon,
   CheckIcon,
@@ -31,14 +31,14 @@ import {
   ScanIcon,
   ChevronDownIcon,
   ChevronUpIcon,
-} from '../common/Icon'
+} from "../common/Icon";
 
 interface Props {
-  progress: ProgressEvent | null
-  onCancel?: () => void
-  isCancelling?: boolean
+  progress: ProgressEvent | null;
+  onCancel?: () => void;
+  isCancelling?: boolean;
   /** 强制展开（例如首次出现时；之后交由用户折叠） */
-  defaultExpanded?: boolean
+  defaultExpanded?: boolean;
 }
 
 export default function ScanProgress({
@@ -47,34 +47,34 @@ export default function ScanProgress({
   isCancelling = false,
   defaultExpanded = true,
 }: Props) {
-  const [collapsed, setCollapsed] = useState(!defaultExpanded)
-  const [phase, setPhase] = useState<'in' | 'visible' | 'out'>('in')
+  const [collapsed, setCollapsed] = useState(!defaultExpanded);
+  const [phase, setPhase] = useState<"in" | "visible" | "out">("in");
 
   // 终态后短暂保留显示，再滑出
-  const [showTerminal, setShowTerminal] = useState(false)
+  const [showTerminal, setShowTerminal] = useState(false);
 
   useEffect(() => {
     if (!progress) {
-      setShowTerminal(false)
-      setPhase('out')
-      return
+      setShowTerminal(false);
+      setPhase("out");
+      return;
     }
     if (
-      progress.status === 'complete' ||
-      progress.status === 'cancelled' ||
-      progress.status === 'error'
+      progress.status === "complete" ||
+      progress.status === "cancelled" ||
+      progress.status === "error"
     ) {
-      setShowTerminal(true)
-      setPhase('visible')
-      const id = window.setTimeout(() => setPhase('out'), FADE_DELAY_MS)
-      return () => window.clearTimeout(id)
+      setShowTerminal(true);
+      setPhase("visible");
+      const id = window.setTimeout(() => setPhase("out"), FADE_DELAY_MS);
+      return () => window.clearTimeout(id);
     }
-    setShowTerminal(false)
-    setPhase('visible')
-  }, [progress])
+    setShowTerminal(false);
+    setPhase("visible");
+  }, [progress]);
 
-  if (!progress) return null
-  if (phase === 'out') return null
+  if (!progress) return null;
+  if (phase === "out") return null;
 
   // 合法渲染窗口：
   //   - 扫描中（pending/running） + 没有终态保持标志 → 渲染
@@ -82,15 +82,15 @@ export default function ScanProgress({
   // 其他组合（如刚切到 complete 但 useEffect 还没把 showTerminal 置 true）
   // 短暂返回 null，等下一帧 useEffect 跑完再渲染。
   const isScanActive =
-    progress.status === 'pending' || progress.status === 'running'
+    progress.status === "pending" || progress.status === "running";
   const isTerminal =
-    progress.status === 'complete' ||
-    progress.status === 'cancelled' ||
-    progress.status === 'error'
+    progress.status === "complete" ||
+    progress.status === "cancelled" ||
+    progress.status === "error";
 
   if (isScanActive && showTerminal) {
     // race：刚切回 running 时不要继续显示终态
-    return null
+    return null;
   }
   if (isScanActive && !showTerminal) {
     // 正常进行中 — 渲染
@@ -98,50 +98,52 @@ export default function ScanProgress({
     // 终态保持中 — 渲染
   } else {
     // 其他组合（刚切到 complete / 刚清空 progress）— 短暂隐藏
-    return null
+    return null;
   }
 
-  const isRunning = progress.status === 'running' || progress.status === 'pending'
-  const isComplete = progress.status === 'complete'
-  const isError = progress.status === 'error' || progress.status === 'cancelled'
-  const pct = Math.max(0, Math.min(100, progress.progress))
-  const elapsedSec = (progress.elapsedMs / 1000).toFixed(1)
+  const isRunning =
+    progress.status === "running" || progress.status === "pending";
+  const isComplete = progress.status === "complete";
+  const isError =
+    progress.status === "error" || progress.status === "cancelled";
+  const pct = Math.max(0, Math.min(100, progress.progress));
+  const elapsedSec = (progress.elapsedMs / 1000).toFixed(1);
   const fileName =
-    progress.currentPath?.split(/[\\/]/).filter(Boolean).pop() ?? ''
+    progress.currentPath?.split(/[\\/]/).filter(Boolean).pop() ?? "";
 
   // 状态条
   const barColor = isComplete
-    ? 'bg-success'
+    ? "bg-success"
     : isError
-      ? 'bg-danger'
-      : 'bg-accent'
+      ? "bg-danger"
+      : "bg-accent";
 
   // 状态文案 + 图标
-  const StatusIcon = isComplete ? CheckIcon : isError ? AlertIcon : ScanIcon
+  const StatusIcon = isComplete ? CheckIcon : isError ? AlertIcon : ScanIcon;
   const statusText = isComplete
-    ? '扫描完成'
-    : progress.status === 'cancelled'
-      ? '已取消'
-      : progress.status === 'error'
-        ? '扫描失败'
-        : '扫描中'
+    ? "扫描完成"
+    : progress.status === "cancelled"
+      ? "已取消"
+      : progress.status === "error"
+        ? "扫描失败"
+        : "扫描中";
   const statusColor = isComplete
-    ? 'text-success'
+    ? "text-success"
     : isError
-      ? 'text-danger'
-      : 'text-fg'
+      ? "text-danger"
+      : "text-fg";
 
   const phaseLabel =
-    progress.phase === 'smart-grouping'
-      ? '聚合标签中'
-      : progress.phase === 'done'
-        ? '收尾中'
-        : '扫描目录'
+    progress.phase === "smart-grouping"
+      ? "聚合标签中"
+      : progress.phase === "done"
+        ? "收尾中"
+        : "扫描目录";
 
   return (
     <div
       // 左下角浮动卡 — fixed 到 viewport（不挂 main 内部，避开 main 滚动影响）
-      className="fixed bottom-4 left-56 sm:bottom-6 sm:left-60 z-50 w-[400px] max-w-[calc(100vw-2rem)] rounded-xl border border-border shadow-2xl glass-strong fade-up"
+      className="fixed bottom-4 left-4 sm:bottom-6 sm:left-60 z-50 w-[400px] max-w-[calc(100vw-2rem)] rounded-xl border border-border shadow-2xl glass-strong fade-up"
       role="status"
       aria-live="polite"
       data-testid="scan-progress"
@@ -171,7 +173,9 @@ export default function ScanProgress({
 
             {/* 百分比 + 耗时 */}
             {isRunning && (
-              <span className="tabular-nums text-fg-muted shrink-0">{pct}%</span>
+              <span className="tabular-nums text-fg-muted shrink-0">
+                {pct}%
+              </span>
             )}
             {!isRunning && (
               <span className="tabular-nums text-fg-subtle shrink-0">
@@ -188,7 +192,7 @@ export default function ScanProgress({
               onClick={onCancel}
               disabled={isCancelling}
               className="mr-2 p-1 rounded text-fg-muted hover:text-fg hover:bg-bg-subtle transition-colors disabled:cursor-wait disabled:opacity-50 shrink-0"
-              title={isCancelling ? '正在取消扫描' : '取消扫描'}
+              title={isCancelling ? "正在取消扫描" : "取消扫描"}
               aria-label="取消扫描"
               aria-busy={isCancelling}
             >
@@ -202,7 +206,9 @@ export default function ScanProgress({
           {/* Header：icon + status + 百分比 + 耗时 + collapse + 关闭 */}
           <div className="flex items-center gap-2.5 px-3.5 h-10 border-b border-border-faint">
             <StatusIcon size={13} className={statusColor} />
-            <span className={`font-medium ${statusColor} text-[12px] flex-1 min-w-0`}>
+            <span
+              className={`font-medium ${statusColor} text-[12px] flex-1 min-w-0`}
+            >
               {statusText}
             </span>
 
@@ -226,7 +232,7 @@ export default function ScanProgress({
             </button>
             <button
               type="button"
-              onClick={() => setPhase('out')}
+              onClick={() => setPhase("out")}
               className="p-1 rounded text-fg-muted hover:text-fg hover:bg-bg-subtle transition-colors"
               title="关闭"
               aria-label="关闭扫描卡片"
@@ -252,10 +258,10 @@ export default function ScanProgress({
                 阶段 <span className="text-fg">{phaseLabel}</span>
               </span>
               <span>
-                已发现{' '}
+                已发现{" "}
                 <span className="text-fg tabular-nums">
                   {progress.albumsFound}
-                </span>{' '}
+                </span>{" "}
                 个文件夹
               </span>
               {isError && progress.error && (
@@ -291,12 +297,12 @@ export default function ScanProgress({
                 aria-busy={isCancelling}
                 className="w-full h-8 rounded-md border border-border bg-bg-subtle/40 hover:bg-bg-subtle text-fg-muted hover:text-fg text-[12px] transition-colors disabled:cursor-wait disabled:opacity-50"
               >
-                {isCancelling ? '正在取消…' : '取消扫描'}
+                {isCancelling ? "正在取消…" : "取消扫描"}
               </button>
             </div>
           )}
         </div>
       )}
     </div>
-  )
+  );
 }

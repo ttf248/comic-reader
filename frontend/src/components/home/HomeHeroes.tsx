@@ -1,10 +1,10 @@
-import { useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { thumbUrl } from '../../api/thumbs'
-import { useFavorites } from '../../hooks/useFavorites'
-import { decodeFavPath } from '../../utils/path'
-import AlbumCard from '../album/AlbumCard'
-import type { CardData } from '../album/AlbumGrid'
+import { useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import { thumbUrl } from "../../api/thumbs";
+import { useFavorites } from "../../hooks/useFavorites";
+import { decodeFavPath } from "../../utils/path";
+import AlbumCard from "../album/AlbumCard";
+import type { CardData } from "../album/AlbumGrid";
 import {
   ArrowRightLineIcon,
   CheckIcon,
@@ -13,13 +13,13 @@ import {
   ReaderIcon,
   ShuffleIcon,
   SparkleIcon,
-} from '../common/Icon'
+} from "../common/Icon";
 
 interface UnreadHeroProps {
-  cards: CardData[]
-  count: number
-  onShuffle: () => void
-  onMarkRead: (card: CardData) => void
+  cards: CardData[];
+  count: number;
+  onShuffle: () => void;
+  onMarkRead: (card: CardData) => void;
 }
 
 // 首页未读入口：只展示前六本，完整列表交给 /unread 页面。
@@ -29,10 +29,10 @@ export function UnreadHero({
   onShuffle,
   onMarkRead,
 }: UnreadHeroProps) {
-  const navigate = useNavigate()
-  const { favorites } = useFavorites()
-  const favoriteIds = useMemo(() => new Set(favorites), [favorites])
-  const visible = cards.slice(0, 6)
+  const navigate = useNavigate();
+  const { favorites } = useFavorites();
+  const favoriteIds = useMemo(() => new Set(favorites), [favorites]);
+  const visible = cards.slice(0, 6);
 
   return (
     <section
@@ -46,7 +46,8 @@ export function UnreadHero({
             未读
           </span>
           <span className="text-[13px] text-fg">
-            还有 <span className="font-semibold tabular-nums">{count}</span> 本没看
+            还有 <span className="font-semibold tabular-nums">{count}</span>{" "}
+            本没看
           </span>
           <div className="ml-auto flex items-center gap-2">
             <button
@@ -57,7 +58,7 @@ export function UnreadHero({
               随机未读
             </button>
             <button
-              onClick={() => navigate('/unread')}
+              onClick={() => navigate("/unread")}
               className="inline-flex items-center gap-1 h-8 px-2.5 rounded-md border border-border-faint text-fg-muted hover:text-fg hover:border-border-strong text-xs transition-colors"
             >
               全部
@@ -77,11 +78,11 @@ export function UnreadHero({
               <button
                 type="button"
                 onClick={(event) => {
-                  event.preventDefault()
-                  event.stopPropagation()
-                  onMarkRead(card)
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onMarkRead(card);
                 }}
-                className="absolute top-1.5 right-1.5 z-10 w-6 h-6 rounded-full bg-black/55 text-white/90 hover:bg-accent hover:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-all"
+                className="absolute top-1.5 right-1.5 z-10 w-6 h-6 rounded-full bg-black/55 text-white/90 hover:bg-accent hover:text-white flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-all"
                 title={`将「${card.title}」标记为已读`}
                 aria-label={`将${card.title}标记为已读`}
               >
@@ -92,14 +93,14 @@ export function UnreadHero({
         </div>
       </div>
     </section>
-  )
+  );
 }
 
 interface ContinueReadingHeroProps {
-  cards: CardData[]
-  onContinue: (card: CardData) => void
-  onRemove: (card: CardData) => void
-  onClearAll: () => void
+  cards: CardData[];
+  onContinue: (card: CardData) => void;
+  onRemove: (card: CardData) => void;
+  onClearAll: () => void;
 }
 
 // 首页继续阅读入口：点击卡片直接进入上次阅读位置。
@@ -121,7 +122,8 @@ export function ContinueReadingHero({
             继续阅读
           </span>
           <span className="text-[13px] text-fg-muted">
-            <span className="tabular-nums text-fg">{cards.length}</span> 本还没看完
+            <span className="tabular-nums text-fg">{cards.length}</span>{" "}
+            本还没看完
           </span>
           <span className="flex-1" />
           <button
@@ -145,7 +147,7 @@ export function ContinueReadingHero({
         </div>
       </div>
     </section>
-  )
+  );
 }
 
 function ContinueCard({
@@ -153,20 +155,18 @@ function ContinueCard({
   onClick,
   onRemove,
 }: {
-  card: CardData
-  onClick: () => void
-  onRemove: () => void
+  card: CardData;
+  onClick: () => void;
+  onRemove: () => void;
 }) {
-  const progress = card.progress
+  const progress = card.progress;
   const progressPercent =
     progress && progress.total > 1
       ? Math.min(
           100,
-          Math.round(
-            (progress.index / Math.max(1, progress.total - 1)) * 100,
-          ),
+          Math.round((progress.index / Math.max(1, progress.total - 1)) * 100),
         )
-      : null
+      : null;
 
   return (
     <div
@@ -174,9 +174,9 @@ function ContinueCard({
       tabIndex={0}
       onClick={onClick}
       onKeyDown={(event) => {
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault()
-          onClick()
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onClick();
         }
       }}
       className="group block text-left rounded-lg border border-border-faint bg-bg-elevated overflow-hidden hover:border-border-strong hover:shadow-md transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
@@ -198,11 +198,11 @@ function ContinueCard({
         <button
           type="button"
           onClick={(event) => {
-            event.preventDefault()
-            event.stopPropagation()
-            onRemove()
+            event.preventDefault();
+            event.stopPropagation();
+            onRemove();
           }}
-          className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/55 text-white/90 hover:bg-danger hover:text-white flex items-center justify-center opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-all"
+          className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/55 text-white/90 hover:bg-danger hover:text-white flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-all"
           title={`将「${card.title}」标记为已读`}
           aria-label={`将${card.title}标记为已读`}
         >
@@ -228,5 +228,5 @@ function ContinueCard({
         </div>
       </div>
     </div>
-  )
+  );
 }

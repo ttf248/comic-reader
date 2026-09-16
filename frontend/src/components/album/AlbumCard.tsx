@@ -272,7 +272,7 @@ function GridCard({
 
           {/* 「进入」提示 — hover 时从右下角淡入 */}
           <div
-            className="absolute bottom-2.5 right-2.5 inline-flex items-center gap-1 px-2 h-6 rounded-full bg-bg-elevated/90 backdrop-blur text-fg text-[10px] font-medium shadow-sm opacity-0 translate-y-1 group-hover:opacity-100 group-hover:translate-y-0 transition-all duration-200 ease-out"
+            className="absolute bottom-2.5 right-2.5 inline-flex items-center gap-1 px-2 h-6 rounded-full bg-bg-elevated/90 backdrop-blur text-fg text-[10px] font-medium shadow-sm opacity-100 translate-y-0 md:opacity-0 md:translate-y-1 md:group-hover:opacity-100 md:group-hover:translate-y-0 transition-all duration-200 ease-out"
             aria-hidden
           >
             <span>进入</span>
@@ -556,7 +556,7 @@ function ListCard({
         )}
       </div>
 
-      <div className="text-fg-subtle opacity-0 group-hover:opacity-100 transition-opacity pr-1">
+      <div className="text-fg-subtle opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity pr-1">
         <span className="text-sm">›</span>
       </div>
     </Link>
