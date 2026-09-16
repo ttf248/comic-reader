@@ -77,7 +77,8 @@ describe("Tag", () => {
 
     expect(useTagAlbums).toHaveBeenCalledWith("旅行");
     expect(screen.getByText("旅行册")).toBeInTheDocument();
-    expect(screen.getByText("12")).toBeInTheDocument();
+    expect(screen.getByText("13")).toBeInTheDocument();
+    expect(screen.getByText("图片 12 · 视频 1")).toBeInTheDocument();
     expect(screen.getByText("0/1")).toBeInTheDocument();
   });
 

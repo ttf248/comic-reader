@@ -42,10 +42,15 @@ export default function Tag() {
     [albumsQuery.data],
   );
 
-  const totalPages = useMemo(
+  const totalImages = useMemo(
     () => albums.reduce((sum, album) => sum + (album.imageCount ?? 0), 0),
     [albums],
   );
+  const totalVideos = useMemo(
+    () => albums.reduce((sum, album) => sum + (album.videoCount ?? 0), 0),
+    [albums],
+  );
+  const totalMedia = totalImages + totalVideos;
 
   const progressPaths = useMemo(
     () => albums.map((album) => album.id),
@@ -202,8 +207,9 @@ export default function Tag() {
             />
             <Stat
               icon={<ReaderIcon size={13} />}
-              label="总张数"
-              value={totalPages}
+              label="总媒体"
+              value={totalMedia}
+              detail={`图片 ${totalImages} · 视频 ${totalVideos}`}
             />
             <Stat
               icon={<ClockIcon size={13} />}
@@ -257,10 +263,12 @@ function Stat({
   icon,
   label,
   value,
+  detail,
 }: {
   icon: React.ReactNode;
   label: string;
   value: number | string;
+  detail?: string;
 }) {
   return (
     <div>
@@ -271,6 +279,9 @@ function Stat({
       <div className="text-lg font-display font-semibold mt-1 tabular-nums">
         {value}
       </div>
+      {detail && (
+        <div className="text-[10px] text-fg-subtle mt-0.5">{detail}</div>
+      )}
     </div>
   );
 }

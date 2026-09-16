@@ -38,6 +38,7 @@ import PropertiesDialog from "../components/common/PropertiesDialog";
 import ContextMenu, { type AnyMenuItem } from "../components/album/ContextMenu";
 import VideoCoverImage from "../components/common/VideoCoverImage";
 import MediaThumbnailGrid from "../components/album/MediaThumbnailGrid";
+import MixedMediaThumbnailGrid from "../components/album/MixedMediaThumbnailGrid";
 import VideoThumbnailGrid from "../components/album/VideoThumbnailGrid";
 import { fsCapabilities } from "../api/fs";
 import type { GalleryContextEntry } from "../utils/galleryContext";
@@ -58,6 +59,7 @@ interface AlbumDetail {
   name: string;
   imageFiles: string[];
   videoFiles?: string[];
+  mediaItems?: LibraryMediaItem[];
   coverImage: string;
   coverKind?: "image" | "video";
   imageCount: number;
@@ -102,6 +104,7 @@ function albumDetailFromSummary(
     videoFiles: media
       .filter((item) => item.kind === "video")
       .map((item) => item.id),
+    mediaItems: media,
     coverImage: summary.coverImage ?? "",
     coverKind: summary.coverKind,
     imageCount: summary.imageCount ?? 0,
@@ -355,6 +358,16 @@ function AlbumView({
     navigate(`/gallery?${qs.toString()}`);
   };
 
+  const openMedia = (item: LibraryMediaItem) => {
+    const qs = new URLSearchParams({
+      path: detail.path,
+      index: String(item.kindIndex),
+      name: detail.name,
+    });
+    if (item.kind === "video") qs.set("type", "video");
+    navigate(`/gallery?${qs.toString()}`);
+  };
+
   // 用 AlbumActions 钩子,实现菜单里的复制路径 / 资源管理器 / 属性
   const actions = useAlbumActions(
     {
@@ -399,6 +412,22 @@ function AlbumView({
 
   // 防御：API 可能返回 null
   const imageFiles = detail.imageFiles ?? [];
+  const mediaItems = useMemo(
+    () => detail.mediaItems ?? [],
+    [detail.mediaItems],
+  );
+  const videoCount = detail.videoCount ?? 0;
+  const videoIds = useMemo(
+    () =>
+      mediaItems.filter((item) => item.kind === "video").map((item) => item.id),
+    [mediaItems],
+  );
+  const videoInfos = useQuery({
+    queryKey: ["video-infos", detail.path, videoIds],
+    queryFn: () => getVideoInfoBatch(videoIds),
+    enabled: videoIds.length > 0,
+    staleTime: 5 * 60_000,
+  });
 
   if (detail.imageCount === 0) {
     return (
@@ -493,15 +522,9 @@ function AlbumView({
                 )}
                 <span className="tabular-nums">
                   {detail.imageCount > 0 ? `${detail.imageCount} 张` : ""}
-                  {detail.imageCount > 0 && (detail.videoCount ?? 0) > 0
-                    ? " · "
-                    : ""}
-                  {(detail.videoCount ?? 0) > 0
-                    ? `${detail.videoCount} 个视频`
-                    : ""}
-                  {detail.imageCount === 0 && (detail.videoCount ?? 0) === 0
-                    ? "0 张"
-                    : ""}
+                  {detail.imageCount > 0 && videoCount > 0 ? " · " : ""}
+                  {videoCount > 0 ? `${videoCount} 个视频` : ""}
+                  {detail.imageCount === 0 && videoCount === 0 ? "0 张" : ""}
                 </span>
                 {detail.folderSize > 0 && (
                   <>
@@ -634,10 +657,12 @@ function AlbumView({
       <div className="px-6 lg:px-10 pt-5 pb-3 flex items-center gap-3 max-w-[1400px] mx-auto w-full">
         <ImageIcon size={12} className="text-fg-muted" />
         <h2 className="text-[11px] uppercase tracking-[0.18em] text-fg-muted font-medium">
-          所有页面
+          {videoCount > 0 ? "全部媒体" : "所有页面"}
         </h2>
         <span className="text-[11px] text-fg-subtle tabular-nums">
-          {imageFiles.length} 张
+          {videoCount > 0
+            ? `${detail.imageCount} 张 · ${videoCount} 个视频`
+            : `${detail.imageCount} 张`}
         </span>
         <span className="text-fg-subtle/40">·</span>
         <div className="flex items-center border border-border-faint rounded-md overflow-hidden text-xs ml-auto">
@@ -660,20 +685,43 @@ function AlbumView({
       </div>
 
       <div className="flex-1 overflow-auto">
-        <MediaThumbnailGrid
-          files={imageFiles}
-          total={detail.imageCount}
-          gridClassName={gridCls}
-          progressIndex={progress?.pageIndex}
-          hasNextPage={hasNextPage}
-          isLoadingMore={isLoadingMore}
-          onLoadMore={onLoadMore}
-          onOpen={openGallery}
-          onContextMenu={(index, event) => {
-            event.preventDefault();
-            setContextMenu({ x: event.clientX, y: event.clientY, index });
-          }}
-        />
+        {videoCount > 0 ? (
+          <MixedMediaThumbnailGrid
+            items={mediaItems}
+            total={detail.imageCount + videoCount}
+            gridClassName={gridCls}
+            progressIndex={progress?.pageIndex}
+            videoInfos={videoInfos.data ?? {}}
+            hasNextPage={hasNextPage}
+            isLoadingMore={isLoadingMore}
+            onLoadMore={onLoadMore}
+            onOpen={openMedia}
+            onContextMenu={(item, event) => {
+              if (item.kind !== "image") return;
+              event.preventDefault();
+              setContextMenu({
+                x: event.clientX,
+                y: event.clientY,
+                index: item.kindIndex,
+              });
+            }}
+          />
+        ) : (
+          <MediaThumbnailGrid
+            files={imageFiles}
+            total={detail.imageCount}
+            gridClassName={gridCls}
+            progressIndex={progress?.pageIndex}
+            hasNextPage={hasNextPage}
+            isLoadingMore={isLoadingMore}
+            onLoadMore={onLoadMore}
+            onOpen={openGallery}
+            onContextMenu={(index, event) => {
+              event.preventDefault();
+              setContextMenu({ x: event.clientX, y: event.clientY, index });
+            }}
+          />
+        )}
       </div>
 
       {contextMenu && (
