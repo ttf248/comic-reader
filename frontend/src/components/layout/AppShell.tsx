@@ -1,5 +1,5 @@
 import { Outlet, useLocation, useNavigate } from "react-router-dom";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useUIStore } from "../../store/uiStore";
 import { useKeyboard } from "../../hooks/useKeyboard";
@@ -29,9 +29,30 @@ export default function AppShell() {
   const pushToast = useUIStore((s) => s.pushToast);
   const [helpOpen, setHelpOpen] = useState(false);
   const [isCancellingScan, setIsCancellingScan] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const wasMobileNavOpen = useRef(false);
   const onGallery = location.pathname.startsWith("/gallery");
   // 扫描进度 + 取消（提升到 AppShell 后所有路由都能看到顶部进度条）
   const scanSse = useScanSSE();
+
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (!mobileNavOpen) {
+      if (wasMobileNavOpen.current) mobileMenuButtonRef.current?.focus();
+      wasMobileNavOpen.current = false;
+      return;
+    }
+    wasMobileNavOpen.current = true;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileNavOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileNavOpen]);
 
   // 启动时同步服务端能力（fsCapabilities.allowOsOpen），
   // 否则 Album 详情 / 右键菜单的"在资源管理器中打开"按钮永远 disabled。
@@ -92,8 +113,7 @@ export default function AppShell() {
   const randomAlbum = useMutation({
     mutationFn: () => libraryApi.randomAlbum(),
     onSuccess: ({ album }) => navigate(albumRoute(album.id)),
-    onError: () =>
-      pushToast({ kind: "info", message: "没有可随机打开的相册" }),
+    onError: () => pushToast({ kind: "info", message: "没有可随机打开的相册" }),
   });
 
   const goShuffle = () => {
@@ -141,9 +161,16 @@ export default function AppShell() {
 
   return (
     <div className="flex h-full bg-bg">
-      <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
+      <Sidebar
+        collapsed={mobileNavOpen ? false : sidebarCollapsed}
+        onToggle={toggleSidebar}
+        mobileOpen={mobileNavOpen}
+      />
       <div className="flex-1 flex flex-col min-w-0">
-        <Toolbar />
+        <Toolbar
+          onOpenMobileNav={() => setMobileNavOpen(true)}
+          mobileMenuButtonRef={mobileMenuButtonRef}
+        />
         <main className="flex-1 overflow-auto">
           {/* 路由层错误兜底:任意子组件 render 抛错都不会让整个 SPA 白屏。 */}
           <ErrorBoundary key={location.pathname}>
@@ -152,6 +179,14 @@ export default function AppShell() {
         </main>
         <StatusBar />
       </div>
+      {mobileNavOpen && (
+        <button
+          type="button"
+          aria-label="关闭导航"
+          onClick={() => setMobileNavOpen(false)}
+          className="fixed inset-0 z-40 bg-black/30 lg:hidden"
+        />
+      )}
       {/*
         扫描进度卡：左下角浮动卡（fixed，相对 viewport）。
         必须在 <main> 外面，否则会被 main 的 overflow-auto 影响 sticky/fixed 行为。

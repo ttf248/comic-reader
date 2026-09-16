@@ -65,6 +65,12 @@ export const SearchIcon = (p: IconProps) => (
   </svg>
 )
 
+export const MenuIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M4 7h16M4 12h16M4 17h16" />
+  </svg>
+)
+
 export const ScanIcon = (p: IconProps) => (
   <svg {...base(p)}>
     <path d="M4 7V5a1 1 0 0 1 1-1h2" />

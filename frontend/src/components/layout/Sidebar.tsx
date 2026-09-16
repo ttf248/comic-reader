@@ -1,4 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
+import { useEffect, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import {
   HomeIcon,
@@ -19,6 +20,7 @@ import { albumRoute } from "../../utils/path";
 interface Props {
   collapsed: boolean;
   onToggle: () => void;
+  mobileOpen?: boolean;
 }
 
 const items = [
@@ -32,21 +34,30 @@ const items = [
 // - 极简的图标列；展开时多 8px 内边距 + 文字
 // - 透明背景，仅在 hover/active 时出现 subtle 背景
 // - 顶部的 "Local Gallery" 文字标只在展开时显示，折叠时仅保留品牌方块
-export default function Sidebar({ collapsed, onToggle }: Props) {
+export default function Sidebar({
+  collapsed,
+  onToggle,
+  mobileOpen = false,
+}: Props) {
   const navigate = useNavigate();
   const location = useLocation();
   const pushToast = useUIStore((s) => s.pushToast);
   // 常驻导航只消费服务端派生的计数，不能为 badge 常驻下载全库相册摘要。
   const activitySummary = useLibraryActivitySummary();
   const unreadCount = activitySummary.data?.summary.unreadCount ?? 0;
+  const navRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    navRef.current?.querySelector<HTMLElement>("a, button")?.focus();
+  }, [mobileOpen]);
   const randomAlbum = useMutation({
     mutationFn: (scope: "all" | "unread") => libraryApi.randomAlbum(scope),
     onSuccess: ({ album }) => navigate(albumRoute(album.id)),
     onError: (_error, scope) =>
       pushToast({
         kind: "info",
-        message:
-          scope === "unread" ? "没有未读相册可跳" : "尚未加载图像库",
+        message: scope === "unread" ? "没有未读相册可跳" : "尚未加载图像库",
       }),
   });
 
@@ -62,8 +73,11 @@ export default function Sidebar({ collapsed, onToggle }: Props) {
 
   return (
     <aside
+      aria-label="主导航"
       className={`flex flex-col glass border-r border-border-faint transition-[width] duration-200 ease-out ${
-        collapsed ? "w-[60px]" : "w-[208px]"
+        mobileOpen
+          ? "fixed inset-y-0 left-0 z-50 w-[208px]"
+          : `hidden lg:flex lg:static ${collapsed ? "w-[60px]" : "w-[208px]"}`
       }`}
     >
       <div
@@ -117,7 +131,7 @@ export default function Sidebar({ collapsed, onToggle }: Props) {
         </button>
       </div>
 
-      <nav className="flex-1 py-3 px-2 space-y-0.5">
+      <nav ref={navRef} className="flex-1 py-3 px-2 space-y-0.5">
         <div className="px-1.5 mb-1.5 text-[10px] font-medium uppercase tracking-[0.18em] text-fg-subtle">
           {!collapsed ? "导航" : ""}
         </div>

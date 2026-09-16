@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { RefObject } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { scanApi } from "../../api/scan";
@@ -14,6 +15,7 @@ import {
   MoreHorizontalIcon,
   RefreshIcon,
   HelpIcon,
+  MenuIcon,
 } from "../common/Icon";
 
 // 顶部工具栏（精简后）：
@@ -23,7 +25,13 @@ import {
 //
 // 排序 / 视图模式 / 视图 chips 已迁移到各 list 页面的 filter strip,
 //  让 toolbar 只承担"全局信息 + 主题"职责,避免挤 7+ 控件。
-export default function Toolbar() {
+export default function Toolbar({
+  onOpenMobileNav,
+  mobileMenuButtonRef,
+}: {
+  onOpenMobileNav?: () => void;
+  mobileMenuButtonRef?: RefObject<HTMLButtonElement>;
+}) {
   const navigate = useNavigate();
   const location = useLocation();
   const sse = useScanSSE();
@@ -78,15 +86,28 @@ export default function Toolbar() {
         </span>
       </div>
       {/* 窄屏：返回按钮 */}
-      <div className="lg:hidden">
-        {onGallery ? (
+      <div className="flex items-center gap-1 lg:hidden">
+        {onOpenMobileNav && (
           <button
+            type="button"
+            ref={mobileMenuButtonRef}
+            onClick={onOpenMobileNav}
+            className="inline-flex items-center justify-center w-8 h-8 rounded-md text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors"
+            title="打开导航"
+            aria-label="打开导航"
+          >
+            <MenuIcon size={15} />
+          </button>
+        )}
+        {onGallery && (
+          <button
+            type="button"
             onClick={() => navigate(-1)}
             className="text-xs h-8 px-2.5 rounded-md text-fg-muted hover:bg-bg-subtle"
           >
             返回
           </button>
-        ) : null}
+        )}
       </div>
 
       {!onGallery && (
