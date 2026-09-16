@@ -57,12 +57,12 @@
 | 能力       | 当前行为                                     | 主要实现                                           |
 | ---------- | -------------------------------------------- | -------------------------------------------------- |
 | 首页       | 年份时间线、窗口化网格/列表、筛选、排序和随机 | `routes/Home.tsx`、`components/home/HomeHeroes.tsx`、`components/album/AlbumGrid.tsx` |
-| 相册       | 集合下钻、智能合集、混合媒体虚拟网格、封面选择和属性查看 | `routes/Album.tsx`、`MixedMediaThumbnailGrid`       |
+| 相册       | 集合下钻、智能合集、分页虚拟媒体网格、封面选择和属性查看 | `routes/Album.tsx`、`MediaThumbnailGrid` / `VideoThumbnailGrid` / `MixedMediaThumbnailGrid` |
 | 画廊       | 单张、连续、双张、RTL、缩放、旋转、全屏      | `routes/Gallery.tsx`、`components/gallery`         |
 | 视频播放器 | 原生 controls 与播放、跳转、音量、静音快捷键 | `VideoPlayer.tsx`                                  |
 | 搜索       | 名称、标签模糊搜索；`/` 聚焦                 | `GlobalSearch.tsx`                         |
 | 主题       | light/dark/system 和六套强调色               | `useTheme`、`themeStore`                   |
-| 动效与触摸 | 尊重系统减少动态效果设置；触摸设备直接显示关键操作 | `global.css`、`useReducedMotion`、各卡片组件 |
+| 动效与触摸 | 尊重系统减少动态效果设置；触摸设备显示关键操作、提供导航抽屉和单页滑动翻页 | `global.css`、`useReducedMotion`、`AppShell`、`ImageGallery` |
 | 键盘       | 阅读、导航、显示模式和帮助快捷键             | [SHORTCUTS.md](./SHORTCUTS.md)             |
 
 ## 用户数据
