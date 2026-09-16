@@ -101,7 +101,7 @@ func VideoHandler(transcode *services.TranscodeService, faststart *services.Vide
 //	GET /api/videos/:id/info
 //
 // 字段：
-//   - path / name / dir / size / mtime：与服务端文件信息一致
+//   - path / name / dir / size / mtime：公开资源标识和服务端文件信息
 //   - format：扩展名（含点，小写）
 //   - duration / width / height / codec / container / bitRate：
 //     当 VideoInfoService 可用（ffprobe 装好）时填入；否则全 0/空串，
@@ -132,13 +132,17 @@ func VideoInfoHandler(infoSvc *services.VideoInfoService, transcode *services.Tr
 			}
 			return writeError(c, fiber.StatusInternalServerError, "video_info_failed", "failed to read video metadata")
 		}
-		publicPath := path
-		publicDir := filepath.Dir(path)
+		// 没有资源目录时兼容旧的 query path 入口：只返回文件名，不能把
+		// SafePath 中的本地绝对路径重新写入响应或探测失败日志。
+		publicPath := filepath.Base(path)
+		publicDir := ""
+		publicID := filepath.Base(path)
 		if catalog != nil {
 			publicPath = resourceID
 			publicDir = catalog.RelativeLabel(resourceID)
+			publicID = resourceID
 		}
-		resp := videoInfoResponse(infoSvc, transcode, resourceID, publicPath, publicDir, path, info)
+		resp := videoInfoResponse(infoSvc, transcode, publicID, publicPath, publicDir, path, info)
 		return c.JSON(resp)
 	}
 }

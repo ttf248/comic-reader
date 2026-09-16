@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -146,5 +147,39 @@ func TestVideoInfoBatchUsesResourceIDsAndHidesAbsolutePaths(t *testing.T) {
 	}
 	if !strings.Contains(string(body), videoID) {
 		t.Fatalf("batch response does not contain resource id %q: %s", videoID, body)
+	}
+}
+
+func TestVideoInfoWithoutCatalogHidesAbsolutePath(t *testing.T) {
+	root := t.TempDir()
+	videoPath := filepath.Join(root, "legacy.mp4")
+	if err := os.WriteFile(videoPath, []byte("fake video"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	app := fiber.New()
+	app.Get("/api/videos/info", VideoInfoHandler(nil, nil))
+	request := httptest.NewRequest(
+		http.MethodGet,
+		"/api/videos/info?path="+url.QueryEscape(videoPath),
+		nil,
+	)
+	res, err := app.Test(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(res.Body)
+		t.Fatalf("status = %d, body = %s", res.StatusCode, body)
+	}
+	body, err := io.ReadAll(res.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), root) || strings.Contains(string(body), videoPath) {
+		t.Fatalf("legacy response leaked an absolute path: %s", body)
+	}
+	if !strings.Contains(string(body), `"path":"legacy.mp4"`) {
+		t.Fatalf("legacy response did not use a safe public path: %s", body)
 	}
 }
