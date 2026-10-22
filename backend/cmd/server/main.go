@@ -380,7 +380,25 @@ func main() {
 	// ---- 启动与优雅退出 ----
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := runServer(ctx, app, cfg.Addr(), runner, transcode, scanCache); err != nil {
+	maintenanceDone := make(chan struct{})
+	go func() {
+		defer close(maintenanceDone)
+		services.RunCacheMaintenance(ctx, time.Hour, func(ctx context.Context) error {
+			current := mgr.Get()
+			deleted, err := services.MaintainDerivedCache(ctx, cacheLayout, current.CacheMaxSizeMB*1024*1024, current.CacheMaxAgeDays)
+			if deleted > 0 {
+				cacheStats.Invalidate()
+			}
+			if err != nil && ctx.Err() == nil {
+				log.Print("派生缓存自动清理未完成，请检查工作目录权限")
+			}
+			return err
+		})
+	}()
+	err = runServer(ctx, app, cfg.Addr(), runner, transcode, scanCache)
+	stop()
+	<-maintenanceDone
+	if err != nil {
 		log.Printf("服务退出异常: %v", err)
 		os.Exit(1)
 	}

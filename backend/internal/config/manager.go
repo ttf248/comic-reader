@@ -292,6 +292,7 @@ func marshalConfig(cfg *Config) ([]byte, error) {
 	addKV("thumbSizeH", scalarInt(cfg.ThumbSizeH))
 	addKV("thumbCacheSize", scalarInt(cfg.ThumbCacheSize))
 	addKV("cacheMaxAgeDays", scalarInt(cfg.CacheMaxAgeDays))
+	addKV("cacheMaxSizeMB", scalarInt(int(cfg.CacheMaxSizeMB)))
 	addKV("allowOsOpen", scalarBool(cfg.AllowOsOpen))
 	addKV("staticDir", scalarString(cfg.StaticDir))
 	addKV("ffmpegPath", scalarString(cfg.FFmpegPath))
@@ -360,6 +361,9 @@ func applyPatch(dst *Config, p *ConfigPatch) {
 	}
 	if p.CacheMaxAgeDaysSet {
 		dst.CacheMaxAgeDays = p.CacheMaxAgeDays
+	}
+	if p.CacheMaxSizeMBSet {
+		dst.CacheMaxSizeMB = p.CacheMaxSizeMB
 	}
 	if p.AllowOsOpenSet {
 		dst.AllowOsOpen = p.AllowOsOpen

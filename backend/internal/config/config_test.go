@@ -9,6 +9,20 @@ import (
 	"testing"
 )
 
+func TestCacheCapacityExplicitZeroSurvivesReload(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("cacheMaxSizeMB: 0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadFile(path)
+	if err != nil || cfg.CacheMaxSizeMB != 0 {
+		t.Fatalf("capacity=%v err=%v", cfg, err)
+	}
+	if Default().CacheMaxSizeMB != 10240 {
+		t.Fatal("unexpected default budget")
+	}
+}
+
 // writeTempYAML 写入临时 YAML 配置文件并返回路径。
 func writeTempYAML(t *testing.T, content string) string {
 	t.Helper()

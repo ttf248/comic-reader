@@ -171,6 +171,7 @@ cd ../backend && go build -o ../bin/server ./cmd/server
 | `thumbSizeW` / `thumbSizeH` | 缩略图尺寸                                                                |
 | `thumbCacheSize`            | LRU 内存缓存项数                                                          |
 | `cacheMaxAgeDays`           | 磁盘缓存保留天数                                                          |
+| `cacheMaxSizeMB`            | 派生缓存容量软上限，默认 10240 MiB；0 不限容量；启动及每小时按年龄和容量清理 |
 | `ffmpegPath`                | ffmpeg / ffprobe 路径，留空则自动探测 `bin/ffmpeg/<os>/<arch>/`；修改需重启 |
 | `allowOsOpen`               | 是否允许 `/api/fs/open` 在系统资源管理器里打开                            |
 | `staticDir`                 | 前端构建产物目录（生产单端口托管用）                                      |

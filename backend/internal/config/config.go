@@ -64,6 +64,7 @@ type Config struct {
 	ThumbSizeH      int      `yaml:"thumbSizeH"`
 	ThumbCacheSize  int      `yaml:"thumbCacheSize"`
 	CacheMaxAgeDays int      `yaml:"cacheMaxAgeDays"`
+	CacheMaxSizeMB  int64    `yaml:"cacheMaxSizeMB"`
 	StaticDir       string   `yaml:"staticDir"`
 
 	// FFmpegPath ffmpeg 可执行文件绝对路径。空 → 走 DefaultFFmpegPath。
@@ -117,6 +118,7 @@ func Default() *Config {
 		ThumbSizeH:      350,
 		ThumbCacheSize:  500,
 		CacheMaxAgeDays: 30,
+		CacheMaxSizeMB:  10240,
 		StaticDir:       "dist",
 		FFmpegPath:      DefaultFFmpegPath,
 		// 排除规则默认值:跳隐藏目录 + 内置系统白名单
@@ -163,6 +165,9 @@ func LoadFile(path string) (*Config, error) {
 	}
 
 	mergeFile(cfg, tmp)
+	if _, present := raw["cacheMaxSizeMB"]; present {
+		cfg.CacheMaxSizeMB = tmp.CacheMaxSizeMB
+	}
 	if err := secureConfigFile(path); err != nil {
 		return nil, fmt.Errorf("secure config file: %w", err)
 	}
@@ -269,6 +274,9 @@ func (c *Config) Validate() error {
 	}
 	if c.ThumbSizeW <= 0 || c.ThumbSizeH <= 0 {
 		return errors.New("thumb size must be positive")
+	}
+	if c.CacheMaxSizeMB < 0 || c.CacheMaxSizeMB > 1048576 {
+		return errors.New("cacheMaxSizeMB must be between 0 and 1048576")
 	}
 	return nil
 }

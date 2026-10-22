@@ -35,6 +35,7 @@ const baseConfig = {
   thumbSizeH: 350,
   thumbCacheSize: 500,
   cacheMaxAgeDays: 30,
+  cacheMaxSizeMB: 10240,
   allowOsOpen: false,
   staticDir: "dist",
   configPath: "C:\\cfg.yaml",
@@ -145,6 +146,17 @@ describe("ServerConfigPanel", () => {
     // 等待 debounce + flush（默认 600ms + 余量）
     await waitFor(
       () => expect(configApi.update).toHaveBeenCalledWith({ port: 9090 }),
+      { timeout: 1500 },
+    );
+  });
+
+  it("缓存容量可以显式设为零", async () => {
+    renderPanel();
+    const input = await screen.findByDisplayValue("10240");
+    fireEvent.change(input, { target: { value: "0" } });
+    await waitFor(
+      () =>
+        expect(configApi.update).toHaveBeenCalledWith({ cacheMaxSizeMB: 0 }),
       { timeout: 1500 },
     );
   });

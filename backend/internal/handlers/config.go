@@ -12,6 +12,7 @@ import (
 //
 // 配置接口是唯一允许返回本机绝对配置路径的回环接口。
 type ConfigResponse struct {
+	CacheMaxSizeMB        int64    `json:"cacheMaxSizeMB"`
 	MediaRoots            []string `json:"mediaRoots"`
 	Host                  string   `json:"host"`
 	Port                  int      `json:"port"`
@@ -85,6 +86,7 @@ func ConfigGetHandler(mgr *config.Manager) fiber.Handler {
 			ThumbSizeH:            cfg.ThumbSizeH,
 			ThumbCacheSize:        cfg.ThumbCacheSize,
 			CacheMaxAgeDays:       cfg.CacheMaxAgeDays,
+			CacheMaxSizeMB:        cfg.CacheMaxSizeMB,
 			AllowOsOpen:           cfg.AllowOsOpen,
 			StaticDir:             cfg.StaticDir,
 			FFmpegPath:            ffPath,
@@ -139,6 +141,7 @@ func ConfigUpdateHandler(mgr *config.Manager, onUpdate func(c *config.Config, me
 				ThumbSizeH:            newCfg.ThumbSizeH,
 				ThumbCacheSize:        newCfg.ThumbCacheSize,
 				CacheMaxAgeDays:       newCfg.CacheMaxAgeDays,
+				CacheMaxSizeMB:        newCfg.CacheMaxSizeMB,
 				AllowOsOpen:           newCfg.AllowOsOpen,
 				StaticDir:             newCfg.StaticDir,
 				FFmpegPath:            newCfg.FFmpegPath,

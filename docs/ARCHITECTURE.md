@@ -91,6 +91,8 @@ POST /api/scans
 
 ## 缓存读路径
 
+后台维护在启动及每小时执行，只枚举 `derived/thumbnails`、`derived/video-faststart`、`derived/video-transcode` 的哈希命名完整产物。删除通过 `os.Root` 限制在派生根内，不跟随越界链接，不遍历 `state`，不处理临时文件；十分钟内的新产物保留。按年龄或全局容量软上限从旧到新淘汰，取消信号贯穿枚举和删除，退出等待维护任务结束。配置 `cacheMaxSizeMB: 0` 只关闭容量淘汰，不关闭过期清理。
+
 `ScanResultCache` 内部用 `atomic.Pointer[scanResultSnapshot]`。
 `Get` 走 `atomic.Load` 无锁，5k 相册 100+ 并发请求不再争夺 RWMutex。
 写路径（`Set` / `ApplyCoverOverrides` / `SetWithOverrideApplied` /

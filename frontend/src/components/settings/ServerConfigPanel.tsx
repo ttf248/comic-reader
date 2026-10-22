@@ -124,6 +124,14 @@ const FIELDS: { section: string; defs: FieldDef[] }[] = [
         min: 1,
         max: 365,
       },
+      {
+        key: "cacheMaxSizeMB",
+        label: "派生缓存容量（MiB）",
+        hint: "启动和每小时清理；0 不限制容量，新产物保留至少十分钟",
+        kind: "number",
+        min: 0,
+        max: 1048576,
+      },
     ],
   },
   {

@@ -11,6 +11,8 @@ import "encoding/json"
 // MediaRoots 用数组替换语义：显式空数组 `[]` 表示"用户清空所有根"，
 // 未提供字段表示"不修改"；区分通过 MediaRootsSet 实现。
 type ConfigPatch struct {
+	CacheMaxSizeMB     int64    `json:"cacheMaxSizeMB,omitempty"`
+	CacheMaxSizeMBSet  bool     `json:"-"`
 	MediaRoots         []string `json:"mediaRoots,omitempty"`
 	MediaRootsSet      bool     `json:"-"`
 	Host               string   `json:"host,omitempty"`
@@ -95,6 +97,9 @@ func (p *ConfigPatch) UnmarshalJSON(data []byte) error {
 	}
 	if _, ok := raw["cacheMaxAgeDays"]; ok {
 		p.CacheMaxAgeDaysSet = true
+	}
+	if _, ok := raw["cacheMaxSizeMB"]; ok {
+		p.CacheMaxSizeMBSet = true
 	}
 	if _, ok := raw["allowOsOpen"]; ok {
 		p.AllowOsOpenSet = true

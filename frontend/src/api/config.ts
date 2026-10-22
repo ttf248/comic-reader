@@ -13,6 +13,7 @@ export interface ServerConfig {
   thumbSizeH: number;
   thumbCacheSize: number;
   cacheMaxAgeDays: number;
+  cacheMaxSizeMB: number;
   allowOsOpen: boolean;
   staticDir: string;
   // ffmpegPath:服务端 ffmpeg 可执行文件路径;空 = 客户端抽帧 fallback
@@ -48,6 +49,7 @@ type ServerConfigFields = Partial<
     | "thumbSizeH"
     | "thumbCacheSize"
     | "cacheMaxAgeDays"
+    | "cacheMaxSizeMB"
     | "allowOsOpen"
     | "staticDir"
     | "ffmpegPath"

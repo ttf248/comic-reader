@@ -49,6 +49,10 @@ thumbCacheSize: 500
 # 缓存保留天数；超过此天数的不再被引用时清理
 cacheMaxAgeDays: 30
 
+# 派生缓存容量软上限（MiB），0 不限制容量。启动及每小时清理一次。
+# 只清理 derived 内完整产物；最近十分钟的新文件、临时文件及 state 不参与。
+cacheMaxSizeMB: 10240
+
 # 是否允许通过 /api/fs/open 在服务端打开系统文件管理器
 # （仅在受信环境开启，如本地开发）
 allowOsOpen: false
