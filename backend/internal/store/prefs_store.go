@@ -134,7 +134,22 @@ func (s *PrefsStore) Get() (models.Prefs, error) {
 	return clonePrefs(s.cached), nil
 }
 
-// Update 全量覆盖（用于 PATCH）。
+// Patch 在一次事务内修改偏好，避免覆盖并发收藏、历史或其它设置更新。
+func (s *PrefsStore) Patch(change func(*models.Prefs)) (models.Prefs, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.ensureLoaded(); err != nil {
+		return models.Prefs{}, err
+	}
+	next := clonePrefs(s.cached)
+	change(&next)
+	if err := s.commitLocked(next); err != nil {
+		return models.Prefs{}, err
+	}
+	return clonePrefs(s.cached), nil
+}
+
+// Update 全量替换内部快照；HTTP 部分更新必须使用 Patch。
 func (s *PrefsStore) Update(p models.Prefs) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

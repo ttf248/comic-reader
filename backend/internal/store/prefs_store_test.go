@@ -5,11 +5,47 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/tianlongxiang/local-gallery/internal/models"
 )
+
+func TestPrefsPatchPreservesConcurrentFavoritesAndHistory(t *testing.T) {
+	s := tempStore(t)
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(2)
+		go func(i int) {
+			defer wg.Done()
+			if _, err := s.AddFavorite(testAlbumID(i)); err != nil {
+				t.Error(err)
+			}
+			if _, err := s.AddHistory(models.HistoryEntry{AlbumID: testAlbumID(i), OpenedAt: time.Now()}); err != nil {
+				t.Error(err)
+			}
+		}(i)
+		go func() {
+			defer wg.Done()
+			if _, err := s.Patch(func(p *models.Prefs) { p.Theme = "dark" }); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	p, err := s.Get()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Favorites) != 20 || len(p.History) != 10 || p.Theme != "dark" {
+		t.Fatalf("lost concurrent writes: favorites=%d history=%d theme=%s", len(p.Favorites), len(p.History), p.Theme)
+	}
+	reloaded, err := NewPrefsStore(s.path).Get()
+	if err != nil || len(reloaded.Favorites) != 20 {
+		t.Fatalf("disk favorites=%d err=%v", len(reloaded.Favorites), err)
+	}
+}
 
 func tempStore(t *testing.T) *PrefsStore {
 	t.Helper()

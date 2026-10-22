@@ -39,28 +39,25 @@ func PrefsPatchHandler(s *store.PrefsStore) fiber.Handler {
 			return writeError(c, fiber.StatusBadRequest, "invalid_prefs_body", "invalid preferences body")
 		}
 
-		cur, err := s.Get()
+		cur, err := s.Patch(func(cur *models.Prefs) {
+			if p.Theme != nil {
+				cur.Theme = *p.Theme
+			}
+			if p.AutoSwitchAlbum != nil {
+				cur.AutoSwitchAlbum = *p.AutoSwitchAlbum
+			}
+			if p.ShowSwitchNotif != nil {
+				cur.ShowSwitchNotif = *p.ShowSwitchNotif
+			}
+			if p.SidebarCollapsed != nil {
+				cur.SidebarCollapsed = *p.SidebarCollapsed
+			}
+			if p.MaxRecent != nil && *p.MaxRecent > 0 {
+				cur.MaxRecent = *p.MaxRecent
+			}
+
+		})
 		if err != nil {
-			return prefsInternalError(c)
-		}
-
-		if p.Theme != nil {
-			cur.Theme = *p.Theme
-		}
-		if p.AutoSwitchAlbum != nil {
-			cur.AutoSwitchAlbum = *p.AutoSwitchAlbum
-		}
-		if p.ShowSwitchNotif != nil {
-			cur.ShowSwitchNotif = *p.ShowSwitchNotif
-		}
-		if p.SidebarCollapsed != nil {
-			cur.SidebarCollapsed = *p.SidebarCollapsed
-		}
-		if p.MaxRecent != nil && *p.MaxRecent > 0 {
-			cur.MaxRecent = *p.MaxRecent
-		}
-
-		if err := s.Update(cur); err != nil {
 			return prefsInternalError(c)
 		}
 		return c.JSON(cur)

@@ -192,6 +192,23 @@ func validatePathMulti(roots, prefixes []string, p string) (string, error) {
 		}
 		// 命中第 i 个根；额外断言 abs 以 prefix 开头，避免边缘大小写问题
 		_ = prefixes[i] // 保留 prefixes 字段供未来 audit / debug
+		// 扫描快照不能证明路径现在仍安全：目录可能在扫描后被替换为
+		// 符号链接或 Windows junction。与扫描器保持一致，根内不跟随链接。
+		for current := abs; ; current = filepath.Dir(current) {
+			if relative, _ := filepath.Rel(root, current); relative == "." {
+				break
+			}
+			info, err := os.Lstat(current)
+			if os.IsNotExist(err) {
+				continue // 已删除的资源由 handler 返回 404，仍检查其父目录。
+			}
+			if err != nil {
+				return "", fmt.Errorf("cannot validate media path")
+			}
+			if info.Mode()&(os.ModeSymlink|os.ModeIrregular) != 0 {
+				return "", fmt.Errorf("media path contains a link")
+			}
+		}
 		return abs, nil
 	}
 	return "", fmt.Errorf("path outside any configured media root")

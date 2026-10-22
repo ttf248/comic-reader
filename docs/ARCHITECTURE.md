@@ -126,6 +126,10 @@ ffprobe 提供元数据；浏览器不支持的编码按需转为 H.264 + AAC；
 
 ## 配置与持久化
 
+偏好部分更新在 store 的同一写锁中完成读取、字段修改和原子落盘，避免修改主题时覆盖并发新增的收藏或历史。返回值是归一化后的已提交快照。
+
+资源请求除相对路径边界校验外，还逐级检查根内路径组件，拒绝符号链接和 Windows junction，包括扫描后才发生的目录替换。该检查不将本机可任意并发改写文件系统的进程视为隔离边界；媒体目录应由受信本机程序管理。
+
 - 配置：`backend/config.yaml`，`mediaRoots` 是唯一媒体根字段。
 - 默认工作目录：进程 CWD 下 `.local-gallery/`。启动时只创建当前分层布局；旧顶层文件不会被读取、移动或删除。
 - 持久状态：`state/scan_cache.json`、`state/web_settings.json`、`state/activity.json`、`state/cover_overrides.json`；任何缓存清理接口都不得进入 `state/`。
