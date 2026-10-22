@@ -134,10 +134,21 @@ cd ../frontend && npm run dev              # 默认 :5173，反向代理到 :808
 
 ### 生产部署
 
+Windows 源码目录支持双击根目录的 `build.bat` 构建，再双击 `start.bat` 启动：
+
+1. 构建需要 PATH 中可用的 Go 1.24+、Node.js 20+（含 npm）和 PowerShell 7（`pwsh`）。
+2. `build.bat` 调用 `scripts/build.ps1`，执行 `npm ci`、前端构建和 Windows 本机架构后端构建，输出 `frontend/dist/` 与 `bin/local-gallery.exe`。
+3. 首次运行前，将 `backend/config.example.yaml` 复制为 `backend/config.yaml`，设置实际存在的 `mediaRoots`，并设置 `staticDir: "../frontend/dist"`。已有配置直接检查这两项，无需覆盖。
+4. `start.bat` 从 `backend/` 工作目录直接运行上述二进制，读取 `config.yaml`；启动不需要 Go、Node.js 或 PowerShell，也不会自动构建。默认访问 `http://127.0.0.1:8080`，按 `Ctrl+C` 停止。
+
+两个 BAT 都可从任意工作目录调用；构建结束或启动失败时会暂停显示结果。命令行及自动化调用可加 `--no-pause`，退出码会保留。配置、缓存和构建产物不入仓。完整说明见 [构建与发布](./docs/RELEASE.md)。
+
+手动构建运行（同样先配置 `staticDir: "../frontend/dist"`，并从 `backend/` 启动）：
+
 ```bash
 cd frontend && npm run build              # 产物在 frontend/dist
 cd ../backend && go build -o ../bin/server ./cmd/server
-./bin/server                              # 单端口同时托管 API + 静态资源
+../bin/server                             # 单端口同时托管 API + 静态资源
 ```
 
 生产发布包、版本线和自动推送流程见 [`docs/RELEASE.md`](./docs/RELEASE.md)。当前 Go + React 架构从 `v2.0.0` 开始；GitHub 上已有的 `v1.x` Release 属于旧 Python 架构，仅作为历史版本保留。
@@ -210,6 +221,7 @@ macOS / Linux 走 `bin/ffmpeg/<os>/<arch>/` 同形目录，安装脚本后续补
 
 ```
 local-gallery/
+├── build.bat / start.bat    # Windows 一键构建 / 运行构建产物
 ├── backend/                # Go + Fiber
 │   ├── cmd/server/         # 入口（flag + YAML 配置装配 + 服务装配）
 │   ├── internal/

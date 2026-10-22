@@ -86,8 +86,16 @@
     },
     {
       "label": "build: all",
-      "dependsOn": ["backend: build", "frontend: build"],
-      "dependsOrder": "parallel",
+      "type": "shell",
+      "command": "pwsh",
+      "args": ["-NoProfile", "-File", "scripts/build.ps1"],
+      "windows": {
+        "command": ".\\build.bat",
+        "args": ["--no-pause"]
+      },
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
       "group": "build",
       "problemMatcher": []
     }
