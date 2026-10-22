@@ -49,7 +49,25 @@ test("扫描并打开示例相册", async ({ page }) => {
   await expect(page).toHaveURL(/\/albums\/a_[A-Za-z0-9_-]+$/);
 
   const albumId = body.page.items[0].id;
+  await page.route("**/api/activity", async (route) => {
+    if (route.request().method() === "PUT") {
+      await route.fulfill({ status: 400, json: { error: "模拟保存失败" } });
+    } else {
+      await route.continue();
+    }
+  });
   await page.goto(`/gallery?path=${encodeURIComponent(albumId)}&index=1`);
+  await expect(page.getByRole("alert")).toContainText("阅读进度未保存");
+  for (const theme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: theme });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    await page.screenshot({
+      path: test.info().outputPath(`progress-save-error-${theme}.png`),
+    });
+  }
+  await page.unroute("**/api/activity");
+  await page.getByRole("button", { name: "重试进度" }).click();
+  await expect(page.getByRole("alert")).toHaveCount(0);
   await expect
     .poll(async () => {
       const response = await page.request.get(

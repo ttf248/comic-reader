@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useUIStore } from "../../store/uiStore";
 import { useKeyboard } from "../../hooks/useKeyboard";
-import { useTheme } from "../../hooks/useTheme";
 import { albumRoute } from "../../utils/path";
 import { fsApi } from "../../api/fs";
 import { scanApi } from "../../api/scan";
@@ -12,7 +11,6 @@ import Sidebar from "./Sidebar";
 import Toolbar from "./Toolbar";
 import StatusBar from "./StatusBar";
 import ScanProgress from "../album/ScanProgress";
-import ToastViewport from "../common/Toast";
 import HelpOverlay from "../common/HelpOverlay";
 import ErrorBoundary from "../common/ErrorBoundary";
 import { libraryApi } from "../../api/library";
@@ -20,7 +18,6 @@ import { libraryApi } from "../../api/library";
 // 应用外壳：侧边栏 + 工具栏 + 主内容。
 // 全局帮助浮层通过 comic:open-help 事件触发（所有页面 ? 都能唤起）。
 export default function AppShell() {
-  useTheme();
   const location = useLocation();
   const navigate = useNavigate();
   const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
@@ -197,7 +194,6 @@ export default function AppShell() {
         onCancel={cancelScan}
         isCancelling={isCancellingScan}
       />
-      <ToastViewport />
       <HelpOverlay open={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>
   );

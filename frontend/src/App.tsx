@@ -3,6 +3,8 @@ import { Routes, Route, Navigate } from "react-router-dom";
 import AppShell from "./components/layout/AppShell";
 import RouteLoading from "./components/common/RouteLoading";
 import AccessGate from "./components/auth/AccessGate";
+import ToastViewport from "./components/common/Toast";
+import { useTheme } from "./hooks/useTheme";
 
 const Home = lazy(() => import("./routes/Home"));
 const Recents = lazy(() => import("./routes/Recents"));
@@ -22,6 +24,7 @@ function lazyPage(Page: ComponentType) {
 }
 
 export default function App() {
+  useTheme();
   return (
     <AccessGate>
       <Routes>
@@ -37,6 +40,7 @@ export default function App() {
         </Route>
         <Route path="/gallery/*" element={lazyPage(Gallery)} />
       </Routes>
+      <ToastViewport />
     </AccessGate>
   );
 }

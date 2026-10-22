@@ -111,6 +111,11 @@ export default function Gallery() {
   const [markingRead, setMarkingRead] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [progressFailure, setProgressFailure] = useState<{
+    key: string;
+    operation: "restore" | "save";
+  } | null>(null);
+  const [retryingProgress, setRetryingProgress] = useState(false);
   const finishedRef = useRef(false);
   // 持有「最新」index/total；sendBeacon 关闭时从这里取最新值。
   // 同时记录 path，只有 images 有效时才更新 — 避免切到新 album 的 loading
@@ -191,6 +196,27 @@ export default function Gallery() {
     isVideo && pathParam && currentVideo
       ? JSON.stringify([pathParam, currentVideo])
       : "";
+  const progressKey = JSON.stringify([pathParam, isVideo, currentVideo ?? ""]);
+  const activeProgressKey = useRef(progressKey);
+  activeProgressKey.current = progressKey;
+  const reportProgressFailure = useCallback(
+    (operation: "restore" | "save") => {
+      if (activeProgressKey.current === progressKey) {
+        setProgressFailure({ key: progressKey, operation });
+      }
+    },
+    [progressKey],
+  );
+  const clearProgressFailure = useCallback(
+    (operation: "restore" | "save") => {
+      setProgressFailure((failure) =>
+        failure?.key === progressKey && failure.operation === operation
+          ? null
+          : failure,
+      );
+    },
+    [progressKey],
+  );
   const imageActivityPageIndex = displayedPageIndex(
     mode,
     index,
@@ -306,10 +332,14 @@ export default function Gallery() {
             : pageIndex;
         setIndex(anchorIndex);
         setImageActivityReadyPath(pathParam);
+        clearProgressFailure("restore");
       })
       .catch((error) => {
         if (!cancelled && isActivityNotFound(error)) {
           setImageActivityReadyPath(pathParam);
+          clearProgressFailure("restore");
+        } else if (!cancelled) {
+          reportProgressFailure("restore");
         }
       });
     return () => {
@@ -352,6 +382,7 @@ export default function Gallery() {
       activityApi
         .setImage(pathParam, imageActivityPageIndex, total)
         .then(() => {
+          clearProgressFailure("save");
           // 活动 API 会通知首页仪表盘刷新；这里同时让 Recents / Favorites
           // 的批量活动和 Album 详情缓存失效，回到列表/详情时立刻看到新进度。
           queryClient.invalidateQueries({
@@ -361,7 +392,7 @@ export default function Gallery() {
             queryKey: ["activity", "image", pathParam],
           });
         })
-        .catch(() => {});
+        .catch(() => reportProgressFailure("save"));
     }, 600);
     return () => clearTimeout(t);
   }, [
@@ -370,6 +401,8 @@ export default function Gallery() {
     pathParam,
     images.length,
     queryClient,
+    clearProgressFailure,
+    reportProgressFailure,
   ]);
 
   // 视频以「相册 ID + 文件 ID」独立保存毫秒位置。播放过程最多
@@ -424,6 +457,7 @@ export default function Gallery() {
           session.durationMs,
         )
         .then(() => {
+          clearProgressFailure("save");
           if (
             videoActivityRef.current === session &&
             session.positionMs === savedPositionMs
@@ -431,9 +465,15 @@ export default function Gallery() {
             session.dirty = false;
           }
         })
-        .catch(() => {});
+        .catch(() => reportProgressFailure("save"));
     },
-    [pathParam, currentVideo, videoActivityKey],
+    [
+      pathParam,
+      currentVideo,
+      videoActivityKey,
+      clearProgressFailure,
+      reportProgressFailure,
+    ],
   );
 
   useEffect(() => {
@@ -465,6 +505,7 @@ export default function Gallery() {
         session.durationMs = durationMs;
         session.phase = "writable";
         session.dirty = false;
+        clearProgressFailure("restore");
         lastVideoWriteAtRef.current = Date.now();
         setVideoResume({
           key: videoActivityKey,
@@ -477,18 +518,71 @@ export default function Gallery() {
         if (isActivityNotFound(error)) {
           session.phase = "writable";
           session.dirty = false;
+          clearProgressFailure("restore");
           lastVideoWriteAtRef.current = Date.now();
           setVideoResume({ key: videoActivityKey });
           return;
         }
         session.phase = "blocked";
         session.dirty = false;
+        reportProgressFailure("restore");
       });
     return () => {
       cancelled = true;
       if (videoActivityRef.current === session) flushVideoSession(session);
     };
-  }, [isVideo, pathParam, currentVideo, videoActivityKey, videosReady]);
+  }, [
+    isVideo,
+    pathParam,
+    currentVideo,
+    videoActivityKey,
+    videosReady,
+    clearProgressFailure,
+    reportProgressFailure,
+  ]);
+
+  async function retryProgress() {
+    if (retryingProgress) return;
+    if (progressFailure?.operation === "restore") {
+      setReloadKey((key) => key + 1);
+      return;
+    }
+    setRetryingProgress(true);
+    try {
+      if (isVideo) {
+        const session = videoActivityRef.current;
+        if (!session || session.phase !== "writable" || session.durationMs <= 0)
+          return;
+        const savedPosition = session.positionMs;
+        await activityApi.setVideo(
+          session.albumId,
+          session.itemId,
+          savedPosition,
+          session.durationMs,
+        );
+        if (session.positionMs === savedPosition) session.dirty = false;
+      } else {
+        const progress = progressRef.current;
+        if (!imageActivityWritable || progress.path !== pathParam) return;
+        await activityApi.setImage(
+          progress.path,
+          progress.index,
+          progress.total,
+        );
+        queryClient.invalidateQueries({
+          queryKey: ["activity-query", "image"],
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["activity", "image", pathParam],
+        });
+      }
+      clearProgressFailure("save");
+    } catch {
+      reportProgressFailure("save");
+    } finally {
+      setRetryingProgress(false);
+    }
+  }
 
   const scrollContinuousTo = useCallback(
     (targetIndex: number) => {
@@ -562,9 +656,10 @@ export default function Gallery() {
     activityApi
       .setImage(pathParam, images.length - 1, images.length)
       .then(() => {
+        clearProgressFailure("save");
         pushToast({ kind: "success", message: "已读完 🎉", ttl: 1500 });
       })
-      .catch(() => {})
+      .catch(() => reportProgressFailure("save"))
       .finally(() => setMarkingRead(false));
   }, [
     imageActivityPageIndex,
@@ -574,6 +669,8 @@ export default function Gallery() {
     isVideo,
     markingRead,
     pushToast,
+    clearProgressFailure,
+    reportProgressFailure,
   ]);
 
   useEffect(() => {
@@ -1008,6 +1105,7 @@ export default function Gallery() {
                     completed.durationMs,
                   )
                   .then(() => {
+                    clearProgressFailure("save");
                     if (
                       videoActivityRef.current === completed &&
                       completed.positionMs === savedPositionMs
@@ -1015,7 +1113,7 @@ export default function Gallery() {
                       completed.dirty = false;
                     }
                   })
-                  .catch(() => {});
+                  .catch(() => reportProgressFailure("save"));
               }
               const cur = Math.max(
                 0,
@@ -1041,6 +1139,26 @@ export default function Gallery() {
       </div>
 
       {/* 顶部常驻条：返回 / 名称 / 页码 / 全屏 / 菜单 */}
+      {progressFailure?.key === progressKey && (
+        <div
+          role="alert"
+          className="absolute top-16 left-3 right-3 z-30 mx-auto flex max-w-xl items-center justify-between gap-3 rounded-md border border-border bg-bg-elevated p-3 text-sm text-fg shadow-lg"
+        >
+          <span>
+            {progressFailure.operation === "restore"
+              ? "无法恢复上次进度，已暂停保存，避免覆盖原记录。"
+              : "阅读进度未保存，请重试。"}
+          </span>
+          <button
+            type="button"
+            disabled={retryingProgress}
+            onClick={() => void retryProgress()}
+            className="shrink-0 rounded border border-border px-3 py-1 hover:bg-bg-hover disabled:opacity-50"
+          >
+            {retryingProgress ? "重试中…" : "重试进度"}
+          </button>
+        </div>
+      )}
       <GalleryHeader
         name={name}
         index={index}

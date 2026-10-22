@@ -1,5 +1,11 @@
 import type { ReactNode } from "react";
-import { act, render, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -132,6 +138,94 @@ describe("Gallery 媒体活动恢复门禁", () => {
   });
 
   afterEach(() => vi.restoreAllMocks());
+
+  function mockImages() {
+    mocks.media.mockResolvedValue({
+      revision: 1,
+      items: ["f_1", "f_2", "f_3"].map((id, index) => ({
+        id,
+        kind: "image",
+        name: `${index}.jpg`,
+        index,
+        kindIndex: index,
+      })),
+      total: 3,
+    });
+  }
+
+  it("图片保存失败持续提示，重试保存当前页后清除提示", async () => {
+    mockImages();
+    mocks.setImage.mockRejectedValueOnce(new Error("disk unavailable"));
+    renderGallery(`path=${albumId}&index=1`);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "阅读进度未保存",
+    );
+    expect(mocks.setImage).toHaveBeenLastCalledWith(albumId, 1, 3);
+    fireEvent.click(screen.getByRole("button", { name: "重试进度" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
+    );
+    expect(mocks.setImage).toHaveBeenCalledTimes(2);
+    expect(mocks.setImage).toHaveBeenLastCalledWith(albumId, 1, 3);
+  });
+
+  it("图片恢复失败时阻止覆盖，手动重试成功后恢复原页", async () => {
+    mockImages();
+    mocks.getImage.mockRejectedValueOnce(new Error("offline"));
+    mocks.getImage.mockResolvedValue({ pageIndex: 1 });
+    renderGallery();
+    expect(await screen.findByRole("alert")).toHaveTextContent("已暂停保存");
+    await new Promise((resolve) => window.setTimeout(resolve, 650));
+    expect(mocks.setImage).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "重试进度" }));
+    await waitFor(() => expect(useGalleryStore.getState().index).toBe(1));
+    await waitFor(() =>
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("视频保存失败可以重试，重试使用最新播放位置", async () => {
+    let now = 1_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    mocks.media.mockResolvedValue({
+      revision: 1,
+      items: [
+        {
+          id: videoId,
+          kind: "video",
+          name: "video.mp4",
+          index: 0,
+          kindIndex: 0,
+        },
+      ],
+      total: 1,
+    });
+    mocks.getVideo.mockResolvedValue({
+      positionMs: 20_000,
+      durationMs: 100_000,
+    });
+    mocks.setVideo.mockRejectedValueOnce(new Error("offline"));
+    renderGallery(`path=${albumId}&type=video&index=0`);
+    await waitFor(() =>
+      expect((mocks.videoProps as MockVideoProps).initialPositionSec).toBe(20),
+    );
+    now += 10_001;
+    act(() => (mocks.videoProps as MockVideoProps).onProgress?.(43));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "阅读进度未保存",
+    );
+    act(() => (mocks.videoProps as MockVideoProps).onProgress?.(44));
+    fireEvent.click(screen.getByRole("button", { name: "重试进度" }));
+    await waitFor(() =>
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
+    );
+    expect(mocks.setVideo).toHaveBeenLastCalledWith(
+      albumId,
+      videoId,
+      44_000,
+      100_000,
+    );
+  });
 
   it("图片恢复查询超过防抖窗口时不会先用初始页覆盖记录", async () => {
     const lookup = deferred<{
@@ -290,7 +384,7 @@ describe("Gallery 媒体活动恢复门禁", () => {
     );
 
     now += 10_001;
-    act(() => {
+    await act(async () => {
       (mocks.videoProps as MockVideoProps).onProgress?.(43);
     });
     expect(activityApi.setVideo).toHaveBeenCalledWith(

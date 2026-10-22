@@ -7,7 +7,6 @@ import ThemeSwitcher from "../components/common/ThemeSwitcher";
 import { useUIStore, type AccentKey } from "../store/uiStore";
 import { libraryQueryKeys, useLibraryManifest } from "../hooks/useLibrary";
 import { ACCENT_SWATCHES } from "../hooks/useTheme";
-import { useTheme } from "../hooks/useTheme";
 import ServerConfigPanel from "../components/settings/ServerConfigPanel";
 import ScanWarnings from "../components/common/ScanWarnings";
 import {
@@ -36,7 +35,6 @@ export default function Settings() {
   const pushToast = useUIStore((s) => s.pushToast);
   const manifest = useLibraryManifest().data?.manifest;
   const sse = useScanSSE();
-  useTheme();
 
   // 缓存占用统计(后端 30s TTL,前端 staleTime 设小一点保证手动刷新能即时看到)
   const cacheStats = useQuery({
