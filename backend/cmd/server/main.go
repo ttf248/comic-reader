@@ -243,18 +243,14 @@ func main() {
 			Height:     snapshot.ThumbSizeH,
 			MaxAgeDays: snapshot.CacheMaxAgeDays,
 			LRUSize:    snapshot.ThumbCacheSize,
+			VideoCover: services.NewVideoCoverExtractor(services.VideoCoverOptions{
+				FFmpegPath: cfg.FFmpegPath,
+				Width:      snapshot.ThumbSizeW, Height: snapshot.ThumbSizeH,
+				Quality: 85, Timeout: 10 * time.Second,
+			}),
 		}); err != nil {
 			log.Printf("警告：缩略图服务热更新失败: %v", err)
 		}
-		// 尺寸变化时同步更新抽帧器，但仍使用启动期 ffmpeg 配置。
-		newCover := services.NewVideoCoverExtractor(services.VideoCoverOptions{
-			FFmpegPath: cfg.FFmpegPath,
-			Width:      snapshot.ThumbSizeW,
-			Height:     snapshot.ThumbSizeH,
-			Quality:    85,
-			Timeout:    10 * time.Second,
-		})
-		thumbs.SetVideoCover(newCover)
 	})
 
 	// 当 MediaRoots 变更：清空扫描缓存，扫描器/handler 已通过 mgr.Roots() 读最新值

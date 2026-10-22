@@ -9,9 +9,63 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
+
+func TestThumbnailHotReloadChangesCachedDimensions(t *testing.T) {
+	svc := newTestService(t)
+	src := makeTestImage(t, t.TempDir(), "page.jpg", 128, 128)
+	for _, size := range []int{8, 32, 16} {
+		if err := svc.UpdateOptions(ThumbnailOptions{Width: size, Height: size}); err != nil {
+			t.Fatal(err)
+		}
+		data, err := svc.GetOrCreate(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+		if err != nil || cfg.Width != size || cfg.Height != size {
+			t.Fatalf("size=%d got=%+v err=%v", size, cfg, err)
+		}
+	}
+}
+
+func TestThumbnailConcurrentReloadAndClear(t *testing.T) {
+	svc := newTestService(t)
+	src := makeTestImage(t, t.TempDir(), "page.jpg", 128, 128)
+	if err := svc.UpdateOptions(ThumbnailOptions{Width: 8, Height: 8}); err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	for i := 0; i < 20; i++ {
+		wg.Add(2)
+		go func(i int) {
+			defer wg.Done()
+			size := 8 + i%2*8
+			if err := svc.UpdateOptions(ThumbnailOptions{Width: size, Height: size, LRUSize: i + 1}); err != nil {
+				t.Error(err)
+			}
+			if _, _, err := svc.ClearAll(); err != nil {
+				t.Error(err)
+			}
+		}(i)
+		go func() {
+			defer wg.Done()
+			data, err := svc.GetOrCreate(src)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+			if err != nil || cfg.Width != cfg.Height || (cfg.Width != 8 && cfg.Width != 16) {
+				t.Errorf("inconsistent dimensions: %+v %v", cfg, err)
+			}
+		}()
+	}
+	wg.Wait()
+}
 
 // makeTestImage 生成指定尺寸的 RGBA 测试图片并保存为 JPEG。
 func makeTestImage(t *testing.T, dir, name string, w, h int) string {

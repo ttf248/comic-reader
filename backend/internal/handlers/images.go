@@ -63,7 +63,7 @@ func ImageHandler() fiber.Handler {
 		if ext == ".heic" || ext == ".heif" {
 			c.Set("Content-Type", "image/heic")
 		}
-		c.Set("Cache-Control", "public, max-age=86400")
+		c.Set("Cache-Control", "private, no-cache")
 		return c.SendFile(path, false)
 	}
 }

@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"crypto/sha256"
 	"errors"
+	"fmt"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -10,43 +12,13 @@ import (
 	"github.com/tianlongxiang/local-gallery/internal/services"
 )
 
-// ThumbHandler 返回 /api/thumbs/* 处理函数。
-//
-//	GET /api/thumbs?path=<absolute>
-//
-// 视频路径时：若封面已缓存则正常返回；未缓存时返回 404 + code
-// "video_cover_missing"，前端据此触发 `<video>` 抽帧后回传
-// POST /api/thumbs/cover。
-//
-// 缓存协商（仅在 200 响应时启用）：响应 ETag = CacheKey（md5 16 字
-// 节十六进制）。客户端带 If-None-Match 命中时返回 304 + 空 body，0
-// 字节 0 CPU。配合 Cache-Control: max-age=2592000 实现「30 天内走
-// 浏览器缓存，30 天后走 304 验证」的二层策略。
-//
-// 注意：4xx/5xx 响应**不**带 ETag —— 视频 404 状态本身是临时的
-// (cover 抽帧后变成 200)，不能让浏览器把 404 缓存住，否则 cover
-// 永远拿不到。
+// ThumbHandler 返回 JPEG 缩略图。稳定资源 URL 每次重新验证；ETag 基于实际响应字节。
+// 视频封面尚未生成时返回不可缓存的 video_cover_missing 错误。
 func ThumbHandler(svc *services.ThumbnailService) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		path := middleware.SafePath(c)
 		if path == "" {
 			return httputil.BadRequest(c, "missing_path", "missing 'path' query parameter")
-		}
-
-		// 先尝试 ETag 协商：客户端带了 If-None-Match 且与当前文件
-		// mtime/size 派生的 ETag 一致时直接 304,省掉 GetOrCreate 的
-		// 磁盘读 + 解码 + 缩放 + JPEG 编码。这是冷启动 / 翻到未缓存合集
-		// 时最常见的路径(20+ 张同时 miss,1 张命中都省好几 ms)。
-		//
-		// ETagFor 内部只调一次 os.Stat,失败时 (源文件不存在等) 返回
-		// ErrSourceMissing,这种情况下必须走 GetOrCreate 让它返回 404
-		// 而不是 304。
-		if etag, etagErr := svc.ETagFor(path); etagErr == nil {
-			etagQuoted := `"` + etag + `"`
-			if match := c.Get("If-None-Match"); match != "" && match == etagQuoted {
-				c.Set("ETag", etagQuoted)
-				return c.SendStatus(fiber.StatusNotModified)
-			}
 		}
 
 		data, err := svc.GetOrCreate(path)
@@ -61,19 +33,18 @@ func ThumbHandler(svc *services.ThumbnailService) fiber.Handler {
 			case errors.Is(err, services.ErrUnsupportedFormat):
 				return httputil.Error(c, fiber.StatusUnsupportedMediaType, "unsupported_format", "unsupported format")
 			default:
-				return httputil.Internal(c, "thumbnail_error", err.Error())
+				return httputil.Internal(c, "thumbnail_error", "thumbnail generation failed")
 			}
 		}
 
-		// 走到这里说明客户端没带 If-None-Match(或带但不匹配),
-		// 需要把 ETag 带上方便客户端下次走 304。
-		if etag, etagErr := svc.ETagFor(path); etagErr == nil {
-			etagQuoted := `"` + etag + `"`
-			c.Set("ETag", etagQuoted)
+		// 对实际响应字节计算 ETag，覆盖尺寸变化和同一视频的封面重写。
+		etag := fmt.Sprintf(`"%x"`, sha256.Sum256(data))
+		c.Set("ETag", etag)
+		c.Set("Cache-Control", "private, no-cache")
+		if c.Get("If-None-Match") == etag {
+			return c.SendStatus(fiber.StatusNotModified)
 		}
-
 		c.Set("Content-Type", "image/jpeg")
-		c.Set("Cache-Control", "public, max-age=2592000") // 30 天
 		return c.Send(data)
 	}
 }

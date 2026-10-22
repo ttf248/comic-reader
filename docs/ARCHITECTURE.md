@@ -111,6 +111,22 @@ snapshot。stat 全部移到锁外，`flushDebounce=500ms` 异步落盘。
 
 ## 媒体管线
 
+缩略图请求在配置读锁内完成缓存查找及生成，配置热更新和清空缓存使用写锁。尺寸和编码版本参与派生缓存键，HTTP ETag 基于实际 JPEG 字节。图片解码全局最多并发 `min(4, NumCPU)` 个任务，视频封面最多两个任务，同一文件通过 singleflight 去重。原图与缩略图稳定 URL 使用 `private, no-cache`，允许缓存但要求重新验证。
+
+2026-10-22 本机冷缓存对照（Windows amd64、Go 1.24.3、i7-10700K）：24 张合成 2048×2048 JPEG，8 个请求 worker，目标 320×350。使用当前 `thumbnail_bench_test.go` 同时测量基线 `9f9f1b8` 与当前实现：
+
+```powershell
+cd backend
+go test ./internal/services -run '^$' -bench BenchmarkThumbnailCold -benchtime=24x -benchmem
+```
+
+| 实现 | 吞吐（张/秒） | p95（毫秒） | 采样峰值堆增量（MiB） |
+| --- | ---: | ---: | ---: |
+| 无不同图片的并发上限 | 34.61 | 259.3 | 105.2 |
+| 最多四张同时解码 | 26.48 | 314.7 | 59.75 |
+
+该限制以约 43% 的峰值堆下降换取约 24% 的冷缓存吞吐下降，目标是控制多张大图同时解码的资源峰值，不代表整体加速。数据为单次本机对照，堆内存每 2ms 采样，不能代替目标设备的大库基线。
+
 图片通过 `/api/media/:fileId` 发送，使用 mtime + size 生成 ETag。缩略图采用内存 LRU 和磁盘缓存，源文件变化时失效。
 
 视频发送顺序：

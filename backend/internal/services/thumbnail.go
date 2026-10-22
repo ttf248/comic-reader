@@ -10,6 +10,7 @@ import (
 	"image/jpeg"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -44,7 +45,7 @@ type ThumbnailService struct {
 	maxAgeDays int
 	lruSize    int
 
-	mu       sync.Mutex
+	mu       sync.RWMutex
 	memCache *lru.Cache[string, []byte]
 
 	// singleflight 防缓存击穿：同一 key 并发请求时只跑一次生成，
@@ -56,6 +57,7 @@ type ThumbnailService struct {
 	// 一个视口同时启动几十个 ffmpeg。singleflight 负责同文件去重，
 	// 这个槽位限制不同文件的并发数。
 	videoCoverSlots chan struct{}
+	imageSlots      chan struct{}
 
 	// videoCover 用于服务端 FFmpeg 抽帧（可选）。为 nil 时,
 	// 视频封面维持原"客户端抽帧 + 上传"流程(见 getVideoCover)。
@@ -117,6 +119,7 @@ func NewThumbnailService(opts ThumbnailOptions) (*ThumbnailService, error) {
 		memCache:        cache,
 		videoCover:      opts.VideoCover,
 		videoCoverSlots: make(chan struct{}, 2),
+		imageSlots:      make(chan struct{}, min(4, runtime.NumCPU())),
 	}, nil
 }
 
@@ -158,30 +161,19 @@ const JPEGExt = ".jpg"
 //     （由前端浏览器抽帧后回填到 SaveVideoCover），未命中返回
 //     ErrVideoCoverMissing，handler 端透传 404 + code 让前端触发抽帧。
 func (s *ThumbnailService) GetOrCreate(absPath string) ([]byte, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if models.IsVideoFile(filepath.Base(absPath)) {
 		return s.getVideoCover(absPath)
 	}
 	return s.getOrCreateImage(absPath)
 }
 
-// ETagFor 计算 absPath 当前内容的 ETag（不带引号），不触发任何生成。
-//
-// 用途：handler 端先算 ETag 发给浏览器；客户端下次带 If-None-Match
-// 命中时直接 304，省掉 GetOrCreate 的磁盘读 + 反序列化。源文件不
-// 存在时返回 ErrSourceMissing（让 handler 跳过 ETag 协商走原本的
-// 错误路径）。
-func (s *ThumbnailService) ETagFor(absPath string) (string, error) {
-	fi, err := os.Stat(absPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", ErrSourceMissing
-		}
-		return "", err
-	}
-	if models.IsVideoFile(filepath.Base(absPath)) {
-		return videoCoverKey(absPath, fi.ModTime(), fi.Size()), nil
-	}
-	return CacheKeyFromStat(absPath, fi), nil
+// renditionKey 把尺寸和编码版本纳入磁盘及内存缓存标识。
+// 调用方持有配置读锁，保证同次生成使用一致的尺寸。
+func (s *ThumbnailService) renditionKey(sourceKey string) string {
+	sum := md5.Sum([]byte(fmt.Sprintf("%s|%dx%d|jpeg-v2", sourceKey, s.width, s.height)))
+	return hex.EncodeToString(sum[:])
 }
 
 // getOrCreateImage 现有图片缩略图流程。
@@ -194,7 +186,7 @@ func (s *ThumbnailService) getOrCreateImage(absPath string) ([]byte, error) {
 		return nil, err
 	}
 
-	key := CacheKeyFromStat(absPath, fi)
+	key := s.renditionKey(CacheKeyFromStat(absPath, fi))
 
 	// 1) 内存缓存
 	if data, ok := s.memCache.Get(key); ok {
@@ -264,7 +256,7 @@ func (s *ThumbnailService) getVideoCover(absPath string) ([]byte, error) {
 		}
 		return nil, err
 	}
-	key := videoCoverKey(absPath, fi.ModTime(), fi.Size())
+	key := s.renditionKey(videoCoverKey(absPath, fi.ModTime(), fi.Size()))
 
 	if data, ok := s.memCache.Get(key); ok {
 		return data, nil
@@ -286,9 +278,7 @@ func (s *ThumbnailService) getVideoCover(absPath string) ([]byte, error) {
 			return data, nil
 		}
 
-		s.mu.Lock()
 		extractor := s.videoCover
-		s.mu.Unlock()
 		if extractor == nil || !extractor.Available() {
 			return nil, ErrVideoCoverMissing
 		}
@@ -335,6 +325,8 @@ func (s *ThumbnailService) getVideoCover(absPath string) ([]byte, error) {
 // 源文件不存在时返回 ErrSourceMissing（前端抽完帧视频已被删等场景）。
 // 源文件存在但 data 不是合法图片时返回 ErrUnsupportedFormat。
 func (s *ThumbnailService) SaveVideoCover(absPath string, data []byte) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	if !models.IsVideoFile(filepath.Base(absPath)) {
 		return errors.New("source is not a supported video file")
 	}
@@ -359,7 +351,7 @@ func (s *ThumbnailService) SaveVideoCover(absPath string, data []byte) error {
 		return fmt.Errorf("encode jpeg: %w", err)
 	}
 
-	key := videoCoverKey(absPath, fi.ModTime(), fi.Size())
+	key := s.renditionKey(videoCoverKey(absPath, fi.ModTime(), fi.Size()))
 	diskPath := filepath.Join(s.cacheDir, key+JPEGExt)
 	if werr := os.WriteFile(diskPath, buf, 0o644); werr != nil {
 		return fmt.Errorf("write cover cache: %w", werr)
@@ -374,6 +366,8 @@ const jpegQuality = 85
 
 // generate 解码 → 缩放 → 编码为 JPEG。
 func (s *ThumbnailService) generate(absPath string) ([]byte, error) {
+	s.imageSlots <- struct{}{}
+	defer func() { <-s.imageSlots }()
 	img, err := decodeImage(absPath)
 	if err != nil {
 		if errors.Is(err, imaging.ErrUnsupportedFormat) {
@@ -424,6 +418,8 @@ func isThumbnailCacheFile(name string) bool {
 // Cleanup 删除早于 maxAgeDays 天的缓存文件。
 // 返回被删除的文件数。
 func (s *ThumbnailService) Cleanup() (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	cutoff := time.Now().AddDate(0, 0, -s.maxAgeDays)
 
 	entries, err := os.ReadDir(s.cacheDir)
@@ -446,6 +442,9 @@ func (s *ThumbnailService) Cleanup() (int, error) {
 				count++
 			}
 		}
+	}
+	if count > 0 {
+		s.memCache.Purge()
 	}
 	return count, nil
 }
@@ -535,13 +534,16 @@ func (s *ThumbnailService) SetVideoCover(vc *VideoCoverExtractor) {
 // UpdateOptions 热更新部分运行参数。0 值表示"不修改"（除了 LRUSize 显式
 // 用 0 表示"不重建 LRU"）。调用方负责保证 CacheDir 已存在。
 //
-//   - Width/Height 变化：影响后续新生成的缩略图，旧的仍按旧尺寸保留在磁盘
+//   - Width/Height 变化：使用新的缓存键，旧尺寸文件等待清理
 //   - MaxAgeDays 变化：影响后续 Cleanup 的截止时间
 //   - LRUSize 变化：重建 LRU 内存缓存（现有项全部丢弃）
 //   - CacheDir 变化：先 MkdirAll 验证新目录可创建，再切换；旧目录保留
 func (s *ThumbnailService) UpdateOptions(opts ThumbnailOptions) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if opts.VideoCover != nil {
+		s.videoCover = opts.VideoCover
+	}
 	if opts.Width > 0 {
 		s.width = opts.Width
 	}
