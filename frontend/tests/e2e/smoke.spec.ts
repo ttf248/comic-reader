@@ -47,6 +47,19 @@ test("扫描并打开示例相册", async ({ page }) => {
     .first()
     .click();
   await expect(page).toHaveURL(/\/albums\/a_[A-Za-z0-9_-]+$/);
+
+  const albumId = body.page.items[0].id;
+  await page.goto(`/gallery?path=${encodeURIComponent(albumId)}&index=1`);
+  await expect
+    .poll(async () => {
+      const response = await page.request.get(
+        `/api/activity?albumId=${encodeURIComponent(albumId)}&mediaKind=image`,
+      );
+      return response.ok() ? (await response.json()).pageIndex : -1;
+    })
+    .toBe(1);
+  await page.goto(`/gallery?path=${encodeURIComponent(albumId)}`);
+  await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("2");
 });
 
 test("设置页可加载服务端配置", async ({ page }) => {
@@ -56,5 +69,20 @@ test("设置页可加载服务端配置", async ({ page }) => {
   ).toBeVisible();
   await expect(
     page.getByText("图像根目录", { exact: false }).first(),
+  ).toBeVisible();
+  const capacity = page
+    .locator('input[type="number"]')
+    .filter({ visible: true });
+  const budget = capacity.locator('xpath=./self::input[@value="10240"]');
+  await budget.fill("0");
+  await expect
+    .poll(async () => {
+      const response = await page.request.get("/api/config");
+      return (await response.json()).cacheMaxSizeMB;
+    })
+    .toBe(0);
+  await page.reload();
+  await expect(
+    page.locator('input[type="number"][value="0"]').first(),
   ).toBeVisible();
 });

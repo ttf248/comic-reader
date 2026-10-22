@@ -27,23 +27,21 @@
       }
     },
     {
-      "name": "3) 全栈: 后端 + 前端 (复合)",
-      "type": "node",
+      "name": "3) 运行已构建版本",
+      "type": "node-terminal",
       "request": "launch",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--prefix", "${workspaceFolder}"],
-      "cwd": "${workspaceFolder}",
-      "console": "integratedTerminal",
-      "preLaunchTask": "backend: tidy"
+      "command": "../bin/local-gallery --config config.yaml",
+      "windows": { "command": "../bin/local-gallery.exe --config config.yaml" },
+      "cwd": "${workspaceFolder}/backend"
     },
     {
-      "name": "4) 后端: 运行 Go 测试",
+      "name": "4) 后端: 调试服务测试",
       "type": "go",
       "request": "launch",
       "mode": "test",
-      "program": "${workspaceFolder}/backend",
+      "program": "${workspaceFolder}/backend/internal/services",
       "cwd": "${workspaceFolder}/backend",
-      "args": ["-v", "./..."],
+      "args": ["-test.v"],
       "console": "integratedTerminal"
     }
   ],

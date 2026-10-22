@@ -1,9 +1,6 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - "v2.*"
   workflow_dispatch:
     inputs:
       tag:
@@ -15,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  group: release-${{ inputs.tag }}
   cancel-in-progress: false
 
 jobs:
@@ -29,21 +26,21 @@ jobs:
       - name: 检出标签
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag }}
           fetch-depth: 0
 
       - name: 校验 v2 版本标签
         id: version
         shell: bash
         env:
-          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          RELEASE_TAG: ${{ inputs.tag }}
         run: |
           set -euo pipefail
           if [[ ! "$RELEASE_TAG" =~ ^v2\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
             echo "仅允许发布 v2.x.y 或 v2.x.y-rc.1 标签，收到：$RELEASE_TAG" >&2
             exit 1
           fi
-          git rev-parse "$RELEASE_TAG^{commit}" >/dev/null
+          git rev-parse "refs/tags/$RELEASE_TAG^{commit}" >/dev/null
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
           echo "version=${RELEASE_TAG#v}" >> "$GITHUB_OUTPUT"
 

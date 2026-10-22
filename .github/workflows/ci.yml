@@ -1,33 +1,26 @@
 name: CI
 
 on:
-  push:
-    branches:
-      - "**"
-  pull_request:
-    branches:
-      - main
-  repository_dispatch:
-    types:
-      - cnb_sync
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.event_name == 'repository_dispatch' && github.event.client_payload.sha || github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   verify:
     name: 验证与构建
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.sha || github.ref }}
 
       - name: 设置 Go
         uses: actions/setup-go@v5
@@ -59,7 +52,21 @@ jobs:
         working-directory: frontend
         run: npm run test
 
+      - name: 后端并发检查
+        if: runner.os == 'Linux'
+        working-directory: backend
+        run: go test -race ./...
+
+      - name: 安装浏览器
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: 全栈端到端验证
+        working-directory: frontend
+        run: npm run test:e2e
+
       - name: 构建可运行包
+        if: runner.os == 'Linux'
         shell: pwsh
         run: |
           $outputDir = Join-Path $env:RUNNER_TEMP 'local-gallery-ci-build'
@@ -79,6 +86,7 @@ jobs:
             -C $env:RUNNER_TEMP local-gallery-ci-package
 
       - name: 上传构建产物
+        if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
         with:
           name: local-gallery-ci-${{ github.sha }}

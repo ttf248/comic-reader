@@ -12,25 +12,6 @@
             password: ${GIT_ACCESS_TOKEN}
             branch: ${CNB_BRANCH}
             force: true
-        - name: trigger github actions
-          image: alpine:3.20
-          script: |
-            apk add --no-cache curl
-            case "${CNB_BRANCH}" in
-              ''|*[!A-Za-z0-9._/-]*)
-                echo "skip GitHub dispatch for unsafe branch name"
-                exit 0
-                ;;
-            esac
-            curl --fail --silent --show-error \
-              --request POST \
-              --url https://api.github.com/repos/ttf248/local-gallery/dispatches \
-              --header "Accept: application/vnd.github+json" \
-              --header "Content-Type: application/json" \
-              --header "Authorization: Bearer ${GIT_ACCESS_TOKEN}" \
-              --header "X-GitHub-Api-Version: 2022-11-28" \
-              --data-raw "{\"event_type\":\"cnb_sync\",\"client_payload\":{\"branch\":\"${CNB_BRANCH}\",\"sha\":\"${CNB_COMMIT}\"}}"
-
   web_trigger_sync:
     - imports:
         - https://cnb.cool/ttf248/tokens/-/blob/main/env.yml
@@ -44,21 +25,3 @@
             password: ${GIT_ACCESS_TOKEN}
             branch: ${CNB_BRANCH}
             force: true
-        - name: trigger github actions
-          image: alpine:3.20
-          script: |
-            apk add --no-cache curl
-            case "${CNB_BRANCH}" in
-              ''|*[!A-Za-z0-9._/-]*)
-                echo "skip GitHub dispatch for unsafe branch name"
-                exit 0
-                ;;
-            esac
-            curl --fail --silent --show-error \
-              --request POST \
-              --url https://api.github.com/repos/ttf248/local-gallery/dispatches \
-              --header "Accept: application/vnd.github+json" \
-              --header "Content-Type: application/json" \
-              --header "Authorization: Bearer ${GIT_ACCESS_TOKEN}" \
-              --header "X-GitHub-Api-Version: 2022-11-28" \
-              --data-raw "{\"event_type\":\"cnb_sync\",\"client_payload\":{\"branch\":\"${CNB_BRANCH}\",\"sha\":\"${CNB_COMMIT}\"}}"

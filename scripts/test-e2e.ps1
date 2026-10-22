@@ -6,8 +6,14 @@ $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $backendRoot = Join-Path $repoRoot "backend"
 $frontendRoot = Join-Path $repoRoot "frontend"
-$testRoot = Join-Path $env:TEMP "local-gallery-e2e-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
-$sampleDir = Join-Path $testRoot "media\sample-album"
+$testRoot = Join-Path ([System.IO.Path]::GetTempPath()) "local-gallery-e2e-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
+$sampleDir = Join-Path (Join-Path $testRoot "media") "sample-album"
+$portListener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+$portListener.Start()
+$testPort = $portListener.LocalEndpoint.Port
+$portListener.Stop()
+$previousBaseURL = $env:PLAYWRIGHT_BASE_URL
+$env:PLAYWRIGHT_BASE_URL = "http://127.0.0.1:$testPort"
 $serverName = if ($IsWindows -or $env:OS -eq "Windows_NT") { "server.exe" } else { "server" }
 $serverPath = Join-Path $testRoot $serverName
 $cfgPath = Join-Path $testRoot "config.yaml"
@@ -15,38 +21,48 @@ $stdoutPath = Join-Path $testRoot "server.stdout.log"
 $stderrPath = Join-Path $testRoot "server.stderr.log"
 $backendProcess = $null
 
-New-Item -ItemType Directory -Path $sampleDir -Force | Out-Null
-$pngBytes = [Convert]::FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=")
-1..3 | ForEach-Object {
-  [System.IO.File]::WriteAllBytes((Join-Path $sampleDir "page-$_.png"), $pngBytes)
-}
+try {
+  New-Item -ItemType Directory -Path $sampleDir -Force | Out-Null
+  $pngBytes = [Convert]::FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=")
+  1..3 | ForEach-Object {
+    [System.IO.File]::WriteAllBytes((Join-Path $sampleDir "page-$_.png"), $pngBytes)
+  }
 
-$mediaPathYaml = (Join-Path $testRoot "media").Replace("\", "/")
-$cachePathYaml = (Join-Path $testRoot "cache").Replace("\", "/")
-$staticPathYaml = (Join-Path $frontendRoot "dist").Replace("\", "/")
-$config = @"
+  $mediaPathYaml = (Join-Path $testRoot "media").Replace("\", "/")
+  $cachePathYaml = (Join-Path $testRoot "cache").Replace("\", "/")
+  $staticPathYaml = (Join-Path $frontendRoot "dist").Replace("\", "/")
+  $config = @"
 mediaRoots:
   - "$mediaPathYaml"
 host: "127.0.0.1"
-port: 18080
+port: $testPort
 cacheDir: "$cachePathYaml"
 staticDir: "$staticPathYaml"
 "@
-[System.IO.File]::WriteAllText($cfgPath, $config, [System.Text.UTF8Encoding]::new($false))
+  [System.IO.File]::WriteAllText($cfgPath, $config, [System.Text.UTF8Encoding]::new($false))
 
-try {
   Write-Host "[1/4] 构建前端与临时后端..." -ForegroundColor Cyan
   Push-Location $frontendRoot
-  try { npm run build } finally { Pop-Location }
+  try { npm run build; if ($LASTEXITCODE -ne 0) { throw "前端构建失败" } } finally { Pop-Location }
   Push-Location $backendRoot
-  try { go build -o $serverPath ./cmd/server } finally { Pop-Location }
+  try { go build -o $serverPath ./cmd/server; if ($LASTEXITCODE -ne 0) { throw "后端构建失败" } } finally { Pop-Location }
 
   Write-Host "[2/4] 启动临时服务..." -ForegroundColor Cyan
-  $backendProcess = Start-Process -FilePath $serverPath -ArgumentList "--config", $cfgPath -WorkingDirectory $backendRoot -WindowStyle Hidden -RedirectStandardOutput $stdoutPath -RedirectStandardError $stderrPath -PassThru
+  $processOptions = @{
+    FilePath = $serverPath
+    ArgumentList = @("--config", ('"' + $cfgPath + '"'))
+    WorkingDirectory = $backendRoot
+    RedirectStandardOutput = $stdoutPath
+    RedirectStandardError = $stderrPath
+    PassThru = $true
+  }
+  if ($IsWindows) { $processOptions.WindowStyle = "Hidden" }
+  $backendProcess = Start-Process @processOptions
   $ready = $false
   $curlCommand = if (Get-Command curl.exe -ErrorAction SilentlyContinue) { "curl.exe" } else { "curl" }
   for ($attempt = 0; $attempt -lt 60; $attempt++) {
-    & $curlCommand --noproxy "*" --silent --fail --max-time 1 "http://127.0.0.1:18080/api/health" | Out-Null
+    if ($backendProcess.HasExited) { throw "临时服务提前退出，退出码 $($backendProcess.ExitCode)" }
+    & $curlCommand --noproxy "*" --silent --fail --max-time 1 "$env:PLAYWRIGHT_BASE_URL/api/health" | Out-Null
     if ($LASTEXITCODE -eq 0) {
       $ready = $true
       break
@@ -73,6 +89,11 @@ try {
     $backendProcess.WaitForExit(5000) | Out-Null
   }
   if (Test-Path $testRoot) {
+    $resolvedTestRoot = [System.IO.Path]::GetFullPath($testRoot)
+    $resolvedTempRoot = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd([System.IO.Path]::DirectorySeparatorChar) + [System.IO.Path]::DirectorySeparatorChar
+    if (-not $resolvedTestRoot.StartsWith($resolvedTempRoot, [System.StringComparison]::OrdinalIgnoreCase) -or
+        -not ([System.IO.Path]::GetFileName($resolvedTestRoot)).StartsWith("local-gallery-e2e-")) { throw "拒绝清理测试目录之外的路径" }
     Remove-Item -LiteralPath $testRoot -Recurse -Force -ErrorAction SilentlyContinue
   }
+  if ($null -eq $previousBaseURL) { Remove-Item Env:PLAYWRIGHT_BASE_URL -ErrorAction SilentlyContinue } else { $env:PLAYWRIGHT_BASE_URL = $previousBaseURL }
 }

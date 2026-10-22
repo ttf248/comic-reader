@@ -1,5 +1,5 @@
 # scripts/publish.ps1
-# 校验当前改动 → 创建提交 → 推送当前分支 → 轮询 GitHub Actions 结果。
+# 校验当前改动 → 提交已暂存文件 → 推送当前分支。CI 需在 GitHub 手动运行。
 # 默认不强制推送；远端拒绝时保留本地提交并让调用方处理分支分歧。
 
 [CmdletBinding()]
@@ -8,14 +8,7 @@ param(
   [string]$Message,
   [string]$Remote = "origin",
   [string]$Branch = "",
-  [string]$Repository = "ttf248/local-gallery",
-  [string]$Token = "",
-  [switch]$SkipValidation,
-  [switch]$SkipMonitor,
-  [ValidateRange(1, 60)]
-  [int]$MonitorIntervalSeconds = 15,
-  [ValidateRange(30, 3600)]
-  [int]$MonitorTimeoutSeconds = 900
+  [switch]$SkipValidation
 )
 
 $ErrorActionPreference = "Stop"
@@ -80,41 +73,24 @@ if (-not $SkipValidation) {
   Write-Host "[1/5] 已跳过本地构建和测试。" -ForegroundColor Yellow
 }
 
-$statusBefore = (& git -C $repoRoot status --porcelain)
+$statusBefore = (& git -C $repoRoot diff --cached --name-only)
 if ([string]::IsNullOrWhiteSpace(($statusBefore -join "`n"))) {
-  throw "工作区没有可提交的改动。"
+  throw "暂存区没有可提交的改动，请先用 git add 暂存本次任务的文件。"
 }
 
-Write-Host "[4/5] 暂存改动并创建提交..." -ForegroundColor Cyan
-Invoke-GitChecked @("add", "--all")
+Write-Host "[4/5] 提交已暂存的改动..." -ForegroundColor Cyan
 Invoke-GitChecked @("diff", "--cached", "--check")
-Invoke-GitChecked @("commit", "--message", $Message)
+$messagePath = [System.IO.Path]::GetTempFileName()
+try {
+  [System.IO.File]::WriteAllText($messagePath, $Message, [System.Text.UTF8Encoding]::new($false))
+  Invoke-GitChecked @("commit", "--file", $messagePath)
+} finally {
+  Remove-Item -LiteralPath $messagePath -Force
+}
 $commitSha = (& git -C $repoRoot rev-parse HEAD).Trim()
 
 Write-Host "[5/5] 推送 $commitSha 到 $Remote/$Branch..." -ForegroundColor Cyan
 Invoke-GitChecked @("push", $Remote, "HEAD:$Branch")
 Write-Host "推送完成。" -ForegroundColor Green
 
-if (-not $SkipMonitor) {
-  Write-Host "开始等待 GitHub Actions 处理 $commitSha..." -ForegroundColor Cyan
-  $watchArgs = @(
-    "-NoProfile",
-    "-File",
-    (Join-Path $PSScriptRoot "watch-github-actions.ps1"),
-    "-Repository",
-    $Repository,
-    "-CommitSha",
-    $commitSha,
-    "-IntervalSeconds",
-    $MonitorIntervalSeconds,
-    "-TimeoutSeconds",
-    $MonitorTimeoutSeconds
-  )
-  if (-not [string]::IsNullOrWhiteSpace($Token)) {
-    $watchArgs += @("-Token", $Token)
-  }
-  & pwsh @watchArgs
-  if ($LASTEXITCODE -ne 0) {
-    throw "GitHub Actions 未成功完成，请打开 https://github.com/$Repository/actions 查看详情。"
-  }
-}
+Write-Host "如需远端验证，请在 GitHub Actions 手动运行 CI。" -ForegroundColor Cyan

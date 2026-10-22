@@ -15,7 +15,7 @@
 
 默认访问 `http://127.0.0.1:8080`；修改监听地址或端口后使用配置中的地址。服务保持前台运行，按 `Ctrl+C` 停止。两个 BAT 均可从其他工作目录调用，包含空格或中文的仓库路径受支持。构建结束及启动失败时暂停，供双击运行查看结果；自动化使用 `--no-pause`，失败会返回非零退出码。
 
-VSCode 的 `build: all` 任务在 Windows 上调用 `build.bat --no-pause`，生成相同的启动产物。发布压缩包仍使用包内 `staticDir: "dist"` 布局，与源码目录运行方式区分。
+VSCode 的 `build: all` 任务在 Windows 上调用 `build.bat --no-pause`，生成相同的启动产物。VSCode 的“运行已构建版本”入口直接运行二进制；“调试服务测试”入口调试 services 包，完整后端回归使用 `go test ./...`。发布压缩包仍使用包内 `staticDir: "dist"` 布局，与源码目录运行方式区分。
 
 ## 发布线
 
@@ -27,35 +27,30 @@ GitHub 上已有的 `v1.0.0`～`v1.9.0` 是旧 Python/PyInstaller 架构的历�
 - `v2.x.y-rc.n`：候选版本，GitHub Release 会标记为 prerelease；
 - 破坏性架构或配置契约变化提升主版本号。
 
-普通提交不会自动创建 Release。这样可以让每次 push 都有构建反馈，同时把面向用户的版本发布保留为显式标签操作。
+分支推送、PR 和标签推送均不触发构建或发布。CI 与 Release 只保留 `workflow_dispatch` 手动入口，CNB 只同步代码。
 
-## 自动构建链路
+## 手动验证与推送
 
-```text
-本地改动
-  → scripts/publish.ps1
-  → 构建/测试/提交/推送当前分支
-  → CNB .cnb.yml 同步到 GitHub，并发送 cnb_sync dispatch（当前 origin 为 CNB 时）
-  → GitHub CI（每个分支 push、CNB dispatch、main PR）
-```
+在 GitHub Actions 页面选择 CI，指定分支后手动运行。验证覆盖 Windows、macOS 和 Linux 的后端测试、前端 lint、单元测试与真实全栈 E2E；Linux 额外运行 Go race 检查并上传保留 7 天的验证包。本地 Windows 未安装 C 编译器时不运行 race 检查。
 
-GitHub 直接收到分支 push 时也会触发同一个 CI。CNB 同步成功后额外发送 `repository_dispatch`，并携带分支与提交 SHA；CI 会按该 SHA 检出代码，避免镜像 push 没有生成 run 时漏掉构建。CNB 机密仓库中的 `GIT_ACCESS_TOKEN` 除了需要能推送 GitHub 仓库，还需要具备发送 repository dispatch 的权限；缺少该权限时 CNB 阶段会失败并明确暴露配置问题。CI 会运行后端测试、前端 lint、前端测试，并构建一个 Linux 验证包；构建包仅保留 7 天，不作为正式 Release。
-
-运行自动提交、推送和状态轮询：
+本地 E2E 首次运行需要安装浏览器：
 
 ```powershell
-pwsh -File scripts/publish.ps1 -Message "feat: 描述本次改动"
+cd frontend
+npx playwright install chromium
+npm run test:e2e
 ```
 
-脚本默认推送到当前 Git 远端的 `origin` 和当前分支，并轮询 `ttf248/local-gallery` 对应提交的 Actions。公开仓库可不提供 Token；频繁监控或私有仓库建议设置 `GH_TOKEN`，也可以通过 `-Token` 传入。需要只提交推送而不等待状态时使用 `-SkipMonitor`；跳过本地验证仅适合明确的文档或紧急修复场景：
+E2E 脚本自动构建、生成临时测试媒体、使用空闲端口启动服务，并在结束时清理临时进程与目录。需要 PowerShell 7，不依赖正在运行的开发服务，也不读取用户媒体库。
+
+提交推送脚本只处理已暂存文件；非琐碎改动使用包含背景、关键改动、验证方式和影响范围的多行中文提交说明：
 
 ```powershell
-pwsh -File scripts/publish.ps1 `
-  -Message "docs: 更新说明" `
-  -SkipValidation
+git add <本次任务的文件>
+pwsh -File scripts/publish.ps1 -Message $message
 ```
 
-只监控已有提交：
+默认运行构建、后端测试、前端 lint 与单元测试后提交并推送当前分支。不自动暂存其他文件，不自动触发或等待 Actions；文档改动可使用 `-SkipValidation`。远端拒绝推送时保留本地提交，不强推。手动启动 CI 后，可单独监控：
 
 ```powershell
 $sha = (git rev-parse HEAD).Trim()
@@ -64,7 +59,7 @@ pwsh -File scripts/watch-github-actions.ps1 -CommitSha $sha
 
 ## 正式发布
 
-发布前先确认 `main` 的 CI 已通过，然后创建并推送一个带注释的 `v2.*` 标签。标签需要被推送到 GitHub，若本地 `origin` 是 CNB 镜像，请使用已配置认证的 GitHub 远端推送标签：
+发布前先手动运行 CI 并确认通过，在 `docs/release-notes/vX.Y.Z.md` 写中文发布说明，检查远端无同名标签，然后创建并推送带注释的 `v2.*` 标签。标签需要被推送到 GitHub，若本地 `origin` 是 CNB 镜像，请使用已配置认证的 GitHub 远端推送标签：
 
 ```powershell
 git tag -a v2.0.0 -m "发布 v2.0.0"
@@ -73,7 +68,7 @@ git remote add github https://github.com/ttf248/local-gallery.git
 git push github v2.0.0
 ```
 
-也可以在 GitHub Actions 页面手动运行 `Release`，填写一个已经存在的 `v2.x.y` 标签。发布工作流会：
+推送标签后，在 GitHub Actions 页面手动运行 `Release`，填写这个已存在的 `v2.x.y` 标签。发布工作流会：
 
 1. 校验标签只属于当前 Go + React 的 `v2` 发布线；
 2. 构建前端一次，并把同一份 `dist` 复用到所有平台包；

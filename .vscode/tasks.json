@@ -6,12 +6,7 @@
       "type": "shell",
       "command": "go mod tidy",
       "options": {
-        "cwd": "${workspaceFolder}/backend",
-        "shell": {
-          "windows": {
-            "args": ["/c"]
-          }
-        }
+        "cwd": "${workspaceFolder}/backend"
       },
       "presentation": {
         "reveal": "silent",
@@ -22,7 +17,10 @@
     {
       "label": "backend: build",
       "type": "shell",
-      "command": "go build -o ../bin/server ./cmd/server",
+      "command": "go build -o ../bin/local-gallery ./cmd/server",
+      "windows": {
+        "command": "go build -o ../bin/local-gallery.exe ./cmd/server"
+      },
       "options": {
         "cwd": "${workspaceFolder}/backend"
       },

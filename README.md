@@ -21,7 +21,7 @@
 - **跨设备持久化**：收藏、最近、图片阅读/视频播放活动、设置走服务端 JSON
 - **无障碍与触摸适配**：尊重系统减少动态效果设置，移动端使用导航抽屉，阅读器支持横向滑动翻页
 - **单进程单端口部署**：Go 后端托管前端静态资源，一个端口一把梭
-- **自动构建发布**：分支 push 自动 CI，`v2.*` 标签生成跨平台发布包
+- **手动验证发布**：手动 CI 覆盖三平台测试，手动 Release 生成跨平台发布包
 
 ---
 
@@ -132,7 +132,7 @@ cd ../frontend && npm run dev              # 默认 :5173，反向代理到 :808
 
 打开 `http://localhost:5173`，`Ctrl+S` 扫描，按 `R` 随机翻一卷。
 
-> 全栈开发首选 VSCode → 运行和调试 → **"全栈: 后端 + 前端 (复合)"**。详见 `.vscode/launch.json`。
+> 全栈开发首选 VSCode → 运行和调试 → **"全栈复合调试"**。详见 `.vscode/launch.json`。
 
 ### 生产部署
 
@@ -153,7 +153,7 @@ cd ../backend && go build -o ../bin/server ./cmd/server
 ../bin/server                             # 单端口同时托管 API + 静态资源
 ```
 
-生产发布包、版本线和自动推送流程见 [`docs/RELEASE.md`](./docs/RELEASE.md)。当前 Go + React 架构从 `v2.0.0` 开始；GitHub 上已有的 `v1.x` Release 属于旧 Python 架构，仅作为历史版本保留。
+生产发布包、版本线和手动验证流程见 [`docs/RELEASE.md`](./docs/RELEASE.md)。当前 Go + React 架构从 `v2.0.0` 开始；GitHub 上已有的 `v1.x` Release 属于旧 Python 架构，仅作为历史版本保留。
 
 ---
 
@@ -260,7 +260,7 @@ local-gallery/
 | [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | 系统设计、模块划分、数据流、性能         |
 | [docs/API.md](./docs/API.md)                   | HTTP 接口手册                            |
 | [docs/SHORTCUTS.md](./docs/SHORTCUTS.md)       | 快捷键全集（含视频播放器）               |
-| [docs/RELEASE.md](./docs/RELEASE.md)            | 自动构建、推送、版本线与发布包             |
+| [docs/RELEASE.md](./docs/RELEASE.md)            | 手动验证、推送、版本线与发布包             |
 
 `?` 在应用里随时唤起可搜索的帮助浮层。
 
@@ -276,9 +276,9 @@ local-gallery/
 | 前端单测 | `cd frontend && npm run test`                               |
 | 集成测试 | `cd backend && go test ./tests/integration -v`              |
 | e2e      | `cd frontend && npm run test:e2e` 或 `scripts/test-e2e.ps1` |
-| 全栈启动 | VSCode → "全栈: 后端 + 前端 (复合)"                         |
+| 全栈启动 | VSCode → "全栈复合调试"                         |
 | 全栈构建 | `scripts/build.ps1` 或 VSCode 任务 `build: all`             |
-| 自动提交推送 | `pwsh -File scripts/publish.ps1 -Message "feat: ..."`      |
+| 提交已暂存文件并推送 | `pwsh -File scripts/publish.ps1 -Message "feat: ..."`      |
 
 **改动业务逻辑必须同步改测试**——后端 handler / service / middleware → `go test`；前端组件 / hook / store → Vitest；跨层主链路 → integration / e2e。
 
@@ -300,7 +300,7 @@ local-gallery/
 
 诚实声明：
 
-- ✅ 分支 push / PR 自动 CI；`v2.*` 标签自动生成 GitHub Release
+- ✅ 手动 CI 验证 Windows / macOS / Linux；手动 Release 生成发布包
 - ❌ 不存数据库（偏好走服务端 JSON 原子写）
 - ❌ 不引入微服务 / 消息队列
 - ❌ 不做用户系统（单用户本地工具）
