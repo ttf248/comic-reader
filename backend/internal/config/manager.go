@@ -135,6 +135,11 @@ func (m *Manager) Update(patch ConfigPatch) (requiresRestart []string, err error
 	if err := merged.Validate(); err != nil {
 		return nil, fmt.Errorf("validate: %w", err)
 	}
+	if patch.MediaRootsSet {
+		if err := merged.ValidateMediaRoots(); err != nil {
+			return nil, fmt.Errorf("validate: %w", err)
+		}
+	}
 
 	// 3. 写盘
 	if path := m.Path(); path != "" {

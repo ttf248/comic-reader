@@ -174,13 +174,13 @@ func TestValidate(t *testing.T) {
 		mutate  func(c *Config)
 		wantErr bool
 	}{
-		{"empty_root", func(c *Config) { c.MediaRoots = nil }, true},
-		{"missing_root", func(c *Config) { c.MediaRoots = []string{filepath.Join(dir, "nope")} }, true},
+		{"empty_root", func(c *Config) { c.MediaRoots = nil }, false},
+		{"missing_root", func(c *Config) { c.MediaRoots = []string{filepath.Join(dir, "nope")} }, false},
 		{"file_not_dir", func(c *Config) {
 			f := filepath.Join(dir, "f.txt")
 			os.WriteFile(f, []byte("x"), 0o644)
 			c.MediaRoots = []string{f}
-		}, true},
+		}, false},
 		{"bad_port_low", func(c *Config) { c.Port = 0 }, true},
 		{"bad_port_high", func(c *Config) { c.Port = 70000 }, true},
 		{"bad_access_mode", func(c *Config) { c.AccessMode = "public" }, true},
@@ -226,6 +226,14 @@ func TestAddr(t *testing.T) {
 	c := &Config{Host: "127.0.0.1", Port: 9090}
 	if got := c.Addr(); got != "127.0.0.1:9090" {
 		t.Errorf("Addr: got %q", got)
+	}
+}
+
+func TestEmptyRootDoesNotBecomeWorkingDirectory(t *testing.T) {
+	cfg := Default()
+	cfg.MediaRoots = []string{"", " ", "\t"}
+	if roots := cfg.Roots(); len(roots) != 0 {
+		t.Fatalf("blank roots resolved to a directory: %v", roots)
 	}
 }
 

@@ -36,6 +36,9 @@ func (o ScanOptions) effectiveRoots() []string {
 	seen := make(map[string]bool, len(src))
 	out := make([]string, 0, len(src))
 	for _, r := range src {
+		if strings.TrimSpace(r) == "" {
+			continue
+		}
 		r = filepath.Clean(r)
 		if r == "" || seen[r] {
 			continue

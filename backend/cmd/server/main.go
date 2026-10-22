@@ -3,7 +3,7 @@
 // 启动流程：
 //  1. 解析 flag：仅 --config（指定 YAML 路径）
 //  2. 通过 config.Manager 加载 config.yaml（缺失则用内置默认；显式字段覆盖默认）
-//  3. 校验 MediaRoots 必须存在且均为目录
+//  3. 校验运行参数；媒体目录离线时仍开放设置页，扫描失败保留原快照
 //  4. 注册中间件 + 路由（中间件和扫描 handler 都从 Manager 读最新根目录）
 //  5. 监听 host:port
 //

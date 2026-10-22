@@ -34,6 +34,7 @@ try {
   $config = @"
 mediaRoots:
   - "$mediaPathYaml"
+  - "$mediaPathYaml-offline"
 host: "127.0.0.1"
 port: $testPort
 cacheDir: "$cachePathYaml"

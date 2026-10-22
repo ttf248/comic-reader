@@ -1,6 +1,15 @@
 import { expect, test } from "@playwright/test";
 
 test("扫描并打开示例相册", async ({ page }) => {
+  // 服务带一个不存在的目录启动，仍可通过设置接口修复后扫描。
+  const configResponse = await page.request.get("/api/config");
+  expect(configResponse.ok()).toBeTruthy();
+  const config = (await configResponse.json()) as { mediaRoots: string[] };
+  expect(config.mediaRoots).toHaveLength(2);
+  const repaired = await page.request.put("/api/config", {
+    data: { mediaRoots: config.mediaRoots.slice(0, 1) },
+  });
+  expect(repaired.ok()).toBeTruthy();
   await page.goto("/");
   await expect(
     page.getByText("Local Gallery", { exact: false }).first(),

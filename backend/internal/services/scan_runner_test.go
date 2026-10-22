@@ -6,7 +6,46 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/tianlongxiang/local-gallery/internal/models"
 )
+
+func TestOfflineScanKeepsPublishedSnapshot(t *testing.T) {
+	root := t.TempDir()
+	cache := NewScanResultCache(filepath.Join(t.TempDir(), "scan.json"))
+	previous := &models.ScanResult{Roots: []string{root}, AlbumCount: 7}
+	cache.Set(previous)
+	runner := NewAsyncScanRunner()
+	runner.SetCache(cache)
+	t.Cleanup(func() { _ = runner.Shutdown(context.Background()) })
+	_, events, err := runner.Start(ScanOptions{Roots: []string{root, filepath.Join(root, "offline")}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case event, ok := <-events:
+			if !ok {
+				t.Fatal("scan ended without failure event")
+			}
+			if event.Status == ScanStatusError {
+				if got := cache.Get(); got == nil || got.AlbumCount != 7 {
+					t.Fatal("failed scan replaced previous snapshot")
+				}
+				return
+			}
+		case <-deadline:
+			t.Fatal("scan timed out")
+		}
+	}
+}
+
+func TestBlankScanRootsNeverSelectWorkingDirectory(t *testing.T) {
+	if roots := (ScanOptions{Roots: []string{"", " ", "\t"}}).effectiveRoots(); len(roots) != 0 {
+		t.Fatalf("blank roots selected working directory: %v", roots)
+	}
+}
 
 func TestAsyncScanRunner_HappyPath(t *testing.T) {
 	root := t.TempDir()

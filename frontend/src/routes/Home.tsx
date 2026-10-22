@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useSearchStore } from "../store/searchStore";
 import { useScanSSE } from "../hooks/useScanSSE";
 import { useFavorites } from "../hooks/useFavorites";
@@ -610,16 +610,24 @@ export default function Home() {
         <section className="px-6 lg:px-10 max-w-[1400px] mx-auto w-full">
           <EmptyState
             title="欢迎使用本地画廊"
-            description="点击下方按钮开始扫描你的本地图像目录。"
+            description="首次使用请先设置媒体目录，再开始扫描。目录离线时可在设置中修复。"
             icon={<LibraryIcon size={20} />}
             action={
-              <button
-                onClick={() => startScan.mutate()}
-                disabled={startScan.isPending}
-                className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md bg-accent text-accent-contrast hover:bg-accent-hover text-sm disabled:opacity-50"
-              >
-                {startScan.isPending ? "启动中…" : "开始扫描"}
-              </button>
+              <div className="flex items-center gap-3">
+                <Link
+                  to="/settings"
+                  className="inline-flex items-center h-9 px-4 rounded-md border border-border text-sm hover:bg-bg-hover"
+                >
+                  设置媒体目录
+                </Link>
+                <button
+                  onClick={() => startScan.mutate()}
+                  disabled={startScan.isPending}
+                  className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md bg-accent text-accent-contrast hover:bg-accent-hover text-sm disabled:opacity-50"
+                >
+                  {startScan.isPending ? "启动中…" : "开始扫描"}
+                </button>
+              </div>
             }
           />
         </section>

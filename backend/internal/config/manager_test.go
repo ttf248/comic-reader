@@ -235,6 +235,33 @@ func TestManager_Update_MediaRoot(t *testing.T) {
 	}
 }
 
+func TestManagerOfflineRootCanBeRepaired(t *testing.T) {
+	cfg := Default()
+	cfg.MediaRoots = []string{filepath.Join(t.TempDir(), "offline")}
+	mgr := NewManagerWith(cfg, filepath.Join(t.TempDir(), "config.yaml"))
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("offline root blocks startup: %v", err)
+	}
+	if _, err := mgr.Update(ConfigPatch{ThumbSizeW: 640, ThumbSizeWSet: true}); err != nil {
+		t.Fatalf("offline root blocks unrelated settings: %v", err)
+	}
+	if _, err := mgr.Update(ConfigPatch{MediaRoots: cfg.MediaRoots, MediaRootsSet: true}); err == nil {
+		t.Fatal("explicitly saving an unavailable root should fail")
+	}
+	if _, err := mgr.Update(ConfigPatch{MediaRoots: []string{t.TempDir()}, MediaRootsSet: true}); err != nil {
+		t.Fatalf("repair root: %v", err)
+	}
+	if _, err := mgr.Update(ConfigPatch{MediaRoots: []string{}, MediaRootsSet: true}); err != nil {
+		t.Fatalf("clear roots for setup: %v", err)
+	}
+	if err := mgr.Reload(); err != nil {
+		t.Fatal(err)
+	}
+	if len(mgr.Roots()) != 0 {
+		t.Fatal("empty root configuration did not persist")
+	}
+}
+
 // 多根 PATCH：传入数组应整体替换。
 func TestManager_Update_MediaRootsMulti(t *testing.T) {
 	path := writeValidYAML(t, "")

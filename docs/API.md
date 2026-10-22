@@ -210,3 +210,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 - `POST /api/cache/clear?scope=thumbs|faststart|transcode|all`：统一清空入口，按 scope 删 thumbs / faststart / transcode 缓存中对应的一类；scope=all 等价三者都清。响应 `{ scope, thumbs?, faststart?, transcode?, totalDeleted, totalFreedBytes }`，未涉及的 scope 字段为 null。
 - `POST /api/fs/open`：本机接口，body 为 `{ "id": "<resourceId>" }`。
 - `GET /api/admin/fs/open?path=<configuredPath>&allowConfig=1`：设置页专用，仅允许打开已配置路径且只接受回环请求。
+
+### 媒体目录离线与初始设置
+
+服务启动和配置重载只校验运行参数，媒体根暂时离线或 mediaRoots: [] 不阻止访问设置页。显式 PUT 修改 mediaRoots 时校验每个非空目录存在且为目录；空数组表示主动清空配置。只修改其他设置时不检查旧媒体根是否在线。空白路径会被忽略，不会解析到进程工作目录。扫描仍要求本轮所有根可访问；失败保留上次已发布快照，不将离线目录当作删除。不支持部分根扫描发布。

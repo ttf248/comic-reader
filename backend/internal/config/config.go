@@ -94,6 +94,9 @@ func (c *Config) Roots() []string {
 	out := make([]string, 0, len(c.MediaRoots))
 	seen := make(map[string]bool, len(c.MediaRoots))
 	for _, r := range c.MediaRoots {
+		if strings.TrimSpace(r) == "" {
+			continue
+		}
 		r = filepath.Clean(r)
 		if r == "" || seen[r] {
 			continue
@@ -179,7 +182,7 @@ func LoadFile(path string) (*Config, error) {
 // bool 字段特殊处理：YAML 未设置时为零值 false；只要 file 显式给出
 // true 即视为开启，false 视为未配置（沿用 dst 默认）。
 //
-// MediaRoots 非 nil 表示 YAML 显式提供，空数组也会覆盖默认值并在校验时报错。
+// MediaRoots 非 nil 表示 YAML 显式提供，空数组表示尚未配置媒体库。
 func mergeFile(dst, file *Config) {
 	if file.MediaRoots != nil {
 		dst.MediaRoots = append([]string(nil), file.MediaRoots...)
@@ -237,21 +240,8 @@ func mergeFile(dst, file *Config) {
 	}
 }
 
-// Validate 校验配置合法性。所有根必须存在。
+// Validate 校验运行参数，不要求媒体目录在线；管理员仍可进入设置页修复目录。
 func (c *Config) Validate() error {
-	roots := c.Roots()
-	if len(roots) == 0 {
-		return errors.New("mediaRoots is required")
-	}
-	for _, r := range roots {
-		info, err := os.Stat(r)
-		if err != nil {
-			return fmt.Errorf("media root %q: %w", r, err)
-		}
-		if !info.IsDir() {
-			return fmt.Errorf("media root %q is not a directory", r)
-		}
-	}
 	if c.Port <= 0 || c.Port > 65535 {
 		return fmt.Errorf("invalid port %d", c.Port)
 	}
@@ -277,6 +267,18 @@ func (c *Config) Validate() error {
 	}
 	if c.CacheMaxSizeMB < 0 || c.CacheMaxSizeMB > 1048576 {
 		return errors.New("cacheMaxSizeMB must be between 0 and 1048576")
+	}
+	return nil
+}
+
+// ValidateMediaRoots 仅在用户显式修改媒体根时检查可用性，避免误保存错别字。
+// 空列表用于初始设置或主动清空；未修改根时离线磁盘不阻止其他设置保存。
+func (c *Config) ValidateMediaRoots() error {
+	for _, root := range c.Roots() {
+		info, err := os.Stat(root)
+		if err != nil || !info.IsDir() {
+			return errors.New("media root is unavailable or is not a directory")
+		}
 	}
 	return nil
 }
