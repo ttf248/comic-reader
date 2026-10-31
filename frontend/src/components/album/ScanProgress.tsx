@@ -195,8 +195,11 @@ export default function ScanProgress({
 
             {/* 百分比 + 耗时 */}
             {isRunning && (
-              <span className="tabular-nums text-fg-muted shrink-0">
-                {pct}%
+              <span
+                title="按根目录和阶段估算，不代表剩余文件数或耗时"
+                className="tabular-nums text-fg-muted shrink-0"
+              >
+                约{pct}%
               </span>
             )}
             {!isRunning && (
@@ -246,8 +249,11 @@ export default function ScanProgress({
             </span>
 
             {isRunning && (
-              <span className="tabular-nums text-fg-muted text-[12px] shrink-0">
-                {pct}%
+              <span
+                title="按根目录和阶段估算，不代表剩余文件数或耗时"
+                className="tabular-nums text-fg-muted text-[12px] shrink-0"
+              >
+                约{pct}%
               </span>
             )}
             <span className="tabular-nums text-fg-subtle text-[12px] shrink-0">

@@ -55,8 +55,10 @@ func (o ScanOptions) effectiveRoots() []string {
 type ScanProgress struct {
 	Phase       string         // "scanning" / "smart-grouping"
 	CurrentPath string         // 当前处理的目录/文件
-	Processed   int            // 已处理的子目录数
-	Total       int            // 总子目录数（用于计算百分比）
+	Processed   int            // 当前根已读取的目录数
+	Total       int            // 当前根已发现的目录数，读取过程中会增长
+	RootIndex   int            // 当前根的 0-based 下标
+	RootCount   int            // 本轮去重后的根目录总数
 	AlbumsFound int            // 累计发现的相册数
 	NewAlbums   []models.Album // 本轮新发现的相册
 }
@@ -167,13 +169,29 @@ func (s *Scanner) ScanWithHook(opts ScanOptions, hook ScanHook) (*models.ScanRes
 	var allTopCollections []models.Collection
 	var allWarnings []models.ScanWarning
 
-	// 逐根扫描；进度回调累计所有根的处理数
-	for _, absRoot := range absRoots {
+	// 每个根的目录总数动态发现，相册数量则累计整轮扫描，不能在换根时回退。
+	completedAlbums := 0
+	for rootIndex, absRoot := range absRoots {
 		if err := s.contextErr(); err != nil {
 			return nil, err
 		}
-		records, warnings, err := s.scanDirectoryTree(absRoot, opts.MaxDepth, opts.Exclude, hook)
+		rootAlbums := 0
+		var rootHook ScanHook
+		if hook != nil {
+			rootHook = func(event ScanProgress) {
+				rootAlbums = event.AlbumsFound
+				event.AlbumsFound += completedAlbums
+				event.RootIndex = rootIndex
+				event.RootCount = len(absRoots)
+				hook(event)
+			}
+		}
+		records, warnings, err := s.scanDirectoryTree(absRoot, opts.MaxDepth, opts.Exclude, rootHook)
 		if err != nil {
+			return nil, err
+		}
+		completedAlbums += rootAlbums
+		if err := s.contextErr(); err != nil {
 			return nil, err
 		}
 		topAlbums, topCollections := buildRootResult(absRoot, records)
@@ -188,6 +206,9 @@ func (s *Scanner) ScanWithHook(opts ScanOptions, hook ScanHook) (*models.ScanRes
 		allTopCollections = append(allTopCollections, topCollections...)
 	}
 
+	if err := s.contextErr(); err != nil {
+		return nil, err
+	}
 	// 跨根同名冲突：给 DisplayName 加 [SourceName] 前缀
 	applyNamePrefixIfConflict(&allTopAlbums)
 	applyCollectionNamePrefixIfConflict(&allTopCollections)
@@ -196,6 +217,8 @@ func (s *Scanner) ScanWithHook(opts ScanOptions, hook ScanHook) (*models.ScanRes
 	if hook != nil {
 		hook(ScanProgress{
 			Phase:       "smart-grouping",
+			RootIndex:   len(absRoots) - 1,
+			RootCount:   len(absRoots),
 			AlbumsFound: len(allAlbums),
 		})
 	}

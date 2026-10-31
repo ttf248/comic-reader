@@ -233,17 +233,15 @@ func (r *AsyncScanRunner) run(state *ScanState, opts ScanOptions) {
 	r.publish(state, ProgressEvent{ScanID: state.ID, Status: ScanStatusRunning})
 
 	scanner := NewScanner()
+	progress := 0
 	hook := func(ev ScanProgress) {
 		if state.Ctx.Err() != nil {
 			return
 		}
-		pct := 0
-		if ev.Total > 0 {
-			pct = min(99, ev.Processed*100/ev.Total)
-		}
+		progress = estimateScanProgress(ev, progress)
 		r.publish(state, ProgressEvent{
 			ScanID:      state.ID,
-			Progress:    pct,
+			Progress:    progress,
 			Status:      ScanStatusRunning,
 			Phase:       ev.Phase,
 			CurrentPath: relativeScanPath(ev.CurrentPath, opts.effectiveRoots()),
@@ -254,17 +252,11 @@ func (r *AsyncScanRunner) run(state *ScanState, opts ScanOptions) {
 
 	result, err := scanner.ScanWithContext(state.Ctx, opts, hook)
 	if errors.Is(err, context.Canceled) || state.Ctx.Err() != nil {
-		r.finish(state, ProgressEvent{
-			ScanID: state.ID, Status: ScanStatusCancelled,
-			ElapsedMs: time.Since(state.StartedAt).Milliseconds(),
-		}, nil, context.Canceled)
+		r.finishInterrupted(state, ScanStatusCancelled, context.Canceled)
 		return
 	}
 	if err != nil {
-		r.finish(state, ProgressEvent{
-			ScanID: state.ID, Status: ScanStatusError,
-			Error: "scan failed", ElapsedMs: time.Since(state.StartedAt).Milliseconds(),
-		}, nil, err)
+		r.finishInterrupted(state, ScanStatusError, err)
 		return
 	}
 	// 检查 generation、发布对外视图和替换持久化快照共用一把写锁。
@@ -273,10 +265,7 @@ func (r *AsyncScanRunner) run(state *ScanState, opts ScanOptions) {
 	r.mu.Lock()
 	if state.Generation != r.generation || state.Ctx.Err() != nil {
 		r.mu.Unlock()
-		r.finish(state, ProgressEvent{
-			ScanID: state.ID, Status: ScanStatusCancelled,
-			ElapsedMs: time.Since(state.StartedAt).Milliseconds(),
-		}, nil, context.Canceled)
+		r.finishInterrupted(state, ScanStatusCancelled, context.Canceled)
 		return
 	}
 	revision := uint64(0)
@@ -321,9 +310,30 @@ func (r *AsyncScanRunner) publish(state *ScanState, event ProgressEvent) {
 	}
 }
 
-func (r *AsyncScanRunner) finish(state *ScanState, event ProgressEvent, result *models.ScanResult, err error) {
+// 根目录等分读取阶段的预算，动态发现新目录时不回退；后续整理仍保留独立阶段。
+// 这是界面预估值，不代表剩余文件数或剩余耗时，只有快照发布成功才到 100%。
+func estimateScanProgress(event ScanProgress, previous int) int {
+	if event.Phase == "smart-grouping" {
+		return 99
+	}
+	const directoryLimit = 95
+	rootProgress := directoryLimit * min(event.Processed, event.Total) / max(1, event.Total)
+	estimate := (directoryLimit*event.RootIndex + rootProgress) / max(1, event.RootCount)
+	return max(previous, min(directoryLimit, estimate))
+}
+
+func (r *AsyncScanRunner) finishInterrupted(state *ScanState, status ScanStatus, err error) {
 	r.mu.Lock()
-	retention := r.finishLocked(state, event, result, err)
+	event := state.lastEvent
+	event.ScanID = state.ID
+	event.Status = status
+	event.ElapsedMs = time.Since(state.StartedAt).Milliseconds()
+	event.LibraryRevision = 0
+	event.Error = ""
+	if status == ScanStatusError {
+		event.Error = "scan failed"
+	}
+	retention := r.finishLocked(state, event, nil, err)
 	r.mu.Unlock()
 	r.scheduleRemoval(state, retention)
 }

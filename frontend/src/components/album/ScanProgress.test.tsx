@@ -34,7 +34,11 @@ describe("ScanProgress", () => {
     render(<ScanProgress progress={makeProgress({ progress: 35 })} />);
     // 默认展开：直接看到状态、百分比、耗时
     expect(screen.getByText("扫描中")).toBeInTheDocument();
-    expect(screen.getByText("35%")).toBeInTheDocument();
+    expect(screen.getByText("约35%")).toBeInTheDocument();
+    expect(screen.getByText("约35%")).toHaveAttribute(
+      "title",
+      "按根目录和阶段估算，不代表剩余文件数或耗时",
+    );
     expect(screen.getByText("1.5s")).toBeInTheDocument();
   });
 
@@ -80,7 +84,7 @@ describe("ScanProgress", () => {
     // 折叠后阶段详情不再可见（pill 模式不显示 details）
     expect(screen.queryByText("聚合标签中")).toBeNull();
     // pill 模式下仍有百分比
-    expect(screen.getByText("42%")).toBeInTheDocument();
+    expect(screen.getByText("约42%")).toBeInTheDocument();
   });
 
   it("keeps collapsed cancel action separate from the expand button", () => {
@@ -161,6 +165,7 @@ describe("ScanProgress", () => {
     );
     expect(screen.getByText("已取消")).toBeInTheDocument();
     expect(screen.getByText("0.8s")).toBeInTheDocument();
+    expect(screen.getByText("7")).toBeInTheDocument();
   });
 
   it("clamps progress width to 100% even when value exceeds 100", () => {
@@ -189,7 +194,7 @@ describe("ScanProgress", () => {
       />,
     );
     expect(screen.getByText("进度连接中断")).toBeInTheDocument();
-    expect(screen.getByText("42%")).toBeInTheDocument();
+    expect(screen.getByText("约42%")).toBeInTheDocument();
     expect(
       screen.getByText("正在自动重连，扫描结果尚未确认。"),
     ).toBeInTheDocument();
@@ -254,7 +259,7 @@ describe("ScanProgress", () => {
       <ScanProgress progress={makeProgress()} connectionState="connecting" />,
     );
     expect(screen.getByText("正在连接进度")).toBeInTheDocument();
-    expect(screen.getByText("42%")).toBeInTheDocument();
+    expect(screen.getByText("约42%")).toBeInTheDocument();
     rerender(
       <ScanProgress
         progress={makeProgress({ status: "complete", progress: 100 })}

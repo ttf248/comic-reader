@@ -100,6 +100,32 @@ func TestAsyncScanRunnerSubscriptionsHaveIndependentOwners(t *testing.T) {
 	}
 }
 
+func TestScanInterruptedKeepsLastKnownProgress(t *testing.T) {
+	for _, status := range []ScanStatus{ScanStatusCancelled, ScanStatusError} {
+		t.Run(string(status), func(t *testing.T) {
+			runner := NewAsyncScanRunner()
+			runner.retention = 0
+			state := &ScanState{ID: "partial", StartedAt: time.Now(), subs: make(map[chan ProgressEvent]struct{})}
+			runner.states[state.ID] = state
+			runner.publish(state, ProgressEvent{ScanID: state.ID, Status: ScanStatusRunning, Phase: "scanning", Progress: 61, AlbumsFound: 7, CurrentPath: "root/relative"})
+			runner.finishInterrupted(state, status, context.Canceled)
+			event := state.lastEvent
+			if event.Status != status || event.Progress != 61 || event.AlbumsFound != 7 || event.Phase != "scanning" || event.CurrentPath != "root/relative" {
+				t.Fatalf("interruption lost progress: %+v", event)
+			}
+			if status == ScanStatusError && event.Error != "scan failed" {
+				t.Fatalf("internal error was not sanitized: %q", event.Error)
+			}
+			if status == ScanStatusCancelled && event.Error != "" {
+				t.Fatalf("cancellation has an error: %q", event.Error)
+			}
+			if state.Result != nil || event.LibraryRevision != 0 {
+				t.Fatal("interrupted scan exposed a published result")
+			}
+		})
+	}
+}
+
 func TestAsyncScanRunner_HappyPath(t *testing.T) {
 	root := t.TempDir()
 	mkdirAll(t, filepathJoin(root, "album1"))
