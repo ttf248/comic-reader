@@ -898,3 +898,113 @@ test("主题令牌在明暗模式和六种强调色下保持边框及透明背�
     });
   }
 });
+
+for (const operation of ["limit", "clear", "visit"] as const) {
+  test(`历史 ${operation} 写入成功后读取失败也保持最新列表`, async ({
+    page,
+  }) => {
+    const nodes = await scannedNodes(page.request);
+    const first = nodes.find((node) => node.name === "sample-album")!;
+    const second = nodes.find((node) => node.name === "sample-mixed-cover")!;
+    expect(first).toBeDefined();
+    expect(second).toBeDefined();
+    const original = (await (await page.request.get("/api/prefs")).json()) as {
+      maxRecent: number;
+      history: Array<{ albumId: string; name: string; imageCount: number }>;
+    };
+    try {
+      expect(
+        (
+          await page.request.patch("/api/prefs", { data: { maxRecent: 2 } })
+        ).ok(),
+      ).toBeTruthy();
+      expect((await page.request.delete("/api/history")).ok()).toBeTruthy();
+      for (const node of operation === "visit" ? [first] : [second, first]) {
+        expect(
+          (
+            await page.request.post("/api/history", {
+              data: {
+                albumId: node.id,
+                name: node.name,
+                imageCount: node.imageCount ?? 0,
+              },
+            })
+          ).ok(),
+        ).toBeTruthy();
+      }
+      await page.goto("/recents");
+      await expect(
+        page.locator(`main a[href="/albums/${first.id}"]`).first(),
+      ).toBeVisible();
+      let failedReads = 0;
+      await page.route("**/api/history", async (route) => {
+        if (route.request().method() !== "GET") return route.continue();
+        failedReads++;
+        await route.fulfill({
+          status: 500,
+          json: { code: "test_unavailable", message: "unavailable" },
+        });
+      });
+      if (operation === "visit") {
+        const search = page.getByRole("combobox");
+        await search.fill(second.name);
+        await expect(page.getByRole("option").first()).toBeVisible();
+        await search.press("Enter");
+        await expect(page).toHaveURL(new RegExp(`/albums/${second.id}$`));
+      } else {
+        await expect(
+          page.locator(`main a[href="/albums/${second.id}"]`).first(),
+        ).toBeVisible();
+        await page.getByRole("link", { name: "设置", exact: true }).click();
+        await page
+          .getByRole("button", {
+            name: operation === "limit" ? "减少最近访问保留条数" : "清空",
+            exact: true,
+          })
+          .click();
+      }
+      await expect
+        .poll(async () => {
+          const result = (await (
+            await page.request.get("/api/history")
+          ).json()) as { history: Array<{ albumId: string }> };
+          return result.history.map((entry) => entry.albumId);
+        })
+        .toEqual(
+          operation === "clear"
+            ? []
+            : operation === "limit"
+              ? [first.id]
+              : [second.id, first.id],
+        );
+      await page.getByRole("link", { name: "最近", exact: true }).click();
+      await expect
+        .poll(() => failedReads, { timeout: 15_000 })
+        .toBeGreaterThanOrEqual(8);
+      await expect(page.getByRole("alert")).toContainText("最近阅读加载失败");
+      const firstCard = page
+        .locator(`main a[href="/albums/${first.id}"]`)
+        .first();
+      const secondCard = page
+        .locator(`main a[href="/albums/${second.id}"]`)
+        .first();
+      if (operation === "clear") await expect(firstCard).toHaveCount(0);
+      else await expect(firstCard).toBeVisible();
+      if (operation === "visit") await expect(secondCard).toBeVisible();
+      else await expect(secondCard).toHaveCount(0);
+    } finally {
+      expect(
+        (
+          await page.request.patch("/api/prefs", {
+            data: { maxRecent: original.maxRecent },
+          })
+        ).ok(),
+      ).toBeTruthy();
+      expect((await page.request.delete("/api/history")).ok()).toBeTruthy();
+      for (const entry of [...original.history].reverse())
+        expect(
+          (await page.request.post("/api/history", { data: entry })).ok(),
+        ).toBeTruthy();
+    }
+  });
+}

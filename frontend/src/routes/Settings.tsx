@@ -9,6 +9,7 @@ import { libraryQueryKeys, useLibraryManifest } from "../hooks/useLibrary";
 import { ACCENT_SWATCHES } from "../hooks/useTheme";
 import ServerConfigPanel from "../components/settings/ServerConfigPanel";
 import ScanWarnings from "../components/common/ScanWarnings";
+import { syncHistoryCache } from "../utils/historyCache";
 import {
   RefreshIcon,
   TrashIcon,
@@ -50,8 +51,9 @@ export default function Settings() {
   const patchPrefs = useMutation({
     mutationFn: (p: Partial<Parameters<typeof prefsApi.patch>[0]>) =>
       prefsApi.patch(p),
-    onSuccess: (saved) => {
+    onSuccess: (saved, patch) => {
       qc.setQueryData(["prefs"], saved);
+      if (patch.maxRecent !== undefined) syncHistoryCache(qc, saved.history);
       void qc.invalidateQueries({ queryKey: ["prefs"] });
     },
     onError: () => pushToast({ kind: "error", message: "保存阅读设置失败" }),
@@ -150,7 +152,7 @@ export default function Settings() {
   const clearHist = useMutation({
     mutationFn: () => historyApi.clear(),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["history"] });
+      syncHistoryCache(qc, []);
       pushToast({ kind: "success", message: "已清空最近访问" });
     },
     onError: () => pushToast({ kind: "error", message: "清空最近访问失败" }),

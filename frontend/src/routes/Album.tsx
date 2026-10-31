@@ -5,6 +5,7 @@ import { useSearchStore } from "../store/searchStore";
 import { useFavorites } from "../hooks/useFavorites";
 import { useGalleryContextSync } from "../hooks/useGalleryContextSync";
 import { historyApi } from "../api/prefs";
+import { syncHistoryCache } from "../utils/historyCache";
 import { thumbUrl } from "../api/thumbs";
 import { getVideoInfoBatch } from "../api/videos";
 import { useUIStore } from "../store/uiStore";
@@ -218,7 +219,7 @@ export default function Album() {
         name: historyAlbumName,
         imageCount: historyImageCount,
       })
-      .then(() => queryClient.invalidateQueries({ queryKey: ["history"] }))
+      .then(({ history }) => syncHistoryCache(queryClient, history))
       .catch(() => {});
     // 分页会重建 detail；访问记录只依赖相册标识和摘要，不能跟随媒体页重复写入。
   }, [historyAlbumId, historyAlbumName, historyImageCount, queryClient]);

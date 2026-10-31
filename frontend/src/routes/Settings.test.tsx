@@ -78,6 +78,96 @@ beforeEach(() => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
+const savedHistory: Prefs["history"] = ["a_first", "a_second"].map(
+  (albumId) => ({
+    albumId,
+    name: albumId,
+    imageCount: 3,
+    openedAt: "2026-10-31T10:00:00Z",
+  }),
+);
+
+it("清空成功立即清空共享历史和已有偏好缓存", async () => {
+  const client = clientForTest();
+  client.setQueryData(["history"], { history: savedHistory });
+  vi.mocked(prefsApi.get).mockResolvedValue({
+    ...basePrefs,
+    history: savedHistory,
+  });
+  renderSettings(client);
+  fireEvent.click(await screen.findByRole("button", { name: "清空" }));
+  await waitFor(() =>
+    expect(useUIStore.getState().toasts).toContainEqual(
+      expect.objectContaining({ message: "已清空最近访问" }),
+    ),
+  );
+  expect(client.getQueryData(["history"])).toEqual({ history: [] });
+  expect(client.getQueryData<Prefs>(["prefs"])?.history).toEqual([]);
+});
+
+it("清空失败不丢弃原有共享历史", async () => {
+  const client = clientForTest();
+  client.setQueryData(["history"], { history: savedHistory });
+  vi.mocked(prefsApi.get).mockResolvedValue({
+    ...basePrefs,
+    history: savedHistory,
+  });
+  vi.mocked(historyApi.clear).mockRejectedValue(new Error("offline"));
+  renderSettings(client);
+  fireEvent.click(await screen.findByRole("button", { name: "清空" }));
+  await waitFor(() =>
+    expect(useUIStore.getState().toasts).toContainEqual(
+      expect.objectContaining({ message: "清空最近访问失败" }),
+    ),
+  );
+  expect(client.getQueryData(["history"])).toEqual({ history: savedHistory });
+  expect(client.getQueryData<Prefs>(["prefs"])?.history).toEqual(savedHistory);
+});
+
+it("修改保留条数后用服务端裁剪结果同步最近访问", async () => {
+  const client = clientForTest();
+  client.setQueryData(["history"], { history: savedHistory });
+  vi.mocked(prefsApi.get).mockResolvedValue({
+    ...basePrefs,
+    maxRecent: 2,
+    history: savedHistory,
+  });
+  const saved = {
+    ...basePrefs,
+    maxRecent: 1,
+    history: savedHistory.slice(0, 1),
+  };
+  vi.mocked(prefsApi.patch).mockResolvedValue(saved);
+  renderSettings(client);
+  const decrease = await screen.findByRole("button", {
+    name: "减少最近访问保留条数",
+  });
+  vi.mocked(prefsApi.get).mockResolvedValue(saved);
+  fireEvent.click(decrease);
+  await waitFor(() =>
+    expect(client.getQueryData(["history"])).toEqual({
+      history: saved.history,
+    }),
+  );
+  expect(prefsApi.patch).toHaveBeenCalledWith({ maxRecent: 1 });
+});
+
+it("修改其他阅读偏好不覆盖更晚加载的历史快照", async () => {
+  const client = clientForTest();
+  client.setQueryData(["history"], { history: savedHistory });
+  renderSettings(client);
+  fireEvent.click(
+    await screen.findByRole("switch", { name: "阅读到末尾自动切换下一本" }),
+  );
+  await waitFor(() => expect(prefsApi.patch).toHaveBeenCalledTimes(1));
+  await waitFor(() =>
+    expect(
+      screen.getByRole("switch", { name: "阅读到末尾自动切换下一本" }),
+    ).toBeEnabled(),
+  );
+  expect(client.getQueryData(["history"])).toEqual({ history: savedHistory });
+});
+
 it("读取设置期间显示加载状态", () => {
   vi.mocked(prefsApi.get).mockReturnValue(new Promise(() => {}));
   renderSettings();

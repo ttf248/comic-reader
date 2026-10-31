@@ -5,6 +5,7 @@ import { useGalleryStore } from "../store/galleryStore";
 import { useKeyboard } from "../hooks/useKeyboard";
 import { albumsApi } from "../api/albums";
 import { historyApi } from "../api/prefs";
+import { syncHistoryCache } from "../utils/historyCache";
 import { activityApi, isActivityNotFound } from "../api/activity";
 import { useUIStore } from "../store/uiStore";
 import { useFavorites } from "../hooks/useFavorites";
@@ -364,10 +365,7 @@ export default function Gallery() {
         name: historyName,
         imageCount: historyImageCount,
       })
-      .then(() => {
-        // 让 Recents 立刻刷新，而不是等 30s 缓存过期
-        queryClient.invalidateQueries({ queryKey: ["history"] });
-      })
+      .then(({ history }) => syncHistoryCache(queryClient, history))
       .catch(() => {});
   }, [pathParam, historyName, historyImageCount, queryClient, historyReady]);
 

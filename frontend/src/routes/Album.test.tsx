@@ -213,6 +213,24 @@ describe("Album", () => {
     );
   });
 
+  it("写入访问成功立即采用返回列表，不依赖后续读取", async () => {
+    mockAlbumPage();
+    const history = [
+      {
+        albumId: "a_pages",
+        name: "分页相册",
+        imageCount: 405,
+        openedAt: "2026-10-31T10:00:00Z",
+      },
+    ];
+    vi.mocked(historyApi.add).mockResolvedValue({ history });
+    const { client } = renderAlbum("/albums/a_pages");
+    client.setQueryData(["history"], { history: [] });
+    await waitFor(() =>
+      expect(client.getQueryData(["history"])).toEqual({ history }),
+    );
+  });
+
   it("追加媒体页时不重复写入本次访问", async () => {
     mockAlbumPage();
     const { refresh } = renderAlbum("/albums/a_pages");

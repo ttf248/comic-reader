@@ -119,7 +119,7 @@ function renderGallery(query = `path=${albumId}`) {
       </QueryClientProvider>
     );
   }
-  return render(<Gallery />, { wrapper: Providers });
+  return { ...render(<Gallery />, { wrapper: Providers }), client };
 }
 
 describe("Gallery 媒体活动恢复门禁", () => {
@@ -128,7 +128,7 @@ describe("Gallery 媒体活动恢复门禁", () => {
     mocks.videoProps = null;
     mocks.setImage.mockResolvedValue({});
     mocks.setVideo.mockResolvedValue({});
-    mocks.historyAdd.mockResolvedValue({});
+    mocks.historyAdd.mockResolvedValue({ history: [] });
     mocks.nodes.mockResolvedValue({
       revision: 1,
       items: [],
@@ -152,6 +152,37 @@ describe("Gallery 媒体活动恢复门禁", () => {
       total: 3,
     });
   }
+
+  it("阅读器写入访问成功立即更新共享历史快照", async () => {
+    mockImages();
+    mocks.getImage.mockResolvedValue({ pageIndex: 0 });
+    mocks.nodes.mockResolvedValue({
+      revision: 1,
+      missing: [],
+      items: [
+        {
+          id: albumId,
+          kind: "album",
+          name: "真实相册",
+          coverImages: [],
+          imageCount: 3,
+        },
+      ],
+    });
+    const history = [
+      {
+        albumId,
+        name: "真实相册",
+        imageCount: 3,
+        openedAt: "2026-10-31T10:00:00Z",
+      },
+    ];
+    mocks.historyAdd.mockResolvedValue({ history });
+    const { client } = renderGallery();
+    await waitFor(() =>
+      expect(client.getQueryData(["history"])).toEqual({ history }),
+    );
+  });
 
   it.each([0, 7])(
     "视频阅读按相册摘要展示名称并记录 %s 张图片",
