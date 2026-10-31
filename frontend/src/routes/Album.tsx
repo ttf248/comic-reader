@@ -44,7 +44,7 @@ import VideoCoverImage from "../components/common/VideoCoverImage";
 import MediaThumbnailGrid from "../components/album/MediaThumbnailGrid";
 import MixedMediaThumbnailGrid from "../components/album/MixedMediaThumbnailGrid";
 import VideoThumbnailGrid from "../components/album/VideoThumbnailGrid";
-import { fsCapabilities } from "../api/fs";
+import { fileManagerErrorMessage } from "../utils/fileManager";
 import type { GalleryContextEntry } from "../utils/galleryContext";
 import {
   useAlbumMedia,
@@ -426,11 +426,14 @@ function AlbumView({
   });
 
   const openInExplorer = () => {
-    if (!fsCapabilities.allowOsOpen) {
-      pushToast({ kind: "info", message: "allowOsOpen 已关闭,可在设置中开启" });
-      return;
-    }
-    actions.openInExplorer().catch(() => {});
+    void actions
+      .openInExplorer()
+      .then(() =>
+        pushToast({ kind: "success", message: "已请求打开目录", ttl: 1200 }),
+      )
+      .catch((error: unknown) =>
+        pushToast({ kind: "error", message: fileManagerErrorMessage(error) }),
+      );
   };
 
   const copyLink = () => {
@@ -685,7 +688,7 @@ function AlbumView({
                           setMoreOpen(false);
                           openInExplorer();
                         }}
-                        disabled={!fsCapabilities.allowOsOpen}
+                        disabled={!actions.canOpenInExplorer}
                         className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[13px] text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         <FolderIcon size={12} />
@@ -805,7 +808,7 @@ function AlbumView({
               id: "explorer",
               label: "在资源管理器中打开",
               icon: <ArrowUpRightIcon size={12} />,
-              disabled: !fsCapabilities.allowOsOpen,
+              disabled: !actions.canOpenInExplorer,
             },
             { id: "copy", label: "复制相册链接", icon: <CopyIcon size={12} /> },
             { id: "sep2", separator: true } as AnyMenuItem,

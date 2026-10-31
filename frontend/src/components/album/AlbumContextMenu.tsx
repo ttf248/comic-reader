@@ -6,7 +6,7 @@ import {
   useMarkAlbumRead,
   useResetAlbumRead,
 } from "../../hooks/useImageActivity";
-import { fsCapabilities } from "../../api/fs";
+import { fileManagerErrorMessage } from "../../utils/fileManager";
 import { decodeFavPath } from "../../utils/path";
 import { isCompleted } from "../../utils/progress";
 import { useUIStore } from "../../store/uiStore";
@@ -77,7 +77,7 @@ export default function AlbumContextMenu({
       id: "explorer",
       label: "在资源管理器中打开",
       icon: <ArrowUpRightIcon size={12} />,
-      disabled: !fsCapabilities.allowOsOpen || item.variant === "smart",
+      disabled: !actions.canOpenInExplorer,
     },
     { id: "copy", label: "复制链接", icon: <CopyIcon size={12} /> },
     { id: "separator", separator: true },
@@ -104,7 +104,21 @@ export default function AlbumContextMenu({
             void toggle(resourceId).catch(() => {});
             break;
           case "explorer":
-            void actions.openInExplorer().catch(() => {});
+            void actions
+              .openInExplorer()
+              .then(() =>
+                pushToast({
+                  kind: "success",
+                  message: "已请求打开目录",
+                  ttl: 1200,
+                }),
+              )
+              .catch((error: unknown) =>
+                pushToast({
+                  kind: "error",
+                  message: fileManagerErrorMessage(error),
+                }),
+              );
             break;
           case "copy":
             // 菜单关闭后仍反馈结果，权限受限时由共享复制函数尝试选区回退。

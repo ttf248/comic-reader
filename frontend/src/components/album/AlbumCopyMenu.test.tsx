@@ -18,6 +18,9 @@ import { useUIStore } from "../../store/uiStore";
 vi.mock("../../hooks/useFavorites", () => ({
   useFavorites: () => ({ favorites: [], toggle: vi.fn() }),
 }));
+vi.mock("../../api/fs", () => ({
+  fsApi: { capabilities: vi.fn().mockResolvedValue({ allowOsOpen: false }) },
+}));
 
 const originalClipboard = Object.getOwnPropertyDescriptor(
   navigator,

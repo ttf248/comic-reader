@@ -4,7 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useUIStore } from "../../store/uiStore";
 import { useKeyboard } from "../../hooks/useKeyboard";
 import { albumRoute } from "../../utils/path";
-import { fsApi } from "../../api/fs";
+import { useFsCapabilities } from "../../hooks/useFsCapabilities";
 import { scanApi } from "../../api/scan";
 import { useScanSSE } from "../../hooks/useScanSSE";
 import Sidebar from "./Sidebar";
@@ -32,6 +32,7 @@ export default function AppShell() {
   const onGallery = location.pathname.startsWith("/gallery");
   // 扫描进度 + 取消（提升到 AppShell 后所有路由都能看到顶部进度条）
   const scanSse = useScanSSE();
+  useFsCapabilities();
 
   useEffect(() => {
     setMobileNavOpen(false);
@@ -50,12 +51,6 @@ export default function AppShell() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [mobileNavOpen]);
-
-  // 启动时同步服务端能力（fsCapabilities.allowOsOpen），
-  // 否则 Album 详情 / 右键菜单的"在资源管理器中打开"按钮永远 disabled。
-  useEffect(() => {
-    void fsApi.syncCapabilities();
-  }, []);
 
   useEffect(() => {
     const titles: Record<string, string> = {

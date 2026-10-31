@@ -25,6 +25,7 @@ vi.mock("../../hooks/useFavorites", () => ({
 }));
 vi.mock("../../hooks/useAlbumActions", () => ({
   useAlbumActions: () => ({
+    canOpenInExplorer: false,
     open: vi.fn(),
     openInExplorer: vi.fn().mockResolvedValue(undefined),
     copyLink: vi.fn().mockResolvedValue(undefined),

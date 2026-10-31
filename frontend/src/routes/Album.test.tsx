@@ -27,6 +27,9 @@ vi.mock("../hooks/useLibrary", () => ({
   useTagAlbums: vi.fn(),
 }));
 vi.mock("../hooks/useFavorites", () => ({ useFavorites: vi.fn() }));
+vi.mock("../api/fs", () => ({
+  fsApi: { capabilities: vi.fn().mockResolvedValue({ allowOsOpen: false }) },
+}));
 vi.mock("../api/prefs", () => ({ historyApi: { add: vi.fn() } }));
 vi.mock("../hooks/useGalleryContextSync", () => ({
   useGalleryContextSync: vi.fn(),

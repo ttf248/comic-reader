@@ -5,6 +5,7 @@ import {
   screen,
   waitFor,
   fireEvent,
+  within,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import ServerConfigPanel from "./ServerConfigPanel";
@@ -14,6 +15,8 @@ import { ListFilterBar } from "../common/ListFilterBar";
 import { useSearchStore } from "../../store/searchStore";
 import { authApi } from "../../api/auth";
 import { ApiError } from "../../api/client";
+import { fsApi } from "../../api/fs";
+import { fsCapabilitiesQueryKey } from "../../hooks/useFsCapabilities";
 
 // Mock the config API
 vi.mock("../../api/config", () => ({
@@ -27,6 +30,13 @@ vi.mock("../../api/auth", () => ({
   authApi: {
     login: vi.fn(),
     logout: vi.fn(),
+  },
+}));
+vi.mock("../../api/fs", () => ({
+  fsApi: {
+    capabilities: vi.fn(),
+    openConfiguredPath: vi.fn(),
+    openInExplorer: vi.fn(),
   },
 }));
 
@@ -81,6 +91,8 @@ describe("ServerConfigPanel", () => {
       mode: "lan",
     });
     vi.mocked(authApi.logout).mockResolvedValue(undefined);
+    vi.mocked(fsApi.capabilities).mockResolvedValue({ allowOsOpen: false });
+    vi.mocked(fsApi.openConfiguredPath).mockResolvedValue({ ok: true });
     // 重置 toasts
     useUIStore.setState({ toasts: [] });
   });
@@ -136,7 +148,7 @@ describe("ServerConfigPanel", () => {
   });
 
   it("切换 boolean 立即保存", async () => {
-    renderPanel();
+    const { queryClient } = renderPanel();
     // 现在有多个 switch（allowOsOpen + skipHidden）;用 label 文本锁定目标
     const toggle = await screen.findByRole("switch", {
       name: /允许在系统文件管理器中打开/,
@@ -145,6 +157,72 @@ describe("ServerConfigPanel", () => {
     await waitFor(() => {
       expect(configApi.update).toHaveBeenCalledWith({ allowOsOpen: true });
     });
+    await waitFor(() =>
+      expect(queryClient.getQueryData(fsCapabilitiesQueryKey)).toEqual({
+        allowOsOpen: true,
+      }),
+    );
+    expect(fsApi.capabilities).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    baseConfig.mediaRoots[0],
+    baseConfig.cacheDir,
+    baseConfig.staticDir,
+  ])("配置目录 %s 使用白名单入口打开并反馈结果", async (path) => {
+    vi.mocked(configApi.get).mockResolvedValue({
+      ...baseConfig,
+      allowOsOpen: true,
+    });
+    renderPanel();
+    const input = await screen.findByDisplayValue(path);
+    fireEvent.click(
+      within(input.parentElement!).getByRole("button", {
+        name: "在系统文件管理器中打开此目录",
+      }),
+    );
+    await waitFor(() =>
+      expect(fsApi.openConfiguredPath).toHaveBeenCalledWith(path),
+    );
+    await waitFor(() =>
+      expect(useUIStore.getState().toasts).toEqual([
+        expect.objectContaining({ kind: "success", message: "已请求打开目录" }),
+      ]),
+    );
+    expect(fsApi.openInExplorer).not.toHaveBeenCalled();
+  });
+
+  it("配置目录不在白名单时显示明确提示而不保存原始错误", async () => {
+    vi.mocked(configApi.get).mockResolvedValue({
+      ...baseConfig,
+      allowOsOpen: true,
+    });
+    vi.mocked(fsApi.openConfiguredPath).mockRejectedValueOnce(
+      new ApiError(
+        403,
+        "C:\\private\\directory",
+        undefined,
+        "config_path_not_allowed",
+      ),
+    );
+    renderPanel();
+    const input = await screen.findByDisplayValue(baseConfig.mediaRoots[0]);
+    fireEvent.click(
+      within(input.parentElement!).getByRole("button", {
+        name: "在系统文件管理器中打开此目录",
+      }),
+    );
+    await waitFor(() =>
+      expect(useUIStore.getState().toasts).toEqual([
+        expect.objectContaining({
+          kind: "error",
+          message: "此目录尚未保存到配置，请保存后重试",
+        }),
+      ]),
+    );
+    expect(JSON.stringify(useUIStore.getState().toasts)).not.toContain(
+      "private",
+    );
   });
 
   it("修改数字后 debounce 触发保存", async () => {

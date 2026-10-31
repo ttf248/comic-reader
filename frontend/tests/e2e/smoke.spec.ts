@@ -4,6 +4,7 @@ import {
   type APIRequestContext,
   type Locator,
   type Page,
+  type Route,
 } from "@playwright/test";
 import type { VideoInfo, VideoInfoBatchItem } from "../../src/api/videos";
 
@@ -2314,6 +2315,293 @@ for (const entrypoint of ["more", "image"] as const) {
         });
     } finally {
       await restoreHistory(page.request, original);
+    }
+  });
+}
+
+const systemOpenRoute = /\/api\/(?:admin\/fs|fs)\/open(?:\?|$)/;
+
+function systemOpenRequest(route: Route) {
+  const request = route.request();
+  const url = new URL(request.url());
+  return {
+    endpoint: url.pathname,
+    method: request.method(),
+    body:
+      request.method() === "POST" ? (request.postDataJSON() as unknown) : null,
+    path: url.searchParams.get("path"),
+    allowConfig: url.searchParams.get("allowConfig"),
+  };
+}
+
+for (const view of ["grid", "list"] as const) {
+  test(`${view} 系统打开权限迟到后更新菜单，失败反馈后可重试`, async ({
+    page,
+  }) => {
+    const nodes = await scannedNodes(page.request);
+    const album = nodes.find((node) => node.name === "sample-album")!;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route("**/api/health", async (route) => {
+      await gate;
+      await route.fulfill({
+        status: 200,
+        json: { status: "ok", allowOsOpen: true },
+      });
+    });
+    const requests: ReturnType<typeof systemOpenRequest>[] = [];
+    let blocked = true;
+    // 所有系统打开请求均拦截，浏览器回归不启动桌面文件管理器。
+    await page.route(systemOpenRoute, async (route) => {
+      requests.push(systemOpenRequest(route));
+      await route.fulfill(
+        blocked
+          ? {
+              status: 500,
+              json: {
+                code: "os_open_failed",
+                message: "failed to open the resource",
+              },
+            }
+          : { status: 200, json: { ok: true } },
+      );
+    });
+    await page.goto("/");
+    await page.getByRole("combobox").fill(album.name);
+    await page
+      .getByRole("button", {
+        name: view === "grid" ? "网格视图" : "列表视图",
+        exact: true,
+      })
+      .click();
+    const card = page.locator(
+      `main [data-virtuoso-scroller] a[href="/albums/${album.id}"]`,
+    );
+    await card.click({ button: "right" });
+    const open = page.getByRole("menuitem", {
+      name: "在资源管理器中打开",
+      exact: true,
+    });
+    await expect(open).toBeDisabled();
+    release();
+    await expect(open).toBeEnabled();
+    await open.click();
+    await expect(
+      page.getByText("系统文件管理器未能打开，请确认目录仍可用后重试", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(page.getByRole("menu")).toHaveCount(0);
+    await expect(card).toBeFocused();
+    blocked = false;
+    await card.click({ button: "right" });
+    await open.click();
+    await expect(
+      page.getByText("已请求打开目录", { exact: true }),
+    ).toBeVisible();
+    await expect(card).toBeFocused();
+    expect(requests).toEqual(
+      Array(2).fill({
+        endpoint: "/api/fs/open",
+        method: "POST",
+        body: { id: album.id },
+        path: null,
+        allowConfig: null,
+      }),
+    );
+  });
+}
+
+test("相册系统打开权限更新更多及图片菜单，并说明本机限制", async ({ page }) => {
+  const nodes = await scannedNodes(page.request);
+  const album = nodes.find((node) => node.name === "sample-album")!;
+  const original = (await (await page.request.get("/api/prefs")).json()) as {
+    maxRecent: number;
+    history: Array<{ albumId: string; name: string; imageCount: number }>;
+  };
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  try {
+    await page.route("**/api/health", async (route) => {
+      await gate;
+      await route.fulfill({
+        status: 200,
+        json: { status: "ok", allowOsOpen: true },
+      });
+    });
+    let blocked = true;
+    const requests: ReturnType<typeof systemOpenRequest>[] = [];
+    await page.route(systemOpenRoute, async (route) => {
+      requests.push(systemOpenRequest(route));
+      await route.fulfill(
+        blocked
+          ? {
+              status: 403,
+              json: { code: "local_access_required", message: "local only" },
+            }
+          : { status: 200, json: { ok: true } },
+      );
+    });
+    await page.goto(`/albums/${album.id}`);
+    const more = page.getByRole("button", { name: "更多操作", exact: true });
+    await more.click();
+    const open = page.getByRole("menuitem", {
+      name: "在资源管理器中打开",
+      exact: true,
+    });
+    await expect(open).toBeDisabled();
+    release();
+    await expect(open).toBeEnabled();
+    await open.click();
+    await expect(
+      page.getByText("请在运行服务的计算机上打开系统文件管理器", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(more).toBeFocused();
+    blocked = false;
+    const image = page.getByRole("button", {
+      name: "打开第 1 张",
+      exact: true,
+    });
+    await image.click({ button: "right" });
+    await open.click();
+    await expect(
+      page.getByText("已请求打开目录", { exact: true }),
+    ).toBeVisible();
+    await expect(image).toBeFocused();
+    expect(requests.map((request) => request.body)).toEqual([
+      { id: album.id },
+      { id: album.id },
+    ]);
+  } finally {
+    release();
+    await restoreHistory(page.request, original);
+  }
+});
+
+for (const health of ["late", "error"] as const) {
+  test(`系统打开设置保存不依赖 ${health} 健康响应，配置目录使用白名单入口`, async ({
+    page,
+  }) => {
+    const nodes = await scannedNodes(page.request);
+    const album = nodes.find((node) => node.name === "sample-album")!;
+    const original = (await (await page.request.get("/api/config")).json()) as {
+      allowOsOpen: boolean;
+      mediaRoots: string[];
+    };
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let completedHealth = 0;
+    try {
+      expect(
+        (
+          await page.request.put("/api/config", {
+            data: { allowOsOpen: false },
+          })
+        ).ok(),
+      ).toBeTruthy();
+      await page.route("**/api/health", async (route) => {
+        if (health === "late") await gate;
+        await route
+          .fulfill(
+            health === "late"
+              ? {
+                  status: 200,
+                  json: { status: "ok", allowOsOpen: false },
+                }
+              : {
+                  status: 500,
+                  json: { code: "test_unavailable", message: "unavailable" },
+                },
+          )
+          .catch(() => {});
+        completedHealth++;
+      });
+      const requests: ReturnType<typeof systemOpenRequest>[] = [];
+      let blocked = true;
+      await page.route(systemOpenRoute, async (route) => {
+        requests.push(systemOpenRequest(route));
+        await route.fulfill(
+          blocked
+            ? {
+                status: 403,
+                json: {
+                  code: "config_path_not_allowed",
+                  message: "path is not configured",
+                },
+              }
+            : { status: 200, json: { ok: true } },
+        );
+      });
+      const initialHealth = page.waitForRequest("**/api/health");
+      await page.goto("/");
+      await initialHealth;
+      await page.getByRole("link", { name: "设置", exact: true }).click();
+      const toggle = page.getByRole("switch", {
+        name: "允许在系统文件管理器中打开",
+        exact: true,
+      });
+      await expect(toggle).toHaveAttribute("aria-checked", "false");
+      const saved = page.waitForResponse(
+        (response) =>
+          new URL(response.url()).pathname === "/api/config" &&
+          response.request().method() === "PUT",
+      );
+      await toggle.click();
+      expect((await saved).ok()).toBeTruthy();
+      await expect(toggle).toHaveAttribute("aria-checked", "true");
+      release();
+      await expect.poll(() => completedHealth).toBeGreaterThan(0);
+      const root = page.locator(
+        `input[value=${JSON.stringify(original.mediaRoots[0])}]`,
+      );
+      const openRoot = root.locator("..").getByRole("button", {
+        name: "在系统文件管理器中打开此目录",
+        exact: true,
+      });
+      await openRoot.click();
+      await expect(
+        page.getByText("此目录尚未保存到配置，请保存后重试", { exact: true }),
+      ).toBeVisible();
+      blocked = false;
+      await openRoot.click();
+      await expect(
+        page.getByText("已请求打开目录", { exact: true }),
+      ).toBeVisible();
+      expect(requests).toEqual(
+        Array(2).fill({
+          endpoint: "/api/admin/fs/open",
+          method: "GET",
+          body: null,
+          path: original.mediaRoots[0],
+          allowConfig: "1",
+        }),
+      );
+      await page.getByRole("link", { name: "主页", exact: true }).click();
+      await page.getByRole("combobox").fill(album.name);
+      const card = page.locator(
+        `main [data-virtuoso-scroller] a[href="/albums/${album.id}"]`,
+      );
+      await card.click({ button: "right" });
+      await expect(
+        page.getByRole("menuitem", { name: "在资源管理器中打开", exact: true }),
+      ).toBeEnabled();
+    } finally {
+      release();
+      expect(
+        (
+          await page.request.put("/api/config", {
+            data: { allowOsOpen: original.allowOsOpen },
+          })
+        ).ok(),
+      ).toBeTruthy();
     }
   });
 }

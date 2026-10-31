@@ -7,6 +7,8 @@ import {
 } from "../../api/config";
 import { useUIStore } from "../../store/uiStore";
 import { fsApi } from "../../api/fs";
+import { updateFsCapabilities } from "../../hooks/useFsCapabilities";
+import { fileManagerErrorMessage } from "../../utils/fileManager";
 import { authApi } from "../../api/auth";
 import { ApiError } from "../../api/client";
 import { useDebounce } from "../../hooks/useDebounce";
@@ -192,7 +194,11 @@ export default function ServerConfigPanel() {
     refetch,
   } = useQuery({
     queryKey: ["server-config"],
-    queryFn: () => configApi.get(),
+    queryFn: async ({ signal }) => {
+      const config = await configApi.get();
+      if (!signal.aborted) updateFsCapabilities(qc, config.allowOsOpen);
+      return config;
+    },
   });
 
   const [status, setStatus] = useState<StatusMap>({});
@@ -287,6 +293,7 @@ export default function ServerConfigPanel() {
   const update = useMutation({
     mutationFn: (patch: ServerConfigPatch) => configApi.update(patch),
     onMutate: (patch) => {
+      void qc.cancelQueries({ queryKey: ["server-config"], exact: true });
       setFieldStatus(Object.keys(patch), "saving");
     },
     onSuccess: (resp, patch) => {
@@ -300,11 +307,9 @@ export default function ServerConfigPanel() {
         qc.removeQueries({ queryKey: libraryQueryKeys.root });
         if (mounted.current) setMediaRootsDirty(true);
       }
-      // allowOsOpen 变更后:让前端 fsCapabilities 立即跟上,
-      // 否则 Album 详情 / 右键菜单的"在资源管理器中打开"按钮
-      // 仍然显示 disabled 状态直到下次 App 启动。
+      // 保存结果已确认权限，直接发布，避免额外健康请求失败或旧响应覆盖。
       if (keys.includes("allowOsOpen")) {
-        void fsApi.syncCapabilities();
+        updateFsCapabilities(qc, resp.config.allowOsOpen);
       }
       // 重启字段提示
       const needRestart = resp.requiresRestart ?? [];
@@ -451,7 +456,7 @@ export default function ServerConfigPanel() {
                 s["mediaRoots"] === "saved" ? { ...s, mediaRoots: "idle" } : s,
               );
             }}
-            onOpenInExplorer={openMediaRoot}
+            onOpenInExplorer={openConfiguredDirectory}
           />
         </div>
       </div>
@@ -654,24 +659,6 @@ export default function ServerConfigPanel() {
   );
 }
 
-// 媒体根打开资源管理器的统一处理(带错误 toast)
-async function openMediaRoot(path: string): Promise<void> {
-  const ui = useUIStore.getState();
-  try {
-    await fsApi.openInExplorer(path);
-  } catch (e: unknown) {
-    const msg = errorMessage(e, "打开失败");
-    if (msg.includes("403") || msg.includes("disabled")) {
-      ui.pushToast({
-        kind: "warning",
-        message: "请先在「安全」里开启「允许在系统文件管理器中打开」",
-      });
-    } else {
-      ui.pushToast({ kind: "error", message: "打开失败:" + msg });
-    }
-  }
-}
-
 // ---- 多根字段(独立组件)----
 
 function MediaRootsField({
@@ -800,7 +787,7 @@ function ConfigRow({
             onCommit={onCommit}
             onOpenInExplorer={
               value && String(value).length > 0 && allowOsOpen
-                ? () => openConfigPath(String(value), def.key as string)
+                ? () => openConfiguredDirectory(String(value))
                 : undefined
             }
             onPick={(picked) => onChange(picked)}
@@ -1114,46 +1101,14 @@ function PathField({
   );
 }
 
-// 打开 cacheDir/staticDir 时需要带 allowConfig=1
-async function openConfigPath(path: string, fieldKey: string): Promise<void> {
+// 设置中的目录统一使用已配置路径白名单入口，与媒体资源 ID 接口区分。
+async function openConfiguredDirectory(path: string): Promise<void> {
   const ui = useUIStore.getState();
   try {
-    // 直接调 fetch,fsApi 没暴露 allowConfig 参数(避免污染通用 API)
-    const res = await fetch(
-      `/api/admin/fs/open?path=${encodeURIComponent(path)}&allowConfig=1`,
-      {
-        method: "GET",
-      },
-    );
-    if (!res.ok) {
-      const body = await res.text().catch(() => "");
-      if (res.status === 403) {
-        if (body.includes("allowOsOpen")) {
-          ui.pushToast({
-            kind: "warning",
-            message: "请先在「安全」里开启「允许在系统文件管理器中打开」",
-          });
-        } else {
-          ui.pushToast({
-            kind: "error",
-            message: "该路径不在可打开白名单(cacheDir/staticDir/mediaRoots)",
-          });
-        }
-      } else {
-        ui.pushToast({
-          kind: "error",
-          message: `打开失败 (${res.status}): ${body}`,
-        });
-      }
-      return;
-    }
-    // 200:成功,不做额外提示
-    void fieldKey; // 暂时无额外用途
+    await fsApi.openConfiguredPath(path);
+    ui.pushToast({ kind: "success", message: "已请求打开目录", ttl: 1200 });
   } catch (e: unknown) {
-    ui.pushToast({
-      kind: "error",
-      message: "网络错误:" + errorMessage(e, "未知"),
-    });
+    ui.pushToast({ kind: "error", message: fileManagerErrorMessage(e) });
   }
 }
 

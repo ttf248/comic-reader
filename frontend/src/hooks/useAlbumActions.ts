@@ -1,10 +1,13 @@
 import { useNavigate } from "react-router-dom";
-import { fsApi, fsCapabilities } from "../api/fs";
+import { fsApi } from "../api/fs";
+import { ApiError } from "../api/client";
+import { useFsCapabilities } from "./useFsCapabilities";
 import type { CardData } from "../components/album/AlbumCard";
 import { copyText } from "../utils/clipboard";
 import { decodeFavPath } from "../utils/path";
 
 interface Actions {
+  canOpenInExplorer: boolean;
   open: () => void;
   openInExplorer: () => Promise<void>;
   copyLink: () => Promise<void>;
@@ -14,14 +17,28 @@ interface Actions {
 // 收藏切换由调用方通过 useFavorites().toggle 触发（避免再订阅 query）。
 export function useAlbumActions(item: CardData) {
   const navigate = useNavigate();
+  const allowOsOpen = useFsCapabilities();
 
   const resourceId = decodeFavPath(item.to);
 
   const actions: Actions = {
+    canOpenInExplorer: allowOsOpen && item.variant !== "smart",
     open: () => navigate(item.to),
     openInExplorer: async () => {
-      if (!fsCapabilities.allowOsOpen) throw new Error("allowOsOpen disabled");
-      if (item.variant === "smart") throw new Error("not a real path");
+      if (!allowOsOpen)
+        throw new ApiError(
+          403,
+          "OS file manager is disabled",
+          undefined,
+          "os_open_disabled",
+        );
+      if (item.variant === "smart")
+        throw new ApiError(
+          400,
+          "not a file system resource",
+          undefined,
+          "invalid_resource_kind",
+        );
       await fsApi.openInExplorer(resourceId);
     },
     copyLink: async () => {
