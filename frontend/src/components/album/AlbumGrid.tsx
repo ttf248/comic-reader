@@ -1,4 +1,4 @@
-import { forwardRef, useState, type ReactNode } from "react";
+import { forwardRef, useCallback, useState, type ReactNode } from "react";
 import { Virtuoso, VirtuosoGrid, type ListProps } from "react-virtuoso";
 import AlbumCard, { type CardData } from "./AlbumCard";
 import ContextMenu, { type AnyMenuItem } from "./ContextMenu";
@@ -40,7 +40,7 @@ const VirtualList = forwardRef<HTMLDivElement, ListProps>(function VirtualList(
 const virtualListComponents = { List: VirtualList };
 
 // 网格 / 列表容器。
-// 统一使用窗口滚动虚拟化：筛选结果可以很大，但页面只挂载视口附近的卡片。
+// 跟随最近的滚动区域虚拟化：筛选结果可以很大，但只挂载视口附近的卡片。
 // 列表视图下，悬停时显示右侧 chevron。
 // 右键菜单统一：打开 / 收藏 / 资源管理器 / 复制路径 / 属性。
 export default function AlbumGrid({
@@ -56,6 +56,20 @@ export default function AlbumGrid({
   } | null>(null);
   const [propsOpen, setPropsOpen] = useState(false);
   const [propsPath, setPropsPath] = useState<string | null>(null);
+  const [scrollParent, setScrollParent] = useState<HTMLElement>();
+  const bindScrollParent = useCallback((container: HTMLDivElement | null) => {
+    if (!container) return;
+    let parent = container.parentElement;
+    while (parent && parent !== document.body) {
+      // 占位高度还未生成时也要绑定；集合页优先使用自己的内层滚动区。
+      if (/(auto|scroll|overlay)/.test(getComputedStyle(parent).overflowY)) {
+        setScrollParent(parent);
+        return;
+      }
+      parent = parent.parentElement;
+    }
+    setScrollParent(undefined);
+  }, []);
   const viewMode = useUIStore((s) => s.viewMode);
   const mode = variant ?? viewMode;
 
@@ -84,10 +98,11 @@ export default function AlbumGrid({
   };
 
   return (
-    <div>
+    <div ref={bindScrollParent}>
       {mode === "list" ? (
         <Virtuoso
-          useWindowScroll
+          customScrollParent={scrollParent}
+          useWindowScroll={!scrollParent}
           data={items}
           components={virtualListComponents}
           computeItemKey={(_index, item) => item.id}
@@ -96,7 +111,8 @@ export default function AlbumGrid({
         />
       ) : (
         <VirtuosoGrid
-          useWindowScroll
+          customScrollParent={scrollParent}
+          useWindowScroll={!scrollParent}
           data={items}
           computeItemKey={(_index, item) => item.id}
           increaseViewportBy={{ top: 720, bottom: 1080 }}

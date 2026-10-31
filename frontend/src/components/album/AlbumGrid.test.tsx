@@ -12,6 +12,7 @@ interface VirtualizedProps {
   data: readonly CardData[];
   itemContent: (index: number, item: CardData) => ReactNode;
   useWindowScroll?: boolean;
+  customScrollParent?: HTMLElement;
   computeItemKey?: (index: number, item: CardData) => string;
   [key: string]: unknown;
 }
@@ -74,7 +75,7 @@ describe("AlbumGrid", () => {
     virtuoso.list.mockClear();
   });
 
-  it("网格模式使用窗口滚动虚拟化并保留稳定卡片键", () => {
+  it("独立网格使用窗口滚动并保留稳定卡片键", () => {
     render(<AlbumGrid items={cards} variant="grid" />);
 
     expect(screen.getByTestId("virtual-grid")).toBeInTheDocument();
@@ -87,7 +88,7 @@ describe("AlbumGrid", () => {
     expect(props.computeItemKey(1, cards[1])).toBe("a_2");
   });
 
-  it("列表模式同样使用窗口滚动虚拟化", () => {
+  it("独立列表使用窗口滚动并保留稳定卡片键", () => {
     render(<AlbumGrid items={cards} variant="list" />);
 
     expect(screen.getByTestId("virtual-list")).toBeInTheDocument();
@@ -97,5 +98,50 @@ describe("AlbumGrid", () => {
     };
     expect(props.useWindowScroll).toBe(true);
     expect(props.computeItemKey(0, cards[0])).toBe("a_1");
+  });
+
+  it.each(["grid", "list"] as const)("%s 模式使用主内容区域滚动", (mode) => {
+    render(
+      <main style={{ overflowY: "auto" }} data-testid="scroll-area">
+        <section>
+          <AlbumGrid items={cards} variant={mode} />
+        </section>
+      </main>,
+    );
+    const calls = mode === "grid" ? virtuoso.grid : virtuoso.list;
+    const props = calls.mock.lastCall?.[0] as VirtualizedProps;
+    expect(props.customScrollParent).toBe(screen.getByTestId("scroll-area"));
+    expect(props.useWindowScroll).toBe(false);
+  });
+
+  it.each(["grid", "list"] as const)(
+    "%s 模式优先使用集合内层滚动区域",
+    (mode) => {
+      render(
+        <main style={{ overflowY: "auto" }}>
+          <div style={{ overflowY: "auto" }} data-testid="scroll-area">
+            <AlbumGrid items={cards} variant={mode} />
+          </div>
+        </main>,
+      );
+      const calls = mode === "grid" ? virtuoso.grid : virtuoso.list;
+      const props = calls.mock.lastCall?.[0] as VirtualizedProps;
+      expect(props.customScrollParent).toBe(screen.getByTestId("scroll-area"));
+      expect(props.useWindowScroll).toBe(false);
+    },
+  );
+
+  it("从空结果加载出卡片后绑定滚动区域", () => {
+    const view = (items: CardData[]) => (
+      <main style={{ overflowY: "auto" }} data-testid="scroll-area">
+        <AlbumGrid items={items} variant="grid" />
+      </main>
+    );
+    const { rerender } = render(view([]));
+    expect(virtuoso.grid).not.toHaveBeenCalled();
+    rerender(view(cards));
+    const props = virtuoso.grid.mock.lastCall?.[0] as VirtualizedProps;
+    expect(props.customScrollParent).toBe(screen.getByTestId("scroll-area"));
+    expect(props.useWindowScroll).toBe(false);
   });
 });

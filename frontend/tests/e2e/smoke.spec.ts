@@ -1488,3 +1488,77 @@ for (const name of ["home", "collection", "unread", "tag"] as const) {
     }
   });
 }
+
+for (const name of ["home", "collection", "unread", "tag"] as const) {
+  for (const mode of ["grid", "list"] as const) {
+    test(`${name} ${mode} 长相册列表随实际滚动区域更新首尾卡片`, async ({
+      page,
+    }) => {
+      const nodes = await scannedNodes(page.request);
+      const prefix = "zz-[滚动回归] long-list-";
+      const collection = nodes.find(
+        (node) => node.name === "zz-scroll-collection",
+      )!;
+      expect(collection).toBeDefined();
+      const children = (await (
+        await page.request.get(
+          `/api/library/${collection.id}/children?limit=200`,
+        )
+      ).json()) as { page: { items: Array<{ id: string; name: string }> } };
+      const source = name === "collection" ? children.page.items : nodes;
+      const first = source.find((node) => node.name === prefix + "001")!;
+      const last = source.find((node) => node.name === prefix + "108")!;
+      expect(first).toBeDefined();
+      expect(last).toBeDefined();
+      const paths = {
+        home: "/",
+        collection: `/albums/${collection.id}`,
+        unread: "/unread",
+        tag: `/tags/${encodeURIComponent("滚动回归")}`,
+      };
+      await page.goto(paths[name]);
+      await page.getByRole("combobox").fill(prefix);
+      await page
+        .getByRole("button", {
+          name: mode === "grid" ? "网格视图" : "列表视图",
+          exact: true,
+        })
+        .click();
+      const cards = page.locator(
+        'main [data-virtuoso-scroller] a[href^="/albums/"]',
+      );
+      const firstCard = page.locator(
+        `main [data-virtuoso-scroller] a[href="/albums/${first.id}"]`,
+      );
+      const lastCard = page.locator(
+        `main [data-virtuoso-scroller] a[href="/albums/${last.id}"]`,
+      );
+      await firstCard.scrollIntoViewIfNeeded();
+      await expect(firstCard).toBeInViewport();
+      expect(await cards.count()).toBeLessThan(108);
+      const scrollArea =
+        name === "collection"
+          ? page.locator("main .overflow-auto").first()
+          : page.locator("main");
+      await expect
+        .poll(async () => {
+          await scrollArea.evaluate((element) => {
+            element.scrollTop = element.scrollHeight;
+          });
+          return lastCard.count();
+        })
+        .toBe(1);
+      await scrollArea.evaluate((element) => {
+        element.scrollTop = element.scrollHeight;
+      });
+      await expect(lastCard).toBeInViewport();
+      await expect(firstCard).toHaveCount(0);
+      expect(await cards.count()).toBeLessThan(108);
+      await scrollArea.evaluate((element) => {
+        element.scrollTop = 0;
+      });
+      await firstCard.scrollIntoViewIfNeeded();
+      await expect(firstCard).toBeInViewport();
+    });
+  }
+}

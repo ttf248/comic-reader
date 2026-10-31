@@ -46,6 +46,16 @@ try {
     }
   }
 
+  # 长相册列表：主区域与集合内层各放 108 本，验证滚动到首屏之外仍能访问。
+  $scrollCollectionDir = Join-Path (Join-Path $testRoot "media") "zz-scroll-collection"
+  foreach ($parent in @((Join-Path $testRoot "media"), $scrollCollectionDir)) {
+    1..108 | ForEach-Object {
+      $scrollAlbumDir = Join-Path $parent ("zz-[滚动回归] long-list-{0:D3}" -f $_)
+      New-Item -ItemType Directory -Path $scrollAlbumDir -Force | Out-Null
+      [System.IO.File]::WriteAllBytes((Join-Path $scrollAlbumDir "page.png"), $pngBytes)
+    }
+  }
+
   # 超过两页的轻量素材，验证三个虚拟媒体网格的分页边界和远距离跳转。
   foreach ($kind in @("images", "mixed", "videos")) {
     $pagedDir = Join-Path (Join-Path $testRoot "media") "sample-paged-$kind"
