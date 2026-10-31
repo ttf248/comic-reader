@@ -636,3 +636,126 @@ for (const failure of ["favorites", "nodes", "tags"] as const) {
     }
   });
 }
+
+test("设置读取失败可重试，恢复后显示阅读设置", async ({ page }) => {
+  let blocked = true;
+  await page.route("**/api/prefs", async (route) => {
+    if (blocked)
+      await route.fulfill({
+        status: 500,
+        json: { code: "test_unavailable", message: "unavailable" },
+      });
+    else await route.continue();
+  });
+  await page.goto("/settings");
+  const alert = page.getByRole("alert");
+  await expect(alert).toContainText("设置加载失败", { timeout: 15_000 });
+  await expect(page.getByText("加载中…", { exact: true })).toHaveCount(0);
+  for (const theme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: theme });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    await page.screenshot({
+      path: test.info().outputPath(`settings-error-${theme}.png`),
+    });
+  }
+  blocked = false;
+  await alert.getByRole("button", { name: "重试加载", exact: true }).click();
+  await expect(
+    page.getByRole("switch", { name: "阅读到末尾自动切换下一本" }),
+  ).toBeVisible();
+  await expect(alert).toHaveCount(0);
+});
+
+for (const operation of ["prefs", "prune", "history"] as const) {
+  test(`设置 ${operation} 操作期间禁止重复请求，失败提示后可以重试`, async ({
+    page,
+  }) => {
+    const original = (await (await page.request.get("/api/prefs")).json()) as {
+      autoSwitchAlbum: boolean;
+    };
+    const pathname = {
+      prefs: "/api/prefs",
+      prune: "/api/favorites/prune",
+      history: "/api/history",
+    }[operation];
+    const method = { prefs: "PATCH", prune: "POST", history: "DELETE" }[
+      operation
+    ];
+    let blocked = true;
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route(
+      (url) => url.pathname === pathname,
+      async (route) => {
+        if (!blocked || route.request().method() !== method)
+          return route.continue();
+        await gate;
+        await route.fulfill({
+          status: 500,
+          json: { code: "test_unavailable", message: "unavailable" },
+        });
+      },
+    );
+    try {
+      await page.goto("/settings");
+      const action =
+        operation === "prefs"
+          ? page.getByRole("switch", { name: "阅读到末尾自动切换下一本" })
+          : page.getByRole("button", {
+              name: operation === "prune" ? /^清理(?:中…)?$/ : /^清空(?:中…)?$/,
+            });
+      await action.click();
+      await expect(action).toBeDisabled();
+      if (operation === "prefs") {
+        await expect(
+          page.getByRole("switch", { name: "切换时显示通知" }),
+        ).toBeDisabled();
+        await expect(
+          page.getByRole("button", { name: "增加最近访问保留条数" }),
+        ).toBeDisabled();
+      }
+      release();
+      const message = {
+        prefs: "保存阅读设置失败",
+        prune: "清理失效收藏失败",
+        history: "清空最近访问失败",
+      }[operation];
+      await expect(page.getByText(message, { exact: true })).toBeVisible();
+      await expect(action).toBeEnabled();
+      if (operation === "prefs")
+        await expect(action).toHaveAttribute(
+          "aria-checked",
+          String(original.autoSwitchAlbum),
+        );
+      blocked = false;
+      await action.click();
+      if (operation === "prefs") {
+        await expect(action).toHaveAttribute(
+          "aria-checked",
+          String(!original.autoSwitchAlbum),
+        );
+      } else {
+        await expect(
+          page.getByText(
+            operation === "prune"
+              ? /^已清理 \d+ 项失效收藏$/
+              : "已清空最近访问",
+          ),
+        ).toBeVisible();
+      }
+    } finally {
+      release();
+      if (operation === "prefs") {
+        expect(
+          (
+            await page.request.patch("/api/prefs", {
+              data: { autoSwitchAlbum: original.autoSwitchAlbum },
+            })
+          ).ok(),
+        ).toBeTruthy();
+      }
+    }
+  });
+}

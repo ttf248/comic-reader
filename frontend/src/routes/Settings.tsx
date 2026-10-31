@@ -21,10 +21,11 @@ import {
 } from "../components/common/Icon";
 
 export default function Settings() {
-  const { data, isLoading } = useQuery({
+  const prefsQuery = useQuery({
     queryKey: ["prefs"],
     queryFn: () => prefsApi.get(),
   });
+  const { data } = prefsQuery;
   const qc = useQueryClient();
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
   const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
@@ -49,7 +50,11 @@ export default function Settings() {
   const patchPrefs = useMutation({
     mutationFn: (p: Partial<Parameters<typeof prefsApi.patch>[0]>) =>
       prefsApi.patch(p),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["prefs"] }),
+    onSuccess: (saved) => {
+      qc.setQueryData(["prefs"], saved);
+      void qc.invalidateQueries({ queryKey: ["prefs"] });
+    },
+    onError: () => pushToast({ kind: "error", message: "保存阅读设置失败" }),
   });
 
   const pruneFav = useMutation({
@@ -61,6 +66,7 @@ export default function Settings() {
         message: `已清理 ${r.removed.length} 项失效收藏`,
       });
     },
+    onError: () => pushToast({ kind: "error", message: "清理失效收藏失败" }),
   });
 
   // 单 scope 清空(thumbs / faststart / transcode)。三个独立 mutation
@@ -147,6 +153,7 @@ export default function Settings() {
       qc.invalidateQueries({ queryKey: ["history"] });
       pushToast({ kind: "success", message: "已清空最近访问" });
     },
+    onError: () => pushToast({ kind: "error", message: "清空最近访问失败" }),
   });
 
   // Settings 页内也能触发扫描：与 Home / Toolbar 走同一套 SSE。
@@ -158,8 +165,38 @@ export default function Settings() {
     },
     onError: () => pushToast({ kind: "error", message: "启动扫描失败" }),
   });
-  if (isLoading || !data) {
-    return <div className="p-10 text-fg-muted text-sm">加载中…</div>;
+  const prefsError = prefsQuery.isError && (
+    <div
+      role="alert"
+      className="flex items-center justify-between gap-3 rounded-md border border-danger/30 bg-danger/5 px-4 py-3 mb-6 text-sm"
+    >
+      <p>
+        设置加载失败。
+        {data ? "仍显示上次加载的设置。" : "请重试加载。"}
+      </p>
+      <button
+        type="button"
+        onClick={() => void prefsQuery.refetch()}
+        disabled={prefsQuery.isFetching}
+        className="shrink-0 text-accent hover:underline disabled:opacity-50"
+      >
+        {prefsQuery.isFetching ? "正在重试…" : "重试加载"}
+      </button>
+    </div>
+  );
+  if (!data) {
+    return (
+      <div className="px-6 lg:px-10 py-10 max-w-3xl mx-auto w-full">
+        <h1 className="font-display text-[32px] font-semibold tracking-[-0.02em] mb-6">
+          设置
+        </h1>
+        {prefsError || (
+          <div role="status" className="text-fg-muted text-sm">
+            正在加载设置…
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (
@@ -168,6 +205,7 @@ export default function Settings() {
         设置
       </h1>
       <p className="text-sm text-fg-muted mt-2 mb-10">个性化你的阅读体验</p>
+      {prefsError}
 
       <Section title="外观" icon={<SunIcon size={13} />}>
         <Row label="主题">
@@ -226,19 +264,24 @@ export default function Settings() {
       <Section title="阅读" icon={<LibraryIcon size={13} />}>
         <Row label="阅读到末尾自动切换下一本">
           <Toggle
+            label="阅读到末尾自动切换下一本"
             checked={data.autoSwitchAlbum}
+            disabled={patchPrefs.isPending}
             onChange={(v) => patchPrefs.mutate({ autoSwitchAlbum: v })}
           />
         </Row>
         <Row label="切换时显示通知">
           <Toggle
+            label="切换时显示通知"
             checked={data.showSwitchNotif}
+            disabled={patchPrefs.isPending}
             onChange={(v) => patchPrefs.mutate({ showSwitchNotif: v })}
           />
         </Row>
         <Row label="最近访问保留条数">
           <NumberInput
             value={data.maxRecent}
+            disabled={patchPrefs.isPending}
             min={1}
             max={50}
             onChange={(v) => patchPrefs.mutate({ maxRecent: v })}
@@ -378,7 +421,8 @@ export default function Settings() {
         <Row label="清理失效收藏">
           <button
             onClick={() => pruneFav.mutate()}
-            className="h-8 px-3 rounded-md border border-border-faint hover:bg-bg-subtle text-xs transition-colors"
+            disabled={pruneFav.isPending}
+            className="h-8 px-3 rounded-md border border-border-faint hover:bg-bg-subtle text-xs transition-colors disabled:opacity-50"
           >
             {pruneFav.isPending ? "清理中…" : "清理"}
           </button>
@@ -386,7 +430,8 @@ export default function Settings() {
         <Row label="清空最近访问" danger>
           <button
             onClick={() => clearHist.mutate()}
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-danger/40 text-danger hover:bg-danger/5 text-xs transition-colors"
+            disabled={clearHist.isPending}
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-danger/40 text-danger hover:bg-danger/5 text-xs transition-colors disabled:opacity-50"
           >
             <TrashIcon size={11} />
             <span>{clearHist.isPending ? "清空中…" : "清空"}</span>
@@ -474,18 +519,24 @@ function Row({
 }
 
 function Toggle({
+  label,
   checked,
+  disabled,
   onChange,
 }: {
+  label: string;
   checked: boolean;
+  disabled: boolean;
   onChange: (v: boolean) => void;
 }) {
   return (
     <button
       role="switch"
+      aria-label={label}
       aria-checked={checked}
+      disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-5 w-9 rounded-full transition-colors ${
+      className={`relative inline-flex h-5 w-9 rounded-full transition-colors disabled:opacity-50 ${
         checked ? "bg-accent" : "bg-bg-strong"
       }`}
     >
@@ -500,11 +551,13 @@ function Toggle({
 
 function NumberInput({
   value,
+  disabled,
   min,
   max,
   onChange,
 }: {
   value: number;
+  disabled: boolean;
   min: number;
   max: number;
   onChange: (v: number) => void;
@@ -512,8 +565,10 @@ function NumberInput({
   return (
     <div className="inline-flex items-center border border-border-faint rounded-md overflow-hidden">
       <button
+        aria-label="减少最近访问保留条数"
+        disabled={disabled}
         onClick={() => onChange(Math.max(min, value - 1))}
-        className="w-8 h-8 text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors"
+        className="w-8 h-8 text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors disabled:opacity-50"
       >
         −
       </button>
@@ -521,8 +576,10 @@ function NumberInput({
         {value}
       </span>
       <button
+        aria-label="增加最近访问保留条数"
+        disabled={disabled}
         onClick={() => onChange(Math.min(max, value + 1))}
-        className="w-8 h-8 text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors"
+        className="w-8 h-8 text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors disabled:opacity-50"
       >
         +
       </button>
