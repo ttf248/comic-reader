@@ -99,7 +99,7 @@ func newHarness(t *testing.T) *harness {
 	})
 	app.Use(middleware.Logger())
 	app.Use(middleware.Recover())
-	safetyMw, _ := middleware.PathSafetyMiddleware([]string{root})
+	safetyMw, safetyState := middleware.PathSafetyMiddleware([]string{root})
 	app.Use(safetyMw)
 
 	thumbs, err := services.NewThumbnailService(services.ThumbnailOptions{
@@ -151,7 +151,7 @@ func newHarness(t *testing.T) *harness {
 	api.Get("/videos/transcode/events", handlers.TranscodeEventsHandler(nil))
 	api.Post("/videos/transcode/cancel", handlers.TranscodeCancelHandler(nil))
 	api.Get("/images", handlers.ImageHandler())
-	api.Get("/images/info", handlers.ImageInfoHandler())
+	api.Get("/images/:id/info", middleware.ResourceParam(catalog, safetyState), handlers.ImageInfoHandler(catalog))
 	api.Get("/prefs", handlers.PrefsGetHandler(prefsStore))
 	api.Patch("/prefs", handlers.PrefsPatchHandler(prefsStore))
 	api.Get("/favorites", handlers.FavoritesListHandler(prefsStore))
@@ -387,6 +387,23 @@ func TestPagedLibraryFlowAfterScan(t *testing.T) {
 	if media.Page.Items[0].Kind != "image" || media.Page.Items[0].KindIndex != 0 {
 		t.Fatalf("unexpected media item: %+v", media.Page.Items[0])
 	}
+	fileID := media.Page.Items[0].ID
+	res, body = h.do(t, http.MethodGet, "/api/images/"+fileID+"/info", nil)
+	var imageInfo services.ImageInfo
+	if res.StatusCode != http.StatusOK || json.Unmarshal(body, &imageInfo) != nil {
+		t.Fatalf("image info status=%d body=%s", res.StatusCode, body)
+	}
+	wantDir := filepath.ToSlash(filepath.Join(filepath.Base(h.root), firstAlbum.Name))
+	if imageInfo.Path != fileID || imageInfo.Dir != wantDir || imageInfo.Name != media.Page.Items[0].Name ||
+		imageInfo.Width != 200 || imageInfo.Height != 300 || len(imageInfo.Checksum) != 16 {
+		t.Fatalf("unexpected image metadata: %+v; want directory %q", imageInfo, wantDir)
+	}
+	for _, id := range []string{rootID, firstAlbum.ID} {
+		res, body = h.do(t, http.MethodGet, "/api/images/"+id+"/info", nil)
+		if res.StatusCode != http.StatusBadRequest || !bytes.Contains(body, []byte(`"code":"invalid_resource_kind"`)) {
+			t.Fatalf("non-file image info status=%d body=%s", res.StatusCode, body)
+		}
+	}
 
 	res, body = h.do(t, http.MethodPost, "/api/library/nodes/query", map[string]any{
 		"ids": []string{firstAlbum.ID, "a_missing"},
@@ -429,7 +446,7 @@ func TestPagedLibraryFlowAfterScan(t *testing.T) {
 	}
 }
 
-func TestImageAndInfo(t *testing.T) {
+func TestImage(t *testing.T) {
 	h := newHarness(t)
 	img := filepath.Join(h.root, "[作者A] vol1", "page1.png")
 	res, body := h.do(t, "GET", "/api/images?path="+escape(img), nil)
@@ -442,19 +459,6 @@ func TestImageAndInfo(t *testing.T) {
 	}
 	if cfg.Width != 200 || cfg.Height != 300 {
 		t.Errorf("size=%dx%d", cfg.Width, cfg.Height)
-	}
-
-	ir, ib := h.do(t, "GET", "/api/images/info?path="+escape(img), nil)
-	if ir.StatusCode != 200 {
-		t.Fatalf("info status=%d body=%s", ir.StatusCode, ib)
-	}
-	var info map[string]interface{}
-	json.Unmarshal(ib, &info)
-	if info["width"].(float64) != 200 {
-		t.Errorf("info width=%v", info["width"])
-	}
-	if info["checksum"] == "" || info["checksum"] == nil {
-		t.Error("checksum missing")
 	}
 
 	// 让 fasthttp 内部缓冲释放，避免 Windows 上 t.TempDir 清理时的 file lock
@@ -632,12 +636,11 @@ func TestPrefs(t *testing.T) {
 
 func TestPathSafetyRejectsEscape(t *testing.T) {
 	h := newHarness(t)
-	bad := "/etc/passwd"
-	if _, err := os.Stat(bad); err == nil {
-		res, _ := h.do(t, "GET", "/api/images/info?path="+escape(bad), nil)
-		if res.StatusCode == 200 {
-			t.Errorf("path safety failed: escape succeeded")
-		}
+	bad := filepath.Join(t.TempDir(), "outside.png")
+	writePNG(t, bad, 1, 1)
+	res, body := h.do(t, http.MethodGet, "/api/images/"+url.PathEscape(bad)+"/info", nil)
+	if res.StatusCode != http.StatusNotFound || !bytes.Contains(body, []byte(`"code":"resource_not_found"`)) {
+		t.Fatalf("external path accepted as resource: status=%d body=%s", res.StatusCode, body)
 	}
 }
 

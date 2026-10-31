@@ -20,7 +20,7 @@
 - SSE 事件名：扫描用 `pending / running / complete / cancelled / error`，
   转码用 `progress / done`（与扫描命名空间分离，避免命名冲突）。
 - 错误响应 code 速查（持续扩充）：
-  - `missing_path` (400) - 缺少 `path` query 参数
+  - `missing_resource_id` (400) - 缺少资源 ID
   - `unsupported_video_format` (415) - 视频扩展名不在白名单
   - `unsupported_format` (415) - 缩略图不支持的图片格式
   - `video_not_found` (404) - 视频文件不存在
@@ -152,7 +152,15 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 ### `GET /api/images/:fileId/info`
 
-返回图片尺寸、格式、大小、修改时间和 checksum；`path` 为文件 ID，`dir` 为相对展示路径。
+仅接受图片文件资源 ID，返回图片尺寸、格式、大小、修改时间和 checksum。`path` 为文件 ID，`name` 为文件名，`dir` 为所在目录的“根别名/相对父目录”，不包含文件名；根目录直属图片的 `dir` 只有根别名。例如 `name: "page.png"`、`dir: "素材/相册"`。
+
+| 状态 | code | 含义 |
+|------|------|------|
+| 400 | `invalid_resource_kind` | 传入根、相册或集合 ID |
+| 404 | `resource_not_found` | ID 无效、已过期或不在当前媒体根中 |
+| 404 | `media_not_found` | 已收录的文件不存在 |
+| 415 | `unsupported_image_format` | 文件不是受支持图片，例如视频文件 |
+| 500 | `image_info_failed` | 无法读取或解码图片 |
 
 ### `GET /api/videos/:fileId/info`
 

@@ -1994,6 +1994,13 @@ test("图片属性使用文件ID并支持失败重试和小屏关闭", async ({ 
     ).toBeFocused();
     await expect(dialog.getByText(file.name, { exact: true })).toBeVisible();
     await expect(dialog.getByText("1 × 1 px", { exact: true })).toBeVisible();
+    await expect(
+      dialog
+        .locator("dt")
+        .filter({ hasText: /^目录$/ })
+        .locator("..")
+        .locator("dd"),
+    ).toHaveText("media/sample-album");
     const bounds = await dialog.boundingBox();
     expect(bounds!.width).toBeLessThanOrEqual(390);
     expect(bounds!.height).toBeLessThanOrEqual(740);

@@ -137,6 +137,8 @@ go test ./internal/services -run '^$' -bench BenchmarkThumbnailCold -benchtime=2
 
 图片通过 `/api/media/:fileId` 发送，使用 mtime + size 生成 ETag。缩略图采用内存 LRU 和磁盘缓存，源文件变化时失效。
 
+图片元数据通过 `/api/images/:fileId/info` 读取，只接受文件资源并校验图片扩展名。类型校验与目录展示复用资源参数中间件固定的扫描快照，重扫或清空目录时不会混用不同版本；`path` 始终为文件 ID，`dir` 仅为根别名和相对父目录，绝对路径只用于服务端文件读取。
+
 视频发送顺序：
 
 ```text

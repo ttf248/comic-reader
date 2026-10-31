@@ -87,13 +87,23 @@ func MediaHandler(transcode *services.TranscodeService, faststart *services.Vide
 // ImageInfoHandler 返回图片元数据（尺寸、格式、大小、修改时间、checksum）。
 //
 //	GET /api/images/:id/info
-func ImageInfoHandler(catalogs ...*services.ResourceCatalog) fiber.Handler {
-	catalog := optionalCatalog(catalogs)
+func ImageInfoHandler(catalog *services.ResourceCatalog) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		resourceID := middleware.ResourceID(c)
 		path := middleware.SafePath(c)
-		if path == "" {
-			return writeError(c, fiber.StatusBadRequest, "missing_path", "missing 'path' query parameter")
+		if resourceID == "" || path == "" {
+			return writeError(c, fiber.StatusBadRequest, "missing_resource_id", "resource id is required")
+		}
+		snapshot := requestCatalogSnapshot(c, catalog)
+		ref, ok := snapshot.Lookup(resourceID)
+		if !ok {
+			return writeError(c, fiber.StatusNotFound, "resource_not_found", "resource id is invalid or stale")
+		}
+		if ref.Kind != services.ResourceFile {
+			return writeError(c, fiber.StatusBadRequest, "invalid_resource_kind", "resource type does not support this operation")
+		}
+		if !models.IsImageFile(filepath.Base(path)) {
+			return writeError(c, fiber.StatusUnsupportedMediaType, "unsupported_image_format", "not a supported image format")
 		}
 		info, err := services.GetImageInfo(path)
 		if err != nil {
@@ -102,10 +112,8 @@ func ImageInfoHandler(catalogs ...*services.ResourceCatalog) fiber.Handler {
 			}
 			return writeError(c, fiber.StatusInternalServerError, "image_info_failed", "failed to read image metadata")
 		}
-		if catalog != nil {
-			info.Path = resourceID
-			info.Dir = catalog.RelativeLabel(resourceID)
-		}
+		info.Path = resourceID
+		info.Dir = filepath.ToSlash(filepath.Dir(snapshot.RelativeLabel(resourceID)))
 		return c.JSON(info)
 	}
 }
