@@ -759,3 +759,65 @@ for (const operation of ["prefs", "prune", "history"] as const) {
     }
   });
 }
+
+test("收藏写入成功后列表刷新失败仍保留已确认的状态", async ({ page }) => {
+  const nodes = await scannedNodes(page.request);
+  const album = nodes.find((node) => node.name === "sample-album");
+  expect(album).toBeDefined();
+  const resourceId = album!.id;
+  const original = (await (
+    await page.request.get("/api/favorites")
+  ).json()) as { favorites: string[] };
+  expect(
+    (await page.request.post("/api/favorites", { data: { resourceId } })).ok(),
+  ).toBeTruthy();
+  try {
+    await page.goto(`/albums/${resourceId}`);
+    await expect(
+      page.getByRole("button", { name: "已收藏", exact: true }),
+    ).toBeVisible();
+    let failedReads = 0;
+    await page.route("**/api/favorites", async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      failedReads++;
+      await route.fulfill({
+        status: 500,
+        json: { code: "test_unavailable", message: "unavailable" },
+      });
+    });
+    await page.getByRole("button", { name: "已收藏", exact: true }).click();
+    const unselected = page.getByRole("button", { name: "收藏", exact: true });
+    await expect(unselected).toBeVisible();
+    await expect(page.getByText("已取消收藏", { exact: true })).toBeVisible();
+    const removed = (await (
+      await page.request.get("/api/favorites")
+    ).json()) as { favorites: string[] };
+    expect(removed.favorites).not.toContain(resourceId);
+    await expect
+      .poll(() => failedReads, { timeout: 15_000 })
+      .toBeGreaterThanOrEqual(8);
+    await expect(unselected).toBeVisible();
+    await unselected.click();
+    await expect(
+      page.getByRole("button", { name: "已收藏", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText("已加入收藏", { exact: true })).toBeVisible();
+    const added = (await (await page.request.get("/api/favorites")).json()) as {
+      favorites: string[];
+    };
+    expect(added.favorites).toContain(resourceId);
+    await page.getByRole("link", { name: "收藏", exact: true }).click();
+    await expect(
+      page.locator(`a[href="/albums/${resourceId}"]`).first(),
+    ).toBeVisible();
+    await expect(page.getByText("还没有收藏", { exact: true })).toHaveCount(0);
+  } finally {
+    if (!original.favorites.includes(resourceId)) {
+      expect(
+        (
+          await page.request.delete("/api/favorites", { data: { resourceId } })
+        ).ok(),
+      ).toBeTruthy();
+    }
+  }
+});
