@@ -3128,3 +3128,178 @@ test("设置自动保存等待组合输入确认，其他字段仍可保存", as
   expect(writes[3]).toEqual({ port: 9091 });
   expect(JSON.stringify(writes)).not.toContain("候选");
 });
+
+for (const failFirst of [false, true]) {
+  test(`配置保存串行并在重新进入后保留最新值，首次${failFirst ? "失败" : "成功"}`, async ({
+    page,
+  }) => {
+    const config = (await (
+      await page.request.get("/api/config")
+    ).json()) as Record<string, unknown>;
+    let confirmed = {
+      ...config,
+      mediaRoots: [String((config.mediaRoots as string[])[0])],
+    };
+    const writes: Record<string, unknown>[] = [];
+    const release: Array<() => void> = [];
+    const tasks: Promise<void>[] = [];
+    let closing = false;
+    let active = 0;
+    let maxActive = 0;
+    await page.route("**/api/config", (route) => {
+      if (route.request().method() !== "PUT")
+        return route.fulfill({ json: confirmed });
+      if (closing)
+        return route
+          .fulfill({
+            status: 500,
+            json: { code: "test_closed", message: "closed" },
+          })
+          .catch(() => {});
+      const task = (async () => {
+        const patch = route.request().postDataJSON() as Record<string, unknown>;
+        const index = writes.push(patch) - 1;
+        active++;
+        maxActive = Math.max(maxActive, active);
+        await new Promise<void>((resolve) => {
+          release[index] = resolve;
+        });
+        active--;
+        if (index === 0 && failFirst)
+          return route
+            .fulfill({
+              status: 500,
+              json: { code: "test_save_failed", message: "保存失败，请重试" },
+            })
+            .catch(() => {});
+        confirmed = { ...confirmed, ...patch };
+        await route
+          .fulfill({
+            json: {
+              ok: true,
+              config: confirmed,
+              requiresRestart: [],
+              mediaRootsChanged: false,
+            },
+          })
+          .catch(() => {});
+      })();
+      tasks.push(task);
+      return task;
+    });
+    try {
+      await page.clock.install();
+      await page.goto("/settings");
+      const input = page.getByPlaceholder("E:\\照片 或 /home/user/pics");
+      await input.fill("/queue/first");
+      await page.clock.runFor(500);
+      await expect.poll(() => writes.length).toBe(1);
+      await expect(input).toHaveValue("/queue/first");
+      await input.fill("/queue/latest");
+      await page.clock.runFor(700);
+      expect(writes).toHaveLength(1);
+      await expect(input).toHaveValue("/queue/latest");
+      await page.getByRole("link", { name: /^主页/ }).click();
+      await page.getByRole("link", { name: "设置", exact: true }).click();
+      await expect(input).toHaveValue("/queue/latest");
+      release[0]();
+      await expect.poll(() => writes.length).toBe(2);
+      await expect(input).toHaveValue("/queue/latest");
+      const last = page.waitForResponse(
+        (response) =>
+          response.request().method() === "PUT" &&
+          response.request().postDataJSON().mediaRoots?.[0] === "/queue/latest",
+      );
+      release[1]();
+      expect((await last).ok()).toBe(true);
+      await page.clock.runFor(5);
+      await expect(input).toHaveValue("/queue/latest");
+      await expect(page.getByLabel("保存中", { exact: true })).toHaveCount(0);
+      await expect(page.getByLabel("保存失败", { exact: true })).toHaveCount(0);
+      expect(writes).toEqual([
+        { mediaRoots: ["/queue/first"] },
+        { mediaRoots: ["/queue/latest"] },
+      ]);
+      expect(maxActive).toBe(1);
+    } finally {
+      closing = true;
+      release.forEach((done) => done());
+      await page.close();
+      await Promise.allSettled(tasks);
+    }
+  });
+}
+
+test("配置保存等待 LAN 会话建立后再发送后续写入", async ({ page }) => {
+  const config = (await (
+    await page.request.get("/api/config")
+  ).json()) as Record<string, unknown>;
+  let current = { ...config };
+  const writes: Record<string, unknown>[] = [];
+  const readyAtWrite: boolean[] = [];
+  let releaseLogin = () => {};
+  const login = new Promise<void>((resolve) => {
+    releaseLogin = resolve;
+  });
+  let ready = false;
+  let loginStarted = false;
+  let closing = false;
+  await page.route("**/api/config", (route) => {
+    if (route.request().method() !== "PUT")
+      return route.fulfill({ json: current });
+    const patch = route.request().postDataJSON() as Record<string, unknown>;
+    writes.push(patch);
+    readyAtWrite.push(ready);
+    current = { ...current, ...patch, accessTokenConfigured: true };
+    delete current.accessToken;
+    return route
+      .fulfill({
+        json: {
+          ok: true,
+          config: current,
+          requiresRestart: [],
+          mediaRootsChanged: false,
+        },
+      })
+      .catch(() => {});
+  });
+  await page.route("**/api/auth/session", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    loginStarted = true;
+    await login;
+    ready = true;
+    if (closing) return route.abort().catch(() => {});
+    return route
+      .fulfill({ json: { authenticated: true, mode: "lan" } })
+      .catch(() => {});
+  });
+  try {
+    await page.clock.install();
+    await page.goto("/settings");
+    await page
+      .getByLabel("LAN 访问令牌")
+      .fill("0123456789abcdef0123456789abcdef");
+    await page
+      .getByRole("button", { name: "开启 LAN 访问", exact: true })
+      .click();
+    await expect.poll(() => loginStarted).toBe(true);
+    const original = String(config.cacheDir);
+    const placeholder = await page
+      .locator(`input[value=${JSON.stringify(original)}]`)
+      .getAttribute("placeholder");
+    const input = page.getByPlaceholder(placeholder!, { exact: true });
+    await input.fill(original + "_queued");
+    await input.press("Tab");
+    await page.clock.runFor(300);
+    await expect(input).toHaveValue(original + "_queued");
+    expect(writes).toHaveLength(1);
+    releaseLogin();
+    await expect.poll(() => writes.length).toBe(2);
+    expect(readyAtWrite[1]).toBe(true);
+    expect(writes[1]).toEqual({ cacheDir: original + "_queued" });
+  } finally {
+    closing = true;
+    releaseLogin();
+    await page.close();
+  }
+});

@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useMutationState,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   configApi,
   type ServerConfig,
@@ -28,6 +33,7 @@ import {
 
 // 单个字段的保存状态。
 type FieldStatus = "idle" | "saving" | "saved" | "error";
+const CONFIG_SAVE_KEY = ["server-config", "save"] as const;
 
 // 哪些字段改动后需要重启才生效。
 const REQUIRES_RESTART = new Set([
@@ -195,13 +201,26 @@ export default function ServerConfigPanel() {
   } = useQuery({
     queryKey: ["server-config"],
     queryFn: async ({ signal }) => {
-      const config = await configApi.get();
+      const config = await configApi.get(signal);
       if (!signal.aborted) updateFsCapabilities(qc, config.allowOsOpen);
       return config;
     },
   });
 
   const [status, setStatus] = useState<StatusMap>({});
+  // 同一 QueryClient 下共享保存状态，离开再进入时仍显示进行中的最新值。
+  const pendingPatches = useMutationState<ServerConfigPatch>({
+    filters: { mutationKey: CONFIG_SAVE_KEY, exact: true, status: "pending" },
+    select: (mutation) => mutation.state.variables as ServerConfigPatch,
+  });
+  const pendingValues = useMemo(
+    () =>
+      pendingPatches.reduce<ServerConfigPatch>(
+        (values, patch) => ({ ...values, ...patch }),
+        {},
+      ),
+    [pendingPatches],
+  );
   const mounted = useRef(false);
   // 每个字段独立计时；再次保存或离开面板时取消旧提示的清理任务。
   const savedTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -301,14 +320,17 @@ export default function ServerConfigPanel() {
   }
 
   const update = useMutation({
+    mutationKey: CONFIG_SAVE_KEY,
+    scope: { id: "server-config" },
     mutationFn: (patch: ServerConfigPatch) => configApi.update(patch),
-    onMutate: (patch) => {
-      void qc.cancelQueries({ queryKey: ["server-config"], exact: true });
+    onMutate: async (patch) => {
+      await qc.cancelQueries({ queryKey: ["server-config"], exact: true });
       setFieldStatus(Object.keys(patch), "saving");
     },
-    onSuccess: (resp, patch) => {
+    onSuccess: async (resp, patch) => {
       const keys = Object.keys(patch);
-      setFieldStatus(keys, "saved");
+      // 写入期间也可能开始新读取；先取消它，避免晚到的旧响应覆盖确认值。
+      await qc.cancelQueries({ queryKey: ["server-config"], exact: true });
       qc.setQueryData(["server-config"], resp.config);
 
       // 标记 MediaRoots 变脏 → 提示用户重新扫描
@@ -321,6 +343,13 @@ export default function ServerConfigPanel() {
       if (keys.includes("allowOsOpen")) {
         updateFsCapabilities(qc, resp.config.allowOsOpen);
       }
+      // 串行保存也涵盖会话切换，后续写请求不能抢在新会话建立前发出。
+      if (resp.config.accessMode === "lan" && patch.accessToken) {
+        await authApi.login(patch.accessToken);
+      } else if (patch.accessMode === "local") {
+        await authApi.logout().catch(() => {});
+      }
+      setFieldStatus(keys, "saved");
       // 重启字段提示
       const needRestart = resp.requiresRestart ?? [];
       const changedRestart = needRestart.filter((f) => keys.includes(f));
@@ -373,9 +402,6 @@ export default function ServerConfigPanel() {
     setAccessError("");
     try {
       await update.mutateAsync({ accessMode: "lan", accessToken: token });
-      // 配置热更新后旧会话立即失效；用同一令牌立即换取新会话，
-      // 避免设置页下一个请求才突然跳到解锁页。
-      await authApi.login(token);
       setAccessTokenDraft("");
     } catch {
       setAccessError("访问配置未完成，请确认令牌后重试");
@@ -386,7 +412,6 @@ export default function ServerConfigPanel() {
     setAccessError("");
     try {
       await update.mutateAsync({ accessMode: "local", accessToken: "" });
-      await authApi.logout().catch(() => {});
       setAccessTokenDraft("");
     } catch {
       setAccessError("无法切换为仅本机访问");
@@ -447,11 +472,17 @@ export default function ServerConfigPanel() {
   const fieldValue = (
     key: keyof ServerConfigPatch,
   ): string | number | boolean => {
-    // draft 优先:用户正在编辑的字段实时反映,否则从后端返回的当前值读
+    // 当前编辑 > 已进入保存流程的最新值 > 服务端确认值。
     if (key in draft && draft[key] !== undefined) {
       return draft[key] as never;
     }
+    if (pendingValues[key] !== undefined) return pendingValues[key] as never;
     return (data as ServerConfig)[key as keyof ServerConfig] as never;
+  };
+  const fieldStatus = (key: keyof ServerConfigPatch): FieldStatus => {
+    if (draft[key] !== undefined) return "idle";
+    if (pendingValues[key] !== undefined) return "saving";
+    return status[key] ?? "idle";
   };
 
   return (
@@ -463,11 +494,14 @@ export default function ServerConfigPanel() {
         </div>
         <div className="bg-bg-elevated border border-border-faint rounded-md overflow-hidden">
           <MediaRootsField
-            // 用 draft 中的 mediaRoots 覆盖 data(draft 是用户当前编辑状态)
-            // data.mediaRoots 在新装 / 没显式设过媒体库时是 null,不能传给下游
-            // MediaRootsField(其内部对 roots 做 .join / .length 等操作,直接炸)
-            roots={draft.mediaRoots ?? data.mediaRoots ?? []}
-            status={status["mediaRoots"] ?? "idle"}
+            // 当前草稿覆盖保存中的值，再回退到服务端确认的目录；未配置时为空。
+            roots={
+              draft.mediaRoots ??
+              pendingValues.mediaRoots ??
+              data.mediaRoots ??
+              []
+            }
+            status={fieldStatus("mediaRoots")}
             allowOsOpen={data.allowOsOpen}
             onChange={(next) => {
               setDraft((d) => ({ ...d, mediaRoots: next }));
@@ -492,12 +526,24 @@ export default function ServerConfigPanel() {
         </div>
         <div className="bg-bg-elevated border border-border-faint rounded-md overflow-hidden">
           <ExcludeRulesField
-            patterns={draft.excludePatterns ?? data.excludePatterns ?? []}
-            systemFiles={draft.systemFiles ?? data.systemFiles ?? []}
-            skipHidden={draft.skipHidden ?? data.skipHidden}
-            patternsStatus={status["excludePatterns"] ?? "idle"}
-            systemFilesStatus={status["systemFiles"] ?? "idle"}
-            skipHiddenStatus={status["skipHidden"] ?? "idle"}
+            patterns={
+              draft.excludePatterns ??
+              pendingValues.excludePatterns ??
+              data.excludePatterns ??
+              []
+            }
+            systemFiles={
+              draft.systemFiles ??
+              pendingValues.systemFiles ??
+              data.systemFiles ??
+              []
+            }
+            skipHidden={
+              draft.skipHidden ?? pendingValues.skipHidden ?? data.skipHidden
+            }
+            patternsStatus={fieldStatus("excludePatterns")}
+            systemFilesStatus={fieldStatus("systemFiles")}
+            skipHiddenStatus={fieldStatus("skipHidden")}
             onPatternsChange={(next) => {
               setDraft((d) => ({ ...d, excludePatterns: next }));
               pathDirtyRef.current.excludePatterns = next;
@@ -610,7 +656,7 @@ export default function ServerConfigPanel() {
           <div className="bg-bg-elevated border border-border-faint rounded-md divide-y divide-border-faint overflow-hidden">
             {group.defs.map((def) => {
               const statusKey = def.key;
-              const st = status[statusKey] ?? "idle";
+              const st = fieldStatus(statusKey);
               const requiresRestart = REQUIRES_RESTART.has(def.key as string);
               const isPath = PATH_FIELDS.has(def.key as string);
               return (
@@ -796,7 +842,7 @@ function MediaRootsField({
           <span className="text-fg">图像根目录</span>
           <span className="text-xs text-fg-subtle mt-0.5">
             多个目录都会扫描，相册按来源分组，徽标显示所属目录。按 Esc
-            撤销整组尚未提交的修改。
+            撤销整组编辑草稿。
           </span>
         </div>
         <StatusBadge status={status} />
@@ -1136,8 +1182,8 @@ function PathField({
         placeholder={placeholder}
         title={
           onCommit
-            ? "Enter 或移开焦点保存；Esc 撤销未提交修改"
-            : "停止输入后自动保存；Esc 撤销整组未提交修改"
+            ? "Enter 或移开焦点保存；Esc 撤销编辑草稿"
+            : "停止输入后自动保存；Esc 撤销整组编辑草稿"
         }
         aria-keyshortcuts="Enter Escape"
         className="flex-1 min-w-0 bg-bg-subtle border border-border-faint rounded-md h-8 px-2.5 text-sm font-mono focus:outline-none focus:border-accent"

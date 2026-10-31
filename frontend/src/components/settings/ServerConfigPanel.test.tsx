@@ -9,7 +9,7 @@ import {
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import ServerConfigPanel from "./ServerConfigPanel";
-import { configApi } from "../../api/config";
+import { configApi, type ServerConfig } from "../../api/config";
 import { useUIStore } from "../../store/uiStore";
 import { ListFilterBar } from "../common/ListFilterBar";
 import { useSearchStore } from "../../store/searchStore";
@@ -73,19 +73,40 @@ beforeAll(() => {
   });
 });
 
-function renderPanel() {
-  const qc = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false, gcTime: Infinity },
-      mutations: { gcTime: Infinity },
-    },
-  });
+function renderPanel(queryClient?: QueryClient) {
+  const qc =
+    queryClient ??
+    new QueryClient({
+      defaultOptions: {
+        queries: { retry: false, gcTime: Infinity },
+        mutations: { gcTime: Infinity },
+      },
+    });
   const view = render(
     <QueryClientProvider client={qc}>
       <ServerConfigPanel />
     </QueryClientProvider>,
   );
   return { ...view, queryClient: qc };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+
+function savedConfig(fields: Partial<ServerConfig> = {}) {
+  return {
+    ok: true,
+    config: { ...baseConfig, ...fields },
+    requiresRestart: [],
+    mediaRootsChanged: false,
+  };
 }
 
 describe("ServerConfigPanel", () => {
@@ -735,6 +756,204 @@ describe("ServerConfigPanel", () => {
     fireEvent.click(toggle);
     await waitFor(() => {
       expect(configApi.update).toHaveBeenCalledWith({ skipHidden: false });
+    });
+  });
+
+  it("连续保存媒体根按顺序执行并持续显示最新待保存值", async () => {
+    const first = deferred<ReturnType<typeof savedConfig>>();
+    const second = deferred<ReturnType<typeof savedConfig>>();
+    vi.mocked(configApi.update).mockImplementation((patch) =>
+      patch.mediaRoots?.[0] === "/save/one" ? first.promise : second.promise,
+    );
+    const { queryClient } = renderPanel();
+    const input = await screen.findByPlaceholderText(
+      "E:\\照片 或 /home/user/pics",
+    );
+    fireEvent.change(input, { target: { value: "/save/one" } });
+    await waitFor(() => expect(configApi.update).toHaveBeenCalledOnce(), {
+      timeout: 1500,
+    });
+    expect(input).toHaveValue("/save/one");
+    fireEvent.change(input, { target: { value: "/save/cancelled" } });
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(input).toHaveValue("/save/one");
+    fireEvent.change(input, { target: { value: "/save/two" } });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+    });
+    expect(configApi.update).toHaveBeenCalledOnce();
+    expect(input).toHaveValue("/save/two");
+    await act(async () => {
+      first.resolve(savedConfig({ mediaRoots: ["/save/one"] }));
+    });
+    await waitFor(() => expect(configApi.update).toHaveBeenCalledTimes(2));
+    expect(input).toHaveValue("/save/two");
+    await act(async () => {
+      second.resolve(savedConfig({ mediaRoots: ["/save/two"] }));
+    });
+    await waitFor(() =>
+      expect(queryClient.getQueryData(["server-config"])).toMatchObject({
+        mediaRoots: ["/save/two"],
+      }),
+    );
+    expect(input).toHaveValue("/save/two");
+  });
+
+  it("前一次保存失败仍继续后续保存，不把旧错误覆盖到新结果", async () => {
+    const first = deferred<ReturnType<typeof savedConfig>>();
+    vi.mocked(configApi.update).mockImplementation((patch) =>
+      patch.cacheDir === "/save/one"
+        ? first.promise
+        : Promise.resolve(savedConfig({ cacheDir: "/save/two" })),
+    );
+    const { queryClient } = renderPanel();
+    const input = await screen.findByDisplayValue(baseConfig.cacheDir);
+    fireEvent.change(input, { target: { value: "/save/one" } });
+    fireEvent.blur(input);
+    await waitFor(() => expect(configApi.update).toHaveBeenCalledOnce());
+    fireEvent.change(input, { target: { value: "/save/two" } });
+    fireEvent.blur(input);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+    expect(configApi.update).toHaveBeenCalledOnce();
+    await act(async () => {
+      first.reject(new Error("first save failed"));
+    });
+    await waitFor(() =>
+      expect(queryClient.getQueryData(["server-config"])).toMatchObject({
+        cacheDir: "/save/two",
+      }),
+    );
+    expect(input).toHaveValue("/save/two");
+    expect(screen.queryByLabelText("保存失败")).not.toBeInTheDocument();
+    expect(configApi.update).toHaveBeenCalledTimes(2);
+  });
+
+  it("旧保存确认不把仍在组合输入的新草稿标为已保存", async () => {
+    const first = deferred<ReturnType<typeof savedConfig>>();
+    vi.mocked(configApi.update).mockImplementation(() => first.promise);
+    const { queryClient } = renderPanel();
+    const input = await screen.findByDisplayValue(baseConfig.host);
+    fireEvent.change(input, { target: { value: "old.local" } });
+    await waitFor(() => expect(configApi.update).toHaveBeenCalledOnce(), {
+      timeout: 1500,
+    });
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: "新候选.local" } });
+    await act(async () => {
+      first.resolve(savedConfig({ host: "old.local" }));
+    });
+    await waitFor(() =>
+      expect(queryClient.getQueryData(["server-config"])).toMatchObject({
+        host: "old.local",
+      }),
+    );
+    expect(input).toHaveValue("新候选.local");
+    expect(
+      within(input.parentElement!).queryByLabelText("已保存"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("离开后重新进入沿用保存队列与待保存值", async () => {
+    const first = deferred<ReturnType<typeof savedConfig>>();
+    const second = deferred<ReturnType<typeof savedConfig>>();
+    vi.mocked(configApi.update).mockImplementation((patch) =>
+      patch.cacheDir === "/save/one" ? first.promise : second.promise,
+    );
+    const initial = renderPanel();
+    const input = await screen.findByDisplayValue(baseConfig.cacheDir);
+    fireEvent.change(input, { target: { value: "/save/one" } });
+    fireEvent.blur(input);
+    await waitFor(() => expect(configApi.update).toHaveBeenCalledOnce());
+    initial.unmount();
+    const next = renderPanel(initial.queryClient);
+    const resumed = await screen.findByDisplayValue("/save/one");
+    fireEvent.change(resumed, { target: { value: "/save/two" } });
+    fireEvent.blur(resumed);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+    expect(configApi.update).toHaveBeenCalledOnce();
+    await act(async () => {
+      first.resolve(savedConfig({ cacheDir: "/save/one" }));
+    });
+    await waitFor(() => expect(configApi.update).toHaveBeenCalledTimes(2));
+    expect(resumed).toHaveValue("/save/two");
+    await act(async () => {
+      second.resolve(savedConfig({ cacheDir: "/save/two" }));
+    });
+    await waitFor(() =>
+      expect(initial.queryClient.getQueryData(["server-config"])).toMatchObject(
+        { cacheDir: "/save/two" },
+      ),
+    );
+    next.unmount();
+  });
+
+  it("保存确认会取消期间开始的旧配置读取", async () => {
+    const write = deferred<ReturnType<typeof savedConfig>>();
+    const read = deferred<ServerConfig>();
+    vi.mocked(configApi.update).mockImplementation(() => write.promise);
+    const { queryClient } = renderPanel();
+    const input = await screen.findByDisplayValue(baseConfig.cacheDir);
+    fireEvent.change(input, { target: { value: "/save/current" } });
+    fireEvent.blur(input);
+    await waitFor(() => expect(configApi.update).toHaveBeenCalledOnce());
+    vi.mocked(configApi.get).mockImplementation(() => read.promise);
+    const refetch = queryClient.refetchQueries({
+      queryKey: ["server-config"],
+      exact: true,
+    });
+    await waitFor(() => expect(configApi.get).toHaveBeenCalledTimes(2));
+    await act(async () => {
+      write.resolve(savedConfig({ cacheDir: "/save/current" }));
+    });
+    await waitFor(() =>
+      expect(queryClient.getQueryData(["server-config"])).toMatchObject({
+        cacheDir: "/save/current",
+      }),
+    );
+    await act(async () => {
+      read.resolve(baseConfig);
+      await refetch;
+    });
+    expect(queryClient.getQueryData(["server-config"])).toMatchObject({
+      cacheDir: "/save/current",
+    });
+    expect(configApi.get).toHaveBeenLastCalledWith(expect.any(AbortSignal));
+  });
+
+  it("切换 LAN 后建立会话完成前不发送后续配置写请求", async () => {
+    const token = "0123456789abcdef0123456789abcdef";
+    const login = deferred<Awaited<ReturnType<typeof authApi.login>>>();
+    vi.mocked(authApi.login).mockImplementation(() => login.promise);
+    vi.mocked(configApi.update).mockImplementation(async (patch) =>
+      savedConfig({
+        accessMode: "lan",
+        accessTokenConfigured: true,
+        ...(patch.cacheDir ? { cacheDir: patch.cacheDir } : {}),
+      }),
+    );
+    renderPanel();
+    fireEvent.change(await screen.findByLabelText("LAN 访问令牌"), {
+      target: { value: token },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "开启 LAN 访问" }));
+    await waitFor(() => expect(authApi.login).toHaveBeenCalledWith(token));
+    const input = screen.getByDisplayValue(baseConfig.cacheDir);
+    fireEvent.change(input, { target: { value: "/save/after-login" } });
+    fireEvent.blur(input);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    });
+    expect(configApi.update).toHaveBeenCalledOnce();
+    await act(async () => {
+      login.resolve({ authenticated: true, mode: "lan" });
+    });
+    await waitFor(() => expect(configApi.update).toHaveBeenCalledTimes(2));
+    expect(configApi.update).toHaveBeenLastCalledWith({
+      cacheDir: "/save/after-login",
     });
   });
 

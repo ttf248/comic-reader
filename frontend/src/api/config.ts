@@ -31,7 +31,7 @@ export interface ServerConfig {
   excludePatterns: string[];
 }
 
-// PATCH /api/config 的请求体。key 缺省视为"不修改"；
+// PUT /api/config 的请求体。key 缺省视为"不修改"；
 // bool 字段（如 allowOsOpen）必须显式传值以区分 unset / explicit false。
 // mediaRoots 数组用空数组 `[]` 表达"清空所有根"，不传字段表达"不修改"。
 //
@@ -73,7 +73,7 @@ export interface ServerConfigUpdateResponse {
 }
 
 export const configApi = {
-  get: () => api<ServerConfig>("/api/config"),
+  get: (signal?: AbortSignal) => api<ServerConfig>("/api/config", { signal }),
 
   update: (patch: ServerConfigPatch) =>
     api<ServerConfigUpdateResponse>("/api/config", {
