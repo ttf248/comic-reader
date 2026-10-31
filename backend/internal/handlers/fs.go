@@ -57,7 +57,8 @@ func FsOpenHandler(mgr *config.Manager) fiber.Handler {
 }
 
 // FsOpenResourceHandler 使用脱敏资源 ID 打开媒体目录。
-func FsOpenResourceHandler(mgr *config.Manager, catalog *services.ResourceCatalog) fiber.Handler {
+// 系统打开器由启动入口注入，和目录解析、权限校验分离。
+func FsOpenResourceHandler(mgr *config.Manager, catalog *services.ResourceCatalog, validator middleware.PathValidator, openPath func(string) error) fiber.Handler {
 	type request struct {
 		ID string `json:"id"`
 	}
@@ -70,11 +71,33 @@ func FsOpenResourceHandler(mgr *config.Manager, catalog *services.ResourceCatalo
 		if err := c.BodyParser(&body); err != nil || body.ID == "" {
 			return writeError(c, fiber.StatusBadRequest, "invalid_resource_id", "resource id is required")
 		}
-		path, ok := catalog.Resolve(body.ID)
+		if catalog == nil || validator == nil || openPath == nil {
+			return writeError(c, fiber.StatusInternalServerError, "os_open_failed", "system file manager is unavailable")
+		}
+		ref, ok := catalog.Lookup(body.ID)
 		if !ok {
 			return writeError(c, fiber.StatusNotFound, "resource_not_found", "resource id is invalid or stale")
 		}
-		if err := middleware.OpenInOS(path); err != nil {
+		// 扫描快照不能证明路径现在仍安全，配置目录的查询参数也不能绕过此校验。
+		path, err := validator.Validate(ref.AbsolutePath)
+		if err != nil || path == "" {
+			return writeError(c, fiber.StatusNotFound, "resource_not_found", "resource id is invalid or stale")
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			return writeError(c, fiber.StatusNotFound, "resource_not_found", "resource id is invalid or stale")
+		}
+		validType := false
+		switch ref.Kind {
+		case services.ResourceFile:
+			validType = info.Mode().IsRegular()
+		case services.ResourceRoot, services.ResourceCollection, services.ResourceAlbum:
+			validType = info.IsDir()
+		}
+		if !validType {
+			return writeError(c, fiber.StatusNotFound, "resource_not_found", "resource id is invalid or stale")
+		}
+		if err := openPath(path); err != nil {
 			return writeError(c, fiber.StatusInternalServerError, "os_open_failed", "failed to open the resource")
 		}
 		return c.JSON(fiber.Map{"ok": true})

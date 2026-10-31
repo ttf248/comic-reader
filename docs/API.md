@@ -231,10 +231,19 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 - `GET /api/cache/stats`：返回脱敏缓存名称、占用和文件数。
 - `POST /api/thumbs/cleanup`
 - `POST /api/cache/clear?scope=thumbs|faststart|transcode|all`：统一清空入口，按 scope 删 thumbs / faststart / transcode 缓存中对应的一类；scope=all 同时清理三类派生缓存和视频元数据内存摘要。响应 `{ scope, thumbs?, faststart?, transcode?, totalDeleted, totalFreedBytes }`，未涉及的 scope 字段省略。删除数量与释放字节只统计磁盘文件，不包含内存摘要。
-- `POST /api/fs/open`：本机接口，body 为 `{ "id": "<resourceId>" }`。
+- `POST /api/fs/open`：本机接口，body 为 `{ "id": "<resourceId>" }`。执行前按当前媒体根重新校验路径；根、集合和相册必须仍为目录，文件必须仍为普通文件。
 - `GET /api/admin/fs/open?path=<configuredPath>&allowConfig=1`：设置页专用，仅允许打开已配置路径且只接受回环请求。
 
 系统打开操作有副作用，前端不自动重试请求；配置目录打开的 GET 同样不缓存响应。
+
+`POST /api/fs/open` 拒绝扫描后出现在根内路径中的符号链接或 Windows junction，`allowConfig` 查询参数不能豁免该资源校验。主要错误如下：
+
+| 状态 | code | 含义 |
+| --- | --- | --- |
+| 400 | `invalid_resource_id` | 缺少 ID 或请求体非法 |
+| 403 | `os_open_disabled` / `local_access_required` | 系统打开未开启或请求来自远程 |
+| 404 | `resource_not_found` | ID 无效、已过期、路径不在当前根中、含链接、资源不可用或类型已变化 |
+| 500 | `os_open_failed` | 校验或系统打开依赖不可用，或系统打开执行失败 |
 
 ### 媒体目录离线与初始设置
 

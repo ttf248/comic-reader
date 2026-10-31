@@ -222,6 +222,8 @@ const { request } = require("@playwright/test");
 
 资源请求除相对路径边界校验外，还逐级检查根内路径组件，拒绝符号链接和 Windows junction，包括扫描后才发生的目录替换。该检查不将本机可任意并发改写文件系统的进程视为隔离边界；媒体目录应由受信本机程序管理。
 
+`POST /api/fs/open` 的请求体资源 ID 由 handler 解析，再使用与资源路由共用的 `PathValidator` 按当前媒体根校验；扫描快照和 `allowConfig` 查询参数均不能替代此步骤。调用系统打开器前，还确认路径存在且目录/普通文件类型与资源快照相符，失效统一返回 `resource_not_found`。系统打开器由启动入口注入，使资源解析、路径校验和桌面副作用分离；单元与集成测试使用记录器确认未通过校验的路径不会进入系统调用。
+
 - 配置：`backend/config.yaml`，`mediaRoots` 是唯一媒体根字段。
 - 默认工作目录：进程 CWD 下 `.local-gallery/`。启动时只创建当前分层布局；旧顶层文件不会被读取、移动或删除。
 - 持久状态：`state/scan_cache.json`、`state/web_settings.json`、`state/activity.json`、`state/cover_overrides.json`；任何缓存清理接口都不得进入 `state/`。
