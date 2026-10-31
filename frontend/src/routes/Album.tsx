@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSearchStore } from "../store/searchStore";
 import { useFavorites } from "../hooks/useFavorites";
 import { useGalleryContextSync } from "../hooks/useGalleryContextSync";
@@ -143,6 +143,7 @@ function collectionDetailFromSummary(
 export default function Album() {
   const params = useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const resourceID = decodeFavPath("/albums/" + (params["*"] ?? ""));
 
   const query = useSearchStore((s) => s.query);
@@ -206,18 +207,21 @@ export default function Album() {
     (node?.kind === "album" && mediaQuery.isLoading) ||
     (node?.kind === "collection" && childrenQuery.isLoading);
 
+  const historyAlbumId = detail?.type === "album" ? detail.path : "";
+  const historyAlbumName = detail?.type === "album" ? detail.name : "";
+  const historyImageCount = detail?.type === "album" ? detail.imageCount : 0;
   useEffect(() => {
-    if (!detail) return;
-    if (detail.type === "album") {
-      historyApi
-        .add({
-          albumId: detail.path,
-          name: detail.name,
-          imageCount: detail.imageCount,
-        })
-        .catch(() => {});
-    }
-  }, [detail]);
+    if (!historyAlbumId) return;
+    historyApi
+      .add({
+        albumId: historyAlbumId,
+        name: historyAlbumName,
+        imageCount: historyImageCount,
+      })
+      .then(() => queryClient.invalidateQueries({ queryKey: ["history"] }))
+      .catch(() => {});
+    // 分页会重建 detail；访问记录只依赖相册标识和摘要，不能跟随媒体页重复写入。
+  }, [historyAlbumId, historyAlbumName, historyImageCount, queryClient]);
 
   if (isDetailLoading) {
     return (

@@ -417,3 +417,49 @@ test("空收藏返回数组且无失效项时清理显示零项成功", async ({
     page.getByText("已清理 0 项失效收藏", { exact: true }),
   ).toBeVisible();
 });
+
+test("新打开相册立即出现在最近阅读，媒体分页不重复记录访问", async ({
+  page,
+}) => {
+  const nodes = await scannedNodes(page.request);
+  const album = nodes.find((node) => node.name === "sample-paged-images");
+  expect(album).toBeDefined();
+  expect((await page.request.delete("/api/history")).ok()).toBeTruthy();
+  let historyWrites = 0;
+  page.on("request", (request) => {
+    if (
+      new URL(request.url()).pathname === "/api/history" &&
+      request.method() === "POST"
+    )
+      historyWrites++;
+  });
+  await page.goto("/recents");
+  await expect(page.getByText("还没有最近阅读", { exact: true })).toBeVisible();
+  const search = page.getByRole("combobox");
+  await search.fill("sample-paged-images");
+  await expect(page.getByRole("option").first()).toBeVisible();
+  await search.press("Enter");
+  await expect(page).toHaveURL(new RegExp(`/albums/${album!.id}$`));
+  const scroller = page.locator("[data-virtuoso-scroller]");
+  await expect(scroller.getByRole("button").first()).toBeVisible();
+  await scroller.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect(
+    scroller.getByRole("button", { name: "打开第 405 张", exact: true }),
+  ).toBeVisible();
+  await expect
+    .poll(async () => {
+      const response = await page.request.get("/api/history");
+      const result = (await response.json()) as {
+        history: Array<{ albumId: string }>;
+      };
+      return result.history[0]?.albumId;
+    })
+    .toBe(album!.id);
+  await page.getByRole("link", { name: "最近", exact: true }).click();
+  await expect(
+    page.locator(`a[href="/albums/${album!.id}"]`).first(),
+  ).toBeVisible();
+  expect(historyWrites).toBe(1);
+});
