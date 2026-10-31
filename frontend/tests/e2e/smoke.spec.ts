@@ -243,3 +243,44 @@ for (const kind of ["images", "mixed", "videos"] as const) {
     expect(mediaRequests).toHaveLength(3);
   });
 }
+
+test("浏览器抽帧上传后封面可通过原资源 URL 显示", async ({ page }) => {
+  const nodes = await scannedNodes(page.request);
+  const album = nodes.find((node) => node.name === "sample-video-cover");
+  expect(album).toBeDefined();
+  const response = await page.request.get(`/api/albums/${album!.id}/media`);
+  expect(response.ok()).toBeTruthy();
+  const media = (await response.json()) as {
+    page: { items: Array<{ id: string }> };
+  };
+  const fileId = media.page.items[0].id;
+  let uploaded = false;
+  let probes = 0;
+  await page.clock.install();
+  await page.route(`**/api/thumbs/${fileId}/cover`, async (route) => {
+    const result = await route.fetch();
+    uploaded = result.ok();
+    await route.fulfill({ response: result });
+  });
+  // 只模拟服务端封面未就绪；视频解码、canvas 抽帧、上传和最终 GET 均走真实流程。
+  await page.route(`**/api/thumbs/${fileId}`, async (route) => {
+    if (route.request().method() === "HEAD" && !uploaded) {
+      probes++;
+      await route.fulfill({ status: 404 });
+    } else {
+      await route.continue();
+    }
+  });
+  await page.goto(`/albums/${album!.id}`);
+  await expect.poll(() => probes).toBeGreaterThan(0);
+  await page.clock.fastForward(21_000);
+  await expect.poll(() => uploaded).toBe(true);
+  const cover = page.getByRole("img", {
+    name: "sample-video-cover",
+    exact: true,
+  });
+  await expect(cover).toHaveAttribute("src", `/api/thumbs/${fileId}`);
+  await expect
+    .poll(() => cover.evaluate((image: HTMLImageElement) => image.naturalWidth))
+    .toBeGreaterThan(0);
+});

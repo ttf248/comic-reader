@@ -18,7 +18,7 @@ interface Options {
 
 interface Result {
   status: VideoCoverStatus;
-  /** 给 <img src=...> 用的 URL。bust 是为了"抽帧完成"后强制 reload。 */
+  /** 给 <img src=...> 用的稳定 URL，由服务端缓存头重新验证实际封面。 */
   url: string;
   /** 手动重试（用于 UI 上的"重试"按钮）。 */
   retry: () => void;
@@ -51,7 +51,7 @@ const SERVER_POLL_TIMEOUT_MS = 20_000;
  * 浏览器抽帧流程（服务端无 ffmpeg 时）:
  *   1) HEAD 404 → extracting
  *   2) <video>+canvas 抽帧 + POST
- *   3) bust + 重新 HEAD → ready
+ *   3) 重新 HEAD → ready，图片使用稳定资源 URL 重新验证封面
  *
  * 即使服务端没有 ffmpeg，浏览器抽帧路径仍可用，只是对 1GB+ 视频的
  * 首次封面生成可能需要数秒。
@@ -63,7 +63,7 @@ export function useVideoCover(
   const [status, setStatus] = useState<VideoCoverStatus>(
     videoPath ? "loading" : "idle",
   );
-  const [bust, setBust] = useState(0);
+  const [coverRevision, setCoverRevision] = useState(0);
   // 防止 effect 重复触发 extracting（StrictMode 双 mount 时尤其需要）
   const startedRef = useRef(false);
   // retry() 调用时递增，强制重抽
@@ -118,9 +118,9 @@ export function useVideoCover(
       cancelled = true;
       stopped = true;
     };
-    // bust 变化时（上传成功后）也再检查一次
+    // 封面上传成功后也再检查一次
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [videoPath, bust, retryNonce]);
+  }, [videoPath, coverRevision, retryNonce]);
 
   // 抽帧 + 上传(浏览器侧,作为服务端不可用时的降级)
   const extract = useCallback(async () => {
@@ -129,7 +129,7 @@ export function useVideoCover(
     try {
       const blob = await captureVideoFrame(videoPath);
       await uploadVideoCover(videoPath, blob);
-      setBust((b) => b + 1);
+      setCoverRevision((revision) => revision + 1);
     } catch (err) {
       console.error("[useVideoCover] extract failed:", err);
       setSt("error");
@@ -149,9 +149,7 @@ export function useVideoCover(
     setRetryNonce((n) => n + 1);
   }, []);
 
-  const url = videoPath
-    ? `${thumbUrl(videoPath)}${bust ? `&_=${bust}` : ""}`
-    : "";
+  const url = videoPath ? thumbUrl(videoPath) : "";
   return { status, url, retry, enabled: !!videoPath };
 }
 
