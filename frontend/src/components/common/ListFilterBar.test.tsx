@@ -1,0 +1,94 @@
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { beforeEach, expect, it, vi } from "vitest";
+import { ListFilterBar } from "./ListFilterBar";
+import { useSearchStore } from "../../store/searchStore";
+
+beforeEach(() => useSearchStore.getState().reset());
+
+it("选择排序后恢复按钮焦点并更新排序", () => {
+  render(<ListFilterBar totalCount={10} />);
+  const trigger = screen.getByRole("button", { name: "排序" });
+  trigger.focus();
+  fireEvent.click(trigger);
+  const option = screen.getByRole("button", { name: "按最近看" });
+  option.focus();
+  fireEvent.click(option);
+  expect(useSearchStore.getState().sortBy).toBe("viewed");
+  expect(trigger).toHaveFocus();
+  expect(screen.queryByRole("button", { name: "按最近看" })).toBeNull();
+});
+
+it("Esc 取消后恢复按钮焦点并保留原排序", async () => {
+  render(<ListFilterBar totalCount={10} />);
+  const trigger = screen.getByRole("button", { name: "排序" });
+  trigger.focus();
+  fireEvent.click(trigger);
+  const option = screen.getByRole("button", { name: "按最近看" });
+  option.focus();
+  await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+  fireEvent.keyDown(option, { key: "Escape" });
+  expect(trigger).toHaveFocus();
+  expect(useSearchStore.getState().sortBy).toBe("name");
+  expect(screen.queryByRole("button", { name: "按最近看" })).toBeNull();
+});
+
+it("离开排序区域时收起选项，保留新目标焦点", () => {
+  render(
+    <>
+      <ListFilterBar totalCount={10} />
+      <button type="button">外部操作</button>
+    </>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "排序" }));
+  const option = screen.getByRole("button", { name: "按最近看" });
+  option.focus();
+  const outside = screen.getByRole("button", { name: "外部操作" });
+  act(() => outside.focus());
+  expect(screen.queryByRole("button", { name: "按最近看" })).toBeNull();
+  expect(outside).toHaveFocus();
+});
+
+it("点击外部关闭选项且不恢复排序按钮焦点", async () => {
+  render(
+    <>
+      <ListFilterBar totalCount={10} />
+      <input aria-label="外部输入" />
+    </>,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "排序" }));
+  await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+  const outside = screen.getByRole("textbox", { name: "外部输入" });
+  fireEvent.mouseDown(outside);
+  outside.focus();
+  expect(screen.queryByRole("button", { name: "按最近看" })).toBeNull();
+  expect(outside).toHaveFocus();
+});
+
+it("公开展开状态及当前选中的排序项", () => {
+  render(<ListFilterBar totalCount={10} />);
+  const trigger = screen.getByRole("button", { name: "排序" });
+  expect(trigger).toHaveAttribute("aria-expanded", "false");
+  fireEvent.click(trigger);
+  expect(trigger).toHaveAttribute("aria-expanded", "true");
+  const options = screen.getByRole("group", { name: "排序选项" });
+  expect(trigger).toHaveAttribute("aria-controls", options.id);
+  expect(
+    within(options).getByRole("button", { name: "按名称", pressed: true }),
+  ).toBeInTheDocument();
+  expect(
+    within(options).getAllByRole("button", { pressed: false }),
+  ).toHaveLength(3);
+});
+
+it("刚展开就卸载时不留下待注册的监听任务", () => {
+  vi.useFakeTimers();
+  const { unmount } = render(<ListFilterBar totalCount={10} />);
+  try {
+    fireEvent.click(screen.getByRole("button", { name: "排序" }));
+    unmount();
+    expect(vi.getTimerCount()).toBe(0);
+  } finally {
+    unmount();
+    vi.useRealTimers();
+  }
+});

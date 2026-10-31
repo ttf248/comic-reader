@@ -1562,3 +1562,86 @@ for (const name of ["home", "collection", "unread", "tag"] as const) {
     });
   }
 }
+
+test("排序选项支持键盘确认取消和自然移出焦点", async ({ page }) => {
+  await scannedNodes(page.request);
+  await page.goto("/unread");
+  const trigger = page.getByRole("button", { name: "排序", exact: true });
+  const options = page.getByRole("group", { name: "排序选项" });
+  const first = page.getByRole("button", { name: "按名称", exact: true });
+  const grid = page.getByRole("button", { name: "网格视图", exact: true });
+
+  await test.step("回车确认后返回排序按钮，并可继续 Tab 到视图控件", async () => {
+    await trigger.focus();
+    await trigger.press("Enter");
+    await expect(options).toBeVisible();
+    await expect(first).toHaveAttribute("aria-pressed", "true");
+    await page.keyboard.press("Tab");
+    await expect(first).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(
+      page.getByRole("button", { name: "按张数", exact: true }),
+    ).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(options).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+    await expect(trigger).toContainText("按张数");
+    await page.keyboard.press("Tab");
+    await expect(grid).toBeFocused();
+  });
+
+  await test.step("空格打开，Esc 取消并保留排序及焦点", async () => {
+    await trigger.focus();
+    await trigger.press("Space");
+    for (let index = 0; index < 3; index++) await page.keyboard.press("Tab");
+    await expect(
+      page.getByRole("button", { name: "按最近改", exact: true }),
+    ).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(options).toHaveCount(0);
+    await expect(trigger).toBeFocused();
+    await expect(trigger).toContainText("按张数");
+  });
+
+  await test.step("Tab 从最后一项移出时关闭选项并保留下一控件焦点", async () => {
+    await trigger.press("Enter");
+    for (let index = 0; index < 5; index++) await page.keyboard.press("Tab");
+    await expect(grid).toBeFocused();
+    await expect(options).toHaveCount(0);
+  });
+
+  await test.step("反向 Tab 离开时关闭选项并保留上一控件焦点", async () => {
+    await trigger.focus();
+    await trigger.press("Enter");
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Shift+Tab");
+    await expect(trigger).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(page.locator('main input[type="number"]')).toBeFocused();
+    await expect(options).toHaveCount(0);
+  });
+
+  await test.step("外部点击关闭选项并保留目标焦点", async () => {
+    await trigger.click();
+    await page.getByRole("combobox").click();
+    await expect(options).toHaveCount(0);
+    await expect(page.getByRole("combobox")).toBeFocused();
+  });
+
+  await trigger.focus();
+  await trigger.press("Enter");
+  for (const theme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    await expect(options).toBeVisible();
+    await page.mouse.move(0, 0);
+    await page.screenshot({
+      path: test.info().outputPath(`sort-options-${theme}.png`),
+    });
+  }
+  for (let index = 0; index < 3; index++) await page.keyboard.press("Tab");
+  await page.keyboard.press("Space");
+  await expect(options).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  await expect(trigger).toContainText("按最近改");
+});

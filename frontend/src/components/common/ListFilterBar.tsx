@@ -1,21 +1,21 @@
-import { useEffect, useRef, useState } from 'react'
-import { useSearchStore, type SortKey } from '../../store/searchStore'
-import { useUIStore } from '../../store/uiStore'
-import { ChevronDownIcon, GridIcon, ListIcon, FilterIcon } from './Icon'
+import { useEffect, useId, useRef, useState } from "react";
+import { useSearchStore, type SortKey } from "../../store/searchStore";
+import { useUIStore } from "../../store/uiStore";
+import { ChevronDownIcon, GridIcon, ListIcon, FilterIcon } from "./Icon";
 
 // 共享 filter strip: 视图 chips (可选) + 总数 + 排序 + 视图模式
 // 取代原 toolbar 上分散的 4-5 个控件,让 list 页面更克制。
 interface ListFilterBarProps {
   // 视图 chips (全部 / 文件夹 / 集合 / 标签),不需要就传 undefined
-  viewChips?: { key: string; label: string; count: number }[]
+  viewChips?: { key: string; label: string; count: number }[];
   // 当前激活的 view chip key
-  activeViewKey?: string
-  onChangeView?: (key: string) => void
+  activeViewKey?: string;
+  onChangeView?: (key: string) => void;
   // 总数(用于 "共 N 项")
-  totalCount: number
+  totalCount: number;
   // 显示「最少图数」过滤(默认 true)。如果某页不希望显示(如纯 smart
   // 集合页,过滤不适用),传 false。
-  showMinImageFilter?: boolean
+  showMinImageFilter?: boolean;
 }
 
 export function ListFilterBar({
@@ -25,62 +25,66 @@ export function ListFilterBar({
   totalCount,
   showMinImageFilter = true,
 }: ListFilterBarProps) {
-  const sortBy = useSearchStore((s) => s.sortBy)
-  const setSortBy = useSearchStore((s) => s.setSortBy)
-  const viewMode = useUIStore((s) => s.viewMode)
-  const setViewMode = useUIStore((s) => s.setViewMode)
-  const minImageCount = useSearchStore((s) => s.minImageCount)
-  const setMinImageCount = useSearchStore((s) => s.setMinImageCount)
+  const sortBy = useSearchStore((s) => s.sortBy);
+  const setSortBy = useSearchStore((s) => s.setSortBy);
+  const viewMode = useUIStore((s) => s.viewMode);
+  const setViewMode = useUIStore((s) => s.setViewMode);
+  const minImageCount = useSearchStore((s) => s.minImageCount);
+  const setMinImageCount = useSearchStore((s) => s.setMinImageCount);
 
   return (
     <div className="px-6 lg:px-10 max-w-[1400px] mx-auto w-full">
       <div className="flex items-center justify-between gap-3 border-t border-border-faint py-3">
         <div className="flex items-center gap-1 flex-wrap min-w-0">
           {viewChips?.map((v) => {
-            const active = activeViewKey === v.key
+            const active = activeViewKey === v.key;
             return (
               <button
                 key={v.key}
                 onClick={() => onChangeView?.(v.key)}
                 className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-[12.5px] transition-colors ${
                   active
-                    ? 'bg-bg-strong text-fg'
-                    : 'text-fg-muted hover:bg-bg-subtle hover:text-fg'
+                    ? "bg-bg-strong text-fg"
+                    : "text-fg-muted hover:bg-bg-subtle hover:text-fg"
                 }`}
               >
                 <span>{v.label}</span>
-                <span className="tabular-nums text-[10.5px] opacity-60">{v.count}</span>
+                <span className="tabular-nums text-[10.5px] opacity-60">
+                  {v.count}
+                </span>
               </button>
-            )
+            );
           })}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {showMinImageFilter && (
             <MinImageFilter value={minImageCount} onChange={setMinImageCount} />
           )}
-          <span className="text-[11px] text-fg-subtle tabular-nums">共 {totalCount} 项</span>
+          <span className="text-[11px] text-fg-subtle tabular-nums">
+            共 {totalCount} 项
+          </span>
           <SortMenu value={sortBy} onChange={setSortBy} />
           <div className="flex items-center border border-border-faint rounded-md overflow-hidden">
             <button
-              onClick={() => setViewMode('grid')}
+              onClick={() => setViewMode("grid")}
               title="网格"
               aria-label="网格视图"
               className={`inline-flex items-center justify-center w-7 h-7 transition-colors ${
-                viewMode === 'grid'
-                  ? 'bg-bg-subtle text-fg'
-                  : 'text-fg-subtle hover:text-fg hover:bg-bg-subtle/60'
+                viewMode === "grid"
+                  ? "bg-bg-subtle text-fg"
+                  : "text-fg-subtle hover:text-fg hover:bg-bg-subtle/60"
               }`}
             >
               <GridIcon size={12} />
             </button>
             <button
-              onClick={() => setViewMode('list')}
+              onClick={() => setViewMode("list")}
               title="列表"
               aria-label="列表视图"
               className={`inline-flex items-center justify-center w-7 h-7 transition-colors ${
-                viewMode === 'list'
-                  ? 'bg-bg-subtle text-fg'
-                  : 'text-fg-subtle hover:text-fg hover:bg-bg-subtle/60'
+                viewMode === "list"
+                  ? "bg-bg-subtle text-fg"
+                  : "text-fg-subtle hover:text-fg hover:bg-bg-subtle/60"
               }`}
             >
               <ListIcon size={12} />
@@ -89,69 +93,95 @@ export function ListFilterBar({
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 const sortOptions: { value: SortKey; label: string }[] = [
-  { value: 'name', label: '按名称' },
-  { value: 'count', label: '按张数' },
-  { value: 'recent', label: '按最近改' },
-  { value: 'viewed', label: '按最近看' },
-]
+  { value: "name", label: "按名称" },
+  { value: "count", label: "按张数" },
+  { value: "recent", label: "按最近改" },
+  { value: "viewed", label: "按最近看" },
+];
 
 function SortMenu({
   value,
   onChange,
 }: {
-  value: SortKey
-  onChange: (v: SortKey) => void
+  value: SortKey;
+  onChange: (v: SortKey) => void;
 }) {
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const optionsId = useId();
   useEffect(() => {
-    if (!open) return
+    if (!open) return;
     const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
-    }
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
-    }
-    setTimeout(() => {
-      window.addEventListener('mousedown', onClick)
-      window.addEventListener('keydown', onKey)
-    }, 0)
+      if (e.target instanceof Node && !ref.current?.contains(e.target))
+        setOpen(false);
+    };
+    window.addEventListener("mousedown", onClick);
     return () => {
-      window.removeEventListener('mousedown', onClick)
-      window.removeEventListener('keydown', onKey)
-    }
-  }, [open])
+      window.removeEventListener("mousedown", onClick);
+    };
+  }, [open]);
 
-  const cur = sortOptions.find((o) => o.value === value) ?? sortOptions[0]
+  const cur = sortOptions.find((o) => o.value === value) ?? sortOptions[0];
 
   return (
-    <div ref={ref} className="relative">
+    <div
+      ref={ref}
+      className="relative"
+      onBlur={(e) => {
+        if (
+          !(e.relatedTarget instanceof Node) ||
+          !e.currentTarget.contains(e.relatedTarget)
+        ) {
+          setOpen(false);
+        }
+      }}
+      onKeyDown={(e) => {
+        if (e.key !== "Escape" || !open) return;
+        e.preventDefault();
+        e.stopPropagation();
+        setOpen(false);
+        triggerRef.current?.focus();
+      }}
+    >
       <button
+        ref={triggerRef}
+        type="button"
         onClick={() => setOpen((v) => !v)}
         className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-[12px] text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors border border-border-faint"
         title="排序"
         aria-label="排序"
+        aria-expanded={open}
+        aria-controls={open ? optionsId : undefined}
       >
         <span>{cur.label}</span>
         <ChevronDownIcon size={10} />
       </button>
       {open && (
-        <div className="absolute right-0 top-full mt-1.5 min-w-[140px] bg-bg-elevated border border-border rounded-lg shadow-lg py-1 z-40 fade-up">
+        <div
+          id={optionsId}
+          role="group"
+          aria-label="排序选项"
+          className="absolute right-0 top-full mt-1.5 min-w-[140px] bg-bg-elevated border border-border rounded-lg shadow-lg py-1 z-40 fade-up"
+        >
           {sortOptions.map((o) => (
             <button
               key={o.value}
+              type="button"
+              aria-pressed={o.value === value}
               onClick={() => {
-                onChange(o.value)
-                setOpen(false)
+                onChange(o.value);
+                setOpen(false);
+                triggerRef.current?.focus();
               }}
               className={`w-full text-left px-3 py-1.5 text-[13px] transition-colors ${
                 o.value === value
-                  ? 'text-fg font-medium'
-                  : 'text-fg-muted hover:bg-bg-subtle hover:text-fg'
+                  ? "text-fg font-medium"
+                  : "text-fg-muted hover:bg-bg-subtle hover:text-fg"
               }`}
             >
               {o.label}
@@ -160,7 +190,7 @@ function SortMenu({
         </div>
       )}
     </div>
-  )
+  );
 }
 
 // 最少图数过滤:小尺寸 inline 控件,带「≥」前缀和 Filter 图标。
@@ -172,25 +202,25 @@ function MinImageFilter({
   value,
   onChange,
 }: {
-  value: number
-  onChange: (v: number) => void
+  value: number;
+  onChange: (v: number) => void;
 }) {
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState(String(value))
-  const active = value > 0
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(String(value));
+  const active = value > 0;
   // 关闭编辑时把 draft 写回 store(允许"键入数字后点别处"这种 commit)
   function commit() {
-    const n = parseInt(draft, 10)
-    if (Number.isFinite(n) && n >= 0) onChange(n)
-    else setDraft(String(value))
-    setEditing(false)
+    const n = parseInt(draft, 10);
+    if (Number.isFinite(n) && n >= 0) onChange(n);
+    else setDraft(String(value));
+    setEditing(false);
   }
   return (
     <div
       className={`inline-flex items-center gap-1 h-7 px-2 rounded-md border transition-colors ${
         active
-          ? 'border-accent/40 bg-accent-soft text-accent'
-          : 'border-border-faint text-fg-muted hover:bg-bg-subtle'
+          ? "border-accent/40 bg-accent-soft text-accent"
+          : "border-border-faint text-fg-muted hover:bg-bg-subtle"
       }`}
       title="隐藏图数少于 N 的相册(0 = 不过滤)"
     >
@@ -201,19 +231,19 @@ function MinImageFilter({
         min={0}
         max={9999}
         value={editing ? draft : value}
-        onChange={(e) => setDraft(e.target.value.replace(/[^\d]/g, ''))}
+        onChange={(e) => setDraft(e.target.value.replace(/[^\d]/g, ""))}
         onFocus={() => {
-          setEditing(true)
-          setDraft(String(value))
+          setEditing(true);
+          setDraft(String(value));
         }}
         onBlur={commit}
         onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault()
-            ;(e.target as HTMLInputElement).blur()
-          } else if (e.key === 'Escape') {
-            setEditing(false)
-            setDraft(String(value))
+          if (e.key === "Enter") {
+            e.preventDefault();
+            (e.target as HTMLInputElement).blur();
+          } else if (e.key === "Escape") {
+            setEditing(false);
+            setDraft(String(value));
           }
         }}
         className="w-10 bg-transparent border-0 outline-none text-[12px] tabular-nums text-right focus:outline-none"
@@ -230,5 +260,5 @@ function MinImageFilter({
         </button>
       )}
     </div>
-  )
+  );
 }
