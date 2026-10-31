@@ -2040,6 +2040,7 @@ interface CopyAudit {
   selections: Array<{
     command: string;
     value: string;
+    selectedValue: string;
     insideModal: boolean;
     focused: boolean;
   }>;
@@ -2047,6 +2048,55 @@ interface CopyAudit {
 }
 
 type CopyAuditWindow = Window & { __copyAudit: CopyAudit };
+
+async function installCopyAudit(
+  page: Page,
+  mode: "api" | "missing" | "denied",
+) {
+  // 隔离系统剪贴板，记录浏览器中的真实焦点和选区。
+  await page.addInitScript((mode) => {
+    const audit: CopyAudit = {
+      apiValues: [],
+      selections: [],
+      throwOnSelection: mode === "denied",
+    };
+    (window as CopyAuditWindow).__copyAudit = audit;
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value:
+        mode === "missing"
+          ? undefined
+          : {
+              writeText(value: string) {
+                audit.apiValues.push(value);
+                return mode === "api"
+                  ? Promise.resolve()
+                  : Promise.reject(new Error("test denied"));
+              },
+            },
+    });
+    Object.defineProperty(document, "execCommand", {
+      configurable: true,
+      value(command: string) {
+        const textarea = document.querySelector("textarea");
+        const selection = {
+          command,
+          value: textarea?.value ?? "",
+          selectedValue:
+            textarea?.value.slice(
+              textarea.selectionStart,
+              textarea.selectionEnd,
+            ) ?? "",
+          insideModal: Boolean(textarea?.closest("dialog:modal")),
+          focused: document.activeElement === textarea,
+        };
+        audit.selections.push(selection);
+        if (audit.throwOnSelection) throw new Error("test copy failed");
+        return selection.focused && selection.value === selection.selectedValue;
+      },
+    });
+  }, mode);
+}
 
 for (const mode of ["api", "missing", "denied"] as const) {
   const scenario = {
@@ -2058,45 +2108,9 @@ for (const mode of ["api", "missing", "denied"] as const) {
     const nodes = await scannedNodes(page.request);
     const album = nodes.find((node) => node.name === "sample-album")!;
     expect(album).toBeDefined();
-    // 隔离系统剪贴板，只记录调用及原生模态弹窗中的真实焦点和选区。
-    await page.addInitScript((mode) => {
-      const audit: CopyAudit = {
-        apiValues: [],
-        selections: [],
-        throwOnSelection: mode === "denied",
-      };
-      (window as CopyAuditWindow).__copyAudit = audit;
-      Object.defineProperty(navigator, "clipboard", {
-        configurable: true,
-        value:
-          mode === "missing"
-            ? undefined
-            : {
-                writeText(value: string) {
-                  audit.apiValues.push(value);
-                  return mode === "api"
-                    ? Promise.resolve()
-                    : Promise.reject(new Error("test denied"));
-                },
-              },
-      });
-      Object.defineProperty(document, "execCommand", {
-        configurable: true,
-        value(command: string) {
-          const textarea = document.querySelector("textarea");
-          const selection = {
-            command,
-            value: textarea?.value ?? "",
-            insideModal: Boolean(textarea?.closest("dialog:modal")),
-            focused: document.activeElement === textarea,
-          };
-          audit.selections.push(selection);
-          if (audit.throwOnSelection) throw new Error("test copy failed");
-          return selection.insideModal && selection.focused;
-        },
-      });
-    }, mode);
+    await installCopyAudit(page, mode);
     await page.goto("/");
+    await page.getByRole("combobox").fill(album.name);
     const { card, dialog } = await openCardProperties(page, album.id);
     const copy = dialog
       .locator("dt")
@@ -2127,6 +2141,7 @@ for (const mode of ["api", "missing", "denied"] as const) {
       Array(mode === "api" ? 0 : mode === "denied" ? 2 : 1).fill({
         command: "copy",
         value: album.name,
+        selectedValue: album.name,
         insideModal: true,
         focused: true,
       }),
@@ -2134,6 +2149,172 @@ for (const mode of ["api", "missing", "denied"] as const) {
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
     await expect(card).toBeFocused();
+  });
+}
+
+for (const view of ["grid", "list"] as const) {
+  for (const mode of ["api", "missing", "denied"] as const) {
+    test(`${view} 右键复制链接在 ${mode} 下反馈结果并恢复卡片焦点`, async ({
+      page,
+    }) => {
+      const nodes = await scannedNodes(page.request);
+      const album = nodes.find((node) => node.name === "sample-album")!;
+      expect(album).toBeDefined();
+      await installCopyAudit(page, mode);
+      await page.goto("/");
+      await page.getByRole("combobox").fill(album.name);
+      await page
+        .getByRole("button", {
+          name: view === "grid" ? "网格视图" : "列表视图",
+          exact: true,
+        })
+        .click();
+      const card = page.locator(
+        `main [data-virtuoso-scroller] a[href="/albums/${album.id}"]`,
+      );
+      await card.click({ button: "right" });
+      await page
+        .getByRole("menuitem", { name: "复制链接", exact: true })
+        .click();
+      await expect(page.getByRole("menu")).toHaveCount(0);
+      if (mode === "denied") {
+        await expect(
+          page.getByText("复制失败，请检查浏览器权限", { exact: true }),
+        ).toBeVisible();
+        await expect(card).toBeFocused();
+        await expect(page.locator("textarea")).toHaveCount(0);
+        await page.evaluate(() => {
+          (window as CopyAuditWindow).__copyAudit.throwOnSelection = false;
+        });
+        await card.click({ button: "right" });
+        await page
+          .getByRole("menuitem", { name: "复制链接", exact: true })
+          .click();
+      }
+      await expect(page.getByText("已复制链接", { exact: true })).toBeVisible();
+      await expect(card).toBeFocused();
+      await expect(page.locator("textarea")).toHaveCount(0);
+      const audit = await page.evaluate(
+        () => (window as CopyAuditWindow).__copyAudit,
+      );
+      const link = new URL(page.url()).origin + `/albums/${album.id}`;
+      expect(audit.apiValues).toEqual(
+        mode === "missing" ? [] : Array(mode === "denied" ? 2 : 1).fill(link),
+      );
+      expect(audit.selections).toEqual(
+        Array(mode === "api" ? 0 : mode === "denied" ? 2 : 1).fill({
+          command: "copy",
+          value: link,
+          selectedValue: link,
+          insideModal: false,
+          focused: true,
+        }),
+      );
+    });
+  }
+}
+
+test("收藏标签复制链接保留字面百分号并可直接打开", async ({ page }) => {
+  await scannedNodes(page.request);
+  const tag = "字面%2F";
+  const resourceId = `smart:${tag}`;
+  const original = (await (
+    await page.request.get("/api/favorites")
+  ).json()) as { favorites: string[] };
+  try {
+    expect(
+      (
+        await page.request.post("/api/favorites", { data: { resourceId } })
+      ).ok(),
+    ).toBeTruthy();
+    await installCopyAudit(page, "api");
+    await page.goto("/favorites");
+    const tagPath = `/tags/${encodeURIComponent(tag)}`;
+    const card = page.locator(
+      `main [data-virtuoso-scroller] a[href="${tagPath}"]`,
+    );
+    await card.click({ button: "right" });
+    await page.getByRole("menuitem", { name: "复制链接", exact: true }).click();
+    await expect(page.getByText("已复制链接", { exact: true })).toBeVisible();
+    await expect(card).toBeFocused();
+    const audit = await page.evaluate(
+      () => (window as CopyAuditWindow).__copyAudit,
+    );
+    expect(audit.apiValues).toEqual([new URL(page.url()).origin + tagPath]);
+    await page.goto(audit.apiValues[0]);
+    await expect(
+      page.getByRole("heading", { name: tag, exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.locator('main [data-virtuoso-scroller] a[href^="/albums/"]').first(),
+    ).toBeVisible();
+  } finally {
+    if (!original.favorites.includes(resourceId))
+      expect(
+        (
+          await page.request.delete("/api/favorites", { data: { resourceId } })
+        ).ok(),
+      ).toBeTruthy();
+  }
+});
+
+for (const entrypoint of ["more", "image"] as const) {
+  test(`相册 ${entrypoint} 菜单复制链接并恢复来源焦点`, async ({ page }) => {
+    const nodes = await scannedNodes(page.request);
+    const album = nodes.find((node) => node.name === "sample-album")!;
+    const original = (await (await page.request.get("/api/prefs")).json()) as {
+      maxRecent: number;
+      history: Array<{ albumId: string; name: string; imageCount: number }>;
+    };
+    try {
+      await installCopyAudit(page, entrypoint === "more" ? "denied" : "api");
+      await page.goto(`/albums/${album.id}`);
+      const source =
+        entrypoint === "more"
+          ? page.getByRole("button", { name: "更多操作", exact: true })
+          : page.getByRole("button", { name: "打开第 1 张", exact: true });
+      const copy = async () => {
+        if (entrypoint === "more") await source.click();
+        else await source.click({ button: "right" });
+        await page
+          .getByRole("menuitem", {
+            name: entrypoint === "more" ? "复制链接" : "复制相册链接",
+            exact: true,
+          })
+          .click();
+      };
+      await copy();
+      if (entrypoint === "more") {
+        await expect(
+          page.getByText("复制失败，请检查浏览器权限", { exact: true }),
+        ).toBeVisible();
+        await expect(source).toBeFocused();
+        await expect(page.locator("textarea")).toHaveCount(0);
+        await page.evaluate(() => {
+          (window as CopyAuditWindow).__copyAudit.throwOnSelection = false;
+        });
+        await copy();
+      }
+      await expect(page.getByText("已复制链接", { exact: true })).toBeVisible();
+      await expect(page.getByRole("menu")).toHaveCount(0);
+      await expect(source).toBeFocused();
+      await expect(page.locator("textarea")).toHaveCount(0);
+      const audit = await page.evaluate(
+        () => (window as CopyAuditWindow).__copyAudit,
+      );
+      const link = new URL(page.url()).origin + `/albums/${album.id}`;
+      expect(audit.apiValues).toEqual(
+        Array(entrypoint === "more" ? 2 : 1).fill(link),
+      );
+      for (const selection of audit.selections)
+        expect(selection).toMatchObject({
+          value: link,
+          selectedValue: link,
+          focused: true,
+        });
+    } finally {
+      await restoreHistory(page.request, original);
+    }
   });
 }
 

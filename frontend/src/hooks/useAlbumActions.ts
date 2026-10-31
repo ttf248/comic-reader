@@ -1,11 +1,13 @@
 import { useNavigate } from "react-router-dom";
 import { fsApi, fsCapabilities } from "../api/fs";
-import type { CardData } from "../components/album/AlbumGrid";
+import type { CardData } from "../components/album/AlbumCard";
+import { copyText } from "../utils/clipboard";
+import { decodeFavPath } from "../utils/path";
 
 interface Actions {
   open: () => void;
   openInExplorer: () => Promise<void>;
-  copyPath: () => Promise<void>;
+  copyLink: () => Promise<void>;
 }
 
 // 提供相册右键菜单的动作实现。
@@ -13,27 +15,19 @@ interface Actions {
 export function useAlbumActions(item: CardData) {
   const navigate = useNavigate();
 
-  // 收藏标签没有文件系统资源，复制它的内部标签标识而不是 /tags 路由。
-  // 其余卡片把 /albums/<encoded> 解码回不透明资源 ID。
-  const decodedPath = (() => {
-    if (item.variant === "smart") return `smart:${item.title}`;
-    if (!item.to.startsWith("/albums/")) return item.to;
-    try {
-      return decodeURIComponent(item.to.replace(/^\/albums\//, ""));
-    } catch {
-      return item.to;
-    }
-  })();
+  const resourceId = decodeFavPath(item.to);
 
   const actions: Actions = {
     open: () => navigate(item.to),
     openInExplorer: async () => {
       if (!fsCapabilities.allowOsOpen) throw new Error("allowOsOpen disabled");
       if (item.variant === "smart") throw new Error("not a real path");
-      await fsApi.openInExplorer(decodedPath);
+      await fsApi.openInExplorer(resourceId);
     },
-    copyPath: async () => {
-      await navigator.clipboard.writeText(decodedPath);
+    copyLink: async () => {
+      // 保留路由编码，复制当前站点可直接打开的地址。
+      const link = new URL(item.to, window.location.origin).href;
+      if (!(await copyText(link))) throw new Error("clipboard copy failed");
     },
   };
 

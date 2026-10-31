@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { useUIStore } from "../../store/uiStore";
+import { copyText } from "../../utils/clipboard";
 import { CopyIcon, CheckIcon } from "./Icon";
 
 interface Props {
@@ -10,37 +11,6 @@ interface Props {
 }
 
 type CopyStatus = "idle" | "copying" | "copied" | "failed";
-
-function copyWithSelection(button: HTMLButtonElement, value: string): boolean {
-  const doc = button.ownerDocument;
-  const previousFocus = doc.activeElement;
-  const textarea = doc.createElement("textarea");
-  textarea.value = value;
-  textarea.readOnly = true;
-  textarea.tabIndex = -1;
-  textarea.style.cssText =
-    "position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none";
-  try {
-    // 模态 dialog 外的元素不可聚焦，临时选区必须放在按钮所属弹窗内。
-    (button.closest("dialog[open]") ?? doc.body).appendChild(textarea);
-    textarea.focus({ preventScroll: true });
-    textarea.select();
-    if (doc.activeElement !== textarea) return false;
-    return doc.execCommand("copy");
-  } catch {
-    return false;
-  } finally {
-    const restoreFocus = doc.activeElement === textarea;
-    textarea.remove();
-    if (
-      restoreFocus &&
-      previousFocus instanceof HTMLElement &&
-      previousFocus.isConnected
-    ) {
-      previousFocus.focus({ preventScroll: true });
-    }
-  }
-}
 
 // 优先使用剪贴板 API；不可用或被拒绝时尝试临时选区，并在按钮上反馈结果。
 export default function CopyButton({ value, title }: Props) {
@@ -73,17 +43,10 @@ export default function CopyButton({ value, title }: Props) {
     }
     setStatus("copying");
     try {
-      let copied = false;
-      try {
-        if (navigator.clipboard?.writeText) {
-          await navigator.clipboard.writeText(value);
-          copied = true;
-        }
-      } catch {
-        // 权限或上下文受限时尝试下面的选区复制。
-      }
-      if (!isCurrent()) return;
-      if (!copied) copied = copyWithSelection(button, value);
+      const copied = await copyText(value, {
+        source: button,
+        canFallback: isCurrent,
+      });
       if (!isCurrent()) return;
       if (copied) {
         setStatus("copied");

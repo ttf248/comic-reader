@@ -79,7 +79,7 @@ export default function AlbumContextMenu({
       icon: <ArrowUpRightIcon size={12} />,
       disabled: !fsCapabilities.allowOsOpen || item.variant === "smart",
     },
-    { id: "copy", label: "复制路径", icon: <CopyIcon size={12} /> },
+    { id: "copy", label: "复制链接", icon: <CopyIcon size={12} /> },
     { id: "separator", separator: true },
     {
       id: "properties",
@@ -107,7 +107,22 @@ export default function AlbumContextMenu({
             void actions.openInExplorer().catch(() => {});
             break;
           case "copy":
-            void actions.copyPath().catch(() => {});
+            // 菜单关闭后仍反馈结果，权限受限时由共享复制函数尝试选区回退。
+            void actions
+              .copyLink()
+              .then(() =>
+                pushToast({
+                  kind: "success",
+                  message: "已复制链接",
+                  ttl: 1200,
+                }),
+              )
+              .catch(() =>
+                pushToast({
+                  kind: "error",
+                  message: "复制失败，请检查浏览器权限",
+                }),
+              );
             break;
           case "properties":
             onShowProperties(resourceId);

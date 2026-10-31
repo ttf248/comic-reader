@@ -413,7 +413,7 @@ function AlbumView({
     navigate(`/gallery?${qs.toString()}`);
   };
 
-  // 用 AlbumActions 钩子实现菜单里的复制路径与资源管理器操作。
+  // 用 AlbumActions 钩子实现菜单里的复制链接与资源管理器操作。
   const actions = useAlbumActions({
     id: detail.path,
     variant: "album",
@@ -433,11 +433,15 @@ function AlbumView({
     actions.openInExplorer().catch(() => {});
   };
 
-  const copyPath = () => {
-    actions
-      .copyPath()
-      .then(() => pushToast({ kind: "success", message: "路径已复制" }))
-      .catch(() => pushToast({ kind: "error", message: "复制失败" }));
+  const copyLink = () => {
+    void actions
+      .copyLink()
+      .then(() =>
+        pushToast({ kind: "success", message: "已复制链接", ttl: 1200 }),
+      )
+      .catch(() =>
+        pushToast({ kind: "error", message: "复制失败，请检查浏览器权限" }),
+      );
   };
 
   const toggleFavorite = () => {
@@ -692,12 +696,12 @@ function AlbumView({
                         role="menuitem"
                         onClick={() => {
                           setMoreOpen(false);
-                          copyPath();
+                          copyLink();
                         }}
                         className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[13px] text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors"
                       >
                         <CopyIcon size={12} />
-                        <span>复制路径</span>
+                        <span>复制链接</span>
                       </button>
                     </div>
                   )}
@@ -803,7 +807,7 @@ function AlbumView({
               icon: <ArrowUpRightIcon size={12} />,
               disabled: !fsCapabilities.allowOsOpen,
             },
-            { id: "copy", label: "复制路径", icon: <CopyIcon size={12} /> },
+            { id: "copy", label: "复制相册链接", icon: <CopyIcon size={12} /> },
             { id: "sep2", separator: true } as AnyMenuItem,
             { id: "properties", label: "属性", icon: <InfoIcon size={12} /> },
           ]}
@@ -819,7 +823,7 @@ function AlbumView({
                 openInExplorer();
                 break;
               case "copy":
-                copyPath();
+                copyLink();
                 break;
               case "properties": {
                 const img = imageFiles[contextMenu.index];

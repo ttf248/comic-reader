@@ -18,6 +18,7 @@ import {
 import { useFavorites } from "../hooks/useFavorites";
 import { useSearchStore } from "../store/searchStore";
 import { historyApi } from "../api/prefs";
+import { useUIStore } from "../store/uiStore";
 
 vi.mock("../hooks/useLibrary", () => ({
   useAlbumMedia: vi.fn(),
@@ -202,6 +203,78 @@ describe("Album", () => {
       fetchNextPage: vi.fn(),
     } as never);
   }
+
+  it("更多菜单复制相册的完整链接并恢复来源焦点", async () => {
+    const originalClipboard = Object.getOwnPropertyDescriptor(
+      navigator,
+      "clipboard",
+    );
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    useUIStore.setState({ toasts: [] });
+    try {
+      mockAlbumPage();
+      renderAlbum("/albums/a_pages");
+      const source = screen.getByRole("button", { name: "更多操作" });
+      source.focus();
+      fireEvent.click(source);
+      fireEvent.click(
+        screen.getByRole("menuitem", {
+          name: "复制链接",
+        }),
+      );
+      await waitFor(() =>
+        expect(writeText).toHaveBeenCalledWith(
+          window.location.origin + "/albums/a_pages",
+        ),
+      );
+      await waitFor(() =>
+        expect(useUIStore.getState().toasts).toEqual([
+          expect.objectContaining({ kind: "success", message: "已复制链接" }),
+        ]),
+      );
+      expect(screen.queryByRole("menu")).toBeNull();
+      expect(source).toHaveFocus();
+    } finally {
+      if (originalClipboard)
+        Object.defineProperty(navigator, "clipboard", originalClipboard);
+      else Reflect.deleteProperty(navigator, "clipboard");
+    }
+  });
+
+  it("详情菜单复制被拒绝且回退不可用时反馈错误", async () => {
+    const originalClipboard = Object.getOwnPropertyDescriptor(
+      navigator,
+      "clipboard",
+    );
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn().mockRejectedValue(new Error("test denied")) },
+    });
+    useUIStore.setState({ toasts: [] });
+    try {
+      mockAlbumPage();
+      renderAlbum("/albums/a_pages");
+      fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
+      fireEvent.click(screen.getByRole("menuitem", { name: "复制链接" }));
+      await waitFor(() =>
+        expect(useUIStore.getState().toasts).toEqual([
+          expect.objectContaining({
+            kind: "error",
+            message: "复制失败，请检查浏览器权限",
+          }),
+        ]),
+      );
+      expect(document.querySelector("textarea")).toBeNull();
+    } finally {
+      if (originalClipboard)
+        Object.defineProperty(navigator, "clipboard", originalClipboard);
+      else Reflect.deleteProperty(navigator, "clipboard");
+    }
+  });
 
   it("打开相册成功写入访问后使已有历史缓存立即失效", async () => {
     mockAlbumPage();
