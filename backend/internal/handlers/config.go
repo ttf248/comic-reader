@@ -5,6 +5,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/tianlongxiang/local-gallery/internal/config"
+	"github.com/tianlongxiang/local-gallery/internal/pathutil"
 	"github.com/tianlongxiang/local-gallery/internal/services"
 )
 
@@ -42,24 +43,6 @@ type ConfigUpdateResponse struct {
 	Config            ConfigResponse `json:"config"`
 	RequiresRestart   []string       `json:"requiresRestart,omitempty"`
 	MediaRootsChanged bool           `json:"mediaRootsChanged"` // 根集合是否变化（顺序无关）
-}
-
-// rootsEqual 规范化比较两个根列表（顺序无关）。
-func rootsEqual(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	seen := make(map[string]int, len(a))
-	for _, r := range a {
-		seen[r]++
-	}
-	for _, r := range b {
-		if seen[r] == 0 {
-			return false
-		}
-		seen[r]--
-	}
-	return true
 }
 
 // ConfigGetHandler 返回 /api/config GET 处理函数。
@@ -119,7 +102,7 @@ func ConfigUpdateHandler(mgr *config.Manager, onUpdate func(c *config.Config, me
 		}
 		newCfg := mgr.Get()
 		newRoots := newCfg.Roots()
-		mediaRootsChanged := !rootsEqual(prevRoots, newRoots)
+		mediaRootsChanged := !pathutil.EqualRoots(prevRoots, newRoots)
 
 		if onUpdate != nil {
 			if err := onUpdate(newCfg, mediaRootsChanged); err != nil {

@@ -401,8 +401,7 @@ func TestScanResultCache_LoadWithRoots_MultiRootsOrderInsensitive(t *testing.T) 
 	}
 }
 
-// sameRootSet 工具函数的直接单元测试
-func TestSameRootSet(t *testing.T) {
+func TestSameRootIDs(t *testing.T) {
 	cases := []struct {
 		name string
 		a, b []string
@@ -414,12 +413,14 @@ func TestSameRootSet(t *testing.T) {
 		{"diff single", []string{"a"}, []string{"b"}, false},
 		{"order independent", []string{"a", "b"}, []string{"b", "a"}, true},
 		{"multi mismatch", []string{"a", "b"}, []string{"a", "c"}, false},
-		{"trailing slash normalized", []string{filepath.Join("a", "")}, []string{"a"}, true},
+		{"cached duplicate", []string{"a", "a"}, []string{"a", "b"}, false},
+		{"current duplicate", []string{"a", "b"}, []string{"a", "a"}, false},
+		{"both duplicate", []string{"a", "a"}, []string{"a", "a"}, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := sameRootSet(tc.a, tc.b); got != tc.want {
-				t.Fatalf("sameRootSet(%v, %v) = %v, want %v", tc.a, tc.b, got, tc.want)
+			if got := sameRootIDs(tc.a, tc.b); got != tc.want {
+				t.Fatalf("sameRootIDs(%v, %v) = %v, want %v", tc.a, tc.b, got, tc.want)
 			}
 		})
 	}

@@ -104,7 +104,11 @@ staticDir: build/web
 	if err != nil {
 		t.Fatalf("LoadFile: %v", err)
 	}
-	if got := cfg.Roots(); len(got) != 1 || got[0] != "D:\\photos" {
+	wantRoot, err := filepath.Abs("D:\\photos")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.Roots(); len(got) != 1 || got[0] != wantRoot {
 		t.Errorf("mediaRoots: got %q", got)
 	}
 	if cfg.Port != 9090 {

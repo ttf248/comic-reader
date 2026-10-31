@@ -16,6 +16,8 @@ import (
 	"unicode"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/tianlongxiang/local-gallery/internal/pathutil"
 )
 
 // Version 后端版本号（编译期可通过 -ldflags 注入）。
@@ -91,20 +93,7 @@ type Config struct {
 //
 // 永远返回非 nil 切片（避免下游 nil 检查）。
 func (c *Config) Roots() []string {
-	out := make([]string, 0, len(c.MediaRoots))
-	seen := make(map[string]bool, len(c.MediaRoots))
-	for _, r := range c.MediaRoots {
-		if strings.TrimSpace(r) == "" {
-			continue
-		}
-		r = filepath.Clean(r)
-		if r == "" || seen[r] {
-			continue
-		}
-		seen[r] = true
-		out = append(out, r)
-	}
-	return out
+	return pathutil.NormalizeRoots(c.MediaRoots)
 }
 
 // Default 返回内置默认配置（缓存目录指向 CWD/.local-gallery）。

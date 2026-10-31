@@ -422,22 +422,3 @@ func diffRequiresRestart(old, neu *Config) []string {
 	}
 	return out
 }
-
-// rootsEqual 规范化比较两个根列表是否等价（顺序无关）。
-func rootsEqual(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	seen := make(map[string]int, len(a))
-	for _, r := range a {
-		seen[filepath.Clean(r)]++
-	}
-	for _, r := range b {
-		k := filepath.Clean(r)
-		if seen[k] == 0 {
-			return false
-		}
-		seen[k]--
-	}
-	return true
-}

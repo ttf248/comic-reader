@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/tianlongxiang/local-gallery/internal/models"
+	"github.com/tianlongxiang/local-gallery/internal/pathutil"
 )
 
 // scanResultSnapshot 不可变快照:发布到 latest 之后,调用方只能读不能改。
@@ -122,11 +123,10 @@ func (c *ScanResultCache) Flush() error {
 //     并通过返回值 rootsMismatch=true 通知调用方需要重扫。
 //   - 一致：按原样加载到内存。
 //
-// 根集合比较规则：
-//   - 使用 filepath.Clean 规范化
-//   - 顺序无关（按集合比较）
-//   - 大小写：Windows 上不敏感（paths.ToLower 后比），其他平台敏感
+// 当前根先按配置与扫描器共用的规则绝对化、去空、去重，再比较根 ID 集合。
+// 缓存重复记录同一根 ID 时视为无效，不能恢复重复扫描产出的统计和节点。
 func (c *ScanResultCache) LoadWithRoots(currentRoots []string) (rootsMismatch bool, err error) {
+	currentRoots = pathutil.NormalizeRoots(currentRoots)
 	if len(currentRoots) == 0 {
 		return false, errors.New("current media roots are required to load scan cache")
 	}
@@ -158,7 +158,7 @@ func (c *ScanResultCache) LoadWithRoots(currentRoots []string) (rootsMismatch bo
 		}
 		currentRootIDs = append(currentRootIDs, rootIDFor(abs))
 	}
-	if !sameRootSet(envelope.RootIDs, currentRootIDs) {
+	if !sameRootIDs(envelope.RootIDs, currentRootIDs) {
 		c.resetMemory()
 		if err := removeCacheFile(c.path); err != nil {
 			return true, err
@@ -317,13 +317,19 @@ func encodeScanResultForDisk(result *models.ScanResult) (*scanCacheEnvelope, err
 		return nil, errors.New("scan result has no roots")
 	}
 	rootIDs := make([]string, 0, len(roots))
+	seenRootIDs := make(map[string]struct{}, len(roots))
 	for _, root := range roots {
 		abs, err := filepath.Abs(root)
 		if err != nil {
 			return nil, err
 		}
 		abs = filepath.Clean(abs)
-		rootIDs = append(rootIDs, rootIDFor(abs))
+		id := rootIDFor(abs)
+		if _, exists := seenRootIDs[id]; exists {
+			return nil, errors.New("scan result repeats a root")
+		}
+		seenRootIDs[id] = struct{}{}
+		rootIDs = append(rootIDs, id)
 	}
 	// 当前 schema 直接存原始 result，不再做路径混淆。
 	// 原始 result。绝对路径会出现在 cache.json 里 ——
@@ -487,48 +493,23 @@ func findAlbumInCollection(col *models.Collection, path string) *models.Album {
 	return nil
 }
 
-// normalizeRoots 把一组根目录字符串做规范化：filepath.Clean + 去空。
-// 比较函数 sameRootSet 内部使用。
-func normalizeRoots(roots []string) []string {
-	out := make([]string, 0, len(roots))
-	for _, r := range roots {
-		r = filepath.Clean(r)
-		if r == "" || r == "." {
-			continue
-		}
-		out = append(out, r)
-	}
-	return out
-}
-
-// sameRootSet 判断 a、b 两个根集合是否等价（顺序无关）。
-//
-// 规则：
-//   - 都先经过 filepath.Clean 规范化
-//   - 大小写：Windows 上不敏感（filepath.Clean 不会改变大小写，故此处手工 ToLower）；
-//     其他平台保持大小写敏感
-//   - 任一为空且另一个也为空 → true；任一为空但另一个非空 → false
-func sameRootSet(a, b []string) bool {
-	na := normalizeRoots(a)
-	nb := normalizeRoots(b)
-	if len(na) != len(nb) {
+// sameRootIDs 比较不透明根 ID 集合；重复 ID 表示无效的缓存或调用输入。
+func sameRootIDs(cached, current []string) bool {
+	if len(cached) != len(current) {
 		return false
 	}
-	caseInsensitive := runtime.GOOS == "windows"
-	set := make(map[string]struct{}, len(na))
-	for _, r := range na {
-		if caseInsensitive {
-			r = strings.ToLower(r)
-		}
-		set[r] = struct{}{}
-	}
-	for _, r := range nb {
-		if caseInsensitive {
-			r = strings.ToLower(r)
-		}
-		if _, ok := set[r]; !ok {
+	set := make(map[string]struct{}, len(cached))
+	for _, id := range cached {
+		if _, exists := set[id]; exists {
 			return false
 		}
+		set[id] = struct{}{}
+	}
+	for _, id := range current {
+		if _, exists := set[id]; !exists {
+			return false
+		}
+		delete(set, id)
 	}
 	return true
 }

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/tianlongxiang/local-gallery/internal/models"
+	"github.com/tianlongxiang/local-gallery/internal/pathutil"
 )
 
 // ScanOptions 扫描选项。
@@ -31,21 +32,7 @@ type ScanOptions struct {
 
 // effectiveRoots 返回本轮要扫描的根列表（去重、保序、规范化）。
 func (o ScanOptions) effectiveRoots() []string {
-	src := o.Roots
-	seen := make(map[string]bool, len(src))
-	out := make([]string, 0, len(src))
-	for _, r := range src {
-		if strings.TrimSpace(r) == "" {
-			continue
-		}
-		r = filepath.Clean(r)
-		if r == "" || seen[r] {
-			continue
-		}
-		seen[r] = true
-		out = append(out, r)
-	}
-	return out
+	return pathutil.NormalizeRoots(o.Roots)
 }
 
 // ScanProgress 扫描进度回调参数。

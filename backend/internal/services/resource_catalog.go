@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 
 	"github.com/tianlongxiang/local-gallery/internal/models"
+	"github.com/tianlongxiang/local-gallery/internal/pathutil"
 )
 
 // ResourceKind 是业务 API 可引用的媒体资源类型。
@@ -157,7 +158,7 @@ func (c *ResourceCatalog) publish(result *models.ScanResult, roots []string, cus
 		collections:  make(map[string]models.Collection),
 		customCovers: cloneCustomCoverPaths(customCovers),
 	}
-	for _, root := range roots {
+	for _, root := range pathutil.NormalizeRoots(roots) {
 		abs, err := filepath.Abs(root)
 		if err != nil {
 			continue
@@ -424,10 +425,7 @@ func externalID(state *resourceCatalogState, path string, kind ResourceKind) str
 }
 
 func rootIDFor(abs string) string {
-	normalized := filepath.Clean(abs)
-	if runtime.GOOS == "windows" {
-		normalized = strings.ToLower(normalized)
-	}
+	normalized := pathutil.RootKey(abs)
 	sum := sha256.Sum256([]byte(normalized))
 	return "r_" + hex.EncodeToString(sum[:6])
 }

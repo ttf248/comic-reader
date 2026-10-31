@@ -32,6 +32,7 @@ Fiber middleware → handlers → services → local files/cache
 - `backend/internal/middleware`：日志、恢复、local/LAN 访问门禁、资源 ID 解析和路径安全。
 - `backend/internal/handlers`：HTTP/SSE 契约、输入校验、状态码和公共 DTO。
 - `backend/internal/services`：扫描、资源目录、缓存、缩略图、faststart、转码和元数据。
+- `backend/internal/pathutil`：配置、扫描、资源索引及缓存共用的根目录规范化与等价比较。
 - `backend/internal/store`：低频偏好与高频媒体活动分文件并发访问，均使用原子落盘。
 - `frontend/src/api`：唯一网络访问层；组件不手写端点。
 - `frontend/src/store`：仅保存 UI 与会话状态；服务端数据由查询层管理。
@@ -114,6 +115,8 @@ POST /api/scans
 snapshot。stat 全部移到锁外，`flushDebounce=500ms` 异步落盘。
 `dirtyVer` 与 `version` 配合（CAS 清零）保证 flush 期间并发 Set 不会
 被错误标记为已持久化。
+
+缓存恢复先按共用根规范化规则计算当前根 ID，再与缓存中的唯一根 ID 集合比较；等价路径和重复配置不导致健康缓存丢失，目录离线时也不额外探测文件系统。含重复根 ID 的缓存无效，清除扫描缓存并由启动流程重新扫描，用户偏好与活动状态不受影响；持久化同样拒绝输出重复根 ID，避免将重复统计写回磁盘。
 
 - 重复启动复用活动任务，不制造重复 I/O。
 - 扫描 hook 保持当前根的目录读取计数，并携带根下标/根总数；相册数量累计所有已完成根与当前根，空根和混合目录的本目录媒体相册也按同一规则统计。根数来自本轮规范化、去重后的目录集合，不新增预遍历。
@@ -244,6 +247,7 @@ const { request } = require("@playwright/test");
 `POST /api/fs/open` 的请求体资源 ID 由 handler 解析，再使用与资源路由共用的 `PathValidator` 按当前媒体根校验；扫描快照和 `allowConfig` 查询参数均不能替代此步骤。调用系统打开器前，还确认路径存在且目录/普通文件类型与资源快照相符，失效统一返回 `resource_not_found`。系统打开器由启动入口注入，使资源解析、路径校验和桌面副作用分离；单元与集成测试使用记录器确认未通过校验的路径不会进入系统调用。
 
 - 配置：`backend/config.yaml`，`mediaRoots` 是唯一媒体根字段。
+- `pathutil.NormalizeRoots` 相对进程 CWD 绝对化、去空并保序去重；`RootKey` 与根资源 ID 共用 Windows 忽略大小写、其他平台区分大小写的规则。规范化不读取目录，不解析链接；离线根仍能参与配置和缓存比较。读取配置、写回 YAML、扫描进度根数、资源根索引和 `mediaRootsChanged` 使用同一规则，避免等价路径重复扫描或触发清库。
 - 默认工作目录：进程 CWD 下 `.local-gallery/`。启动时只创建当前分层布局；旧顶层文件不会被读取、移动或删除。
 - 持久状态：`state/scan_cache.json`、`state/web_settings.json`、`state/activity.json`、`state/cover_overrides.json`；任何缓存清理接口都不得进入 `state/`。
 - 派生缓存：`derived/thumbnails/`、`derived/video-faststart/`、`derived/video-transcode/`；按内容派生键写入，可安全重建。
