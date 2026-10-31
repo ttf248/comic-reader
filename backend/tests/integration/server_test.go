@@ -146,7 +146,7 @@ func newHarness(t *testing.T) *harness {
 	api.Get("/videos", handlers.VideoHandler(nil, nil))
 	// 元数据工具不可用时仍通过正式资源路由返回基础文件信息。
 	api.Get("/videos/:id/info", middleware.ResourceParam(catalog, safetyState), handlers.VideoInfoHandler(nil, nil, catalog))
-	api.Post("/videos/info/batch", handlers.VideoInfoBatchHandler(nil, nil, catalog))
+	api.Post("/videos/info/batch", handlers.VideoInfoBatchHandler(nil, nil, catalog, safetyState))
 	api.Get("/videos/transcode/status", handlers.TranscodeStatusHandler(nil))
 	api.Get("/videos/transcode/events", handlers.TranscodeEventsHandler(nil))
 	api.Post("/videos/transcode/cancel", handlers.TranscodeCancelHandler(nil))
@@ -922,6 +922,64 @@ func TestVideoInfo(t *testing.T) {
 	}
 	if batch.Items[0].Info.Path != id || batch.Items[0].Info.Dir != wantDir || batch.Items[1].Code != "invalid_resource_kind" || batch.Items[2].Code != "resource_not_found" {
 		t.Fatalf("unexpected batch result: %s", body)
+	}
+}
+
+func TestVideoInfoBatchRejectsLinkedDirectoryAfterScan(t *testing.T) {
+	h := newHarness(t)
+	album := filepath.Join(h.root, "[作者A] vol1")
+	linkedVideo := filepath.Join(album, "clip.webm")
+	validVideo := filepath.Join(h.root, "[作者A] vol2", "clip.webm")
+	for _, path := range []string{linkedVideo, validVideo} {
+		if err := os.WriteFile(path, []byte("inside"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h.scanLibrary(t)
+	linkedID := h.catalog.ExternalID(linkedVideo, services.ResourceFile)
+	validID := h.catalog.ExternalID(validVideo, services.ResourceFile)
+	if linkedID == "" || validID == "" {
+		t.Fatal("scan did not publish videos")
+	}
+	if err := os.Rename(album, filepath.Join(h.root, "original")); err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "clip.webm"), []byte("outside metadata"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if runtime.GOOS == "windows" {
+		command := exec.Command("powershell", "-NoProfile", "-Command", "New-Item -ItemType Junction -Path $env:TEST_LINK -Target $env:TEST_TARGET -ErrorAction Stop | Out-Null")
+		command.Env = append(os.Environ(), "TEST_LINK="+album, "TEST_TARGET="+outside)
+		if output, err := command.CombinedOutput(); err != nil {
+			t.Fatalf("junction: %v %s", err, output)
+		}
+	} else if err := os.Symlink(outside, album); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Remove(album) })
+	res, body := h.do(t, http.MethodGet, "/api/videos/"+linkedID+"/info", nil)
+	if res.StatusCode != http.StatusNotFound {
+		t.Fatalf("single status=%d body=%s", res.StatusCode, body)
+	}
+	res, body = h.do(t, http.MethodPost, "/api/videos/info/batch", map[string]any{"ids": []string{linkedID, validID}})
+	var result struct {
+		Items []struct {
+			ID   string `json:"id"`
+			Code string `json:"code"`
+			Info *struct {
+				Path string `json:"path"`
+			} `json:"info"`
+		} `json:"items"`
+	}
+	if res.StatusCode != http.StatusOK || json.Unmarshal(body, &result) != nil || len(result.Items) != 2 {
+		t.Fatalf("batch status=%d body=%s", res.StatusCode, body)
+	}
+	if result.Items[0].ID != linkedID || result.Items[0].Code != "resource_not_found" || result.Items[0].Info != nil {
+		t.Fatalf("linked path escaped validation: %s", body)
+	}
+	if result.Items[1].Info == nil || result.Items[1].Info.Path != validID || result.Items[1].Code != "" {
+		t.Fatalf("valid item was lost: %s", body)
 	}
 }
 

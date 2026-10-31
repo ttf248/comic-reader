@@ -38,7 +38,7 @@ func videoInfoTestApp(root string, catalog *services.ResourceCatalog, afterResol
 	handlers = append(handlers, afterResolve...)
 	handlers = append(handlers, VideoInfoHandler(nil, nil, catalog))
 	app.Get("/api/videos/:id/info", handlers...)
-	app.Post("/api/videos/info/batch", VideoInfoBatchHandler(nil, nil, catalog))
+	app.Post("/api/videos/info/batch", VideoInfoBatchHandler(nil, nil, catalog, safety))
 	return app
 }
 
@@ -203,5 +203,51 @@ func TestVideoInfoRejectsDisappearedFiles(t *testing.T) {
 				t.Fatalf("batch item=%+v", batch.Items[0])
 			}
 		})
+	}
+}
+
+func TestVideoInfoBatchRevalidatesCurrentRoots(t *testing.T) {
+	root, picture, catalog := mediaInfoFixture(t, "album/picture.png")
+	id := catalog.ExternalID(filepath.Join(filepath.Dir(picture), "clip.webm"), services.ResourceFile)
+	_, safety := middleware.PathSafetyMiddleware([]string{root})
+	app := fiber.New()
+	app.Post("/api/videos/info/batch", VideoInfoBatchHandler(nil, nil, catalog, safety))
+	before := queryVideoInfoBatch(t, app, []string{id})
+	if before.Items[0].Info == nil {
+		t.Fatal("valid file was rejected")
+	}
+	safety.SetRoots([]string{t.TempDir()})
+	after := queryVideoInfoBatch(t, app, []string{id})
+	if after.Items[0].Code != "resource_not_found" || after.Items[0].Info != nil {
+		t.Fatalf("removed root remained readable: %+v", after.Items[0])
+	}
+}
+
+func TestVideoInfoBatchRequiresPathValidator(t *testing.T) {
+	_, picture, catalog := mediaInfoFixture(t, "album/picture.png")
+	id := catalog.ExternalID(filepath.Join(filepath.Dir(picture), "clip.webm"), services.ResourceFile)
+	payload, err := json.Marshal(struct {
+		IDs []string `json:"ids"`
+	}{[]string{id}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	app := fiber.New()
+	app.Post("/api/videos/info/batch", VideoInfoBatchHandler(nil, nil, catalog, nil))
+	req := httptest.NewRequest(http.MethodPost, "/api/videos/info/batch", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	res, err := app.Test(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	var response struct {
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(res.Body).Decode(&response); err != nil {
+		t.Fatal(err)
+	}
+	if res.StatusCode != http.StatusInternalServerError || response.Code != "video_info_unavailable" {
+		t.Fatalf("missing validator was accepted: status=%d code=%s", res.StatusCode, response.Code)
 	}
 }

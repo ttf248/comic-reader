@@ -155,7 +155,7 @@ const maxVideoInfoBatch = 100
 //
 // 请求只接受资源 ID；路径解析仍然来自当前 ResourceCatalog 快照，响应中的
 // path/dir 也只使用资源 ID 和根别名，不把本地绝对路径带回浏览器。
-func VideoInfoBatchHandler(infoSvc *services.VideoInfoService, transcode *services.TranscodeService, catalog *services.ResourceCatalog) fiber.Handler {
+func VideoInfoBatchHandler(infoSvc *services.VideoInfoService, transcode *services.TranscodeService, catalog *services.ResourceCatalog, validator middleware.PathValidator) fiber.Handler {
 	type request struct {
 		IDs []string `json:"ids"`
 	}
@@ -172,8 +172,8 @@ func VideoInfoBatchHandler(infoSvc *services.VideoInfoService, transcode *servic
 		if len(body.IDs) > maxVideoInfoBatch {
 			return httputil.BadRequest(c, "too_many_video_ids", "ids exceeds the batch limit")
 		}
-		if catalog == nil {
-			return httputil.Internal(c, "video_info_unavailable", "video info catalog is unavailable")
+		if catalog == nil || validator == nil {
+			return httputil.Internal(c, "video_info_unavailable", "video info resource validation is unavailable")
 		}
 
 		snapshot := catalog.Acquire()
@@ -195,15 +195,21 @@ func VideoInfoBatchHandler(infoSvc *services.VideoInfoService, transcode *servic
 					items[index].Code = "resource_not_found"
 					return
 				}
+				// 扫描后目录可能被替换为链接，媒体根也可能热更新；固定快照不能代替当前路径校验。
+				path, err := validator.Validate(ref.AbsolutePath)
+				if err != nil {
+					items[index].Code = "resource_not_found"
+					return
+				}
 				if ref.Kind != services.ResourceFile {
 					items[index].Code = "invalid_resource_kind"
 					return
 				}
-				if !models.IsVideoFile(filepath.Base(ref.AbsolutePath)) {
+				if !models.IsVideoFile(filepath.Base(path)) {
 					items[index].Code = "unsupported_video_format"
 					return
 				}
-				info, err := os.Stat(ref.AbsolutePath)
+				info, err := os.Stat(path)
 				if err != nil {
 					if os.IsNotExist(err) {
 						items[index].Code = "video_not_found"
@@ -217,7 +223,7 @@ func VideoInfoBatchHandler(infoSvc *services.VideoInfoService, transcode *servic
 					return
 				}
 				semaphore <- struct{}{}
-				items[index].Info = videoInfoResponse(infoSvc, transcode, snapshot, id, ref.AbsolutePath, info)
+				items[index].Info = videoInfoResponse(infoSvc, transcode, snapshot, id, path, info)
 				<-semaphore
 			}()
 		}

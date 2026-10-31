@@ -12,8 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gofiber/fiber/v2"
-
 	"github.com/tianlongxiang/local-gallery/internal/models"
 	"github.com/tianlongxiang/local-gallery/internal/services"
 )
@@ -121,8 +119,7 @@ func TestVideoInfoBatchUsesResourceIDsAndHidesAbsolutePaths(t *testing.T) {
 		t.Fatal("catalog did not create a video resource id")
 	}
 
-	app := fiber.New()
-	app.Post("/api/videos/info/batch", VideoInfoBatchHandler(nil, nil, catalog))
+	app := videoInfoTestApp(root, catalog)
 	payload, err := json.Marshal(map[string]any{"ids": []string{videoID}})
 	if err != nil {
 		t.Fatal(err)

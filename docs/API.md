@@ -180,10 +180,12 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 单独请求。请求体为 `{ "ids": ["f_...", "f_..."] }`，单次最多 100 个
 文件 ID。响应为 `{ "ok": true, "items": [{ "id": "f_...", "info": {...} }] }`；
 结果保留输入顺序及重复项。单项失败不返回 `info`，其 `code` 为
-`resource_not_found`（ID 失效）、`invalid_resource_kind`（目录资源）、
+`resource_not_found`（ID 失效、路径含链接或不在当前媒体根中）、`invalid_resource_kind`（目录资源）、
 `unsupported_video_format`（非视频）、`video_not_found`（文件不存在或被目录替换）
 或 `video_info_failed`（文件信息读取失败），不会使整批失败。
 成功项的 `info.path`、`info.dir` 与单条接口采用相同的文件 ID 和父目录语义。
+
+每项都按当前媒体根重新校验路径，拒绝扫描后被替换为符号链接或 junction 的目录，校验失败不会读取或探测该文件。服务未配置资源目录或路径校验器时返回 `500 video_info_unavailable`。
 
 ### 视频转码
 
