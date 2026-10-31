@@ -3,6 +3,7 @@ import {
   test,
   type APIRequestContext,
   type Locator,
+  type Page,
 } from "@playwright/test";
 
 async function renderedColors(locator: Locator, properties: string[]) {
@@ -113,6 +114,18 @@ async function restoreHistory(
     expect(
       (await request.post("/api/history", { data: entry })).ok(),
     ).toBeTruthy();
+}
+
+async function openCardProperties(page: Page, nodeId: string) {
+  const card = page.locator(
+    `main [data-virtuoso-scroller] a[href="/albums/${nodeId}"]`,
+  );
+  await card.scrollIntoViewIfNeeded();
+  await card.click({ button: "right" });
+  await page.getByRole("menuitem", { name: "属性", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "属性", exact: true });
+  await expect(dialog).toBeVisible();
+  return { card, dialog };
 }
 
 test("扫描并打开示例相册", async ({ page }) => {
@@ -1801,3 +1814,206 @@ for (const mode of ["grid", "list"] as const) {
     }
   });
 }
+
+for (const mode of ["grid", "list"] as const) {
+  test(`${mode} 相册集合属性按类型读取并保持模态焦点`, async ({ page }) => {
+    const nodes = await scannedNodes(page.request);
+    const album = nodes.find((node) => node.name === "sample-album")!;
+    const collection = nodes.find(
+      (node) => node.name === "zz-sort-collection",
+    )!;
+    expect(album).toBeDefined();
+    expect(collection).toBeDefined();
+    const metadataRequests: string[] = [];
+    page.on("request", (request) => {
+      if (/\/api\/images\/.+\/info$/.test(new URL(request.url()).pathname))
+        metadataRequests.push(request.url());
+    });
+    await page.goto("/");
+    await page
+      .getByRole("button", {
+        name: mode === "grid" ? "网格视图" : "列表视图",
+        exact: true,
+      })
+      .click();
+    for (const [node, kind] of [
+      [album, "相册"],
+      [collection, "集合"],
+    ] as const) {
+      await page.getByRole("combobox").fill(node.name);
+      await page
+        .getByRole("button", {
+          name: mode === "grid" ? "网格视图" : "列表视图",
+          exact: true,
+        })
+        .click();
+      const { card, dialog } = await openCardProperties(page, node.id);
+      const fields = () =>
+        dialog
+          .locator("dl")
+          .evaluate((element) =>
+            Object.fromEntries(
+              Array.from(element.querySelectorAll("dt"), (term) => [
+                term.textContent?.trim(),
+                term.nextElementSibling?.textContent?.trim(),
+              ]),
+            ),
+          );
+      await expect.poll(fields).toMatchObject({
+        名称: node.name,
+        类型: kind,
+        来源: "media",
+        媒体总数: "3 项",
+      });
+      if (kind === "相册")
+        await expect.poll(fields).toMatchObject({ 图片: "3 张", 视频: "0 个" });
+      else
+        await expect
+          .poll(fields)
+          .toMatchObject({ 相册数量: "3 本", 直属项目: "3 项" });
+      expect((await fields())["大小"]).toMatch(/[1-9].*B/);
+      const close = dialog.getByRole("button", { name: "关闭", exact: true });
+      await expect(close).toBeFocused();
+      await page.keyboard.press("Shift+Tab");
+      expect(
+        await dialog.evaluate((element) =>
+          element.contains(document.activeElement),
+        ),
+      ).toBe(true);
+      await page.keyboard.press("Tab");
+      await expect(close).toBeFocused();
+      await page
+        .getByRole("combobox")
+        .evaluate((element) => (element as HTMLInputElement).focus());
+      await expect(close).toBeFocused();
+      await page.keyboard.press("u");
+      await expect(page).toHaveURL(/\/$/);
+      if (mode === "grid") {
+        for (const theme of ["light", "dark"] as const) {
+          await page.emulateMedia({
+            colorScheme: theme,
+            reducedMotion: "reduce",
+          });
+          await expect(page.locator("html")).toHaveAttribute(
+            "data-theme",
+            theme,
+          );
+          const expected = await renderedColors(page.locator("html"), [
+            "--fg",
+            "--bg-elevated",
+          ]);
+          await expect
+            .poll(() => renderedColors(dialog, ["color", "background-color"]))
+            .toEqual(expected);
+          await page.screenshot({
+            path: test
+              .info()
+              .outputPath(
+                `properties-${kind === "相册" ? "album" : "collection"}-${theme}.png`,
+              ),
+          });
+        }
+      }
+      await page.keyboard.press("Escape");
+      await expect(dialog).toHaveCount(0);
+      await expect(card).toBeFocused();
+      await openCardProperties(page, node.id);
+      await expect(dialog.getByText(node.name, { exact: true })).toBeVisible();
+      await page.mouse.click(3, 3);
+      await expect(dialog).toHaveCount(0);
+      await expect(card).toBeFocused();
+    }
+    expect(metadataRequests).toEqual([]);
+  });
+}
+
+test("目录属性读取失败可重试", async ({ page }) => {
+  const nodes = await scannedNodes(page.request);
+  const album = nodes.find((node) => node.name === "sample-album")!;
+  let blocked = true;
+  await page.route("**/api/library/nodes/query", async (route) => {
+    if (!blocked) return route.continue();
+    await route.fulfill({
+      status: 500,
+      json: { code: "test_unavailable", message: "unavailable" },
+    });
+  });
+  await page.goto("/");
+  const { card, dialog } = await openCardProperties(page, album.id);
+  await expect(dialog.getByRole("alert")).toContainText("无法读取目录属性", {
+    timeout: 15_000,
+  });
+  blocked = false;
+  await dialog.getByRole("button", { name: "重试加载", exact: true }).click();
+  await expect(
+    dialog.getByRole("button", { name: "关闭", exact: true }),
+  ).toBeFocused();
+  await expect(dialog.getByText("sample-album", { exact: true })).toBeVisible();
+  await dialog.getByRole("button", { name: "关闭", exact: true }).click();
+  await expect(card).toBeFocused();
+});
+
+test("图片属性使用文件ID并支持失败重试和小屏关闭", async ({ page }) => {
+  const nodes = await scannedNodes(page.request);
+  const album = nodes.find((node) => node.name === "sample-album")!;
+  const media = (await (
+    await page.request.get(`/api/albums/${album.id}/media?limit=1`)
+  ).json()) as {
+    page: { items: Array<{ id: string; name: string }> };
+  };
+  const file = media.page.items[0];
+  const original = (await (await page.request.get("/api/prefs")).json()) as {
+    maxRecent: number;
+    history: Array<{ albumId: string; name: string; imageCount: number }>;
+  };
+  let blocked = true;
+  const metadataIds: string[] = [];
+  await page.route("**/api/images/*/info", async (route) => {
+    metadataIds.push(new URL(route.request().url()).pathname.split("/")[3]);
+    if (!blocked) return route.continue();
+    await route.fulfill({
+      status: 500,
+      json: { code: "test_unavailable", message: "unavailable" },
+    });
+  });
+  try {
+    await page.setViewportSize({ width: 390, height: 740 });
+    await page.goto(`/albums/${album.id}`);
+    const image = page.getByRole("button", {
+      name: "打开第 1 张",
+      exact: true,
+    });
+    await image.click({ button: "right" });
+    await page.getByRole("menuitem", { name: "属性", exact: true }).click();
+    const dialog = page.getByRole("dialog", { name: "属性", exact: true });
+    await expect(dialog.getByRole("alert")).toContainText("无法读取图片属性");
+    blocked = false;
+    await dialog.getByRole("button", { name: "重试加载", exact: true }).click();
+    await expect(
+      dialog.getByRole("button", { name: "关闭", exact: true }),
+    ).toBeFocused();
+    await expect(dialog.getByText(file.name, { exact: true })).toBeVisible();
+    await expect(dialog.getByText("1 × 1 px", { exact: true })).toBeVisible();
+    const bounds = await dialog.boundingBox();
+    expect(bounds!.width).toBeLessThanOrEqual(390);
+    expect(bounds!.height).toBeLessThanOrEqual(740);
+    expect(await dialog.innerText()).not.toMatch(
+      /[A-Za-z]:[\\/]|\/(?:tmp|Users|home)\//,
+    );
+    await page.screenshot({
+      path: test.info().outputPath("properties-image-mobile.png"),
+    });
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(image).toBeFocused();
+    expect(metadataIds.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(metadataIds)).toEqual(new Set([file.id]));
+    await image.click({ button: "right" });
+    await page.getByRole("menuitem", { name: "属性", exact: true }).click();
+    await expect(dialog.getByText(file.name, { exact: true })).toBeVisible();
+    await dialog.getByRole("button", { name: "关闭", exact: true }).click();
+    await expect(image).toBeFocused();
+  } finally {
+    await restoreHistory(page.request, original);
+  }
+});

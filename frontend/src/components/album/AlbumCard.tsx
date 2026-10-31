@@ -96,6 +96,9 @@ export default function AlbumCard({
       onContextMenu={(event) => {
         event.preventDefault();
         event.stopPropagation();
+        event.currentTarget
+          .querySelector<HTMLAnchorElement>("a")
+          ?.focus({ preventScroll: true });
         if (onContextMenu) onContextMenu(event);
         else setMenu({ x: event.clientX, y: event.clientY });
       }}
@@ -116,8 +119,7 @@ export default function AlbumCard({
       )}
       {propertiesId && (
         <PropertiesDialog
-          open
-          absPath={propertiesId}
+          target={{ kind: "node", id: propertiesId }}
           onClose={() => setPropertiesId(null)}
         />
       )}

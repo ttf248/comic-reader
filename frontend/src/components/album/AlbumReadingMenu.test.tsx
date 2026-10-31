@@ -28,7 +28,6 @@ vi.mock("../../hooks/useAlbumActions", () => ({
     open: vi.fn(),
     openInExplorer: vi.fn().mockResolvedValue(undefined),
     copyPath: vi.fn().mockResolvedValue(undefined),
-    showProperties: vi.fn(),
   }),
 }));
 vi.mock("../common/PropertiesDialog", () => ({ default: () => null }));
@@ -236,6 +235,10 @@ it.each(["collection", "smart"] as const)(
   (variant) => {
     renderCards("grid", { variant });
     expect(screen.getByRole("menuitem", { name: "收藏" })).toBeEnabled();
+    expect(screen.getByRole("menuitem", { name: "属性" })).toHaveProperty(
+      "disabled",
+      variant === "smart",
+    );
     expect(screen.queryByRole("menuitem", { name: "标记为已读" })).toBeNull();
     expect(screen.queryByRole("menuitem", { name: "取消已读" })).toBeNull();
   },

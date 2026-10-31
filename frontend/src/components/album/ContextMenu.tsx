@@ -30,10 +30,23 @@ export default function ContextMenu({ x, y, items, onSelect, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    const previous = document.activeElement;
+    const menu = ref.current;
     const firstItem = ref.current?.querySelector<HTMLButtonElement>(
       "button:not(:disabled)",
     );
     firstItem?.focus();
+    return () => {
+      const active = document.activeElement;
+      if (
+        previous instanceof HTMLElement &&
+        previous.isConnected &&
+        (active === document.body ||
+          (active instanceof Node && menu?.contains(active)))
+      ) {
+        previous.focus({ preventScroll: true });
+      }
+    };
   }, []);
 
   useEffect(() => {

@@ -1,45 +1,41 @@
-import { useEffect, useState } from 'react'
-import { imageInfoApi, type ImageInfo } from '../api/imageInfo'
+import { useCallback, useEffect, useState } from "react";
+import { imageInfoApi, type ImageInfo } from "../api/imageInfo";
 
-// 共享的图片元数据 fetch：ImageInfoPanel（画廊右侧）和
-// PropertiesDialog（album/grid 右键菜单）原本各自 useState + useEffect
-// 拉同一份数据。统一到这里避免重复实现 + 重复请求。
-//
-// 行为：
-//   - absPath 变化时重新拉
-//   - 拉取过程中 loading=true
-//   - 失败时 err=<message>
-//   - absPath 为空时 info/err/loading 全部清空
-export function useImageInfo(absPath: string | null | undefined) {
-  const [info, setInfo] = useState<ImageInfo | null>(null)
-  const [err, setErr] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
+// 图片属性和画廊信息面板共享文件资源 ID 查询，切换或重试时清除旧字段。
+export function useImageInfo(fileId: string | null | undefined) {
+  const [info, setInfo] = useState<ImageInfo | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const refetch = useCallback(() => setAttempt((current) => current + 1), []);
 
   useEffect(() => {
-    if (!absPath) {
-      setInfo(null)
-      setErr(null)
-      setLoading(false)
-      return
+    if (!fileId) {
+      setInfo(null);
+      setErr(null);
+      setLoading(false);
+      return;
     }
-    setLoading(true)
-    setErr(null)
-    let cancelled = false
+    setLoading(true);
+    setInfo(null);
+    setErr(null);
+    let cancelled = false;
     imageInfoApi
-      .get(absPath)
+      .get(fileId)
       .then((d) => {
-        if (!cancelled) setInfo(d)
+        if (!cancelled) setInfo(d);
       })
-      .catch((e) => {
-        if (!cancelled) setErr(e?.message ?? '加载失败')
+      .catch((error: unknown) => {
+        if (!cancelled)
+          setErr(error instanceof Error ? error.message : "加载失败");
       })
       .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
+        if (!cancelled) setLoading(false);
+      });
     return () => {
-      cancelled = true
-    }
-  }, [absPath])
+      cancelled = true;
+    };
+  }, [fileId, attempt]);
 
-  return { info, err, loading }
+  return { info, err, loading, refetch };
 }

@@ -349,12 +349,7 @@ function AlbumView({
       : 0;
 
   const [moreOpen, setMoreOpen] = useState(false);
-  const [propsOpen, setPropsOpen] = useState(false);
-  // PropertiesDialog 打开的目标路径（具体某张图片的绝对路径）
-  // album 级的「属性」已删除（folder 不是 image,后端会拒）,这里只接受图片路径。
-  const [propsPath, setPropsPath] = useState<string | null>(null);
-  // 用 key 强制 PropertiesDialog 重新挂载（重新打开时）
-  const [propsKey, setPropsKey] = useState(0);
+  const [propertiesFileId, setPropertiesFileId] = useState<string | null>(null);
   const moreRef = useRef<HTMLDivElement>(null);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
   const moreMenuRef = useRef<HTMLDivElement>(null);
@@ -418,20 +413,17 @@ function AlbumView({
     navigate(`/gallery?${qs.toString()}`);
   };
 
-  // 用 AlbumActions 钩子,实现菜单里的复制路径 / 资源管理器 / 属性
-  const actions = useAlbumActions(
-    {
-      id: detail.path,
-      variant: "album",
-      title: detail.name,
-      subtitle: detail.tags.join(" · "),
-      count: detail.imageCount,
-      coverPath: detail.coverImage,
-      to: `/albums/${encodeURIComponent(detail.path)}`,
-      isFavorite: isFav,
-    },
-    () => setPropsKey((k) => k + 1),
-  );
+  // 用 AlbumActions 钩子实现菜单里的复制路径与资源管理器操作。
+  const actions = useAlbumActions({
+    id: detail.path,
+    variant: "album",
+    title: detail.name,
+    subtitle: detail.tags.join(" · "),
+    count: detail.imageCount,
+    coverPath: detail.coverImage,
+    to: `/albums/${encodeURIComponent(detail.path)}`,
+    isFavorite: isFav,
+  });
 
   const openInExplorer = () => {
     if (!fsCapabilities.allowOsOpen) {
@@ -762,6 +754,7 @@ function AlbumView({
             onContextMenu={(item, event) => {
               if (item.kind !== "image") return;
               event.preventDefault();
+              event.currentTarget.focus({ preventScroll: true });
               setContextMenu({
                 x: event.clientX,
                 y: event.clientY,
@@ -781,6 +774,7 @@ function AlbumView({
             onOpen={openGallery}
             onContextMenu={(index, event) => {
               event.preventDefault();
+              event.currentTarget.focus({ preventScroll: true });
               setContextMenu({ x: event.clientX, y: event.clientY, index });
             }}
           />
@@ -830,8 +824,7 @@ function AlbumView({
               case "properties": {
                 const img = imageFiles[contextMenu.index];
                 if (img) {
-                  setPropsPath(img);
-                  setPropsOpen(true);
+                  setPropertiesFileId(img);
                 }
                 break;
               }
@@ -843,13 +836,10 @@ function AlbumView({
       )}
 
       <PropertiesDialog
-        key={propsKey}
-        open={propsOpen}
-        absPath={propsPath}
-        onClose={() => {
-          setPropsOpen(false);
-          setPropsPath(null);
-        }}
+        target={
+          propertiesFileId ? { kind: "image", id: propertiesFileId } : null
+        }
+        onClose={() => setPropertiesFileId(null)}
       />
     </div>
   );

@@ -36,7 +36,7 @@ export default function AlbumContextMenu({
   onClose,
   onShowProperties,
 }: Props) {
-  const actions = useAlbumActions(item, onShowProperties);
+  const actions = useAlbumActions(item);
   const { favorites, toggle } = useFavorites();
   const markRead = useMarkAlbumRead();
   const resetRead = useResetAlbumRead();
@@ -85,7 +85,7 @@ export default function AlbumContextMenu({
       id: "properties",
       label: "属性",
       icon: <InfoIcon size={12} />,
-      disabled: !isAlbum,
+      disabled: item.variant === "smart",
     },
   );
 
@@ -110,7 +110,7 @@ export default function AlbumContextMenu({
             void actions.copyPath().catch(() => {});
             break;
           case "properties":
-            actions.showProperties();
+            onShowProperties(resourceId);
             break;
           case "mark-read":
             // 菜单随即卸载；使用 Promise 继续反馈写入结果，缓存由 mutation 同步。

@@ -45,8 +45,7 @@ export default function AlbumGrid({
     y: number;
     item: CardData;
   } | null>(null);
-  const [propsOpen, setPropsOpen] = useState(false);
-  const [propsPath, setPropsPath] = useState<string | null>(null);
+  const [propertiesId, setPropertiesId] = useState<string | null>(null);
   const [scrollParent, setScrollParent] = useState<HTMLElement>();
   const bindScrollParent = useCallback((container: HTMLDivElement | null) => {
     if (!container) return;
@@ -115,16 +114,12 @@ export default function AlbumGrid({
           x={menu.x}
           y={menu.y}
           onClose={() => setMenu(null)}
-          onShowProperties={(p) => {
-            setPropsPath(p);
-            setPropsOpen(true);
-          }}
+          onShowProperties={setPropertiesId}
         />
       )}
       <PropertiesDialog
-        open={propsOpen}
-        absPath={propsPath}
-        onClose={() => setPropsOpen(false)}
+        target={propertiesId ? { kind: "node", id: propertiesId } : null}
+        onClose={() => setPropertiesId(null)}
       />
     </div>
   );
