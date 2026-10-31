@@ -230,7 +230,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 - `GET /api/cache/stats`：返回脱敏缓存名称、占用和文件数。
 - `POST /api/thumbs/cleanup`
-- `POST /api/cache/clear?scope=thumbs|faststart|transcode|all`：统一清空入口，按 scope 删 thumbs / faststart / transcode 缓存中对应的一类；scope=all 等价三者都清。响应 `{ scope, thumbs?, faststart?, transcode?, totalDeleted, totalFreedBytes }`，未涉及的 scope 字段为 null。
+- `POST /api/cache/clear?scope=thumbs|faststart|transcode|all`：统一清空入口，按 scope 删 thumbs / faststart / transcode 缓存中对应的一类；scope=all 同时清理三类派生缓存和视频元数据内存摘要。响应 `{ scope, thumbs?, faststart?, transcode?, totalDeleted, totalFreedBytes }`，未涉及的 scope 字段省略。删除数量与释放字节只统计磁盘文件，不包含内存摘要。
 - `POST /api/fs/open`：本机接口，body 为 `{ "id": "<resourceId>" }`。
 - `GET /api/admin/fs/open?path=<configuredPath>&allowConfig=1`：设置页专用，仅允许打开已配置路径且只接受回环请求。
 

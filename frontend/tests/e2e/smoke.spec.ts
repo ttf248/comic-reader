@@ -618,6 +618,50 @@ test("视频元数据单条与批量共享文件ID及父目录", async ({ reques
   }
 });
 
+test("视频信息重复访问后移除媒体根仍拒绝旧文件ID", async ({ request }) => {
+  const original = (await (await request.get("/api/config")).json()) as {
+    mediaRoots: string[];
+  };
+  try {
+    const nodes = await scannedNodes(request);
+    const album = nodes.find((node) => node.name === "sample-video-cover")!;
+    expect(album).toBeDefined();
+    const media = (await (
+      await request.get(`/api/albums/${album.id}/media`)
+    ).json()) as {
+      page: { items: Array<{ id: string }> };
+    };
+    const id = media.page.items[0].id;
+    for (let index = 0; index < 2; index++) {
+      const warm = await request.post("/api/videos/info/batch", {
+        data: { ids: [id] },
+      });
+      expect(warm.ok()).toBeTruthy();
+      const result = (await warm.json()) as { items: VideoInfoBatchItem[] };
+      expect(result.items[0].info?.path).toBe(id);
+    }
+    expect(
+      (await request.put("/api/config", { data: { mediaRoots: [] } })).ok(),
+    ).toBeTruthy();
+    const response = await request.post("/api/videos/info/batch", {
+      data: { ids: [id] },
+    });
+    expect(response.status()).toBe(200);
+    const result = (await response.json()) as { items: VideoInfoBatchItem[] };
+    expect(result.items[0].code).toBe("resource_not_found");
+    expect(result.items[0].info).toBeUndefined();
+    expect((await request.get(`/api/videos/${id}/info`)).status()).toBe(404);
+  } finally {
+    expect(
+      (
+        await request.put("/api/config", {
+          data: { mediaRoots: original.mediaRoots },
+        })
+      ).ok(),
+    ).toBeTruthy();
+  }
+});
+
 for (const albumName of ["sample-mixed-cover", "sample-video-cover"]) {
   test(`${albumName} 视频阅读标题和历史采用真实相册摘要`, async ({ page }) => {
     const nodes = await scannedNodes(page.request);

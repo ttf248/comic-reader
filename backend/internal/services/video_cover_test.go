@@ -14,7 +14,7 @@ import (
 // findFFmpeg 探测 ffmpeg 路径: 优先环境变量,否则用 install 脚本的默认位置。
 //
 // 找不到就 skip 这些测试(对应 ffmpeg 未安装的 CI / 开发机)。
-func findFFmpeg(t *testing.T) string {
+func findFFmpeg(t testing.TB) string {
 	t.Helper()
 	if p := os.Getenv("FFMPEG_PATH"); p != "" {
 		if _, err := os.Stat(p); err == nil {
@@ -28,8 +28,8 @@ func findFFmpeg(t *testing.T) string {
 	// 2) install 脚本默认位置(可能 cwd 是 tests/ 或 services/)
 	candidates := []string{
 		"../../../../bin/ffmpeg/windows/amd64/ffmpeg.exe", // 来自 services/
-		"../../../bin/ffmpeg/windows/amd64/ffmpeg.exe",   // 来自 backend/
-		"../../bin/ffmpeg/windows/amd64/ffmpeg.exe",      // 来自 repo root
+		"../../../bin/ffmpeg/windows/amd64/ffmpeg.exe",    // 来自 backend/
+		"../../bin/ffmpeg/windows/amd64/ffmpeg.exe",       // 来自 repo root
 		"/usr/bin/ffmpeg",
 		"/usr/local/bin/ffmpeg",
 	}
@@ -45,7 +45,7 @@ func findFFmpeg(t *testing.T) string {
 
 // generateTestVideo 用 ffmpeg 生成一个 2 秒的彩色测试视频,返回路径。
 // 测试结束后由调用方清理(在 t.TempDir 里的会自动清)。
-func generateTestVideo(t *testing.T, ffmpegPath string) string {
+func generateTestVideo(t testing.TB, ffmpegPath string) string {
 	t.Helper()
 	dir := t.TempDir()
 	out := filepath.Join(dir, "test.mp4")

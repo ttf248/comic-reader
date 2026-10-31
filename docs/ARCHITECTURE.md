@@ -141,6 +141,66 @@ go test ./internal/services -run '^$' -bench BenchmarkThumbnailCold -benchtime=2
 
 视频单条与批量信息共用响应构建器，使用同样的文件 ID 与父目录语义，读取前区分目录资源、非视频及失效文件，文件被同名目录替换时按不存在处理。单条查询复用资源参数中间件固定的快照，批量查询在请求内固定一次快照并保持输入顺序及逐项错误；探测不可用时继续返回基础文件信息。
 
+`VideoInfoService` 将成功摘要按规范化路径、文件大小和纳秒修改时间放入最多 512 项的内存 LRU，API 与转码判断复用同一服务。每次查询先检查当前文件指纹，命中时返回值副本；同一指纹的并发未命中通过 singleflight 合并，失败不缓存，探测期间文件变化不回填结果。缓存仅存元数据，不保存媒体字节，也不会代替 HTTP 层的实时路径校验。指纹不区分大小及修改时间均被保留的内容覆盖，这种情况可使用一键全清强制重探测。
+
+`scope=all` 同时清空视频摘要并推进缓存代次，清空前启动的探测仍可完成，但不能回填新缓存；清空后的请求也不会加入旧代次的探测。摘要不持久化，不参与派生磁盘占用与删除计数。
+
+2026-11-01 视频元数据对照（Windows amd64、Go 1.24.3、i7-10700K）：基线 `110a5e0` 与本次缓存实现使用相同测量代码，原始视频只读。样本为本地存照中的一个 11,021,499 字节（10.51 MiB）、720×1280、25.899 秒视频。
+
+服务基准先预热一次，再进行 32 次同文件查询，分别采用 1 和 4 个 worker，以下为三次结果的中位数。`B/op` 是 Go 调用分配量，不包含外部工具进程：
+
+```powershell
+cd backend
+# 测试专用；不覆盖应用的 config.yaml。
+$env:VIDEO_INFO_BENCH_FILE = "本地视频样本路径"
+go test ./internal/services -run '^$' -bench BenchmarkVideoInfoRepeated -benchtime=32x -count=3 -benchmem
+```
+
+| 场景 | 实现 | 吞吐（次/秒） | p95（毫秒） | Go 分配（B/op） |
+| --- | --- | ---: | ---: | ---: |
+| 顺序重复 | 每次外部探测 | 10.56 | 110.9 | 50,857 |
+| 顺序重复 | 成功摘要缓存 | 30,343 | 0.505 | 290 |
+| 四并发重复 | 每次外部探测 | 18.26 | 258.4 | 51,329 |
+| 四并发重复 | 成功摘要缓存 | 28,891 | 0.537 | 340 |
+
+独立服务的 HTTP 对照使用同一样本，预热一次后顺序发送 20 次批量请求，每批一个文件 ID，计时包含 HTTP 与 JSON 读取，不包含构建、启动及扫描：
+
+| 实现 | 吞吐（请求/秒） | p95（毫秒） | 后端峰值工作集（MiB） |
+| --- | ---: | ---: | ---: |
+| 每次外部探测 | 5.19 | 211.79 | 28.30 |
+| 成功摘要缓存 | 325.74 | 3.74 | 26.05 |
+
+HTTP 工作集为后端进程单次观测，不包含 ffprobe 子进程；该差异不作为总体内存收益结论。首次读取仍执行外部探测，本次首读约 106 ms，一键全清后的下一次读取约 103 ms。32 次热查询的服务计时很短，吞吐会受调度开销影响；HTTP 数据也只代表本机同文件重复访问。
+
+另开终端，从仓库根目录运行以下同类请求可复测 HTTP 吞吐和 p95；将 `f_example` 换成媒体分页接口返回的真实视频 ID。本机工作集数据在请求结束后读取服务进程的 `PeakWorkingSet64`。
+
+```powershell
+cd frontend
+@'
+const { request } = require("@playwright/test");
+(async () => {
+  const api = await request.newContext({ baseURL: process.argv[2] });
+  try {
+    const data = { ids: [process.argv[3]] };
+    const probe = async () => {
+      const start = performance.now();
+      const response = await api.post("/api/videos/info/batch", { data });
+      if (!response.ok()) throw new Error("样本不可用");
+      const info = (await response.json()).items[0].info;
+      if (!info || !(info.duration > 0)) throw new Error("需要启用元数据探测的视频样本");
+      return performance.now() - start;
+    };
+    await probe();
+    const start = performance.now(), times = [];
+    for (let i = 0; i < 20; i++) times.push(await probe());
+    const elapsed = performance.now() - start;
+    times.sort((a, b) => a - b);
+    console.log({ requestsPerSecond: 20000 / elapsed, p95Ms: times[18] });
+  } finally { await api.dispose(); }
+})().catch(error => { console.error(error); process.exitCode = 1; });
+'@ | node - http://127.0.0.1:8080 f_example
+```
+
 批量视频信息显式接收与资源参数中间件共用的 `PathValidator`，逐项复核当前媒体根与链接状态，再使用校验返回的路径读取文件信息及探测。扫描快照负责稳定的资源元数据，不作为当前路径仍然安全的证据；校验器缺失时拒绝请求。
 
 视频发送顺序：

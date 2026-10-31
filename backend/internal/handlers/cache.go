@@ -118,6 +118,7 @@ type CacheScopeResult struct {
 //   - scope=faststart  调 VideoFaststartService.ClearCache()(本接口新增能力)
 //   - scope=transcode  调 TranscodeService.ClearCache()(转码缓存全清)
 //   - scope=all        上面三件事都做
+//     并重置视频元数据的内存摘要，不计入磁盘文件数与释放字节。
 //   - 无效 scope → 400
 //
 // 注意:fiber.Path 不带 query string,scope 从 c.Query("scope") 读。
@@ -126,6 +127,7 @@ func CacheClearHandler(
 	thumbs *services.ThumbnailService,
 	faststart *services.VideoFaststartService,
 	transcode *services.TranscodeService,
+	clearVideoInfo func(),
 	cacheStats *services.CacheStatsService,
 ) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -180,6 +182,9 @@ func CacheClearHandler(
 			}
 		}
 
+		if scope == CacheClearScopeAll && clearVideoInfo != nil {
+			clearVideoInfo()
+		}
 		if cacheStats != nil {
 			cacheStats.Invalidate()
 		}

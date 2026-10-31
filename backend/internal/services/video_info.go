@@ -6,11 +6,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	lru "github.com/hashicorp/golang-lru/v2"
+	"golang.org/x/sync/singleflight"
 )
 
 // VideoMetadata 视频元数据(从 ffprobe / ffmpeg 解析得到)。
@@ -24,35 +29,46 @@ import (
 //
 // 这套字段够前端做:封面尺寸估计、播放前时长显示、"格式不支持"提示。
 type VideoMetadata struct {
-	Width       int    `json:"width"`
-	Height      int    `json:"height"`
+	Width       int     `json:"width"`
+	Height      int     `json:"height"`
 	DurationSec float64 `json:"durationSec"`
-	Codec       string `json:"codec"`
-	Container   string `json:"container"`
-	BitRate     int64  `json:"bitRate"`
+	Codec       string  `json:"codec"`
+	Container   string  `json:"container"`
+	BitRate     int64   `json:"bitRate"`
 }
 
 // ErrProbeUnavailable 表示 ffprobe 不可用(可执行文件不存在 / 解析失败)。
 // 调用方应回退到"不依赖元数据"的展示(由前端 <video> 加载后上报)。
 var ErrProbeUnavailable = errors.New("ffprobe unavailable")
 
+const videoInfoCacheSize = 512
+
+type videoInfoCacheKey struct {
+	path     string
+	size     int64
+	modified int64
+}
+
 // VideoInfoService 用 ffprobe / ffmpeg -i 读视频元数据。
 //
-// 性能:ffprobe -show_format -show_streams 只读取容器 metadata,
-// 1GB 视频典型 50-150ms,远快于让前端 <video> 加载整个文件。
+// 成功结果按文件路径、大小和修改时间缓存；同一指纹的并发查询共享探测。
+// 缓存最多 512 项，失败保持可重试。
 //
 // 失败兜底:ffprobe 不在 / 失败时回退到 ffmpeg -i 解析 stdout。
-// 两个都失败 → 返回 ErrProbeUnavailable,调用方决定是否回退到前端上报。
+// 两个都失败时返回错误，由调用方展示基础信息或回退到前端上报。
 type VideoInfoService struct {
 	ffmpegPath  string
 	ffprobePath string
 	timeout     time.Duration
 
-	// 可用性探测缓存:Available() 跑 `ffprobe -version` 50-200ms;
-	// handler 热路径(VideoInfoHandler)每次都调,旧实现每次重跑。
-	// sync.Once 锁住结果,service 实例重建时(main.go OnChange)自动失效。
+	// 工具可用性在服务生命周期内只探测一次；修改工具路径后重启会重建服务。
 	availOnce sync.Once
 	avail     bool
+
+	cacheMu         sync.Mutex
+	cache           *lru.Cache[videoInfoCacheKey, VideoMetadata]
+	cacheGeneration uint64
+	probes          singleflight.Group
 }
 
 // VideoInfoOptions 构造选项。
@@ -77,17 +93,16 @@ func NewVideoInfoService(opts VideoInfoOptions) *VideoInfoService {
 		}
 		ffprobe = filepath.Join(dir, base)
 	}
+	cache, _ := lru.New[videoInfoCacheKey, VideoMetadata](videoInfoCacheSize)
 	return &VideoInfoService{
 		ffmpegPath:  opts.FFmpegPath,
 		ffprobePath: ffprobe,
 		timeout:     t,
+		cache:       cache,
 	}
 }
 
 // Available 返回 ffprobe 是否可用(整个 service 生命周期只探测一次)。
-//
-// 旧实现每次调用都跑 `ffprobe -version`(50-200ms);VideoInfoHandler
-// 每个视频元数据请求都调,改 sync.Once 后只探一次。
 func (s *VideoInfoService) Available() bool {
 	if s == nil || s.ffprobePath == "" {
 		return false
@@ -116,6 +131,81 @@ func (s *VideoInfoService) Probe(absPath string) (*VideoMetadata, error) {
 	if s == nil {
 		return nil, ErrProbeUnavailable
 	}
+	key, err := videoInfoFingerprint(absPath)
+	if err != nil {
+		return nil, err
+	}
+	s.cacheMu.Lock()
+	generation := s.cacheGeneration
+	cached, ok := s.cache.Get(key)
+	s.cacheMu.Unlock()
+	if ok {
+		return &cached, nil
+	}
+
+	flightKey := strconv.FormatUint(generation, 10) + "\x00" + key.path + "\x00" + strconv.FormatInt(key.size, 10) + "\x00" + strconv.FormatInt(key.modified, 10)
+	value, err, _ := s.probes.Do(flightKey, func() (any, error) {
+		// 缓存命中与探测入组之间可能已有其他请求完成。
+		s.cacheMu.Lock()
+		cached, ok := s.cache.Get(key)
+		currentGeneration := s.cacheGeneration
+		s.cacheMu.Unlock()
+		if ok && currentGeneration == generation {
+			return cached, nil
+		}
+		meta, err := s.probeUncached(key.path)
+		if err != nil {
+			return nil, err
+		}
+		if meta == nil {
+			return nil, ErrProbeUnavailable
+		}
+		// 只缓存稳定文件的成功结果；清空前启动的探测不能回填新一代缓存。
+		current, statErr := videoInfoFingerprint(key.path)
+		if statErr == nil && current == key {
+			s.cacheMu.Lock()
+			if s.cacheGeneration == generation {
+				s.cache.Add(key, *meta)
+			}
+			s.cacheMu.Unlock()
+		}
+		return *meta, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	meta := value.(VideoMetadata)
+	return &meta, nil
+}
+
+// ClearCache 清空内存摘要；正在执行的旧探测仍可完成，但不会重新填充缓存。
+func (s *VideoInfoService) ClearCache() {
+	if s == nil {
+		return
+	}
+	s.cacheMu.Lock()
+	s.cacheGeneration++
+	s.cache.Purge()
+	s.cacheMu.Unlock()
+}
+
+func videoInfoFingerprint(path string) (videoInfoCacheKey, error) {
+	path = filepath.Clean(path)
+	info, err := os.Stat(path)
+	if err != nil {
+		var pathErr *os.PathError
+		if errors.As(err, &pathErr) {
+			err = pathErr.Err
+		}
+		return videoInfoCacheKey{}, fmt.Errorf("read video source: %w", err)
+	}
+	if !info.Mode().IsRegular() {
+		return videoInfoCacheKey{}, errors.New("video source is not a regular file")
+	}
+	return videoInfoCacheKey{path: path, size: info.Size(), modified: info.ModTime().UnixNano()}, nil
+}
+
+func (s *VideoInfoService) probeUncached(absPath string) (*VideoMetadata, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), s.timeout)
 	defer cancel()
 

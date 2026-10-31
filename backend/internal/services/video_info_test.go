@@ -3,7 +3,6 @@ package services
 import (
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"testing"
 )
@@ -105,7 +104,5 @@ func TestVideoInfoService_NilReceiver(t *testing.T) {
 	if !errors.Is(err, ErrProbeUnavailable) {
 		t.Errorf("nil Probe should return ErrProbeUnavailable, got %v", err)
 	}
+	svc.ClearCache()
 }
-
-// 防止误删 import
-var _ = exec.Command

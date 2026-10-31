@@ -58,6 +58,7 @@
 - 冷门编码转码状态可在列表卡片上看到（转码中 X% / 已缓存 / 转码失败）
 - 转码 singleflight 去重 + 全局并发限流 + 可取消
 - **缓存清理**：设置页按 thumbs / faststart / transcode 三个 scope 独立清理 + 一键全清（`POST /api/cache/clear?scope=…`）
+- 视频元数据成功结果使用最多 512 项的内存 LRU，同一文件的并发查询共享探测；文件大小或修改时间变化会失效，失败可立即重试，一键全清同时重置摘要
 
 ### 画廊
 
@@ -305,6 +306,8 @@ local-gallery/
 端到端脚本使用独立的系统临时目录保存前后端产物和测试数据，结束后统一清理，支持与本地运行实例并行验证。
 
 faststart 集成测试优先使用测试进程的 `FFMPEG_PATH`，未指定时查找仓库默认位置及 `PATH` 中可执行的 ffmpeg；工具不可用时跳过该用例。此变量只供测试选择工具，不覆盖应用的 `config.yaml`。
+
+视频元数据性能测试使用 `go test ./internal/services -run '^$' -bench BenchmarkVideoInfoRepeated -benchtime=32x -count=3 -benchmem`（在 `backend` 下执行）。可用测试变量 `VIDEO_INFO_BENCH_FILE` 指定只读本地视频；未指定则生成临时素材。此变量不影响应用配置，测量方法与对照见 [架构文档](./docs/ARCHITECTURE.md)。
 
 **改动业务逻辑必须同步改测试**——后端 handler / service / middleware → `go test`；前端组件 / hook / store → Vitest；跨层主链路 → integration / e2e。
 

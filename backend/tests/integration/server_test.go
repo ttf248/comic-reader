@@ -174,7 +174,7 @@ func newHarness(t *testing.T) *harness {
 	// 但 thumbs 是真服务,可测 scope=thumbs 与 scope=all 的 thumbs 分支。
 	cacheStats := services.NewCacheStatsService(50 * time.Millisecond)
 	api.Get("/cache/stats", handlers.CacheStatsHandler(mgr, cacheStats))
-	api.Post("/cache/clear", handlers.CacheClearHandler(thumbs, nil, nil, cacheStats))
+	api.Post("/cache/clear", handlers.CacheClearHandler(thumbs, nil, nil, nil, cacheStats))
 
 	return &harness{app, root, cache, prefs, mgr, catalog}
 }

@@ -303,7 +303,7 @@ func main() {
 	api.Post("/thumbs/cleanup", handlers.ThumbCleanupHandlerWithCacheStats(thumbs, cacheStats))
 	// 统一清空入口:scope=thumbs|faststart|transcode|all。
 	// Settings 页在"缓存占用"面板中按 scope 提供独立清理和一键全清。
-	api.Post("/cache/clear", handlers.CacheClearHandler(thumbs, faststart, transcode, cacheStats))
+	api.Post("/cache/clear", handlers.CacheClearHandler(thumbs, faststart, transcode, videoInfo.ClearCache, cacheStats))
 	api.Get("/cache/stats", handlers.CacheStatsHandler(mgr, cacheStats))
 	api.Get("/media/:id", resourceParam, handlers.MediaHandler(transcode, faststart))
 	api.Get("/images/:id/info", resourceParam, handlers.ImageInfoHandler(resourceCatalog))
