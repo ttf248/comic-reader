@@ -19,7 +19,7 @@ import (
 	"github.com/tianlongxiang/local-gallery/internal/services"
 )
 
-func imageInfoFixture(t *testing.T, relative string) (string, string, *services.ResourceCatalog) {
+func mediaInfoFixture(t *testing.T, relative string) (string, string, *services.ResourceCatalog) {
 	t.Helper()
 	root := t.TempDir()
 	path := filepath.Join(root, filepath.FromSlash(relative))
@@ -70,7 +70,7 @@ func imageInfoTestApp(root string, catalog *services.ResourceCatalog, afterResol
 func TestImageInfoUsesFileIDAndParentDirectory(t *testing.T) {
 	for _, relative := range []string{"root image.png", "相册 [100%]/子目录/photo %20.png"} {
 		t.Run(relative, func(t *testing.T) {
-			root, path, catalog := imageInfoFixture(t, relative)
+			root, path, catalog := mediaInfoFixture(t, relative)
 			id := catalog.ExternalID(path, services.ResourceFile)
 			app := imageInfoTestApp(root, catalog)
 			res, err := app.Test(httptest.NewRequest(http.MethodGet, "/api/images/"+id+"/info", nil))
@@ -97,7 +97,7 @@ func TestImageInfoUsesFileIDAndParentDirectory(t *testing.T) {
 }
 
 func TestImageInfoRejectsWrongResourceTypes(t *testing.T) {
-	root, path, catalog := imageInfoFixture(t, "album/page.png")
+	root, path, catalog := mediaInfoFixture(t, "album/page.png")
 	app := imageInfoTestApp(root, catalog)
 	cases := []struct {
 		name   string
@@ -135,7 +135,7 @@ func TestImageInfoRejectsWrongResourceTypes(t *testing.T) {
 }
 
 func TestImageInfoKeepsResolvedSnapshot(t *testing.T) {
-	root, path, catalog := imageInfoFixture(t, "album/page.png")
+	root, path, catalog := mediaInfoFixture(t, "album/page.png")
 	id := catalog.ExternalID(path, services.ResourceFile)
 	app := imageInfoTestApp(root, catalog, func(c *fiber.Ctx) error {
 		catalog.Clear()
@@ -157,7 +157,7 @@ func TestImageInfoKeepsResolvedSnapshot(t *testing.T) {
 }
 
 func TestImageInfoDecodeFailureHidesFilesystemPath(t *testing.T) {
-	root, path, catalog := imageInfoFixture(t, "album/page.png")
+	root, path, catalog := mediaInfoFixture(t, "album/page.png")
 	if err := os.WriteFile(path, []byte("broken image"), 0o644); err != nil {
 		t.Fatal(err)
 	}

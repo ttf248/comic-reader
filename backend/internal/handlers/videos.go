@@ -114,13 +114,20 @@ func VideoHandler(transcode *services.TranscodeService, faststart *services.Vide
 //
 // 性能: ffprobe 只读 metadata,1GB 视频典型 50-150ms,远快于让前端
 // <video> 加载整个文件再拿 metadata(几个 GB 流量 + 几秒解码)。
-func VideoInfoHandler(infoSvc *services.VideoInfoService, transcode *services.TranscodeService, catalogs ...*services.ResourceCatalog) fiber.Handler {
-	catalog := optionalCatalog(catalogs)
+func VideoInfoHandler(infoSvc *services.VideoInfoService, transcode *services.TranscodeService, catalog *services.ResourceCatalog) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		resourceID := middleware.ResourceID(c)
 		path := middleware.SafePath(c)
-		if path == "" {
-			return writeError(c, fiber.StatusBadRequest, "missing_path", "missing 'path' query parameter")
+		if resourceID == "" || path == "" {
+			return writeError(c, fiber.StatusBadRequest, "missing_resource_id", "resource id is required")
+		}
+		snapshot := requestCatalogSnapshot(c, catalog)
+		ref, ok := snapshot.Lookup(resourceID)
+		if !ok {
+			return writeError(c, fiber.StatusNotFound, "resource_not_found", "resource id is invalid or stale")
+		}
+		if ref.Kind != services.ResourceFile {
+			return writeError(c, fiber.StatusBadRequest, "invalid_resource_kind", "resource type does not support this operation")
 		}
 		if !models.IsVideoFile(filepath.Base(path)) {
 			return writeError(c, fiber.StatusUnsupportedMediaType, "unsupported_video_format", "not a supported video format")
@@ -132,17 +139,10 @@ func VideoInfoHandler(infoSvc *services.VideoInfoService, transcode *services.Tr
 			}
 			return writeError(c, fiber.StatusInternalServerError, "video_info_failed", "failed to read video metadata")
 		}
-		// 没有资源目录时兼容旧的 query path 入口：只返回文件名，不能把
-		// SafePath 中的本地绝对路径重新写入响应或探测失败日志。
-		publicPath := filepath.Base(path)
-		publicDir := ""
-		publicID := filepath.Base(path)
-		if catalog != nil {
-			publicPath = resourceID
-			publicDir = catalog.RelativeLabel(resourceID)
-			publicID = resourceID
+		if info.IsDir() {
+			return writeError(c, fiber.StatusNotFound, "video_not_found", "video file not found")
 		}
-		resp := videoInfoResponse(infoSvc, transcode, publicID, publicPath, publicDir, path, info)
+		resp := videoInfoResponse(infoSvc, transcode, snapshot, resourceID, path, info)
 		return c.JSON(resp)
 	}
 }
@@ -195,7 +195,11 @@ func VideoInfoBatchHandler(infoSvc *services.VideoInfoService, transcode *servic
 					items[index].Code = "resource_not_found"
 					return
 				}
-				if ref.Kind != services.ResourceFile || !models.IsVideoFile(filepath.Base(ref.AbsolutePath)) {
+				if ref.Kind != services.ResourceFile {
+					items[index].Code = "invalid_resource_kind"
+					return
+				}
+				if !models.IsVideoFile(filepath.Base(ref.AbsolutePath)) {
 					items[index].Code = "unsupported_video_format"
 					return
 				}
@@ -208,8 +212,12 @@ func VideoInfoBatchHandler(infoSvc *services.VideoInfoService, transcode *servic
 					}
 					return
 				}
+				if info.IsDir() {
+					items[index].Code = "video_not_found"
+					return
+				}
 				semaphore <- struct{}{}
-				items[index].Info = videoInfoResponse(infoSvc, transcode, id, id, snapshot.RelativeLabel(id), ref.AbsolutePath, info)
+				items[index].Info = videoInfoResponse(infoSvc, transcode, snapshot, id, ref.AbsolutePath, info)
 				<-semaphore
 			}()
 		}
@@ -221,16 +229,15 @@ func VideoInfoBatchHandler(infoSvc *services.VideoInfoService, transcode *servic
 func videoInfoResponse(
 	infoSvc *services.VideoInfoService,
 	transcode *services.TranscodeService,
+	snapshot services.CatalogSnapshot,
 	resourceID string,
-	publicPath string,
-	publicDir string,
 	path string,
 	info os.FileInfo,
 ) fiber.Map {
 	resp := fiber.Map{
-		"path":   publicPath,
+		"path":   resourceID,
 		"name":   filepath.Base(path),
-		"dir":    publicDir,
+		"dir":    filepath.ToSlash(filepath.Dir(snapshot.RelativeLabel(resourceID))),
 		"size":   info.Size(),
 		"mtime":  info.ModTime().UTC().Format("2006-01-02T15:04:05Z"),
 		"format": strings.ToLower(filepath.Ext(path)),

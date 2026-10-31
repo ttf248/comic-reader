@@ -5,6 +5,7 @@ import {
   type Locator,
   type Page,
 } from "@playwright/test";
+import type { VideoInfo, VideoInfoBatchItem } from "../../src/api/videos";
 
 async function renderedColors(locator: Locator, properties: string[]) {
   return locator.evaluate((element, properties) => {
@@ -552,6 +553,69 @@ test("新打开相册立即出现在最近阅读，媒体分页不重复记录�
     page.locator(`a[href="/albums/${album!.id}"]`).first(),
   ).toBeVisible();
   expect(historyWrites).toBe(1);
+});
+
+test("视频元数据单条与批量共享文件ID及父目录", async ({ request }) => {
+  const nodes = await scannedNodes(request);
+  const album = nodes.find((node) => node.name === "sample-video-cover")!;
+  const pictures = nodes.find((node) => node.name === "sample-album")!;
+  expect(album).toBeDefined();
+  expect(pictures).toBeDefined();
+  const videoMedia = (await (
+    await request.get(`/api/albums/${album.id}/media`)
+  ).json()) as {
+    page: { items: Array<{ id: string; name: string }> };
+  };
+  const imageMedia = (await (
+    await request.get(`/api/albums/${pictures.id}/media`)
+  ).json()) as {
+    page: { items: Array<{ id: string }> };
+  };
+  const file = videoMedia.page.items[0];
+  const response = await request.get(`/api/videos/${file.id}/info`);
+  expect(response.status()).toBe(200);
+  const info = (await response.json()) as VideoInfo;
+  expect(info).toMatchObject({
+    path: file.id,
+    name: file.name,
+    dir: "media/sample-video-cover",
+    format: ".webm",
+  });
+  expect(info.size).toBeGreaterThan(0);
+  const invalid = await request.get(`/api/videos/${album.id}/info`);
+  expect(invalid.status()).toBe(400);
+  expect((await invalid.json()).code).toBe("invalid_resource_kind");
+  const ids = [
+    file.id,
+    album.id,
+    "f_unknown",
+    imageMedia.page.items[0].id,
+    file.id,
+  ];
+  const batchResponse = await request.post("/api/videos/info/batch", {
+    data: { ids },
+  });
+  expect(batchResponse.status()).toBe(200);
+  const batch = (await batchResponse.json()) as {
+    items: VideoInfoBatchItem[];
+  };
+  expect(batch.items.map((item) => item.id)).toEqual(ids);
+  for (const index of [0, 4]) {
+    expect(batch.items[index].info).toMatchObject({
+      path: file.id,
+      name: file.name,
+      dir: info.dir,
+    });
+    expect(batch.items[index].code).toBeUndefined();
+  }
+  for (const [index, code] of [
+    [1, "invalid_resource_kind"],
+    [2, "resource_not_found"],
+    [3, "unsupported_video_format"],
+  ] as const) {
+    expect(batch.items[index].code).toBe(code);
+    expect(batch.items[index].info).toBeUndefined();
+  }
 });
 
 for (const albumName of ["sample-mixed-cover", "sample-video-cover"]) {

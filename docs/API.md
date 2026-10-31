@@ -164,15 +164,26 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 ### `GET /api/videos/:fileId/info`
 
-返回视频基础信息、ffprobe 元数据和转码状态，不返回绝对路径。
+仅接受视频文件资源 ID，返回视频基础信息、可用时的 ffprobe 元数据和转码状态。`path` 始终为文件 ID，`name` 为文件名，`dir` 与图片信息接口一致，只包含根别名和相对父目录；探测工具不可用时仍返回基础字段。
+
+| 状态 | code | 含义 |
+|------|------|------|
+| 400 | `invalid_resource_kind` | 传入根、相册或集合 ID |
+| 404 | `resource_not_found` | ID 无效、已过期或不在当前媒体根中 |
+| 404 | `video_not_found` | 视频文件已删除或被目录替换 |
+| 415 | `unsupported_video_format` | 文件不是受支持视频 |
+| 500 | `video_info_failed` | 无法读取文件信息 |
 
 ### `POST /api/videos/info/batch`
 
 批量返回视频基础信息、ffprobe 元数据和转码状态，避免视频列表为每个卡片
 单独请求。请求体为 `{ "ids": ["f_...", "f_..."] }`，单次最多 100 个
 文件 ID。响应为 `{ "ok": true, "items": [{ "id": "f_...", "info": {...} }] }`；
-单个 ID 无效、文件不存在或不是视频时，该项返回稳定的 `code`，不会使整批失败。
-`info.path` 与 `info.dir` 仍只包含资源 ID 或根别名/相对路径。
+结果保留输入顺序及重复项。单项失败不返回 `info`，其 `code` 为
+`resource_not_found`（ID 失效）、`invalid_resource_kind`（目录资源）、
+`unsupported_video_format`（非视频）、`video_not_found`（文件不存在或被目录替换）
+或 `video_info_failed`（文件信息读取失败），不会使整批失败。
+成功项的 `info.path`、`info.dir` 与单条接口采用相同的文件 ID 和父目录语义。
 
 ### 视频转码
 

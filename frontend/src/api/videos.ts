@@ -2,7 +2,7 @@ import { api, API_BASE } from "./client";
 
 // 视频原始流 URL（供 <video src=...> 使用）。
 //
-// 后端 /api/videos 支持 Range，前端拖动进度条时浏览器自动按需分段。
+// 后端 /api/media/:id 支持 Range，前端拖动进度条时浏览器自动按需分段。
 export function videoUrl(fileId: string): string {
   const p = `/api/media/${encodeURIComponent(fileId)}`;
   return API_BASE ? `${API_BASE}${p}` : p;
@@ -13,13 +13,13 @@ export function videoUrl(fileId: string): string {
 // 必填字段：path/name/dir/size/mtime/format。
 // 可选字段（服务端 ffprobe 可用时填,否则缺省）：
 //   - duration / width / height / codec / container / bitRate
-//   - transcode:服务端转码状态(Phase 2 新增);后端 ffmpeg 不可用时整个字段省略
+//   - transcode：服务端转码状态；后端 ffmpeg 不可用时整个字段省略
 //
 // 服务端 ffprobe 可一次性返回元数据，UI 可在列表中展示时长。
 export interface VideoInfo {
-  path: string;
+  path: string; // 文件资源 ID
   name: string;
-  dir: string;
+  dir: string; // 根别名/相对父目录，不含文件名
   size: number;
   mtime: string;
   format: string; // 含点，如 ".mp4"
@@ -30,7 +30,7 @@ export interface VideoInfo {
   codec?: string;
   container?: string;
   bitRate?: number;
-  // 服务端转码状态(可选,Phase 2 新增)
+  // 服务端转码状态（可选）
   transcode?: TranscodeStatus;
 }
 
@@ -71,7 +71,7 @@ export async function getVideoInfoBatch(
   return result;
 }
 
-// ---- 服务端转码 (Phase 2) ----
+// ---- 服务端转码 ----
 
 export type TranscodeStatusValue =
   | "skipped"

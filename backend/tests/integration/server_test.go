@@ -144,9 +144,9 @@ func newHarness(t *testing.T) *harness {
 	api.Post("/thumbs/cleanup", handlers.ThumbCleanupHandler(thumbs))
 	api.Post("/thumbs/cover", handlers.ThumbCoverHandler(thumbs))
 	api.Get("/videos", handlers.VideoHandler(nil, nil))
-	// 集成测试不依赖 ffmpeg/ffprobe:VideoInfoHandler(nil) 行为等价于老版本
-	// (只返回 path/name/dir/size/mtime/format 五个字段)。
-	api.Get("/videos/info", handlers.VideoInfoHandler(nil, nil))
+	// 元数据工具不可用时仍通过正式资源路由返回基础文件信息。
+	api.Get("/videos/:id/info", middleware.ResourceParam(catalog, safetyState), handlers.VideoInfoHandler(nil, nil, catalog))
+	api.Post("/videos/info/batch", handlers.VideoInfoBatchHandler(nil, nil, catalog))
 	api.Get("/videos/transcode/status", handlers.TranscodeStatusHandler(nil))
 	api.Get("/videos/transcode/events", handlers.TranscodeEventsHandler(nil))
 	api.Post("/videos/transcode/cancel", handlers.TranscodeCancelHandler(nil))
@@ -275,8 +275,8 @@ func TestAsyncScanAndSSE(t *testing.T) {
 	t.Fatal("scan did not complete in 3s")
 }
 
-func TestPagedLibraryFlowAfterScan(t *testing.T) {
-	h := newHarness(t)
+func (h *harness) scanLibrary(t *testing.T) (*http.Response, []byte) {
+	t.Helper()
 	res, body := h.do(t, http.MethodPost, "/api/scan/start", nil)
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("start status=%d body=%s", res.StatusCode, body)
@@ -291,14 +291,18 @@ func TestPagedLibraryFlowAfterScan(t *testing.T) {
 	for {
 		res, body = h.do(t, http.MethodGet, "/api/library/manifest", nil)
 		if res.StatusCode == http.StatusOK {
-			break
+			return res, body
 		}
 		if time.Now().After(deadline) {
 			t.Fatalf("library manifest timeout: status=%d body=%s", res.StatusCode, body)
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
+}
 
+func TestPagedLibraryFlowAfterScan(t *testing.T) {
+	h := newHarness(t)
+	res, body := h.scanLibrary(t)
 	if res.Header.Get(fiber.HeaderETag) == "" {
 		t.Fatalf("manifest status=%d etag=%q body=%s", res.StatusCode, res.Header.Get(fiber.HeaderETag), body)
 	}
@@ -865,12 +869,16 @@ func TestVideoStream(t *testing.T) {
 	}
 }
 
-// /api/videos/info 返回 size/mtime/format。
+// 正式资源路由与批量接口在工具不可用时仍返回基础信息。
 func TestVideoInfo(t *testing.T) {
 	h := newHarness(t)
-	vidPath := filepath.Join(h.root, "info.mp4")
-	os.WriteFile(vidPath, []byte("12345"), 0o644)
-	res, body := h.do(t, "GET", "/api/videos/info?path="+escape(vidPath), nil)
+	vidPath := filepath.Join(h.root, "[作者A] vol1", "info.mp4")
+	if err := os.WriteFile(vidPath, []byte("12345"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	h.scanLibrary(t)
+	id := h.catalog.ExternalID(vidPath, services.ResourceFile)
+	res, body := h.do(t, http.MethodGet, "/api/videos/"+id+"/info", nil)
 	if res.StatusCode != 200 {
 		t.Fatalf("status=%d body=%s", res.StatusCode, body)
 	}
@@ -878,8 +886,12 @@ func TestVideoInfo(t *testing.T) {
 		Size   int64  `json:"size"`
 		Format string `json:"format"`
 		Name   string `json:"name"`
+		Path   string `json:"path"`
+		Dir    string `json:"dir"`
 	}
-	json.Unmarshal(body, &info)
+	if err := json.Unmarshal(body, &info); err != nil {
+		t.Fatal(err)
+	}
 	if info.Size != 5 {
 		t.Errorf("size=%d want 5", info.Size)
 	}
@@ -888,6 +900,28 @@ func TestVideoInfo(t *testing.T) {
 	}
 	if info.Name != "info.mp4" {
 		t.Errorf("name=%q", info.Name)
+	}
+	wantDir := filepath.ToSlash(filepath.Join(filepath.Base(h.root), "[作者A] vol1"))
+	if info.Path != id || info.Dir != wantDir {
+		t.Errorf("path/dir=%q/%q", info.Path, info.Dir)
+	}
+	albumID := h.catalog.ExternalID(filepath.Dir(vidPath), services.ResourceAlbum)
+	res, body = h.do(t, http.MethodPost, "/api/videos/info/batch", map[string]any{"ids": []string{id, albumID, "f_unknown"}})
+	var batch struct {
+		Items []struct {
+			ID   string `json:"id"`
+			Code string `json:"code"`
+			Info struct {
+				Path string `json:"path"`
+				Dir  string `json:"dir"`
+			} `json:"info"`
+		} `json:"items"`
+	}
+	if res.StatusCode != http.StatusOK || json.Unmarshal(body, &batch) != nil || len(batch.Items) != 3 {
+		t.Fatalf("batch status=%d body=%s", res.StatusCode, body)
+	}
+	if batch.Items[0].Info.Path != id || batch.Items[0].Info.Dir != wantDir || batch.Items[1].Code != "invalid_resource_kind" || batch.Items[2].Code != "resource_not_found" {
+		t.Fatalf("unexpected batch result: %s", body)
 	}
 }
 
