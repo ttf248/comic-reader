@@ -47,6 +47,10 @@ describe("useUnreadAlbums", () => {
     vi.clearAllMocks();
     vi.mocked(useFavorites).mockReturnValue({
       favorites: [],
+      isLoading: false,
+      isError: false,
+      isFetching: false,
+      refetch: vi.fn(),
       add: vi.fn(),
       remove: vi.fn(),
       toggle: vi.fn(),
@@ -77,6 +81,10 @@ describe("useUnreadAlbums", () => {
     seedUnread([baseAlbum("a_1", "A"), baseAlbum("a_2", "B")]);
     vi.mocked(useFavorites).mockReturnValue({
       favorites: ["a_2"],
+      isLoading: false,
+      isError: false,
+      isFetching: false,
+      refetch: vi.fn(),
       add: vi.fn(),
       remove: vi.fn(),
       toggle: vi.fn(),

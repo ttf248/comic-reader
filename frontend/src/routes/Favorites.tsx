@@ -24,18 +24,21 @@ export default function Favorites() {
   const query = useSearchStore((s) => s.query);
   const sortBy = useSearchStore((s) => s.sortBy);
   const minImageCount = useSearchStore((s) => s.minImageCount);
-  const { favorites } = useFavorites();
+  const favoritesQuery = useFavorites();
+  const { favorites } = favoritesQuery;
   // 历史记录:sortBy='viewed' 时用最近「看过」时间排序
-  const { data: historyData } = useQuery({
+  const historyQuery = useQuery({
     queryKey: ["history"],
     queryFn: () => historyApi.list(),
     staleTime: 30_000,
+    enabled: sortBy === "viewed" && favorites.length > 0,
   });
   const viewedAtMap = useMemo(() => {
     const m = new Map<string, string>();
-    for (const h of historyData?.history ?? []) m.set(h.albumId, h.openedAt);
+    for (const h of historyQuery.data?.history ?? [])
+      m.set(h.albumId, h.openedAt);
     return m;
-  }, [historyData]);
+  }, [historyQuery.data]);
 
   const nodeIds = useMemo(
     () => favorites.filter((id) => !id.startsWith("smart:")),
@@ -149,6 +152,28 @@ export default function Favorites() {
   );
   useGalleryContextSync({ type: "favorites" }, favEntries);
 
+  const favoritesFailed = favoritesQuery.isError;
+  const nodesFailed = nodeIds.length > 0 && nodesQuery.isError;
+  const tagsFailed = smartNames.length > 0 && tagsQuery.isError;
+  const historyFailed =
+    sortBy === "viewed" && favorites.length > 0 && historyQuery.isError;
+  const loadFailed =
+    favoritesFailed || nodesFailed || tagsFailed || historyFailed;
+  const detailsLoading =
+    (nodeIds.length > 0 && nodesQuery.isLoading) ||
+    (smartNames.length > 0 && tagsQuery.isLoading);
+  const retrying =
+    favoritesQuery.isFetching ||
+    (nodeIds.length > 0 && nodesQuery.isFetching) ||
+    (smartNames.length > 0 && tagsQuery.isFetching) ||
+    (sortBy === "viewed" && historyQuery.isFetching);
+  const retryLoad = () => {
+    if (favoritesFailed) void favoritesQuery.refetch();
+    if (nodesFailed) void nodesQuery.refetch();
+    if (tagsFailed) void tagsQuery.refetch();
+    if (historyFailed) void historyQuery.refetch();
+  };
+
   return (
     <div className="min-h-full">
       <section className="px-6 lg:px-10 pt-10 pb-6 max-w-[1400px] mx-auto w-full">
@@ -162,13 +187,56 @@ export default function Favorites() {
           我收藏的图像
         </h1>
         <p className="text-sm text-fg-muted mt-2 tabular-nums">
-          {favorites.length} 项
+          {favoritesQuery.isLoading
+            ? "正在加载收藏…"
+            : favoritesFailed && favorites.length === 0
+              ? "收藏暂不可用"
+              : `${favorites.length} 项`}
         </p>
       </section>
 
-      {favorites.length > 0 && <ListFilterBar totalCount={filtered.length} />}
+      {loadFailed && (
+        <div className="px-6 lg:px-10 max-w-[1400px] mx-auto w-full mb-4">
+          <div
+            role="alert"
+            className="flex items-center justify-between gap-3 rounded-md border border-danger/30 bg-danger/5 px-4 py-3 text-sm"
+          >
+            <p>
+              {favoritesFailed
+                ? "收藏加载失败。"
+                : nodesFailed || tagsFailed
+                  ? "收藏详情加载失败。"
+                  : "最近访问加载失败，无法更新最近看排序。"}
+              {cards.length > 0 ? "仍显示已加载的收藏。" : "请重试加载。"}
+            </p>
+            <button
+              type="button"
+              onClick={retryLoad}
+              disabled={retrying}
+              className="shrink-0 text-accent hover:underline disabled:opacity-50"
+            >
+              {retrying ? "正在重试…" : "重试加载"}
+            </button>
+          </div>
+        </div>
+      )}
+      {cards.length > 0 && <ListFilterBar totalCount={filtered.length} />}
 
-      {favorites.length === 0 ? (
+      {favoritesQuery.isLoading ? (
+        <div
+          role="status"
+          className="px-6 lg:px-10 max-w-[1400px] mx-auto text-sm text-fg-muted"
+        >
+          正在加载收藏…
+        </div>
+      ) : detailsLoading && cards.length === 0 ? (
+        <div
+          role="status"
+          className="px-6 lg:px-10 max-w-[1400px] mx-auto text-sm text-fg-muted"
+        >
+          正在解析收藏…
+        </div>
+      ) : loadFailed && cards.length === 0 ? null : favorites.length === 0 ? (
         <EmptyState
           title="还没有收藏"
           description="在主页或文件夹页右键点击卡片，或者使用卡片右上角的星标收藏喜欢的图像。"
@@ -182,11 +250,19 @@ export default function Favorites() {
             </button>
           }
         />
-      ) : (nodesQuery.isLoading || tagsQuery.isLoading) &&
-        cards.length === 0 ? (
-        <div className="px-6 lg:px-10 max-w-[1400px] mx-auto text-sm text-fg-muted">
-          正在解析收藏…
-        </div>
+      ) : cards.length === 0 ? (
+        <EmptyState
+          title="收藏的内容暂不可用"
+          description="内容可能已移动，或媒体库尚未完成扫描。"
+          action={
+            <button
+              onClick={() => navigate("/")}
+              className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md border border-border hover:bg-bg-subtle text-sm"
+            >
+              去主页看看
+            </button>
+          }
+        />
       ) : filtered.length === 0 ? (
         <EmptyState
           title="没有匹配的收藏"

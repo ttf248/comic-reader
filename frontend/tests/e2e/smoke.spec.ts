@@ -549,3 +549,90 @@ for (const failure of ["history", "nodes"] as const) {
     await expect(alert).toHaveCount(0);
   });
 }
+
+for (const failure of ["favorites", "nodes", "tags"] as const) {
+  test(`收藏 ${failure} 读取失败不显示为空且可重试`, async ({ page }) => {
+    const nodes = await scannedNodes(page.request);
+    const album = nodes.find((node) => node.name === "sample-album");
+    expect(album).toBeDefined();
+    const resourceId = failure === "tags" ? "smart:测试" : album!.id;
+    if (failure === "tags") {
+      const tags = (await (await page.request.get("/api/tags")).json()) as {
+        page: { items: Array<{ tag: string }> };
+      };
+      expect(tags.page.items).toContainEqual(
+        expect.objectContaining({ tag: "测试" }),
+      );
+    }
+    const original = (await (
+      await page.request.get("/api/favorites")
+    ).json()) as {
+      favorites: string[];
+    };
+    expect(
+      (
+        await page.request.post("/api/favorites", { data: { resourceId } })
+      ).ok(),
+    ).toBeTruthy();
+    try {
+      let blocked = true;
+      const pathname = {
+        favorites: "/api/favorites",
+        nodes: "/api/library/nodes/query",
+        tags: "/api/tags",
+      }[failure];
+      await page.route(
+        (url) => url.pathname === pathname,
+        async (route) => {
+          if (blocked)
+            await route.fulfill({
+              status: 500,
+              json: { code: "test_unavailable", message: "unavailable" },
+            });
+          else await route.continue();
+        },
+      );
+      await page.goto("/favorites");
+      const alert = page.getByRole("alert");
+      await expect(alert).toContainText(
+        failure === "favorites" ? "收藏加载失败" : "收藏详情加载失败",
+        { timeout: 15_000 },
+      );
+      await expect(page.getByText("还没有收藏", { exact: true })).toHaveCount(
+        0,
+      );
+      await expect(
+        page.getByText("没有匹配的收藏", { exact: true }),
+      ).toHaveCount(0);
+      for (const theme of ["light", "dark"] as const) {
+        await page.emulateMedia({ colorScheme: theme });
+        await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+        await page.screenshot({
+          path: test
+            .info()
+            .outputPath(`favorites-${failure}-error-${theme}.png`),
+        });
+      }
+      blocked = false;
+      await alert
+        .getByRole("button", { name: "重试加载", exact: true })
+        .click();
+      const target =
+        failure === "tags"
+          ? `/tags/${encodeURIComponent("测试")}`
+          : `/albums/${album!.id}`;
+      await expect(page.locator(`a[href="${target}"]`).first()).toBeVisible();
+      await expect(alert).toHaveCount(0);
+    } finally {
+      if (!original.favorites.includes(resourceId)) {
+        expect(
+          (
+            await page.request.delete("/api/favorites", {
+              data: { resourceId },
+            })
+          ).ok(),
+        ).toBeTruthy();
+      }
+    }
+  });
+}

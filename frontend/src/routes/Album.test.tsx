@@ -64,6 +64,10 @@ describe("Album", () => {
     useSearchStore.getState().reset();
     vi.mocked(useFavorites).mockReturnValue({
       favorites: [],
+      isLoading: false,
+      isError: false,
+      isFetching: false,
+      refetch: vi.fn(),
       add: vi.fn(),
       remove: vi.fn(),
       toggle: vi.fn(),

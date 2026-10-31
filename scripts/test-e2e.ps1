@@ -28,6 +28,14 @@ try {
     [System.IO.File]::WriteAllBytes((Join-Path $sampleDir "page-$_.png"), $pngBytes)
   }
 
+  # 标签收藏需要由真实目录名解析，避免只验证前端模拟数据。
+  # 同标签至少两个相册才会生成智能合集。
+  1..2 | ForEach-Object {
+    $taggedDir = Join-Path (Join-Path $testRoot "media") "zz-[测试] tagged-$_"
+    New-Item -ItemType Directory -Path $taggedDir -Force | Out-Null
+    [System.IO.File]::WriteAllBytes((Join-Path $taggedDir "page.png"), $pngBytes)
+  }
+
   # 超过两页的轻量素材，验证三个虚拟媒体网格的分页边界和远距离跳转。
   foreach ($kind in @("images", "mixed", "videos")) {
     $pagedDir = Join-Path (Join-Path $testRoot "media") "sample-paged-$kind"
