@@ -889,9 +889,11 @@ test("主题令牌在明暗模式和六种强调色下保持边框及透明背�
       await page.getByRole("button", { name, exact: true }).click();
       await expect(root).toHaveAttribute("data-accent", accent);
       const expected = await renderedColors(root, ["--accent-soft", "--fg"]);
-      expect(
-        await renderedColors(activeNavigation, ["background-color", "color"]),
-      ).toEqual(expected);
+      await expect
+        .poll(() =>
+          renderedColors(activeNavigation, ["background-color", "color"]),
+        )
+        .toEqual(expected);
     }
     await page.screenshot({
       path: test.info().outputPath(`theme-tokens-${theme}.png`),
