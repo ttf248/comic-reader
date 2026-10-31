@@ -90,6 +90,16 @@ export function useMarkAlbumRead() {
   });
 }
 
+// 未读由没有图片活动表达；不能写入第 0 页来重置。
+export function useResetAlbumRead() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (albumId: string) => activityApi.removeImage(albumId),
+    onSuccess: (_data, albumId) =>
+      invalidateImageActivities(queryClient, albumId),
+  });
+}
+
 // 批量标记已读只落盘一次。
 export function useMarkAlbumsRead() {
   const queryClient = useQueryClient();

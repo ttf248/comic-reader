@@ -1,20 +1,11 @@
 import { forwardRef, useCallback, useState, type ReactNode } from "react";
 import { Virtuoso, VirtuosoGrid, type ListProps } from "react-virtuoso";
 import AlbumCard, { type CardData } from "./AlbumCard";
-import ContextMenu, { type AnyMenuItem } from "./ContextMenu";
+import AlbumContextMenu from "./AlbumContextMenu";
 import PropertiesDialog from "../common/PropertiesDialog";
-import { useAlbumActions } from "../../hooks/useAlbumActions";
-import { fsCapabilities } from "../../api/fs";
 import { useFavorites } from "../../hooks/useFavorites";
 import { decodeFavPath } from "../../utils/path";
 import { useUIStore, type ViewMode } from "../../store/uiStore";
-import {
-  ArrowRightLineIcon,
-  StarIcon,
-  ArrowUpRightIcon,
-  CopyIcon,
-  InfoIcon,
-} from "../common/Icon";
 
 export type { CardData } from "./AlbumCard";
 
@@ -42,7 +33,7 @@ const virtualListComponents = { List: VirtualList };
 // 网格 / 列表容器。
 // 跟随最近的滚动区域虚拟化：筛选结果可以很大，但只挂载视口附近的卡片。
 // 列表视图下，悬停时显示右侧 chevron。
-// 右键菜单统一：打开 / 收藏 / 资源管理器 / 复制路径 / 属性。
+// 右键菜单统一：打开 / 收藏 / 阅读标记 / 资源管理器 / 复制路径 / 属性。
 export default function AlbumGrid({
   items,
   empty,
@@ -73,7 +64,7 @@ export default function AlbumGrid({
   const viewMode = useUIStore((s) => s.viewMode);
   const mode = variant ?? viewMode;
 
-  const { favorites, toggle } = useFavorites();
+  const { favorites } = useFavorites();
 
   if (items.length === 0) return <>{empty}</>;
 
@@ -82,18 +73,15 @@ export default function AlbumGrid({
       it.variant === "smart" ? `smart:${it.title}` : decodeFavPath(it.to);
     const isFav = favorites.includes(favPath);
     return (
-      <div
+      <AlbumCard
+        data={{ ...it, isFavorite: isFav }}
+        variant={mode}
+        showLastSeen={showLastSeen}
         onContextMenu={(e) => {
           e.preventDefault();
           setMenu({ x: e.clientX, y: e.clientY, item: it });
         }}
-      >
-        <AlbumCard
-          data={{ ...it, isFavorite: isFav }}
-          variant={mode}
-          showLastSeen={showLastSeen}
-        />
-      </div>
+      />
     );
   };
 
@@ -122,7 +110,7 @@ export default function AlbumGrid({
         />
       )}
       {menu && (
-        <ContextMenuWrapper
+        <AlbumContextMenu
           item={menu.item}
           x={menu.x}
           y={menu.y}
@@ -131,18 +119,6 @@ export default function AlbumGrid({
             setPropsPath(p);
             setPropsOpen(true);
           }}
-          onToggleFavorite={() => {
-            const favPath =
-              menu.item.variant === "smart"
-                ? `smart:${menu.item.title}`
-                : decodeFavPath(menu.item.to);
-            toggle(favPath).catch(() => {});
-          }}
-          isFavorite={favorites.includes(
-            menu.item.variant === "smart"
-              ? `smart:${menu.item.title}`
-              : decodeFavPath(menu.item.to),
-          )}
         />
       )}
       <PropertiesDialog
@@ -151,80 +127,5 @@ export default function AlbumGrid({
         onClose={() => setPropsOpen(false)}
       />
     </div>
-  );
-}
-
-function ContextMenuWrapper({
-  item,
-  x,
-  y,
-  onClose,
-  onShowProperties,
-  onToggleFavorite,
-  isFavorite,
-}: {
-  item: CardData;
-  x: number;
-  y: number;
-  onClose: () => void;
-  onShowProperties: (path: string) => void;
-  onToggleFavorite: () => void;
-  isFavorite: boolean;
-}) {
-  const a = useAlbumActions(item, onShowProperties);
-  // 「属性」目前只支持 album(单张图元数据);collection 是文件夹、smart 是聚合,
-  // 都不是 image,后端 GetImageInfo 会拒。disabled 让用户看到入口但点不动,
-  // 比点了报错友好。
-  const isAlbum = item.variant === "album";
-  const items: AnyMenuItem[] = [
-    { id: "open", label: "打开", icon: <ArrowRightLineIcon size={12} /> },
-    {
-      id: "favorite",
-      label: isFavorite ? "取消收藏" : "收藏",
-      icon: <StarIcon size={12} />,
-    },
-    { id: "sep1", separator: true } as AnyMenuItem,
-    {
-      id: "explorer",
-      label: "在资源管理器中打开",
-      icon: <ArrowUpRightIcon size={12} />,
-      disabled: !fsCapabilities.allowOsOpen || item.variant === "smart",
-    },
-    { id: "copy", label: "复制路径", icon: <CopyIcon size={12} /> },
-    { id: "sep2", separator: true } as AnyMenuItem,
-    {
-      id: "properties",
-      label: "属性",
-      icon: <InfoIcon size={12} />,
-      disabled: !isAlbum,
-    },
-  ];
-  return (
-    <ContextMenu
-      x={x}
-      y={y}
-      items={items}
-      onSelect={(id) => {
-        switch (id) {
-          case "open":
-            a.open();
-            break;
-          case "favorite":
-            onToggleFavorite();
-            break;
-          case "explorer":
-            a.openInExplorer().catch(() => {});
-            break;
-          case "copy":
-            a.copyPath().catch(() => {});
-            break;
-          case "properties":
-            a.showProperties();
-            break;
-        }
-        onClose();
-      }}
-      onClose={onClose}
-    />
   );
 }

@@ -33,20 +33,27 @@ export function useLibraryManifest() {
   });
 }
 
-// 常驻侧边栏只需要未读计数，不能为 badge 下载跨根的完整相册摘要。
-// 活动写入成功后由 activity API 发出事件，使 badge 无需等缓存过期即可刷新。
-export function useLibraryActivitySummary() {
+// 应用常驻层统一同步阅读派生缓存；画廊和其他页面也会修改未打开列表的状态。
+export function useLibraryActivitySync() {
   const queryClient = useQueryClient();
   useEffect(() => {
     const refresh = () => {
-      void queryClient.invalidateQueries({
-        queryKey: libraryQueryKeys.activitySummary(),
-      });
+      for (const queryKey of [
+        libraryQueryKeys.activitySummary(),
+        libraryQueryKeys.dashboard(),
+        libraryQueryKeys.unreadAlbums(),
+      ]) {
+        // 失效未挂载页面的缓存，但只立即重新获取当前有订阅的数据。
+        void queryClient.invalidateQueries({ queryKey });
+      }
     };
     window.addEventListener(ACTIVITY_CHANGED_EVENT, refresh);
     return () => window.removeEventListener(ACTIVITY_CHANGED_EVENT, refresh);
   }, [queryClient]);
+}
 
+// 常驻侧边栏只需要未读计数，不能为 badge 下载跨根的完整相册摘要。
+export function useLibraryActivitySummary() {
   return useQuery({
     queryKey: libraryQueryKeys.activitySummary(),
     queryFn: () => libraryApi.activitySummary(),
@@ -56,17 +63,6 @@ export function useLibraryActivitySummary() {
 
 // 首页仪表盘包含有限未读预览和在读摘要；活动变更后立即刷新，避免进度卡滞后。
 export function useLibraryDashboard() {
-  const queryClient = useQueryClient();
-  useEffect(() => {
-    const refresh = () => {
-      void queryClient.invalidateQueries({
-        queryKey: libraryQueryKeys.dashboard(),
-      });
-    };
-    window.addEventListener(ACTIVITY_CHANGED_EVENT, refresh);
-    return () => window.removeEventListener(ACTIVITY_CHANGED_EVENT, refresh);
-  }, [queryClient]);
-
   return useQuery({
     queryKey: libraryQueryKeys.dashboard(),
     queryFn: () => libraryApi.dashboard(),
@@ -76,17 +72,6 @@ export function useLibraryDashboard() {
 
 // 未读页直接取得服务端筛好的相册，不能先下载全库再批量查询每条阅读活动。
 export function useLibraryUnreadAlbums() {
-  const queryClient = useQueryClient();
-  useEffect(() => {
-    const refresh = () => {
-      void queryClient.invalidateQueries({
-        queryKey: libraryQueryKeys.unreadAlbums(),
-      });
-    };
-    window.addEventListener(ACTIVITY_CHANGED_EVENT, refresh);
-    return () => window.removeEventListener(ACTIVITY_CHANGED_EVENT, refresh);
-  }, [queryClient]);
-
   return useQuery({
     queryKey: libraryQueryKeys.unreadAlbums(),
     queryFn: () => libraryApi.allUnreadAlbums(),

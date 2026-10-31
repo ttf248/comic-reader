@@ -23,8 +23,6 @@ export function useUnreadAlbums(): {
       (unreadItems ?? []).map((album) => ({
         ...nodeSummaryToCard(album, "u:"),
         isFavorite: favSet.has(album.id),
-        // 未读图片相册可直接从卡片右键标为已读；纯视频相册仍不伪造图片进度。
-        progress: { index: 0, total: album.imageCount ?? 0 },
       })),
     [unreadItems, favSet],
   );

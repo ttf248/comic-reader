@@ -5,6 +5,7 @@ import RouteLoading from "./components/common/RouteLoading";
 import AccessGate from "./components/auth/AccessGate";
 import ToastViewport from "./components/common/Toast";
 import { useTheme } from "./hooks/useTheme";
+import { useLibraryActivitySync } from "./hooks/useLibrary";
 
 const Home = lazy(() => import("./routes/Home"));
 const Recents = lazy(() => import("./routes/Recents"));
@@ -25,6 +26,7 @@ function lazyPage(Page: ComponentType) {
 
 export default function App() {
   useTheme();
+  useLibraryActivitySync();
   return (
     <AccessGate>
       <Routes>

@@ -1,10 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEventHandler } from "react";
 import { Link } from "react-router-dom";
-import { useQueryClient } from "@tanstack/react-query";
-import { activityApi } from "../../api/activity";
-import { useUIStore } from "../../store/uiStore";
-import { decodeFavPath } from "../../utils/path";
-import ContextMenu, { type AnyMenuItem } from "./ContextMenu";
+import AlbumContextMenu from "./AlbumContextMenu";
+import PropertiesDialog from "../common/PropertiesDialog";
 import {
   StarIcon,
   FolderIcon,
@@ -75,6 +72,8 @@ interface Props {
   variant?: ViewMode;
   /** 显示「上次 X · 看到 Y/Z」行（仅 Recents 列表需要）。 */
   showLastSeen?: boolean;
+  /** 列表容器统一持有菜单，独立卡片则在本地展示同一套操作。 */
+  onContextMenu?: MouseEventHandler<HTMLDivElement>;
 }
 
 // 通用卡片：网格（统一 4:5 封面）/ 列表（横向缩略图 + 元数据）。
@@ -88,10 +87,42 @@ export default function AlbumCard({
   data,
   variant = "grid",
   showLastSeen,
+  onContextMenu,
 }: Props) {
-  if (variant === "list")
-    return <ListCard data={data} showLastSeen={showLastSeen} />;
-  return <GridCard data={data} showLastSeen={showLastSeen} />;
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
+  const [propertiesId, setPropertiesId] = useState<string | null>(null);
+  return (
+    <div
+      onContextMenu={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (onContextMenu) onContextMenu(event);
+        else setMenu({ x: event.clientX, y: event.clientY });
+      }}
+    >
+      {variant === "list" ? (
+        <ListCard data={data} showLastSeen={showLastSeen} />
+      ) : (
+        <GridCard data={data} showLastSeen={showLastSeen} />
+      )}
+      {menu && (
+        <AlbumContextMenu
+          item={data}
+          x={menu.x}
+          y={menu.y}
+          onClose={() => setMenu(null)}
+          onShowProperties={setPropertiesId}
+        />
+      )}
+      {propertiesId && (
+        <PropertiesDialog
+          open
+          absPath={propertiesId}
+          onClose={() => setPropertiesId(null)}
+        />
+      )}
+    </div>
+  );
 }
 
 // 卡片底部"X 张 / Y 个视频 / X 张 · Y 个视频"渲染。
@@ -137,62 +168,6 @@ function GridCard({
   // 重要：仅 album 变体显示；智能集合 / 集合不适用。
   const isFresh = data.variant === "album" && isUnread(data.progress);
 
-  // 右键菜单：仅 album 变体有「标记为已读」语义（集合/smart 是聚合,
-  // 它们的 progress 实际是子相册聚合,不能"标已读"）。
-  // 关键：data.to 是 /albums/<encoded> 路由形式，需要 decodeFavPath 还原
-  // 成不透明相册 ID，再写入图片活动。
-  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
-  const queryClient = useQueryClient();
-  const pushToast = useUIStore((s) => s.pushToast);
-  const canMarkRead =
-    data.variant === "album" &&
-    !!data.progress &&
-    data.progress.total > 0 &&
-    !isFinished;
-  const canUnmarkRead = data.variant === "album" && isFinished;
-  const onContextMenu = (e: React.MouseEvent) => {
-    if (data.variant !== "album") return;
-    // 没「标记/取消已读」也没有「右键设置封面」之类的菜单项,不弹。
-    if (!canMarkRead && !canUnmarkRead) return;
-    e.preventDefault();
-    setMenu({ x: e.clientX, y: e.clientY });
-  };
-  const albumId = data.variant === "album" ? decodeFavPath(data.to) : null;
-  const onMarkRead = () => {
-    if (!albumId || !data.progress) return;
-    const total = data.progress.total;
-    activityApi
-      .setImage(albumId, Math.max(0, total - 1), total)
-      .then(() => {
-        // 活动 API 会通知首页仪表盘刷新；这里同时让完整列表和详情的
-        // 活动查询缓存失效，保证 Unread / Recents / Favorites 同步更新。
-        queryClient.invalidateQueries({
-          queryKey: ["activity-query", "image"],
-        });
-        queryClient.invalidateQueries({
-          queryKey: ["activity", "image", albumId],
-        });
-        pushToast({ kind: "success", message: "已标记为已读", ttl: 1200 });
-      })
-      .catch(() => pushToast({ kind: "error", message: "标记失败" }));
-  };
-  const onUnmarkRead = () => {
-    if (!albumId) return;
-    // 未读由「没有进度记录」表达；index=0 是已经打开第一张，不能拿来重置。
-    activityApi
-      .removeImage(albumId)
-      .then(() => {
-        queryClient.invalidateQueries({
-          queryKey: ["activity-query", "image"],
-        });
-        queryClient.invalidateQueries({
-          queryKey: ["activity", "image", albumId],
-        });
-        pushToast({ kind: "success", message: "已重置为未读", ttl: 1200 });
-      })
-      .catch(() => pushToast({ kind: "error", message: "重置失败" }));
-  };
-
   // 悬停预览：350ms 后弹出，移出卡片或预览延迟 150ms 关闭。
   // （延迟是为了让用户能从卡片顺利移到预览上，预览是 portal 元素，
   //   鼠标在 card→preview 的过渡中会先触发 card mouseleave。）
@@ -235,7 +210,6 @@ function GridCard({
       <Link
         to={data.to}
         aria-label={`打开${data.variant === "album" ? "相册" : data.variant === "collection" ? "集合" : "智能视图"}“${data.displayTitle ?? data.title}”`}
-        onContextMenu={onContextMenu}
         className="group block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
       >
         <div
@@ -413,37 +387,6 @@ function GridCard({
             }
           }}
           onPointerLeave={onLeave}
-        />
-      )}
-      {/* 右键菜单:仅 album 变体有"标记/取消已读",集合/smart 不弹。 */}
-      {menu && data.variant === "album" && (
-        <ContextMenu
-          x={menu.x}
-          y={menu.y}
-          items={
-            [
-              canMarkRead
-                ? { id: "mark-read", label: "标记为已读", icon: <CheckIcon /> }
-                : {
-                    id: "mark-read-disabled",
-                    label: "标记为已读",
-                    disabled: true,
-                  },
-              canUnmarkRead
-                ? { id: "unmark-read", label: "取消已读", icon: <RewindIcon /> }
-                : {
-                    id: "unmark-read-disabled",
-                    label: "取消已读",
-                    disabled: true,
-                  },
-            ] satisfies AnyMenuItem[]
-          }
-          onSelect={(id) => {
-            setMenu(null);
-            if (id === "mark-read") onMarkRead();
-            else if (id === "unmark-read") onUnmarkRead();
-          }}
-          onClose={() => setMenu(null)}
         />
       )}
     </div>

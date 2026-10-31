@@ -1645,3 +1645,159 @@ test("排序选项支持键盘确认取消和自然移出焦点", async ({ page 
   await expect(trigger).toBeFocused();
   await expect(trigger).toContainText("按最近改");
 });
+
+for (const mode of ["grid", "list"] as const) {
+  test(`${mode} 单图相册保持未读并可标记和取消已读`, async ({ page }) => {
+    const nodes = await scannedNodes(page.request);
+    const album = nodes.find((node) => node.name === taggedSortPrefix + "A")!;
+    expect(album).toBeDefined();
+    const activityPath = `/api/activity?albumId=${album.id}&mediaKind=image`;
+    const originalResponse = await page.request.get(activityPath);
+    expect([200, 404]).toContain(originalResponse.status());
+    const originalActivity = originalResponse.ok()
+      ? ((await originalResponse.json()) as {
+          pageIndex: number;
+          pageCount: number;
+        })
+      : null;
+    const originalPrefs = (await (
+      await page.request.get("/api/prefs")
+    ).json()) as { favorites: string[] };
+    try {
+      expect((await page.request.delete(activityPath)).ok()).toBeTruthy();
+      expect(
+        (
+          await page.request.post("/api/favorites", {
+            data: { resourceId: album.id },
+          })
+        ).ok(),
+      ).toBeTruthy();
+      await page.goto("/unread");
+      await page.getByRole("combobox").fill(album.name);
+      await page
+        .getByRole("button", {
+          name: mode === "grid" ? "网格视图" : "列表视图",
+          exact: true,
+        })
+        .click();
+      const card = page.locator(
+        `main [data-virtuoso-scroller] a[href="/albums/${album.id}"]`,
+      );
+      await expect(card).toBeVisible();
+      await expect(card.getByText("已读", { exact: true })).toHaveCount(0);
+      await expect(card.getByText("100%", { exact: true })).toHaveCount(0);
+      if (mode === "grid")
+        await expect(card.getByText("新", { exact: true })).toBeVisible();
+      const menu = page.getByRole("menu", { name: "上下文菜单" });
+      await card.click({ button: "right" });
+      await expect(menu).toHaveCount(1);
+      await expect(
+        menu.getByRole("menuitem", { name: "打开", exact: true }),
+      ).toBeEnabled();
+      await expect(
+        menu.getByRole("menuitem", { name: "取消收藏", exact: true }),
+      ).toBeEnabled();
+      await expect(
+        menu.getByRole("menuitem", { name: "标记为已读", exact: true }),
+      ).toBeEnabled();
+      await expect(
+        menu.getByRole("menuitem", { name: "取消已读", exact: true }),
+      ).toBeDisabled();
+
+      if (mode === "grid") {
+        for (const theme of ["light", "dark"] as const) {
+          await page.emulateMedia({
+            colorScheme: theme,
+            reducedMotion: "reduce",
+          });
+          await expect(page.locator("html")).toHaveAttribute(
+            "data-theme",
+            theme,
+          );
+          await page.mouse.move(0, 0);
+          await page.screenshot({
+            path: test.info().outputPath(`unread-menu-${theme}.png`),
+          });
+        }
+        let blocked = true;
+        await page.route("**/api/activity", async (route) => {
+          if (!blocked || route.request().method() !== "PUT")
+            return route.continue();
+          await route.fulfill({
+            status: 500,
+            json: { code: "test_unavailable", message: "unavailable" },
+          });
+        });
+        await menu
+          .getByRole("menuitem", { name: "标记为已读", exact: true })
+          .click();
+        await expect(page.getByText("标记失败", { exact: true })).toBeVisible();
+        await expect(card).toBeVisible();
+        expect((await page.request.get(activityPath)).status()).toBe(404);
+        blocked = false;
+        await card.click({ button: "right" });
+      }
+      await menu
+        .getByRole("menuitem", { name: "标记为已读", exact: true })
+        .click();
+      await expect(
+        page.getByText("已标记为已读", { exact: true }),
+      ).toBeVisible();
+      await expect(card).toHaveCount(0);
+      const marked = await page.request.get(activityPath);
+      expect(marked.ok()).toBeTruthy();
+      expect(await marked.json()).toMatchObject({
+        pageIndex: 0,
+        pageCount: 1,
+        status: "completed",
+      });
+
+      await page.getByRole("link", { name: "收藏", exact: true }).click();
+      await expect(
+        card.getByText("已读", { exact: true }).first(),
+      ).toBeVisible();
+      await card.click({ button: "right" });
+      await expect(menu).toHaveCount(1);
+      await expect(
+        menu.getByRole("menuitem", { name: "标记为已读", exact: true }),
+      ).toBeDisabled();
+      await menu
+        .getByRole("menuitem", { name: "取消已读", exact: true })
+        .click();
+      await expect(
+        page.getByText("已重置为未读", { exact: true }),
+      ).toBeVisible();
+      await expect(card.getByText("已读", { exact: true })).toHaveCount(0);
+      expect((await page.request.get(activityPath)).status()).toBe(404);
+      await page.getByRole("link", { name: /^未读/ }).click();
+      await expect(card).toBeVisible();
+      await expect(card.getByText("已读", { exact: true })).toHaveCount(0);
+    } finally {
+      if (originalActivity) {
+        expect(
+          (
+            await page.request.put("/api/activity", {
+              data: {
+                albumId: album.id,
+                mediaKind: "image",
+                pageIndex: originalActivity.pageIndex,
+                pageCount: originalActivity.pageCount,
+              },
+            })
+          ).ok(),
+        ).toBeTruthy();
+      } else {
+        expect((await page.request.delete(activityPath)).ok()).toBeTruthy();
+      }
+      if (!originalPrefs.favorites.includes(album.id)) {
+        expect(
+          (
+            await page.request.delete("/api/favorites", {
+              data: { resourceId: album.id },
+            })
+          ).ok(),
+        ).toBeTruthy();
+      }
+    }
+  });
+}

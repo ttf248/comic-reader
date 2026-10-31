@@ -58,15 +58,22 @@ describe("useUnreadAlbums", () => {
     seedUnread([]);
   });
 
-  it("将服务端未读摘要直接转换为可标记已读的卡片", () => {
-    seedUnread([baseAlbum("a_1", "A"), baseAlbum("a_2", "B")]);
+  it.each([1, 10])(
+    "%i 张图片的未读摘要不伪造已开始的阅读进度",
+    (imageCount) => {
+      seedUnread([baseAlbum("a_1", "A", imageCount), baseAlbum("a_2", "B")]);
 
-    const { result } = renderHook(() => useUnreadAlbums());
+      const { result } = renderHook(() => useUnreadAlbums());
 
-    expect(result.current.count).toBe(2);
-    expect(result.current.cards.map((card) => card.title)).toEqual(["A", "B"]);
-    expect(result.current.cards[0]?.progress).toEqual({ index: 0, total: 10 });
-  });
+      expect(result.current.count).toBe(2);
+      expect(result.current.cards.map((card) => card.title)).toEqual([
+        "A",
+        "B",
+      ]);
+      expect(result.current.cards[0]?.imageCount).toBe(imageCount);
+      expect(result.current.cards[0]?.progress).toBeUndefined();
+    },
+  );
 
   it("全库总数来自 manifest，未读总数来自专用端点", () => {
     seedUnread([baseAlbum("a_1", "A")], 12);
