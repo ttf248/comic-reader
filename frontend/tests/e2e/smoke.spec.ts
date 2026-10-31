@@ -2875,3 +2875,110 @@ test("设置目录选择可分页和错误重试，完整保留 POSIX 路径", a
   await expect.poll(() => writes).toEqual([{ mediaRoots: [selected] }]);
   await expect(rootInput).toHaveValue(selected);
 });
+
+test("设置缓存与静态目录按 Esc 撤销，Enter 和失焦只提交确认内容", async ({
+  page,
+}) => {
+  const config = (await (
+    await page.request.get("/api/config")
+  ).json()) as Record<string, unknown>;
+  const current = { ...config };
+  const writes: Record<string, unknown>[] = [];
+  await page.route("**/api/config", async (route) => {
+    if (route.request().method() !== "PUT") return route.continue();
+    const patch = route.request().postDataJSON() as Record<string, unknown>;
+    writes.push(patch);
+    Object.assign(current, patch);
+    await route.fulfill({
+      json: {
+        ok: true,
+        config: current,
+        requiresRestart: [],
+        mediaRootsChanged: false,
+      },
+    });
+  });
+  await page.goto("/settings");
+  for (const field of ["cacheDir", "staticDir"] as const) {
+    const original = String(config[field]);
+    const placeholder = await page
+      .locator(`input[value=${JSON.stringify(original)}]`)
+      .getAttribute("placeholder");
+    const input = page.getByPlaceholder(placeholder!, { exact: true });
+    const before = writes.length;
+    await input.fill(original + "_cancelled");
+    await input.press("Escape");
+    await expect(input).toHaveValue(original);
+    await expect(input).not.toBeFocused();
+    expect(writes).toHaveLength(before);
+    await input.fill(original + "_confirmed");
+    await input.press("Enter");
+    await expect.poll(() => writes.length).toBe(before + 1);
+    expect(writes[before]).toEqual({ [field]: original + "_confirmed" });
+    await expect(input).toHaveValue(original + "_confirmed");
+    await input.fill(original + "_blurred");
+    await input.press("Tab");
+    await expect.poll(() => writes.length).toBe(before + 2);
+    expect(writes[before + 1]).toEqual({ [field]: original + "_blurred" });
+  }
+  expect(writes).toHaveLength(4);
+  expect(JSON.stringify(writes)).not.toContain("_cancelled");
+});
+
+test("设置媒体根按 Esc 撤销整组未提交内容并保留已经确认的自动保存", async ({
+  page,
+}) => {
+  const config = (await (await page.request.get("/api/config")).json()) as {
+    mediaRoots: string[];
+    cacheDir: string;
+  };
+  const roots = [config.mediaRoots[0], config.cacheDir];
+  let current = { ...config, mediaRoots: roots };
+  const writes: { mediaRoots: string[] }[] = [];
+  await page.route("**/api/config", async (route) => {
+    if (route.request().method() === "PUT") {
+      const patch = route.request().postDataJSON() as { mediaRoots: string[] };
+      writes.push(patch);
+      current = { ...current, ...patch };
+      return route.fulfill({
+        json: {
+          ok: true,
+          config: current,
+          requiresRestart: [],
+          mediaRootsChanged: false,
+        },
+      });
+    }
+    return route.fulfill({ json: current });
+  });
+  await page.clock.install();
+  await page.goto("/settings");
+  const inputs = page.getByPlaceholder("E:\\照片 或 /home/user/pics");
+  await inputs.nth(0).fill(roots[0] + "_cancelled");
+  await inputs.nth(1).fill(roots[1] + "_cancelled");
+  await page.getByRole("button", { name: "添加根目录", exact: true }).click();
+  await inputs.nth(2).press("Escape");
+  await expect(inputs).toHaveCount(2);
+  await expect(inputs.nth(0)).toHaveValue(roots[0]);
+  await expect(inputs.nth(1)).toHaveValue(roots[1]);
+  // 推进超过自动保存窗口，确认取消的旧定时结果不会发出写请求。
+  await page.clock.runFor(700);
+  expect(writes).toEqual([]);
+
+  const saved = roots[0] + "_confirmed";
+  await inputs.nth(0).fill(saved);
+  const acknowledged = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PUT" &&
+      new URL(response.url()).pathname === "/api/config",
+  );
+  await page.clock.runFor(500);
+  expect((await acknowledged).ok()).toBe(true);
+  await expect.poll(() => writes).toEqual([{ mediaRoots: [saved, roots[1]] }]);
+  await expect(inputs.nth(0)).toHaveValue(saved);
+  await inputs.nth(0).fill(roots[0] + "_cancelled_again");
+  await inputs.nth(0).press("Escape");
+  await expect(inputs.nth(0)).toHaveValue(saved);
+  await page.clock.runFor(700);
+  expect(writes).toHaveLength(1);
+});

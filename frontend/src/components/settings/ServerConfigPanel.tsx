@@ -397,6 +397,16 @@ export default function ServerConfigPanel() {
     flush({ [key]: v } as ServerConfigPatch);
   }
 
+  function cancelPathField(key: keyof ServerConfigPatch) {
+    // 先同步失效待提交引用，避免随后的 blur 或旧 debounce 再次保存。
+    delete pathDirtyRef.current[key];
+    setDraft((current) => {
+      const next = { ...current };
+      delete next[key];
+      return next;
+    });
+  }
+
   if (isLoading) {
     return <div className="text-sm text-fg-muted">加载中…</div>;
   }
@@ -458,6 +468,7 @@ export default function ServerConfigPanel() {
               );
             }}
             onOpenInExplorer={openConfiguredDirectory}
+            onCancel={() => cancelPathField("mediaRoots")}
           />
         </div>
       </div>
@@ -619,6 +630,7 @@ export default function ServerConfigPanel() {
                     }
                   }}
                   onCommit={isPath ? () => flushPathField(def.key) : undefined}
+                  onCancel={() => cancelPathField(def.key)}
                 />
               );
             })}
@@ -668,12 +680,14 @@ function MediaRootsField({
   allowOsOpen,
   onChange,
   onOpenInExplorer,
+  onCancel,
 }: {
   roots: string[];
   status: FieldStatus;
   allowOsOpen: boolean;
   onChange: (next: string[]) => void;
   onOpenInExplorer: (path: string) => void;
+  onCancel: () => void;
 }) {
   // 始终渲染一个空槽位(即使当前为空),方便用户添加第一个根
   const list = roots.length === 0 ? [""] : roots;
@@ -706,7 +720,8 @@ function MediaRootsField({
         <div className="flex flex-col">
           <span className="text-fg">图像根目录</span>
           <span className="text-xs text-fg-subtle mt-0.5">
-            多个目录都会扫描;相册按"来源"分组,badge 显示来自哪个根
+            多个目录都会扫描，相册按来源分组，徽标显示所属目录。按 Esc
+            撤销整组尚未提交的修改。
           </span>
         </div>
         <StatusBadge status={status} />
@@ -725,6 +740,7 @@ function MediaRootsField({
             }
             onPick={(picked) => updateAt(i, picked)}
             onChange={(nv) => updateAt(i, nv)}
+            onCancel={onCancel}
             removable={roots.length > 1}
             onRemove={() => removeAt(i)}
           />
@@ -753,6 +769,7 @@ function ConfigRow({
   allowOsOpen,
   onChange,
   onCommit,
+  onCancel,
 }: {
   def: FieldDef;
   value: string | number | boolean;
@@ -762,6 +779,7 @@ function ConfigRow({
   allowOsOpen: boolean;
   onChange: (v: string | number | boolean) => void;
   onCommit?: () => void;
+  onCancel: () => void;
 }) {
   return (
     <div className="flex items-center justify-between gap-4 px-4 py-3 text-sm">
@@ -786,6 +804,7 @@ function ConfigRow({
             placeholder={def.hint ?? "路径"}
             onChange={(v) => onChange(v)}
             onCommit={onCommit}
+            onCancel={onCancel}
             onOpenInExplorer={
               value && String(value).length > 0 && allowOsOpen
                 ? () => openConfiguredDirectory(String(value))
@@ -954,6 +973,8 @@ interface PathFieldProps {
   placeholder?: string;
   onChange: (v: string) => void;
   onCommit?: () => void;
+  /** 撤销当前配置字段未提交的草稿；媒体根以整组数组为单位 */
+  onCancel: () => void;
   /** 点击「在资源管理器中打开」时调用(undefined 时按钮隐藏) */
   onOpenInExplorer?: () => void;
   /** 用户确认服务端返回的完整目录路径后回调 */
@@ -972,6 +993,7 @@ function PathField({
   placeholder,
   onChange,
   onCommit,
+  onCancel,
   onOpenInExplorer,
   onPick,
   compact,
@@ -998,15 +1020,25 @@ function PathField({
         onChange={(e) => onChange(e.target.value)}
         onBlur={commit}
         onKeyDown={(e) => {
+          if (e.nativeEvent.isComposing) return;
           if (e.key === "Enter") {
             e.preventDefault();
             (e.currentTarget as HTMLInputElement).blur();
           } else if (e.key === "Escape") {
-            // 取消:不 commit,恢复原值(让 onBlur 仍触发但内容未变)
-            (e.currentTarget as HTMLInputElement).blur();
+            e.preventDefault();
+            e.stopPropagation();
+            // 清掉草稿后再失焦，onBlur 将没有待提交的内容。
+            onCancel();
+            e.currentTarget.blur();
           }
         }}
         placeholder={placeholder}
+        title={
+          onCommit
+            ? "Enter 或移开焦点保存；Esc 撤销未提交修改"
+            : "停止输入后自动保存；Esc 撤销整组未提交修改"
+        }
+        aria-keyshortcuts="Enter Escape"
         className="flex-1 min-w-0 bg-bg-subtle border border-border-faint rounded-md h-8 px-2.5 text-sm font-mono focus:outline-none focus:border-accent"
       />
       {/* 「选择目录」 */}

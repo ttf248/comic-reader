@@ -341,6 +341,165 @@ describe("ServerConfigPanel", () => {
     });
   });
 
+  it.each(["cacheDir", "staticDir"] as const)(
+    "%s 按 Esc 撤销未保存编辑，之后 Enter 和失焦仍可正常保存",
+    async (key) => {
+      renderPanel();
+      const input = await screen.findByDisplayValue(baseConfig[key]);
+      act(() => input.focus());
+      fireEvent.change(input, { target: { value: "/cancelled/path" } });
+      fireEvent.keyDown(input, { key: "Escape" });
+      expect(input).toHaveValue(baseConfig[key]);
+      expect(configApi.update).not.toHaveBeenCalled();
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 700));
+      });
+      expect(configApi.update).not.toHaveBeenCalled();
+
+      act(() => input.focus());
+      fireEvent.change(input, { target: { value: "/confirmed/path" } });
+      fireEvent.keyDown(input, { key: "Enter" });
+      await waitFor(() =>
+        expect(configApi.update).toHaveBeenCalledWith({
+          [key]: "/confirmed/path",
+        }),
+      );
+      fireEvent.blur(input);
+      expect(configApi.update).toHaveBeenCalledOnce();
+
+      act(() => input.focus());
+      fireEvent.change(input, { target: { value: "/blurred/path" } });
+      fireEvent.blur(input);
+      await waitFor(() =>
+        expect(configApi.update).toHaveBeenLastCalledWith({
+          [key]: "/blurred/path",
+        }),
+      );
+      expect(configApi.update).toHaveBeenCalledTimes(2);
+    },
+  );
+
+  it("媒体根按 Esc 撤销整组未提交修改及空槽位，保留其他设置草稿", async () => {
+    const roots = [baseConfig.mediaRoots[0], "/photos/second"];
+    vi.mocked(configApi.get).mockResolvedValue({
+      ...baseConfig,
+      mediaRoots: roots,
+    });
+    vi.mocked(configApi.update).mockResolvedValue({
+      ok: true,
+      config: { ...baseConfig, mediaRoots: roots, port: 9090 },
+      requiresRestart: [],
+      mediaRootsChanged: false,
+    });
+    renderPanel();
+    const inputs = await screen.findAllByPlaceholderText(
+      "E:\\照片 或 /home/user/pics",
+    );
+    fireEvent.change(await screen.findByDisplayValue("8080"), {
+      target: { value: "9090" },
+    });
+    fireEvent.change(inputs[0], { target: { value: "/cancelled/first" } });
+    fireEvent.change(inputs[1], { target: { value: "/cancelled/second" } });
+    fireEvent.click(screen.getByRole("button", { name: "添加根目录" }));
+    const added = screen.getAllByPlaceholderText(
+      "E:\\照片 或 /home/user/pics",
+    )[2];
+    act(() => added.focus());
+    fireEvent.keyDown(added, { key: "Escape" });
+    expect(
+      screen.getAllByPlaceholderText("E:\\照片 或 /home/user/pics"),
+    ).toHaveLength(2);
+    expect(inputs[0]).toHaveValue(roots[0]);
+    expect(inputs[1]).toHaveValue(roots[1]);
+    await waitFor(
+      () => expect(configApi.update).toHaveBeenCalledWith({ port: 9090 }),
+      { timeout: 1500 },
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 700));
+    });
+    expect(configApi.update).toHaveBeenCalledOnce();
+  });
+
+  it("Esc 恢复最新确认的媒体根，不会回滚已经完成的自动保存", async () => {
+    vi.mocked(configApi.update).mockResolvedValue({
+      ok: true,
+      config: { ...baseConfig, mediaRoots: ["/photos/saved"] },
+      requiresRestart: [],
+      mediaRootsChanged: false,
+    });
+    const { queryClient } = renderPanel();
+    const input = await screen.findByPlaceholderText(
+      "E:\\照片 或 /home/user/pics",
+    );
+    fireEvent.change(input, { target: { value: "/photos/saved" } });
+    await waitFor(
+      () =>
+        expect(queryClient.getQueryData(["server-config"])).toEqual(
+          expect.objectContaining({ mediaRoots: ["/photos/saved"] }),
+        ),
+      { timeout: 1500 },
+    );
+    act(() => input.focus());
+    fireEvent.change(input, { target: { value: "/photos/cancelled" } });
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(input).toHaveValue("/photos/saved");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 700));
+    });
+    expect(configApi.update).toHaveBeenCalledOnce();
+  });
+
+  it("Esc 不回滚已经发出、随后才确认的媒体根保存", async () => {
+    let release:
+      | ((result: Awaited<ReturnType<typeof configApi.update>>) => void)
+      | undefined;
+    vi.mocked(configApi.update).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    renderPanel();
+    const input = await screen.findByPlaceholderText(
+      "E:\\照片 或 /home/user/pics",
+    );
+    fireEvent.change(input, { target: { value: "/photos/submitted" } });
+    await waitFor(() => expect(configApi.update).toHaveBeenCalledOnce(), {
+      timeout: 1500,
+    });
+    act(() => input.focus());
+    fireEvent.change(input, { target: { value: "/photos/cancelled" } });
+    fireEvent.keyDown(input, { key: "Escape" });
+    await act(async () => {
+      release?.({
+        ok: true,
+        config: { ...baseConfig, mediaRoots: ["/photos/submitted"] },
+        requiresRestart: [],
+        mediaRootsChanged: false,
+      });
+    });
+    expect(input).toHaveValue("/photos/submitted");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 700));
+    });
+    expect(configApi.update).toHaveBeenCalledOnce();
+  });
+
+  it.each(["Enter", "Escape"])(
+    "中文输入法组合期间的 %s 不保存或取消路径编辑",
+    async (key) => {
+      renderPanel();
+      const input = await screen.findByDisplayValue(baseConfig.cacheDir);
+      act(() => input.focus());
+      fireEvent.change(input, { target: { value: "/photos/输入中" } });
+      fireEvent.keyDown(input, { key, isComposing: true });
+      expect(input).toHaveFocus();
+      expect(input).toHaveValue("/photos/输入中");
+      expect(configApi.update).not.toHaveBeenCalled();
+    },
+  );
+
   it("媒体根目录停止输入后自动保存并提示重新扫描", async () => {
     vi.mocked(configApi.update).mockResolvedValue({
       ok: true,
