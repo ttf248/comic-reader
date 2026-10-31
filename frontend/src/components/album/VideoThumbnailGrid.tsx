@@ -56,31 +56,33 @@ export default function VideoThumbnailGrid({
         const name = info?.name ?? `视频 ${index + 1}`;
         const duration = info?.duration;
         return (
-          <button
-            type="button"
-            onClick={() => onOpen(index)}
-            className="group relative w-full aspect-[3/4] bg-bg-subtle rounded overflow-hidden transition-all hover:ring-1 hover:ring-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-            title={name}
-            aria-label={`播放${name}`}
-          >
+          <div className="group relative w-full aspect-[3/4] bg-bg-subtle rounded overflow-hidden">
             <VideoCoverImage videoPath={video} alt={name} loading="lazy" />
-            <div className="absolute top-1.5 right-1.5 bg-bg-elevated/90 backdrop-blur rounded-md p-1 shadow-sm group-hover:scale-110 transition-transform">
-              <PlayFilledIcon size={10} className="text-accent" />
-            </div>
-            <div className="absolute bottom-1.5 right-1.5 text-[10px] bg-bg-elevated/85 backdrop-blur px-1.5 py-0.5 rounded text-fg-muted tabular-nums">
-              {index + 1}
-            </div>
-            <div className="absolute bottom-0 inset-x-0 px-1.5 py-1 bg-gradient-to-t from-black/60 to-transparent">
-              <div className="text-[10px] text-white/90 truncate flex items-center gap-1.5">
-                <span className="truncate">{name}</span>
-                {duration && duration > 0 && (
-                  <span className="shrink-0 text-white/70 tabular-nums">
-                    {formatDuration(duration)}
-                  </span>
-                )}
+            <button
+              type="button"
+              onClick={() => onOpen(index)}
+              className="absolute inset-0 rounded transition-all hover:ring-1 hover:ring-inset hover:ring-border-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
+              title={name}
+              aria-label={`播放${name}`}
+            >
+              <div className="absolute top-1.5 right-1.5 bg-bg-elevated/90 backdrop-blur rounded-md p-1 shadow-sm group-hover:scale-110 transition-transform">
+                <PlayFilledIcon size={10} className="text-accent" />
               </div>
-            </div>
-          </button>
+              <div className="absolute bottom-1.5 right-1.5 text-[10px] bg-bg-elevated/85 backdrop-blur px-1.5 py-0.5 rounded text-fg-muted tabular-nums">
+                {index + 1}
+              </div>
+              <div className="absolute bottom-0 inset-x-0 px-1.5 py-1 bg-gradient-to-t from-black/60 to-transparent">
+                <div className="text-[10px] text-white/90 truncate flex items-center gap-1.5">
+                  <span className="truncate">{name}</span>
+                  {duration && duration > 0 && (
+                    <span className="shrink-0 text-white/70 tabular-nums">
+                      {formatDuration(duration)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </button>
+          </div>
         );
       }}
     />

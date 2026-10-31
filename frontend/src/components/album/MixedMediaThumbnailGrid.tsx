@@ -85,15 +85,10 @@ export default function MixedMediaThumbnailGrid({
         const duration = info?.duration;
 
         return (
-          <button
-            type="button"
-            onClick={() => onOpen(item)}
-            onContextMenu={(event) => onContextMenu?.(item, event)}
-            className={`group relative w-full aspect-[3/4] bg-bg-subtle rounded overflow-hidden transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+          <div
+            className={`group relative w-full aspect-[3/4] bg-bg-subtle rounded overflow-hidden ${
               isCurrent ? "ring-2 ring-accent" : isPast ? "opacity-70" : ""
             }`}
-            title={name}
-            aria-label={isImage ? `打开${name}` : `播放${name}`}
           >
             {isImage ? (
               <img
@@ -106,32 +101,41 @@ export default function MixedMediaThumbnailGrid({
             ) : (
               <VideoCoverImage videoPath={item.id} alt={name} loading="lazy" />
             )}
-            {!isImage && (
-              <div className="absolute top-1.5 right-1.5 bg-bg-elevated/90 backdrop-blur rounded-md p-1 shadow-sm group-hover:scale-110 transition-transform">
-                <PlayFilledIcon size={10} className="text-accent" />
-              </div>
-            )}
-            {isCurrent && (
-              <div className="absolute top-1.5 left-1.5 bg-accent text-accent-fg text-[10px] font-medium px-1.5 py-0.5 rounded">
-                当前
-              </div>
-            )}
-            <div className="absolute bottom-1.5 right-1.5 text-[10px] bg-bg-elevated/85 backdrop-blur px-1.5 py-0.5 rounded text-fg-muted tabular-nums">
-              {isImage ? item.kindIndex + 1 : `视频 ${item.kindIndex + 1}`}
-            </div>
-            {!isImage && (
-              <div className="absolute bottom-0 inset-x-0 px-1.5 py-1 bg-gradient-to-t from-black/60 to-transparent">
-                <div className="text-[10px] text-white/90 truncate flex items-center gap-1.5">
-                  <span className="truncate">{name}</span>
-                  {duration !== undefined && duration > 0 && (
-                    <span className="shrink-0 text-white/70 tabular-nums">
-                      {formatDuration(duration)}
-                    </span>
-                  )}
+            <button
+              type="button"
+              onClick={() => onOpen(item)}
+              onContextMenu={(event) => onContextMenu?.(item, event)}
+              className="absolute inset-0 rounded transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
+              title={name}
+              aria-label={isImage ? `打开${name}` : `播放${name}`}
+            >
+              {!isImage && (
+                <div className="absolute top-1.5 right-1.5 bg-bg-elevated/90 backdrop-blur rounded-md p-1 shadow-sm group-hover:scale-110 transition-transform">
+                  <PlayFilledIcon size={10} className="text-accent" />
                 </div>
+              )}
+              {isCurrent && (
+                <div className="absolute top-1.5 left-1.5 bg-accent text-accent-fg text-[10px] font-medium px-1.5 py-0.5 rounded">
+                  当前
+                </div>
+              )}
+              <div className="absolute bottom-1.5 right-1.5 text-[10px] bg-bg-elevated/85 backdrop-blur px-1.5 py-0.5 rounded text-fg-muted tabular-nums">
+                {isImage ? item.kindIndex + 1 : `视频 ${item.kindIndex + 1}`}
               </div>
-            )}
-          </button>
+              {!isImage && (
+                <div className="absolute bottom-0 inset-x-0 px-1.5 py-1 bg-gradient-to-t from-black/60 to-transparent">
+                  <div className="text-[10px] text-white/90 truncate flex items-center gap-1.5">
+                    <span className="truncate">{name}</span>
+                    {duration !== undefined && duration > 0 && (
+                      <span className="shrink-0 text-white/70 tabular-nums">
+                        {formatDuration(duration)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )}
+            </button>
+          </div>
         );
       }}
     />

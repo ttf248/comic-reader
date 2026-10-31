@@ -68,7 +68,7 @@ export default function VideoCoverImage({
               if (onRetry) onRetry();
               else retry();
             }}
-            className="text-[10px] text-accent hover:underline"
+            className="relative z-10 text-[10px] text-accent hover:underline"
           >
             重试
           </button>

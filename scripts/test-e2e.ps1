@@ -46,6 +46,10 @@ try {
   New-Item -ItemType Directory -Path $coverDir -Force | Out-Null
   $videoBytes = [Convert]::FromBase64String("GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAAJTEU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHWTbuMU6uEElTDZ1OsggEyTbuMU6uEHFO7a1OsggI97AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsCrXsYMPQkBNgIxMYXZmNjMuMS4xMDFXQYxMYXZmNjMuMS4xMDFEiYhAn0AAAAAAABZUrmvXrgEAAAAAAABO14EBc8WIAN7+EvCpIL6cgQAitZyDdW5kiIEAhoVWX1ZQOIOBASPjg4QdzWUA4JCwgRC6gRCagQJVsIRVuYEBVe6BAOwBAAAAAAAAAgAAElTDZ/pzc59jwIBnyJlFo4dFTkNPREVSRIeMTGF2ZjYzLjEuMTAxc3PVY8CLY8WIAN7+EvCpIL5nyKBFo4dFTkNPREVSRIeTTGF2YzYzLjEuMTAxIGxpYnZweGfIoUWjiERVUkFUSU9ORIeTMDA6MDA6MDIuMDAwMDAwMDAwAB9DtnVAhueBAKO8gQAAgLACAJ0BKhAAEAAARwiFhYiFhIgCAgJ1qgP4Agz9KAD+/00S//xYV/FhX8WFf/FhX/z8zu3F/OYAo5WBAfQAsQEAARAQABgAGFgv9AAIAACjlYED6ACxAQABEBAAGAAYWC/0AAgAAKOVgQXcALEBAAEQEAAYABhYL/QACAAAHFO7a5G7j7OBALeK94EB8YIBsfCBAw==")
   [System.IO.File]::WriteAllBytes((Join-Path $coverDir "clip.webm"), $videoBytes)
+  $mixedCoverDir = Join-Path (Join-Path $testRoot "media") "sample-mixed-cover"
+  New-Item -ItemType Directory -Path $mixedCoverDir -Force | Out-Null
+  [System.IO.File]::WriteAllBytes((Join-Path $mixedCoverDir "clip.webm"), $videoBytes)
+  [System.IO.File]::WriteAllBytes((Join-Path $mixedCoverDir "page.png"), $pngBytes)
 
   $mediaPathYaml = (Join-Path $testRoot "media").Replace("\", "/")
   $cachePathYaml = (Join-Path $testRoot "cache").Replace("\", "/")
