@@ -2035,6 +2035,108 @@ for (const mode of ["grid", "list"] as const) {
   });
 }
 
+interface CopyAudit {
+  apiValues: string[];
+  selections: Array<{
+    command: string;
+    value: string;
+    insideModal: boolean;
+    focused: boolean;
+  }>;
+  throwOnSelection: boolean;
+}
+
+type CopyAuditWindow = Window & { __copyAudit: CopyAudit };
+
+for (const mode of ["api", "missing", "denied"] as const) {
+  const scenario = {
+    api: "使用剪贴板 API",
+    missing: "在 API 缺失时回退",
+    denied: "在 API 拒绝后回退并支持失败重试",
+  }[mode];
+  test(`属性弹窗复制${scenario}`, async ({ page }) => {
+    const nodes = await scannedNodes(page.request);
+    const album = nodes.find((node) => node.name === "sample-album")!;
+    expect(album).toBeDefined();
+    // 隔离系统剪贴板，只记录调用及原生模态弹窗中的真实焦点和选区。
+    await page.addInitScript((mode) => {
+      const audit: CopyAudit = {
+        apiValues: [],
+        selections: [],
+        throwOnSelection: mode === "denied",
+      };
+      (window as CopyAuditWindow).__copyAudit = audit;
+      Object.defineProperty(navigator, "clipboard", {
+        configurable: true,
+        value:
+          mode === "missing"
+            ? undefined
+            : {
+                writeText(value: string) {
+                  audit.apiValues.push(value);
+                  return mode === "api"
+                    ? Promise.resolve()
+                    : Promise.reject(new Error("test denied"));
+                },
+              },
+      });
+      Object.defineProperty(document, "execCommand", {
+        configurable: true,
+        value(command: string) {
+          const textarea = document.querySelector("textarea");
+          const selection = {
+            command,
+            value: textarea?.value ?? "",
+            insideModal: Boolean(textarea?.closest("dialog:modal")),
+            focused: document.activeElement === textarea,
+          };
+          audit.selections.push(selection);
+          if (audit.throwOnSelection) throw new Error("test copy failed");
+          return selection.insideModal && selection.focused;
+        },
+      });
+    }, mode);
+    await page.goto("/");
+    const { card, dialog } = await openCardProperties(page, album.id);
+    const copy = dialog
+      .locator("dt")
+      .filter({ hasText: /^名称$/ })
+      .getByRole("button");
+    await copy.click();
+    if (mode === "denied") {
+      await expect(copy).toHaveAccessibleName("复制失败，重试");
+      await expect(copy).toBeFocused();
+      await expect(page.locator("textarea")).toHaveCount(0);
+      await page.evaluate(() => {
+        (window as CopyAuditWindow).__copyAudit.throwOnSelection = false;
+      });
+      await copy.click();
+    }
+    await expect(copy).toHaveAccessibleName("已复制");
+    await expect(copy).toBeFocused();
+    await expect(page.locator("textarea")).toHaveCount(0);
+    const audit = await page.evaluate(
+      () => (window as CopyAuditWindow).__copyAudit,
+    );
+    expect(audit.apiValues).toEqual(
+      mode === "missing"
+        ? []
+        : Array(mode === "denied" ? 2 : 1).fill(album.name),
+    );
+    expect(audit.selections).toEqual(
+      Array(mode === "api" ? 0 : mode === "denied" ? 2 : 1).fill({
+        command: "copy",
+        value: album.name,
+        insideModal: true,
+        focused: true,
+      }),
+    );
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+    await expect(card).toBeFocused();
+  });
+}
+
 test("目录属性读取失败可重试", async ({ page }) => {
   const nodes = await scannedNodes(page.request);
   const album = nodes.find((node) => node.name === "sample-album")!;
