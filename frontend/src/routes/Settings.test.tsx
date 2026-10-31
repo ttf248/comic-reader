@@ -87,6 +87,66 @@ const savedHistory: Prefs["history"] = ["a_first", "a_second"].map(
   }),
 );
 
+it("清理失效收藏成功后同步收藏列表与已有偏好", async () => {
+  const client = clientForTest();
+  const favorites = ["a_valid", "a_missing"];
+  client.setQueryData(["favorites"], { favorites });
+  vi.mocked(prefsApi.get).mockResolvedValue({
+    ...basePrefs,
+    favorites,
+    history: savedHistory,
+  });
+  vi.mocked(favoritesApi.prune).mockResolvedValue({ removed: ["a_missing"] });
+  renderSettings(client);
+  fireEvent.click(await screen.findByRole("button", { name: "清理" }));
+  await waitFor(() =>
+    expect(useUIStore.getState().toasts).toContainEqual(
+      expect.objectContaining({ message: "已清理 1 项失效收藏" }),
+    ),
+  );
+  expect(client.getQueryData(["favorites"])).toEqual({
+    favorites: ["a_valid"],
+  });
+  expect(client.getQueryData<Prefs>(["prefs"])).toEqual(
+    expect.objectContaining({ favorites: ["a_valid"], history: savedHistory }),
+  );
+});
+
+it("清理时尚未读取收藏列表，不凭删除项伪造空列表", async () => {
+  const client = clientForTest();
+  vi.mocked(prefsApi.get).mockResolvedValue({
+    ...basePrefs,
+    favorites: ["a_valid", "a_missing"],
+  });
+  vi.mocked(favoritesApi.prune).mockResolvedValue({ removed: ["a_missing"] });
+  renderSettings(client);
+  fireEvent.click(await screen.findByRole("button", { name: "清理" }));
+  await waitFor(() =>
+    expect(useUIStore.getState().toasts).toContainEqual(
+      expect.objectContaining({ message: "已清理 1 项失效收藏" }),
+    ),
+  );
+  expect(client.getQueryData(["favorites"])).toBeUndefined();
+  expect(client.getQueryData<Prefs>(["prefs"])?.favorites).toEqual(["a_valid"]);
+});
+
+it("清理失败不移除缓存收藏", async () => {
+  const client = clientForTest();
+  const favorites = ["a_valid", "a_missing"];
+  client.setQueryData(["favorites"], { favorites });
+  vi.mocked(prefsApi.get).mockResolvedValue({ ...basePrefs, favorites });
+  vi.mocked(favoritesApi.prune).mockRejectedValue(new Error("offline"));
+  renderSettings(client);
+  fireEvent.click(await screen.findByRole("button", { name: "清理" }));
+  await waitFor(() =>
+    expect(useUIStore.getState().toasts).toContainEqual(
+      expect.objectContaining({ message: "清理失效收藏失败" }),
+    ),
+  );
+  expect(client.getQueryData(["favorites"])).toEqual({ favorites });
+  expect(client.getQueryData<Prefs>(["prefs"])?.favorites).toEqual(favorites);
+});
+
 it("清空成功立即清空共享历史和已有偏好缓存", async () => {
   const client = clientForTest();
   client.setQueryData(["history"], { history: savedHistory });

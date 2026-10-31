@@ -1008,3 +1008,70 @@ for (const operation of ["limit", "clear", "visit"] as const) {
     }
   });
 }
+
+test("失效收藏清理成功后刷新失败也立即更新收藏项数", async ({ page }) => {
+  const nodes = await scannedNodes(page.request);
+  const album = nodes.find((node) => node.name === "sample-album")!;
+  expect(album).toBeDefined();
+  const missing = "a_smoke_missing_20261031";
+  const list = async () =>
+    (await (await page.request.get("/api/favorites")).json()) as {
+      favorites: string[];
+    };
+  const original = (await list()).favorites;
+  try {
+    for (const resourceId of [album.id, missing])
+      expect(
+        (
+          await page.request.post("/api/favorites", { data: { resourceId } })
+        ).ok(),
+      ).toBeTruthy();
+    const seededCount = (await list()).favorites.length;
+    await page.goto("/favorites");
+    await expect(
+      page.locator(`main a[href="/albums/${album.id}"]`).first(),
+    ).toBeVisible();
+    const count = page.locator("main section").first().locator("p");
+    await expect(count).toHaveText(`${seededCount} 项`);
+    await page.getByRole("link", { name: "设置", exact: true }).click();
+    let failedReads = 0;
+    await page.route("**/api/favorites", async (route) => {
+      if (route.request().method() !== "GET") return route.continue();
+      failedReads++;
+      await route.fulfill({
+        status: 500,
+        json: { code: "test_unavailable", message: "unavailable" },
+      });
+    });
+    await page.getByRole("button", { name: "清理", exact: true }).click();
+    await expect(page.getByText(/^已清理 \d+ 项失效收藏$/)).toBeVisible();
+    const confirmed = (await list()).favorites;
+    expect(confirmed).not.toContain(missing);
+    await page.getByRole("link", { name: "收藏", exact: true }).click();
+    await expect
+      .poll(() => failedReads, { timeout: 15_000 })
+      .toBeGreaterThanOrEqual(8);
+    await expect(count).toHaveText(`${confirmed.length} 项`);
+    await expect(
+      page.locator(`main a[href="/albums/${album.id}"]`).first(),
+    ).toBeVisible();
+    await expect(page.getByRole("alert")).toContainText("仍显示已加载的收藏");
+  } finally {
+    for (const resourceId of (await list()).favorites)
+      if (!original.includes(resourceId))
+        expect(
+          (
+            await page.request.delete("/api/favorites", {
+              data: { resourceId },
+            })
+          ).ok(),
+        ).toBeTruthy();
+    for (const resourceId of original)
+      if (!(await list()).favorites.includes(resourceId))
+        expect(
+          (
+            await page.request.post("/api/favorites", { data: { resourceId } })
+          ).ok(),
+        ).toBeTruthy();
+  }
+});

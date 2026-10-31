@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { prefsApi, favoritesApi, historyApi } from "../api/prefs";
+import { prefsApi, favoritesApi, historyApi, type Prefs } from "../api/prefs";
 import { scanApi } from "../api/scan";
 import { cacheApi, formatBytes } from "../api/cache";
 import { useScanSSE } from "../hooks/useScanSSE";
@@ -62,7 +62,19 @@ export default function Settings() {
   const pruneFav = useMutation({
     mutationFn: () => favoritesApi.prune(),
     onSuccess: (r) => {
-      qc.invalidateQueries({ queryKey: ["favorites"] });
+      const removed = new Set(r.removed);
+      const keep = (id: string) => !removed.has(id);
+      qc.setQueryData<Awaited<ReturnType<typeof favoritesApi.list>>>(
+        ["favorites"],
+        (previous) =>
+          previous ? { favorites: previous.favorites.filter(keep) } : undefined,
+      );
+      qc.setQueryData<Prefs>(["prefs"], (previous) =>
+        previous
+          ? { ...previous, favorites: previous.favorites.filter(keep) }
+          : undefined,
+      );
+      void qc.invalidateQueries({ queryKey: ["favorites"] });
       pushToast({
         kind: "success",
         message: `已清理 ${r.removed.length} 项失效收藏`,
