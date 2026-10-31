@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -209,7 +210,11 @@ func TagAlbumsPageHandler(catalog *services.ResourceCatalog) fiber.Handler {
 		if !ok {
 			return nil
 		}
-		tag := strings.TrimSpace(c.Params("tag"))
+		tag, err := url.PathUnescape(c.Params("tag"))
+		if err != nil {
+			return httputil.BadRequest(c, "invalid_tag", "tag path encoding is invalid")
+		}
+		tag = strings.TrimSpace(tag)
 		if tag == "" {
 			return httputil.BadRequest(c, "missing_tag", "tag is required")
 		}

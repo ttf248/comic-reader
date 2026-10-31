@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -409,6 +410,13 @@ func TestPagedLibraryFlowAfterScan(t *testing.T) {
 	}
 	if err := json.Unmarshal(body, &tags); err != nil || len(tags.Page.Items) != 1 || tags.Page.Items[0].Tag != "作者A" {
 		t.Fatalf("invalid tags page: %s err=%v", body, err)
+	}
+	res, body = h.do(t, http.MethodGet, "/api/tags/"+url.PathEscape(tags.Page.Items[0].Tag)+"/albums?limit=1", nil)
+	var tagged struct {
+		Page services.LibraryPage[services.LibraryNodeSummary] `json:"page"`
+	}
+	if res.StatusCode != http.StatusOK || json.Unmarshal(body, &tagged) != nil || len(tagged.Page.Items) != 1 || tagged.Page.Revision != tags.Page.Revision {
+		t.Fatalf("invalid tag albums page: status=%d body=%s", res.StatusCode, body)
 	}
 
 	// 一次扫描只发布一个 revision，所有当前目录分页端点必须保持一致。

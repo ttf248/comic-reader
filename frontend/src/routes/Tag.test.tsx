@@ -25,9 +25,9 @@ vi.mock("../components/album/AlbumGrid", () => ({
   ),
 }));
 
-function renderTag() {
+function renderTag(path = "/tags/%E6%97%85%E8%A1%8C") {
   return render(
-    <MemoryRouter initialEntries={["/tags/%E6%97%85%E8%A1%8C"]}>
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/tags/*" element={<Tag />} />
       </Routes>
@@ -97,4 +97,16 @@ describe("Tag", () => {
     expect(screen.getByText("正在加载标签")).toBeInTheDocument();
     expect(screen.queryByText("未找到该标签")).not.toBeInTheDocument();
   });
+
+  it.each(["作者A", "作者 A", "C++", "100%", "字面%20", "字面%2F", "字面%25"])(
+    "标签 %s 的路径只解码一次",
+    (tag) => {
+      vi.mocked(useTagAlbums).mockReturnValue({
+        data: { items: [] },
+        isLoading: false,
+      } as never);
+      renderTag(`/tags/${encodeURIComponent(tag)}`);
+      expect(useTagAlbums).toHaveBeenCalledWith(tag);
+    },
+  );
 });

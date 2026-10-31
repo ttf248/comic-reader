@@ -102,7 +102,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 - `GET /api/albums/:albumId/media?limit=60&cursor=...`：按统一自然顺序返回媒体；`index` 是相册内总序号，`kindIndex` 是图片或视频各自序号。
 - `POST /api/library/nodes/query`：body 为 `{ "ids": ["a_...", "c_..."] }`，按输入顺序批量解析相册/集合摘要；单批最多 500 项，失效 ID 返回在 `missing` 中。
 - `GET /api/tags?limit=60&cursor=...`：分页返回标签摘要。
-- `GET /api/tags/:tag/albums?limit=60&cursor=...`：分页返回标签下的相册摘要。
+- `GET /api/tags/:tag/albums?limit=60&cursor=...`：分页返回标签下的相册摘要。`tag` 按单个 URL 路径段编码，服务端只解码一次，支持中文、空格、`+`、`%` 及字面 `%xx`；非法百分号编码返回 `400 invalid_tag`，解码后为空返回 `400 missing_tag`，不存在的标签返回 `404 tag_not_found`。
 
 `limit` 默认 60、最大 200。响应统一为 `{ "ok": true, "page": { "revision": 42,
 "items": [], "total": 0, "nextCursor": "..." } }`；manifest 和分页响应都带

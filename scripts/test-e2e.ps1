@@ -31,7 +31,7 @@ try {
   # 标签收藏需要由真实目录名解析，避免只验证前端模拟数据。
   # 同标签至少两个相册才会生成智能合集。
   1..2 | ForEach-Object {
-    $taggedDir = Join-Path (Join-Path $testRoot "media") "zz-[测试] tagged-$_"
+    $taggedDir = Join-Path (Join-Path $testRoot "media") "zz-[测试][空 格][C++][100%][字面%20][字面%2F][字面%25] tagged-$_"
     New-Item -ItemType Directory -Path $taggedDir -Force | Out-Null
     [System.IO.File]::WriteAllBytes((Join-Path $taggedDir "page.png"), $pngBytes)
   }

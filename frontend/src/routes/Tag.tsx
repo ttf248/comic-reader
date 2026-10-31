@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useSearchStore } from "../store/searchStore";
 import { useUIStore } from "../store/uiStore";
 import { useFavorites } from "../hooks/useFavorites";
@@ -22,11 +22,10 @@ import { useReducedMotion } from "../hooks/useReducedMotion";
 
 // 标签页：展示一个标签下的全部文件夹，支持排序、阅读进度、收藏。
 export default function Tag() {
-  const params = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
-  // react-router v6 已经对 pathname 做过一次解码；这里如果再 decode 会引发双重解码错误
-  const raw = params["*"] ?? "";
-  const tag = raw ? safeDecode(raw) : "";
+  // 从原始路径读取并只解码一次，保留标签名称中的字面 %xx。
+  const tag = decodeTagPath(location.pathname);
 
   const query = useSearchStore((s) => s.query);
   const sortBy = useSearchStore((s) => s.sortBy);
@@ -250,12 +249,11 @@ export default function Tag() {
   );
 }
 
-function safeDecode(s: string): string {
+function decodeTagPath(pathname: string): string {
   try {
-    // 已解码的可能再 decode 一次会失败，因此用 try/catch 兜底
-    return decodeURIComponent(s);
+    return decodeURIComponent(pathname.slice("/tags/".length));
   } catch {
-    return s;
+    return "";
   }
 }
 

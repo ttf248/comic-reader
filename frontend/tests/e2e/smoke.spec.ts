@@ -35,14 +35,16 @@ async function scannedNodes(request: APIRequestContext) {
   }
   const before = (await (
     await request.get("/api/library/manifest")
-  ).json()) as ManifestResponse;
+  ).json()) as Partial<ManifestResponse>;
+  const previousScannedAt = before.manifest?.scannedAt;
   expect((await request.post("/api/scans")).ok()).toBeTruthy();
   await expect
     .poll(async () => {
       const response = await request.get("/api/library/manifest");
+      if (!response.ok()) return previousScannedAt;
       return ((await response.json()) as ManifestResponse).manifest.scannedAt;
     })
-    .not.toBe(before.manifest.scannedAt);
+    .not.toBe(previousScannedAt);
   const manifest = (await (
     await request.get("/api/library/manifest")
   ).json()) as ManifestResponse;
@@ -1075,5 +1077,30 @@ test("失效收藏清理成功后刷新失败也立即更新收藏项数", async
             await page.request.post("/api/favorites", { data: { resourceId } })
           ).ok(),
         ).toBeTruthy();
+  }
+});
+
+test("中文和特殊字符标签通过编码链接正常打开", async ({ page }) => {
+  await scannedNodes(page.request);
+  for (const tag of [
+    "测试",
+    "空 格",
+    "C++",
+    "100%",
+    "字面%20",
+    "字面%2F",
+    "字面%25",
+  ]) {
+    await test.step(tag, async () => {
+      await page.goto(`/tags/${encodeURIComponent(tag)}`);
+      await expect(
+        page.getByRole("heading", { name: tag, exact: true }),
+      ).toBeVisible();
+      await expect(
+        page
+          .locator('main [data-virtuoso-scroller] a[href^="/albums/"]')
+          .first(),
+      ).toBeVisible();
+    });
   }
 });
