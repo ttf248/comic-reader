@@ -196,6 +196,46 @@ export default function ServerConfigPanel() {
   });
 
   const [status, setStatus] = useState<StatusMap>({});
+  const mounted = useRef(false);
+  // 每个字段独立计时；再次保存或离开面板时取消旧提示的清理任务。
+  const savedTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  useEffect(() => {
+    mounted.current = true;
+    const timers = savedTimers.current;
+    return () => {
+      mounted.current = false;
+      timers.forEach((timer) => clearTimeout(timer));
+      timers.clear();
+    };
+  }, []);
+
+  function setFieldStatus(keys: string[], value: FieldStatus) {
+    // 写请求可在卸载后完成，共享缓存仍更新，但不再创建页面状态和定时器。
+    if (!mounted.current) return;
+    const timers = savedTimers.current;
+    keys.forEach((key) => {
+      clearTimeout(timers.get(key));
+      timers.delete(key);
+    });
+    setStatus((current) => {
+      const next = { ...current };
+      keys.forEach((key) => (next[key] = value));
+      return next;
+    });
+    if (value !== "saved") return;
+    keys.forEach((key) => {
+      timers.set(
+        key,
+        setTimeout(() => {
+          timers.delete(key);
+          setStatus((current) =>
+            current[key] === "saved" ? { ...current, [key]: "idle" } : current,
+          );
+        }, 1500),
+      );
+    });
+  }
+
   const [mediaRootsDirty, setMediaRootsDirty] = useState(false);
   // 暂存用户输入:草稿,避免每次 onChange 都触发 PUT(输入体验更顺)
   const [draft, setDraft] = useState<ServerConfigPatch>({});
@@ -247,23 +287,18 @@ export default function ServerConfigPanel() {
   const update = useMutation({
     mutationFn: (patch: ServerConfigPatch) => configApi.update(patch),
     onMutate: (patch) => {
-      const keys = Object.keys(patch);
-      const next: StatusMap = { ...status };
-      keys.forEach((k) => (next[k] = "saving"));
-      setStatus(next);
+      setFieldStatus(Object.keys(patch), "saving");
     },
     onSuccess: (resp, patch) => {
       const keys = Object.keys(patch);
-      const next: StatusMap = { ...status };
-      keys.forEach((k) => (next[k] = "saved"));
-      setStatus(next);
+      setFieldStatus(keys, "saved");
       qc.setQueryData(["server-config"], resp.config);
 
       // 标记 MediaRoots 变脏 → 提示用户重新扫描
       if (resp.mediaRootsChanged) {
         // 后端会丢弃旧扫描快照；同步删除所有前端摘要，不能让旧库短暂回显。
         qc.removeQueries({ queryKey: libraryQueryKeys.root });
-        setMediaRootsDirty(true);
+        if (mounted.current) setMediaRootsDirty(true);
       }
       // allowOsOpen 变更后:让前端 fsCapabilities 立即跟上,
       // 否则 Album 详情 / 右键菜单的"在资源管理器中打开"按钮
@@ -281,18 +316,9 @@ export default function ServerConfigPanel() {
           ttl: 4500,
         });
       }
-      // saved 状态 1.5s 后自动清回 idle,避免永久显示"已保存"
-      keys.forEach((k) => {
-        setTimeout(() => {
-          setStatus((s) => (s[k] === "saved" ? { ...s, [k]: "idle" } : s));
-        }, 1500);
-      });
     },
     onError: (err: unknown, patch) => {
-      const keys = Object.keys(patch ?? {});
-      const next: StatusMap = { ...status };
-      keys.forEach((k) => (next[k] = "error"));
-      setStatus(next);
+      setFieldStatus(Object.keys(patch ?? {}), "error");
       const msg = err instanceof Error ? err.message : "保存失败";
       pushToast({ kind: "error", message: msg });
     },

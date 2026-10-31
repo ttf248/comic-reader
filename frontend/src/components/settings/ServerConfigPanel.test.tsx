@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import {
+  act,
+  render,
+  screen,
+  waitFor,
+  fireEvent,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import ServerConfigPanel from "./ServerConfigPanel";
 import { configApi } from "../../api/config";
@@ -46,12 +52,18 @@ const baseConfig = {
 };
 
 function renderPanel() {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const qc = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false, gcTime: Infinity },
+      mutations: { gcTime: Infinity },
+    },
+  });
+  const view = render(
     <QueryClientProvider client={qc}>
       <ServerConfigPanel />
     </QueryClientProvider>,
   );
+  return { ...view, queryClient: qc };
 }
 
 describe("ServerConfigPanel", () => {
@@ -289,6 +301,93 @@ describe("ServerConfigPanel", () => {
     await waitFor(() => {
       expect(configApi.update).toHaveBeenCalledWith({ skipHidden: false });
     });
+  });
+
+  it("重复保存同一字段后，已保存提示完整保留 1.5 秒", async () => {
+    vi.mocked(configApi.update).mockImplementation(async (patch) => ({
+      ok: true,
+      config: { ...baseConfig, ...patch },
+      requiresRestart: [],
+      mediaRootsChanged: false,
+    }));
+    const { unmount, queryClient } = renderPanel();
+    const toggle = await screen.findByRole("switch", { name: "跳过隐藏目录" });
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(toggle);
+      await act(() => vi.advanceTimersByTimeAsync(600));
+      expect(screen.getByLabelText("已保存")).toBeInTheDocument();
+      await act(() => vi.advanceTimersByTimeAsync(100));
+      fireEvent.click(toggle);
+      await act(() => vi.advanceTimersByTimeAsync(600));
+      expect(configApi.update).toHaveBeenCalledTimes(2);
+      expect(screen.getByLabelText("已保存")).toBeInTheDocument();
+      await act(() => vi.advanceTimersByTimeAsync(1499));
+      expect(screen.getByLabelText("已保存")).toBeInTheDocument();
+      await act(() => vi.advanceTimersByTimeAsync(1));
+      expect(screen.queryByLabelText("已保存")).not.toBeInTheDocument();
+    } finally {
+      unmount();
+      queryClient.clear();
+      vi.useRealTimers();
+    }
+  });
+
+  it("离开设置面板时取消待清除的保存提示", async () => {
+    const { unmount, queryClient } = renderPanel();
+    const toggle = await screen.findByRole("switch", { name: "跳过隐藏目录" });
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(toggle);
+      await act(() => vi.advanceTimersByTimeAsync(600));
+      expect(screen.getByLabelText("已保存")).toBeInTheDocument();
+      unmount();
+      queryClient.clear();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      unmount();
+      queryClient.clear();
+      vi.useRealTimers();
+    }
+  });
+
+  it("保存响应在离开后返回时更新共享配置，不再创建页面定时器", async () => {
+    let finish!: (
+      response: Awaited<ReturnType<typeof configApi.update>>,
+    ) => void;
+    vi.mocked(configApi.update).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const { unmount, queryClient } = renderPanel();
+    const toggle = await screen.findByRole("switch", { name: "跳过隐藏目录" });
+    vi.useFakeTimers();
+    try {
+      fireEvent.click(toggle);
+      await act(() => vi.advanceTimersByTimeAsync(600));
+      expect(configApi.update).toHaveBeenCalledWith({ skipHidden: false });
+      unmount();
+      await act(async () => {
+        finish({
+          ok: true,
+          config: { ...baseConfig, skipHidden: false },
+          requiresRestart: [],
+          mediaRootsChanged: false,
+        });
+      });
+      expect(queryClient.getQueryData(["server-config"])).toMatchObject({
+        skipHidden: false,
+      });
+      queryClient.clear();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      unmount();
+      queryClient.clear();
+      vi.useRealTimers();
+    }
   });
 
   // 回归:之前 `draft.systemFiles ?? data.systemFiles` 在 data.systemFiles

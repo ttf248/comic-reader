@@ -195,6 +195,7 @@ cd ../backend && go build -o ../bin/server ./cmd/server
 
 启动参数只保留 `--config <yaml>`；`staticDir` 也从配置文件读取。**不支持环境变量或其他 CLI 覆盖**。
 配置项可在网页 `/settings` → 「服务端」里改，部分字段热生效（见 [`docs/API.md`](./docs/API.md)「配置项」一节）。
+字段保存成功后显示 1.5 秒确认提示；再次保存重新计时，离开页面时清理提示任务，已发出的写请求仍会完成并同步共享配置。
 
 开发版只接受当前 API 与持久化 schema：所有 HTTP 失败响应固定为 `{ code, message, details? }`；扫描缓存 schema 不匹配时会隔离原文件并以空缓存启动。
 
