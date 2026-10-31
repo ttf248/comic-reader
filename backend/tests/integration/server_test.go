@@ -986,18 +986,7 @@ func TestVideoInfoBatchRejectsLinkedDirectoryAfterScan(t *testing.T) {
 // /api/videos + FaststartService: 非 faststart MP4 经 ffmpeg remux 后,
 // 浏览器就能从前往后读。需要 ffmpeg,缺失时自动 skip。
 func TestVideoStream_FaststartRemux(t *testing.T) {
-	ffmpeg := os.Getenv("FFMPEG_PATH")
-	if ffmpeg == "" {
-		bundled := filepath.Join("..", "..", config.DefaultFFmpegPath)
-		if services.FFmpegAvailableAt(bundled) {
-			ffmpeg = bundled
-		} else if p, err := exec.LookPath("ffmpeg"); err == nil {
-			ffmpeg = p
-		}
-	}
-	if ffmpeg == "" {
-		t.Skip("ffmpeg not found; skipping faststart integration test")
-	}
+	ffmpeg := findIntegrationFFmpeg(t)
 
 	// 用 harness 一样的 cfg 模板构造 faststart 服务
 	cache, _ := os.MkdirTemp("", "comic-cache-faststart-")

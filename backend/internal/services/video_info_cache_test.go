@@ -23,6 +23,9 @@ func TestMain(m *testing.M) {
 
 func videoInfoProbeHelper() int {
 	if len(os.Args) > 1 && os.Args[1] == "-version" {
+		if delay, _ := time.ParseDuration(os.Getenv("VIDEO_INFO_TEST_VERSION_DELAY")); delay > 0 {
+			time.Sleep(delay)
+		}
 		fmt.Println("test ffprobe")
 		return 0
 	}
@@ -41,6 +44,17 @@ func videoInfoProbeHelper() int {
 	}
 	if info, err := os.Stat(os.Args[len(os.Args)-1]); err != nil || !info.Mode().IsRegular() {
 		return 1
+	}
+	ffmpeg := false
+	for _, arg := range os.Args[1:] {
+		if arg == "-i" {
+			ffmpeg = true
+		}
+	}
+	if ffmpeg {
+		if _, err := os.Stderr.Write(data); err != nil {
+			return 1
+		}
 	}
 	if delay, _ := time.ParseDuration(os.Getenv("VIDEO_INFO_TEST_DELAY")); delay > 0 {
 		time.Sleep(delay)
@@ -62,6 +76,9 @@ func videoInfoProbeHelper() int {
 			time.Sleep(time.Millisecond)
 		}
 	}
+	if ffmpeg {
+		return 1
+	} // ffmpeg -i 未指定输出时使用非零退出码。
 	_, err = os.Stdout.Write(data)
 	if err != nil {
 		return 1
@@ -94,6 +111,7 @@ func newVideoProbeFixture(t *testing.T) videoProbeFixture {
 	t.Setenv("VIDEO_INFO_TEST_OUTPUT", fixture.output)
 	t.Setenv("VIDEO_INFO_TEST_CALLS", fixture.log)
 	t.Setenv("VIDEO_INFO_TEST_DELAY", "")
+	t.Setenv("VIDEO_INFO_TEST_VERSION_DELAY", "")
 	t.Setenv("VIDEO_INFO_TEST_GATE", "")
 	fixture.service = NewVideoInfoService(VideoInfoOptions{FFprobePath: executable})
 	return fixture

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -37,9 +38,9 @@ type VideoMetadata struct {
 	BitRate     int64   `json:"bitRate"`
 }
 
-// ErrProbeUnavailable 表示 ffprobe 不可用(可执行文件不存在 / 解析失败)。
+// ErrProbeUnavailable 表示没有可用的元数据探测工具。
 // 调用方应回退到"不依赖元数据"的展示(由前端 <video> 加载后上报)。
-var ErrProbeUnavailable = errors.New("ffprobe unavailable")
+var ErrProbeUnavailable = errors.New("video metadata tools unavailable")
 
 const videoInfoCacheSize = 512
 
@@ -102,14 +103,24 @@ func NewVideoInfoService(opts VideoInfoOptions) *VideoInfoService {
 	}
 }
 
-// Available 返回 ffprobe 是否可用(整个 service 生命周期只探测一次)。
+// Available 返回 ffprobe 或 ffmpeg 是否可用，整个服务生命周期只探测一次。
 func (s *VideoInfoService) Available() bool {
-	if s == nil || s.ffprobePath == "" {
+	if s == nil {
 		return false
 	}
 	s.availOnce.Do(func() {
-		cmd := exec.Command(s.ffprobePath, "-version")
-		s.avail = cmd.Run() == nil
+		for _, path := range []string{s.ffprobePath, s.ffmpegPath} {
+			if path == "" {
+				continue
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), s.timeout)
+			err := exec.CommandContext(ctx, path, "-version").Run()
+			cancel()
+			if err == nil {
+				s.avail = true
+				return
+			}
+		}
 	})
 	return s.avail
 }
@@ -213,6 +224,9 @@ func (s *VideoInfoService) probeUncached(absPath string) (*VideoMetadata, error)
 		if m, err := s.probeViaFFprobe(ctx, absPath); err == nil {
 			return m, nil
 		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		// 失败回退到 ffmpeg
 	}
 	if s.ffmpegPath == "" {
@@ -275,22 +289,16 @@ func (s *VideoInfoService) probeViaFFprobe(ctx context.Context, absPath string) 
 			break
 		}
 	}
-	if out.Format.Duration != "" {
-		var d float64
-		if _, err := fmt.Sscanf(out.Format.Duration, "%f", &d); err == nil {
-			meta.DurationSec = d
-		}
+	if duration, ok := metadataNumber(out.Format.Duration); ok {
+		meta.DurationSec = duration
 	}
-	if out.Format.BitRate != "" {
-		var br int64
-		if _, err := fmt.Sscanf(out.Format.BitRate, "%d", &br); err == nil {
-			meta.BitRate = br
-		}
+	if bitRate, err := strconv.ParseInt(out.Format.BitRate, 10, 64); err == nil && bitRate >= 0 {
+		meta.BitRate = bitRate
 	}
 	return meta, nil
 }
 
-// probeViaFFmpeg 是 ffprobe 不可用时的回退:跑 `ffmpeg -i` 解析 stdout。
+// probeViaFFmpeg 是 ffprobe 不可用时的回退，解析 ffmpeg -i 的标准错误输出。
 //
 // ffmpeg -i 在没有指定输出文件时 exit code = 1,但 stderr 仍包含完整
 // metadata。所以这里忽略 exit code,只解析输出。
@@ -298,86 +306,110 @@ func (s *VideoInfoService) probeViaFFmpeg(ctx context.Context, absPath string) (
 	if s.ffmpegPath == "" {
 		return nil, ErrProbeUnavailable
 	}
-	cmd := exec.CommandContext(ctx, s.ffmpegPath, "-i", absPath)
+	cmd := exec.CommandContext(ctx, s.ffmpegPath, "-hide_banner", "-i", absPath)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out
-	_ = cmd.Run()
+	err := cmd.Run()
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+	if err != nil && cmd.ProcessState == nil {
+		return nil, ErrProbeUnavailable
+	}
 	return parseFFmpegInfoOutput(out.String())
 }
 
 // parseFFmpegInfoOutput 从 `ffmpeg -i <file>` 的输出中解析元数据。
-// 失败返回 ErrProbeUnavailable(格式异常时调用方应忽略,继续展示).
+// 无法提取有效字段时返回脱敏错误，不能将工具输出中的文件路径带入响应或日志。
 func parseFFmpegInfoOutput(s string) (*VideoMetadata, error) {
 	meta := &VideoMetadata{}
-	// Duration: 00:00:12.34
-	if idx := strings.Index(s, "Duration:"); idx >= 0 {
-		rest := s[idx+len("Duration:"):]
-		if c := strings.Index(rest, ","); c > 0 {
-			rest = rest[:c]
+	videoSeen, durationSeen := false, false
+	for _, line := range strings.Split(s, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "Input #0, ") && meta.Container == "" {
+			formats, _, ok := strings.Cut(strings.TrimPrefix(line, "Input #0, "), ", from ")
+			if ok {
+				meta.Container = strings.ToLower(strings.TrimSpace(formats))
+			}
 		}
-		rest = strings.TrimSpace(rest)
-		var h, m, sec float64
-		if _, err := fmt.Sscanf(rest, "%f:%f:%f", &h, &m, &sec); err == nil {
-			meta.DurationSec = h*3600 + m*60 + sec
+		if strings.HasPrefix(line, "Duration:") && !durationSeen {
+			durationSeen = true
+			clock, rest, _ := strings.Cut(strings.TrimSpace(strings.TrimPrefix(line, "Duration:")), ",")
+			meta.DurationSec = ffmpegDuration(clock)
+			if _, rate, ok := strings.Cut(rest, "bitrate:"); ok {
+				meta.BitRate = ffmpegBitRate(rate)
+			}
 		}
-	}
-	// Video: h264 (High) ... 1920x1080 [... ... ...]
-	// 取第一个 "Video:" 段和形如 "1920x1080" 的尺寸
-	if idx := strings.Index(s, "Video:"); idx >= 0 {
-		rest := s[idx+len("Video:"):]
-		// 截到换行
-		if nl := strings.Index(rest, "\n"); nl > 0 {
-			rest = rest[:nl]
-		}
-		// 找 "NxN" 模式
-		var w, h int
-		if _, err := fmt.Sscanf(rest, "%*s%*s%d%*s%d", &w, &h); err == nil && w > 0 && h > 0 {
-			meta.Width = w
-			meta.Height = h
-		}
-		// codec 在 "Video:" 之后第一个词
-		fields := strings.Fields(rest)
-		if len(fields) > 0 {
-			meta.Codec = strings.ToLower(fields[0])
-		}
-	}
-	// Input #0, matroska,webm, ... → container
-	if idx := strings.Index(s, "Input #"); idx >= 0 {
-		rest := s[idx:]
-		if c := strings.Index(rest, ","); c > 0 {
-			rest = rest[:c]
-		}
-		rest = strings.TrimPrefix(rest, "Input #0, ")
-		rest = strings.TrimSpace(rest)
-		meta.Container = strings.ToLower(strings.SplitN(rest, ",", 2)[0])
-	}
-	// bitrate: "bitrate: 1234 kb/s" 出现在 Stream 行
-	if idx := strings.Index(s, "bitrate:"); idx >= 0 {
-		rest := s[idx+len("bitrate:"):]
-		if nl := strings.Index(rest, "\n"); nl > 0 {
-			rest = rest[:nl]
-		}
-		rest = strings.TrimSpace(rest)
-		// "1234 kb/s" / "1.5 Mb/s"
-		var br float64
-		var unit string
-		if _, err := fmt.Sscanf(rest, "%f %s", &br, &unit); err == nil {
-			switch strings.ToLower(unit) {
-			case "kb/s":
-				meta.BitRate = int64(br * 1000)
-			case "mb/s":
-				meta.BitRate = int64(br * 1000 * 1000)
-			case "b/s":
-				meta.BitRate = int64(br)
+		if !videoSeen && strings.HasPrefix(line, "Stream #0:") {
+			_, video, ok := strings.Cut(line, ": Video:")
+			if !ok {
+				continue
+			}
+			videoSeen = true
+			fields := strings.Fields(video)
+			if len(fields) > 0 {
+				meta.Codec = strings.ToLower(strings.TrimSuffix(fields[0], ","))
+			}
+			for _, field := range fields {
+				w, h, ok := strings.Cut(strings.Trim(field, ","), "x")
+				if !ok {
+					continue
+				}
+				width, widthErr := strconv.Atoi(w)
+				height, heightErr := strconv.Atoi(h)
+				if widthErr == nil && heightErr == nil && width > 0 && height > 0 {
+					meta.Width, meta.Height = width, height
+					break
+				}
 			}
 		}
 	}
 	if meta.Width == 0 && meta.Height == 0 && meta.DurationSec == 0 {
-		// 完全没解析出任何元数据 → 视为"探测失败"但非"工具不可用",
-		// 区别于 ErrProbeUnavailable(ffmpeg/ffprobe 自己坏掉)。
-		// 调用方一般按"无元数据"处理:不展示时长,不报错。
-		return nil, errors.New("ffprobe: no metadata parsed from output")
+		return nil, errors.New("no video metadata parsed from tool output")
 	}
 	return meta, nil
+}
+
+func metadataNumber(value string) (float64, bool) {
+	number, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
+	return number, err == nil && number >= 0 && !math.IsNaN(number) && !math.IsInf(number, 0)
+}
+
+func ffmpegDuration(value string) float64 {
+	parts := strings.Split(strings.TrimSpace(value), ":")
+	if len(parts) != 3 {
+		return 0
+	}
+	hours, hourErr := strconv.ParseUint(parts[0], 10, 32)
+	minutes, minuteErr := strconv.ParseUint(parts[1], 10, 8)
+	seconds, ok := metadataNumber(parts[2])
+	if hourErr != nil || minuteErr != nil || minutes >= 60 || !ok || seconds >= 60 {
+		return 0
+	}
+	return float64(hours)*3600 + float64(minutes)*60 + seconds
+}
+
+func ffmpegBitRate(value string) int64 {
+	fields := strings.Fields(value)
+	if len(fields) < 2 {
+		return 0
+	}
+	rate, ok := metadataNumber(fields[0])
+	if !ok {
+		return 0
+	}
+	switch strings.ToLower(strings.TrimSuffix(fields[1], ",")) {
+	case "kb/s":
+		rate *= 1000
+	case "mb/s":
+		rate *= 1000000
+	case "b/s":
+	default:
+		return 0
+	}
+	if math.IsInf(rate, 0) || rate >= math.MaxInt64 {
+		return 0
+	}
+	return int64(rate)
 }

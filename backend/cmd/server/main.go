@@ -125,7 +125,7 @@ func main() {
 		Timeout:    5 * time.Second,
 	})
 	if videoInfo.Available() {
-		log.Printf("  FFprobe:   <可用> (视频元数据已启用)")
+		log.Printf("  VideoMetadata: <可用> (视频元数据已启用)")
 	}
 
 	cacheLayout, err := services.EnsureCacheLayout(cfg.CacheDir)
