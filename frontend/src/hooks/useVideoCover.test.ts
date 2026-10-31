@@ -1,6 +1,15 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useVideoCover } from "./useVideoCover";
+import { captureVideoFrame } from "../utils/videoFrame";
+
+vi.mock("../utils/videoFrame", () => ({ captureVideoFrame: vi.fn() }));
+beforeEach(() => {
+  vi.mocked(captureVideoFrame).mockReset();
+  vi.mocked(captureVideoFrame).mockResolvedValue(
+    new Blob(["jpeg"], { type: "image/jpeg" }),
+  );
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -84,7 +93,10 @@ it("探测请求一直无响应也会超时中止并进入浏览器回退", asyn
     await vi.advanceTimersByTimeAsync(20_000);
   });
   expect(probeSignal?.aborted).toBe(true);
-  expect(fetchMock).toHaveBeenCalledWith("/api/media/f_timeout");
+  expect(captureVideoFrame).toHaveBeenCalledWith(
+    "f_timeout",
+    expect.any(AbortSignal),
+  );
   expect(result.current.status).toBe("error");
   expect(vi.getTimerCount()).toBe(0);
 });
@@ -103,47 +115,6 @@ it("浏览器抽帧上传后用原资源 URL 显示封面，不把刷新参数�
     return new Response(new Blob(["video"]), { status: 200 });
   });
   vi.stubGlobal("fetch", fetchMock);
-  vi.stubGlobal(
-    "URL",
-    class extends URL {
-      static createObjectURL() {
-        return "blob:cover-test";
-      }
-      static revokeObjectURL() {}
-    },
-  );
-
-  const createElement = document.createElement.bind(document);
-  vi.spyOn(document, "createElement").mockImplementation((tag, options) => {
-    const element = createElement(tag, options);
-    if (tag === "video") {
-      Object.defineProperties(element, {
-        duration: { value: 2 },
-        videoWidth: { value: 16 },
-        videoHeight: { value: 16 },
-        src: {
-          set: () =>
-            queueMicrotask(() =>
-              element.dispatchEvent(new Event("loadedmetadata")),
-            ),
-        },
-        currentTime: {
-          set: () =>
-            queueMicrotask(() => element.dispatchEvent(new Event("seeked"))),
-        },
-      });
-    }
-    if (tag === "canvas") {
-      Object.defineProperties(element, {
-        getContext: { value: () => ({ drawImage: vi.fn() }) },
-        toBlob: {
-          value: (callback: BlobCallback) =>
-            callback(new Blob(["jpeg"], { type: "image/jpeg" })),
-        },
-      });
-    }
-    return element;
-  });
 
   const { result } = renderHook(() => useVideoCover("f_cover_test"));
   await act(async () => {
@@ -157,4 +128,74 @@ it("浏览器抽帧上传后用原资源 URL 显示封面，不把刷新参数�
     "/api/thumbs/f_cover_test/cover",
     expect.objectContaining({ method: "POST" }),
   );
+});
+
+it("切换资源后取消旧抽帧，不上传迟到结果或覆盖新封面状态", async () => {
+  vi.useFakeTimers();
+  let resolveOld: (blob: Blob) => void = () => {};
+  vi.mocked(captureVideoFrame).mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        resolveOld = resolve;
+      }),
+  );
+  const fetchMock = vi.fn(
+    async (url: string) =>
+      new Response(null, { status: url.includes("f_old") ? 404 : 200 }),
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  const { result, rerender } = renderHook(useVideoCover, {
+    initialProps: "f_old",
+  });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(20_000);
+  });
+  expect(result.current.status).toBe("extracting");
+  const oldSignal = vi.mocked(captureVideoFrame).mock.calls[0][1];
+
+  rerender("f_new");
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(0);
+  });
+  expect(oldSignal?.aborted).toBe(true);
+  await act(async () => {
+    resolveOld(new Blob(["late"]));
+  });
+  expect(result.current.status).toBe("ready");
+  expect(result.current.url).toBe("/api/thumbs/f_new");
+  expect(fetchMock.mock.calls.some(([url]) => url.endsWith("/cover"))).toBe(
+    false,
+  );
+});
+
+it("卸载时也会取消正在上传的封面", async () => {
+  vi.useFakeTimers();
+  let uploadSignal: AbortSignal | undefined;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((_url: string, options?: RequestInit) => {
+      if (options?.method === "POST") {
+        uploadSignal = options.signal ?? undefined;
+        return new Promise<Response>((_resolve, reject) => {
+          uploadSignal?.addEventListener(
+            "abort",
+            () => reject(new DOMException("aborted", "AbortError")),
+            { once: true },
+          );
+        });
+      }
+      return Promise.resolve(new Response(null, { status: 404 }));
+    }),
+  );
+  const { unmount } = renderHook(() => useVideoCover("f_upload"));
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(20_000);
+  });
+  expect(uploadSignal?.aborted).toBe(false);
+  unmount();
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(0);
+  });
+  expect(uploadSignal?.aborted).toBe(true);
+  expect(vi.getTimerCount()).toBe(0);
 });

@@ -256,6 +256,15 @@ test("浏览器抽帧上传后封面可通过原资源 URL 显示", async ({ pag
   const fileId = media.page.items[0].id;
   let uploaded = false;
   let probes = 0;
+  const frameRequests: Array<{ range: string | undefined; kind: string }> = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === `/api/media/${fileId}`) {
+      frameRequests.push({
+        range: request.headers().range,
+        kind: request.resourceType(),
+      });
+    }
+  });
   await page.clock.install();
   await page.route(`**/api/thumbs/${fileId}/cover`, async (route) => {
     const result = await route.fetch();
@@ -283,6 +292,13 @@ test("浏览器抽帧上传后封面可通过原资源 URL 显示", async ({ pag
   await expect
     .poll(() => cover.evaluate((image: HTMLImageElement) => image.naturalWidth))
     .toBeGreaterThan(0);
+  expect(frameRequests.length).toBeGreaterThan(0);
+  expect(
+    frameRequests.every(
+      (request) =>
+        request.kind === "media" && request.range?.startsWith("bytes="),
+    ),
+  ).toBe(true);
 });
 
 for (const albumName of ["sample-video-cover", "sample-mixed-cover"]) {
@@ -332,3 +348,60 @@ for (const albumName of ["sample-video-cover", "sample-mixed-cover"]) {
     expect(errors).toEqual([]);
   });
 }
+
+test("离开相册会取消浏览器抽帧且不继续上传封面", async ({ page }) => {
+  const nodes = await scannedNodes(page.request);
+  const album = nodes.find((node) => node.name === "sample-video-cover");
+  expect(album).toBeDefined();
+  const mediaResponse = await page.request.get(
+    `/api/albums/${album!.id}/media`,
+  );
+  const media = (await mediaResponse.json()) as {
+    page: { items: Array<{ id: string }> };
+  };
+  const fileId = media.page.items[0].id;
+  let release = () => {};
+  const waiting = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let started = 0;
+  let cancelled = 0;
+  let uploaded = false;
+  let probes = 0;
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("requestfailed", (request) => {
+    if (new URL(request.url()).pathname === `/api/media/${fileId}`) cancelled++;
+  });
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname === `/api/thumbs/${fileId}/cover`)
+      uploaded = true;
+  });
+  await page.clock.install();
+  await page.route(`**/api/thumbs/${fileId}`, async (route) => {
+    probes++;
+    await route.fulfill({ status: 404 });
+  });
+  await page.route(`**/api/media/${fileId}`, async (route) => {
+    started++;
+    await waiting;
+    // 取消后的请求可能已从浏览器路由表移除。
+    await route.continue().catch(() => {});
+  });
+  try {
+    await page.goto(`/albums/${album!.id}`);
+    await expect.poll(() => probes).toBeGreaterThan(0);
+    await page.clock.fastForward(21_000);
+    await expect.poll(() => started).toBeGreaterThan(0);
+    // 使用 SPA 导航，确保中止来自组件清理，而非整页卸载。
+    await page.getByRole("link", { name: "主页", exact: true }).click();
+    release();
+    await expect(page).toHaveURL(/\/$/);
+    await expect.poll(() => cancelled).toBeGreaterThan(0);
+    await page.clock.fastForward(60_000);
+    expect(uploaded).toBe(false);
+    expect(errors).toEqual([]);
+  } finally {
+    release();
+  }
+});

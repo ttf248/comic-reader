@@ -12,6 +12,7 @@ export function thumbUrl(fileId: string): string {
 export async function uploadVideoCover(
   fileId: string,
   blob: Blob,
+  signal?: AbortSignal,
 ): Promise<void> {
   const url = API_BASE
     ? `${API_BASE}/api/thumbs/${encodeURIComponent(fileId)}/cover`
@@ -20,6 +21,7 @@ export async function uploadVideoCover(
     method: "POST",
     headers: { "Content-Type": blob.type || "image/jpeg" },
     body: blob,
+    signal,
   });
   if (!res.ok) {
     let msg = `HTTP ${res.status}`;
