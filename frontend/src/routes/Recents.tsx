@@ -27,14 +27,14 @@ export default function Recents() {
   const sortBy = useSearchStore((s) => s.sortBy);
   const minImageCount = useSearchStore((s) => s.minImageCount);
 
-  const { data } = useQuery({
+  const historyQuery = useQuery({
     queryKey: ["history"],
     queryFn: () => historyApi.list(),
     staleTime: 30 * 1000,
   });
 
   // history 顺序:OpenedAt 倒序
-  const history = data?.history ?? EMPTY_HISTORY;
+  const history = historyQuery.data?.history ?? EMPTY_HISTORY;
   const historyIds = useMemo(
     () => history.map((item) => item.albumId),
     [history],
@@ -109,6 +109,15 @@ export default function Recents() {
   );
   useGalleryContextSync({ type: "recents" }, recentsEntries);
 
+  const historyFailed = historyQuery.isError;
+  const nodesFailed = history.length > 0 && nodesQuery.isError;
+  const loadFailed = historyFailed || nodesFailed;
+  const retrying = historyQuery.isFetching || nodesQuery.isFetching;
+  const retryLoad = () => {
+    if (historyFailed) void historyQuery.refetch();
+    if (nodesFailed) void nodesQuery.refetch();
+  };
+
   return (
     <div className="min-h-full">
       <section className="px-6 lg:px-10 pt-10 pb-6 max-w-[1400px] mx-auto w-full">
@@ -131,15 +140,56 @@ export default function Recents() {
                 {formatRelative(history[0]?.openedAt)}
               </span>
             </>
+          ) : historyQuery.isLoading ? (
+            "正在加载记录…"
+          ) : historyFailed ? (
+            "记录暂不可用"
           ) : (
             "还没有记录"
           )}
         </p>
       </section>
 
-      {history.length > 0 && <ListFilterBar totalCount={filtered.length} />}
+      {loadFailed && (
+        <div className="px-6 lg:px-10 max-w-[1400px] mx-auto w-full mb-4">
+          <div
+            role="alert"
+            className="flex items-center justify-between gap-3 rounded-md border border-danger/30 bg-danger/5 px-4 py-3 text-sm"
+          >
+            <p>
+              {historyFailed
+                ? "最近阅读加载失败。"
+                : "最近阅读的相册信息加载失败。"}
+              {cards.length > 0 ? "仍显示已加载的记录。" : "请重试加载。"}
+            </p>
+            <button
+              type="button"
+              onClick={retryLoad}
+              disabled={retrying}
+              className="shrink-0 text-accent hover:underline disabled:opacity-50"
+            >
+              {retrying ? "正在重试…" : "重试加载"}
+            </button>
+          </div>
+        </div>
+      )}
+      {cards.length > 0 && <ListFilterBar totalCount={filtered.length} />}
 
-      {history.length === 0 ? (
+      {historyQuery.isLoading ? (
+        <div
+          role="status"
+          className="px-6 lg:px-10 max-w-[1400px] mx-auto text-sm text-fg-muted"
+        >
+          正在加载最近阅读…
+        </div>
+      ) : history.length > 0 && nodesQuery.isLoading && cards.length === 0 ? (
+        <div
+          role="status"
+          className="px-6 lg:px-10 max-w-[1400px] mx-auto text-sm text-fg-muted"
+        >
+          正在解析最近浏览…
+        </div>
+      ) : loadFailed && cards.length === 0 ? null : history.length === 0 ? (
         <EmptyState
           title="还没有最近阅读"
           description="打开任意一个文件夹开始浏览，它会出现在这里。"
@@ -153,10 +203,19 @@ export default function Recents() {
             </button>
           }
         />
-      ) : nodesQuery.isLoading && cards.length === 0 ? (
-        <div className="px-6 lg:px-10 max-w-[1400px] mx-auto text-sm text-fg-muted">
-          正在解析最近浏览…
-        </div>
+      ) : cards.length === 0 ? (
+        <EmptyState
+          title="最近访问的相册暂不可用"
+          description="相册可能已移动，或媒体库尚未完成扫描。"
+          action={
+            <button
+              onClick={() => navigate("/")}
+              className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md border border-border hover:bg-bg-subtle text-sm"
+            >
+              去主页看看
+            </button>
+          }
+        />
       ) : filtered.length === 0 ? (
         <EmptyState
           title="没有匹配的最近访问"

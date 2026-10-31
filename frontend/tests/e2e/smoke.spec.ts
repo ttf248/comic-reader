@@ -498,3 +498,54 @@ for (const albumName of ["sample-mixed-cover", "sample-video-cover"]) {
     expect(writes).toBe(1);
   });
 }
+
+for (const failure of ["history", "nodes"] as const) {
+  test(`最近阅读 ${failure} 读取失败不显示为空且可重试`, async ({ page }) => {
+    const nodes = await scannedNodes(page.request);
+    const album = nodes.find((node) => node.name === "sample-album");
+    expect(album).toBeDefined();
+    expect(
+      (
+        await page.request.post("/api/history", {
+          data: { albumId: album!.id, name: album!.name, imageCount: 3 },
+        })
+      ).ok(),
+    ).toBeTruthy();
+    let blocked = true;
+    const pattern =
+      failure === "history" ? "**/api/history" : "**/api/library/nodes/query";
+    await page.route(pattern, async (route) => {
+      if (blocked)
+        await route.fulfill({
+          status: 500,
+          json: { code: "test_unavailable", message: "unavailable" },
+        });
+      else await route.continue();
+    });
+    await page.goto("/recents");
+    const alert = page.getByRole("alert");
+    await expect(alert).toContainText(
+      failure === "history" ? "最近阅读加载失败" : "相册信息加载失败",
+      { timeout: 15_000 },
+    );
+    await expect(page.getByText("还没有最近阅读", { exact: true })).toHaveCount(
+      0,
+    );
+    await expect(
+      page.getByText("没有匹配的最近访问", { exact: true }),
+    ).toHaveCount(0);
+    for (const theme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme: theme });
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+      await page.screenshot({
+        path: test.info().outputPath(`recent-error-${theme}.png`),
+      });
+    }
+    blocked = false;
+    await alert.getByRole("button", { name: "重试加载", exact: true }).click();
+    await expect(
+      page.locator(`a[href="/albums/${album!.id}"]`).first(),
+    ).toBeVisible();
+    await expect(alert).toHaveCount(0);
+  });
+}
