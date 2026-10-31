@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useSearchStore } from "../store/searchStore";
@@ -163,6 +163,10 @@ export default function Album() {
     node?.kind === "album" ? node.id : "",
     nodeQuery.data?.revision,
   );
+  const fetchNextMediaPage = mediaQuery.fetchNextPage;
+  const loadMoreMedia = useCallback(() => {
+    void fetchNextMediaPage({ cancelRefetch: false });
+  }, [fetchNextMediaPage]);
   const revisionChanged =
     childrenQuery.error instanceof LibraryRevisionChangedError ||
     mediaQuery.error instanceof LibraryRevisionChangedError;
@@ -266,26 +270,46 @@ export default function Album() {
     );
   }
 
-  // 纯视频专辑：imageCount=0 且 videoCount>0，走视频列表视图
-  if (detail.imageCount === 0 && (detail.videoCount ?? 0) > 0) {
-    return (
-      <VideoAlbumView
-        detail={detail}
-        onBack={() => navigate(-1)}
-        hasNextPage={mediaQuery.hasNextPage ?? false}
-        isLoadingMore={mediaQuery.isFetchingNextPage}
-        onLoadMore={() => void mediaQuery.fetchNextPage()}
-      />
-    );
-  }
+  const canLoadMore =
+    (mediaQuery.hasNextPage ?? false) && !mediaQuery.isFetchNextPageError;
   return (
-    <AlbumView
-      detail={detail}
-      onBack={() => navigate(-1)}
-      hasNextPage={mediaQuery.hasNextPage ?? false}
-      isLoadingMore={mediaQuery.isFetchingNextPage}
-      onLoadMore={() => void mediaQuery.fetchNextPage()}
-    />
+    <div className="flex flex-col h-full min-h-0">
+      {mediaQuery.isFetchNextPageError && (
+        <div
+          role="alert"
+          className="shrink-0 flex items-center justify-between gap-3 px-6 lg:px-10 py-3 bg-warning/10 text-fg text-sm"
+        >
+          <span>后续媒体加载失败，已加载内容仍可浏览。</span>
+          <button
+            type="button"
+            onClick={loadMoreMedia}
+            disabled={mediaQuery.isFetchingNextPage}
+            className="shrink-0 text-accent hover:underline disabled:opacity-50"
+          >
+            {mediaQuery.isFetchingNextPage ? "正在重试…" : "重试加载"}
+          </button>
+        </div>
+      )}
+      <div className="flex-1 min-h-0">
+        {detail.imageCount === 0 && (detail.videoCount ?? 0) > 0 ? (
+          <VideoAlbumView
+            detail={detail}
+            onBack={() => navigate(-1)}
+            hasNextPage={canLoadMore}
+            isLoadingMore={mediaQuery.isFetchingNextPage}
+            onLoadMore={loadMoreMedia}
+          />
+        ) : (
+          <AlbumView
+            detail={detail}
+            onBack={() => navigate(-1)}
+            hasNextPage={canLoadMore}
+            isLoadingMore={mediaQuery.isFetchingNextPage}
+            onLoadMore={loadMoreMedia}
+          />
+        )}
+      </div>
+    </div>
   );
 }
 

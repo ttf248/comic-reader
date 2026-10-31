@@ -4,6 +4,7 @@ import type { VideoInfo } from "../../api/videos";
 import VideoCoverImage from "../common/VideoCoverImage";
 import { PlayFilledIcon } from "../common/Icon";
 import { formatDuration } from "../../utils/format";
+import { useMediaGridPagination } from "../../hooks/useMediaGridPagination";
 
 interface Props {
   videos: string[];
@@ -25,6 +26,12 @@ export default function VideoThumbnailGrid({
   onLoadMore,
   onOpen,
 }: Props) {
+  const rangeChanged = useMediaGridPagination({
+    loadedCount: videos.length,
+    hasNextPage,
+    isLoadingMore,
+    onLoadMore,
+  });
   const slots = useMemo(
     () =>
       Array.from(
@@ -42,9 +49,7 @@ export default function VideoThumbnailGrid({
       listClassName="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 px-6 lg:px-10 pb-10 max-w-[1400px] mx-auto"
       itemClassName="min-w-0"
       computeItemKey={(index, item) => item ?? `video-placeholder-${index}`}
-      endReached={() => {
-        if (hasNextPage && !isLoadingMore) onLoadMore();
-      }}
+      rangeChanged={rangeChanged}
       itemContent={(index, video) => {
         if (!video) return <VideoPlaceholder />;
         const info = infos[video];

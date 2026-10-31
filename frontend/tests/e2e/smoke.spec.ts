@@ -1,4 +1,42 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "@playwright/test";
+
+interface ManifestResponse {
+  manifest: { scannedAt: string; roots: Array<{ id: string }> };
+}
+
+async function scannedNodes(request: APIRequestContext) {
+  const config = (await (await request.get("/api/config")).json()) as {
+    mediaRoots: string[];
+  };
+  if (config.mediaRoots.length > 1) {
+    const response = await request.put("/api/config", {
+      data: { mediaRoots: config.mediaRoots.slice(0, 1) },
+    });
+    expect(response.ok()).toBeTruthy();
+  }
+  const before = (await (
+    await request.get("/api/library/manifest")
+  ).json()) as ManifestResponse;
+  expect((await request.post("/api/scans")).ok()).toBeTruthy();
+  await expect
+    .poll(async () => {
+      const response = await request.get("/api/library/manifest");
+      return ((await response.json()) as ManifestResponse).manifest.scannedAt;
+    })
+    .not.toBe(before.manifest.scannedAt);
+  const manifest = (await (
+    await request.get("/api/library/manifest")
+  ).json()) as ManifestResponse;
+  const rootId = manifest.manifest.roots[0].id;
+  const response = await request.get(
+    `/api/library/${rootId}/children?limit=200`,
+  );
+  expect(response.ok()).toBeTruthy();
+  const body = (await response.json()) as {
+    page: { items: Array<{ id: string; name: string }> };
+  };
+  return body.page.items;
+}
 
 test("扫描并打开示例相册", async ({ page }) => {
   // 服务带一个不存在的目录启动，仍可通过设置接口修复后扫描。
@@ -113,3 +151,95 @@ test("设置页可加载服务端配置", async ({ page }) => {
     page.locator('input[type="number"][value="0"]').first(),
   ).toBeVisible();
 });
+
+for (const kind of ["images", "mixed", "videos"] as const) {
+  test(`${kind} 网格在已加载边界翻页并补齐远处占位`, async ({ page }) => {
+    const nodes = await scannedNodes(page.request);
+    const album = nodes.find((node) => node.name === `sample-paged-${kind}`);
+    expect(album).toBeDefined();
+    // 分页走真实扫描与 HTTP；封面和视频元数据使用小响应，避免测试依赖 ffmpeg。
+    await page.route("**/api/thumbs/**", (route) =>
+      route.fulfill({
+        contentType: "image/png",
+        body: Buffer.from(
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+          "base64",
+        ),
+      }),
+    );
+    await page.route("**/api/videos/info/batch", (route) =>
+      route.fulfill({ json: { ok: true, items: [] } }),
+    );
+    const mediaRequests: string[] = [];
+    let failNextPage = kind === "images";
+    let failedRequests = 0;
+    await page.route(`**/api/albums/${album!.id}/media?*`, async (route) => {
+      if (
+        failNextPage &&
+        new URL(route.request().url()).searchParams.has("cursor")
+      ) {
+        failedRequests++;
+        await route.fulfill({
+          status: 400,
+          json: { code: "test_page_error", message: "模拟分页失败" },
+        });
+      } else {
+        await route.continue();
+      }
+    });
+    page.on("response", (response) => {
+      if (
+        response.status() === 200 &&
+        new URL(response.url()).pathname === `/api/albums/${album!.id}/media`
+      ) {
+        mediaRequests.push(response.url());
+      }
+    });
+    await page.goto(`/albums/${album!.id}`);
+    const scroller = page.locator("[data-virtuoso-scroller]");
+    await expect(scroller.getByRole("button").first()).toBeVisible();
+    expect(mediaRequests).toHaveLength(1);
+
+    await scroller.evaluate((element) => {
+      element.scrollTop = element.scrollHeight * 0.6;
+    });
+    if (kind === "images") {
+      const alert = page.getByRole("alert");
+      await expect(alert).toContainText("后续媒体加载失败", {
+        timeout: 15_000,
+      });
+      await scroller.evaluate((element) => {
+        element.scrollTop = 0;
+      });
+      await expect(
+        scroller.getByRole("button", { name: "打开第 1 张", exact: true }),
+      ).toBeVisible();
+      expect(failedRequests).toBe(4);
+      for (const theme of ["light", "dark"] as const) {
+        await page.emulateMedia({ colorScheme: theme });
+        await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+        await page.screenshot({
+          path: test.info().outputPath(`media-page-error-${theme}.png`),
+        });
+      }
+      failNextPage = false;
+      await alert.getByRole("button", { name: "重试加载" }).click();
+      await expect(alert).toHaveCount(0);
+    }
+    await expect.poll(() => mediaRequests.length).toBe(2);
+
+    await scroller.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    const lastName =
+      kind === "videos"
+        ? "播放视频 405"
+        : kind === "mixed"
+          ? "播放zz-video.mp4"
+          : "打开第 405 张";
+    await expect(
+      scroller.getByRole("button", { name: lastName, exact: true }),
+    ).toBeVisible();
+    expect(mediaRequests).toHaveLength(3);
+  });
+}

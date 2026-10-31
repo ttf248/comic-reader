@@ -1,6 +1,7 @@
 import { useMemo, type MouseEvent } from "react";
 import { VirtuosoGrid } from "react-virtuoso";
 import { thumbUrl } from "../../api/thumbs";
+import { useMediaGridPagination } from "../../hooks/useMediaGridPagination";
 
 interface Props {
   /** 已加载的图片资源 ID，顺序与相册媒体索引一致。 */
@@ -21,7 +22,7 @@ interface Props {
  * 相册图片缩略图网格。
  *
  * 用轻量占位槽保留服务端总长度，VirtuosoGrid 只挂载视口附近的真实
- * 图片；滚动接近尾部时由父级继续加载媒体页。这样首屏不需要等待整本
+ * 图片；滚动接近已加载边界时由父级继续加载媒体页。这样首屏不需要等待整本
  * 相册，也不会为数千张图片创建完整 DOM 树。
  */
 export default function MediaThumbnailGrid({
@@ -35,6 +36,12 @@ export default function MediaThumbnailGrid({
   onOpen,
   onContextMenu,
 }: Props) {
+  const rangeChanged = useMediaGridPagination({
+    loadedCount: files.length,
+    hasNextPage,
+    isLoadingMore,
+    onLoadMore,
+  });
   const slots = useMemo(
     () =>
       Array.from(
@@ -52,9 +59,7 @@ export default function MediaThumbnailGrid({
       listClassName={`grid gap-2 px-6 lg:px-10 pb-10 max-w-[1400px] mx-auto ${gridClassName}`}
       itemClassName="min-w-0"
       computeItemKey={(index, item) => item ?? `media-placeholder-${index}`}
-      endReached={() => {
-        if (hasNextPage && !isLoadingMore) onLoadMore();
-      }}
+      rangeChanged={rangeChanged}
       itemContent={(index, file) => {
         if (!file) return <ThumbnailPlaceholder />;
         const isCurrent = progressIndex === index;

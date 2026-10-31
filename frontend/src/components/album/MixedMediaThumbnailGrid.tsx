@@ -6,6 +6,7 @@ import { thumbUrl } from "../../api/thumbs";
 import { formatDuration } from "../../utils/format";
 import { PlayFilledIcon } from "../common/Icon";
 import VideoCoverImage from "../common/VideoCoverImage";
+import { useMediaGridPagination } from "../../hooks/useMediaGridPagination";
 
 interface Props {
   /** 已加载的混合媒体项，顺序与服务端媒体索引一致。 */
@@ -40,6 +41,12 @@ export default function MixedMediaThumbnailGrid({
   onOpen,
   onContextMenu,
 }: Props) {
+  const rangeChanged = useMediaGridPagination({
+    loadedCount: items.length,
+    hasNextPage,
+    isLoadingMore,
+    onLoadMore,
+  });
   const slots = useMemo(
     () =>
       Array.from(
@@ -59,9 +66,7 @@ export default function MixedMediaThumbnailGrid({
       computeItemKey={(index, item) =>
         item?.id ?? `mixed-media-placeholder-${index}`
       }
-      endReached={() => {
-        if (hasNextPage && !isLoadingMore) onLoadMore();
-      }}
+      rangeChanged={rangeChanged}
       itemContent={(_, item) => {
         if (!item) return <ThumbnailPlaceholder />;
 

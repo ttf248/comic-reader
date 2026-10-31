@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import Album from "./Album";
 import {
@@ -33,11 +34,17 @@ vi.mock("../components/album/AlbumGrid", () => ({
 
 function renderAlbum(path = "/albums/c_year") {
   return render(
-    <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route path="/albums/*" element={<Album />} />
-      </Routes>
-    </MemoryRouter>,
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/albums/*" element={<Album />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 
@@ -122,5 +129,40 @@ describe("Album", () => {
 
     expect(screen.getByText("正在加载文件夹")).toBeInTheDocument();
     expect(screen.queryByText("找不到此文件夹")).not.toBeInTheDocument();
+  });
+
+  it("分页失败保留相册并提供不取消活动请求的重试", () => {
+    const fetchNextPage = vi.fn();
+    vi.mocked(useLibraryNodes).mockReturnValue({
+      data: {
+        revision: 4,
+        missing: [],
+        items: [
+          { id: "a_pages", kind: "album", name: "分页相册", imageCount: 405 },
+        ],
+      },
+      isLoading: false,
+    } as never);
+    vi.mocked(useAlbumMedia).mockReturnValue({
+      data: {
+        pages: [
+          { items: [{ id: "f_first", kind: "image", index: 0, kindIndex: 0 }] },
+        ],
+      },
+      hasNextPage: true,
+      isFetchNextPageError: true,
+      isFetchingNextPage: false,
+      fetchNextPage,
+    } as never);
+
+    renderAlbum("/albums/a_pages");
+
+    expect(
+      screen.getByRole("heading", { name: "分页相册" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("后续媒体加载失败");
+    fireEvent.click(screen.getByRole("button", { name: "重试加载" }));
+    expect(fetchNextPage).toHaveBeenCalledTimes(1);
+    expect(fetchNextPage).toHaveBeenCalledWith({ cancelRefetch: false });
   });
 });

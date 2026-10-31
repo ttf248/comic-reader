@@ -28,6 +28,19 @@ try {
     [System.IO.File]::WriteAllBytes((Join-Path $sampleDir "page-$_.png"), $pngBytes)
   }
 
+  # 超过两页的轻量素材，验证三个虚拟媒体网格的分页边界和远距离跳转。
+  foreach ($kind in @("images", "mixed", "videos")) {
+    $pagedDir = Join-Path (Join-Path $testRoot "media") "sample-paged-$kind"
+    New-Item -ItemType Directory -Path $pagedDir -Force | Out-Null
+    1..405 | ForEach-Object {
+      $extension = if ($kind -eq "videos") { "mp4" } else { "png" }
+      [System.IO.File]::WriteAllBytes((Join-Path $pagedDir "page-$_.$extension"), $pngBytes)
+    }
+    if ($kind -eq "mixed") {
+      [System.IO.File]::WriteAllBytes((Join-Path $pagedDir "zz-video.mp4"), $pngBytes)
+    }
+  }
+
   $mediaPathYaml = (Join-Path $testRoot "media").Replace("\", "/")
   $cachePathYaml = (Join-Path $testRoot "cache").Replace("\", "/")
   $staticPathYaml = (Join-Path $frontendRoot "dist").Replace("\", "/")
