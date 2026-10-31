@@ -124,7 +124,7 @@ func (c *ScanResultCache) Flush() error {
 //   - 一致：按原样加载到内存。
 //
 // 当前根先按配置与扫描器共用的规则绝对化、去空、去重，再比较根 ID 集合。
-// 缓存重复记录同一根 ID 时视为无效，不能恢复重复扫描产出的统计和节点。
+// 重复根 ID 或目录树中的重复物理节点视为无效，不能恢复重复扫描产出的统计。
 func (c *ScanResultCache) LoadWithRoots(currentRoots []string) (rootsMismatch bool, err error) {
 	currentRoots = pathutil.NormalizeRoots(currentRoots)
 	if len(currentRoots) == 0 {
@@ -158,7 +158,7 @@ func (c *ScanResultCache) LoadWithRoots(currentRoots []string) (rootsMismatch bo
 		}
 		currentRootIDs = append(currentRootIDs, rootIDFor(abs))
 	}
-	if !sameRootIDs(envelope.RootIDs, currentRootIDs) {
+	if !sameRootIDs(envelope.RootIDs, currentRootIDs) || hasRepeatedScanNodes(envelope.Result) {
 		c.resetMemory()
 		if err := removeCacheFile(c.path); err != nil {
 			return true, err
@@ -311,6 +311,9 @@ type scanCacheRoot struct {
 func encodeScanResultForDisk(result *models.ScanResult) (*scanCacheEnvelope, error) {
 	if result == nil {
 		return nil, errors.New("scan result is empty")
+	}
+	if hasRepeatedScanNodes(result) {
+		return nil, errors.New("scan result repeats a physical node")
 	}
 	roots := append([]string(nil), result.Roots...)
 	if len(roots) == 0 {
@@ -512,6 +515,45 @@ func sameRootIDs(cached, current []string) bool {
 		delete(set, id)
 	}
 	return true
+}
+
+// 只校验实体目录树；同一物理目录的虚拟相册/集合属于不同 kind，标签视图可重复引用相册。
+func hasRepeatedScanNodes(result *models.ScanResult) bool {
+	seen := make(map[string]struct{})
+	add := func(path string, kind ResourceKind) bool {
+		if path == "" {
+			return false
+		}
+		key := pathKindKey(path, kind)
+		if _, exists := seen[key]; exists {
+			return true
+		}
+		seen[key] = struct{}{}
+		return false
+	}
+	var collectionsRepeat func([]models.Collection) bool
+	collectionsRepeat = func(collections []models.Collection) bool {
+		for _, collection := range collections {
+			if add(collection.Path, ResourceCollection) {
+				return true
+			}
+			for _, album := range collection.Albums {
+				if add(album.Path, ResourceAlbum) {
+					return true
+				}
+			}
+			if collectionsRepeat(collection.Collections) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, album := range result.Albums {
+		if add(album.Path, ResourceAlbum) {
+			return true
+		}
+	}
+	return collectionsRepeat(result.Collections)
 }
 
 // ApplyCoverOverrides 把用户设置的封面覆盖应用到当前缓存结果上。

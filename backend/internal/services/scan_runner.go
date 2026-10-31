@@ -395,15 +395,22 @@ func isActiveScan(status ScanStatus) bool {
 }
 
 func relativeScanPath(path string, roots []string) string {
+	if path == "" {
+		return ""
+	}
+	var owner, relative string
 	for _, root := range roots {
 		rel, err := filepath.Rel(root, path)
-		if err == nil && !relEscapesRoot(rel) {
-			name := filepath.Base(filepath.Clean(root))
-			if rel == "." {
-				return name
-			}
-			return filepath.ToSlash(filepath.Join(name, rel))
+		if err == nil && !relEscapesRoot(rel) && len(root) > len(owner) {
+			owner, relative = root, rel
 		}
 	}
-	return ""
+	if owner == "" {
+		return ""
+	}
+	name := filepath.Base(filepath.Clean(owner))
+	if relative == "." {
+		return name
+	}
+	return filepath.ToSlash(filepath.Join(name, relative))
 }

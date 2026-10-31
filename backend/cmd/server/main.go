@@ -217,7 +217,7 @@ func main() {
 	if r := scanCache.Get(); r != nil {
 		log.Printf("  已加载上次扫描结果：%d 相册，扫描于 %s", r.AlbumCount, r.ScannedAt.Format("2006-01-02 15:04:05"))
 	} else if mismatch {
-		log.Printf("  缓存的根目录与当前 mediaRoots 不一致，已清空旧缓存")
+		log.Printf("  扫描缓存与当前媒体根不一致或内容无效，已清空旧缓存")
 	}
 
 	// 启动时若缓存为空（首次启动 / 缓存根目录不匹配被清空 / 磁盘无缓存），

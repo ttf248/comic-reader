@@ -95,8 +95,9 @@ func (e *ScanError) Unwrap() error { return e.Err }
 // worker 不递归等待子任务，因此并发数与目录深度无关，也不会出现父任务
 // 占满信号量后等待子任务的死锁。
 type Scanner struct {
-	workers int
-	ctx     context.Context
+	workers  int
+	ctx      context.Context
+	rootKeys map[string]struct{} // 本轮配置根；父根不重复读取单独配置的子根
 }
 
 // NewScanner 创建扫描器。
@@ -140,6 +141,11 @@ func (s *Scanner) ScanWithHook(opts ScanOptions, hook ScanHook) (*models.ScanRes
 func (s *Scanner) scanRoots(opts ScanOptions, roots []scanRoot, hook ScanHook) (*models.ScanResult, error) {
 	start := time.Now()
 	absRoots := scanRootPaths(roots)
+	scoped := *s
+	scoped.rootKeys = make(map[string]struct{}, len(roots))
+	for _, root := range roots {
+		scoped.rootKeys[pathutil.RootKey(root.path)] = struct{}{}
+	}
 
 	var allTopAlbums []models.Album
 	var allTopCollections []models.Collection
@@ -166,7 +172,7 @@ func (s *Scanner) scanRoots(opts ScanOptions, roots []scanRoot, hook ScanHook) (
 				hook(event)
 			}
 		}
-		records, warnings, err := s.scanDirectoryTree(root, opts.MaxDepth, opts.Exclude, rootHook)
+		records, warnings, err := scoped.scanDirectoryTree(root, opts.MaxDepth, opts.Exclude, rootHook)
 		if err != nil {
 			return nil, err
 		}
@@ -433,6 +439,10 @@ func (s *Scanner) inspectDirectory(
 			continue
 		}
 		if entry.IsDir() {
+			childPath := filepath.Join(task.path, entry.Name())
+			if _, delegated := s.rootKeys[pathutil.RootKey(childPath)]; delegated {
+				continue
+			}
 			if exclude.ShouldSkipDir(entry.Name()) {
 				continue
 			}
@@ -442,7 +452,6 @@ func (s *Scanner) inspectDirectory(
 				})
 				continue
 			}
-			childPath := filepath.Join(task.path, entry.Name())
 			result.record.children = append(result.record.children, childPath)
 			result.children = append(result.children, directoryTask{path: childPath, depth: task.depth + 1})
 			continue
