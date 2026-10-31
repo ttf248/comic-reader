@@ -500,6 +500,139 @@ describe("ServerConfigPanel", () => {
     },
   );
 
+  it.each(["mediaRoots", "host", "port"] as const)(
+    "%s 组合输入期间不自动保存，确认文字后重新等待保存间隔",
+    async (field) => {
+      renderPanel();
+      const original =
+        field === "mediaRoots"
+          ? baseConfig.mediaRoots[0]
+          : String(baseConfig[field]);
+      const input = await screen.findByDisplayValue(original);
+      const candidate = field === "port" ? "909" : "/photos/候选文字";
+      fireEvent.compositionStart(input);
+      fireEvent.change(input, { target: { value: candidate } });
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 800));
+      });
+      expect(configApi.update).not.toHaveBeenCalled();
+      expect(input).toHaveValue(field === "port" ? 909 : candidate);
+      const final =
+        field === "mediaRoots"
+          ? "/photos/最终目录"
+          : field === "port"
+            ? "9090"
+            : "final.local";
+      fireEvent.change(input, { target: { value: final } });
+      fireEvent.compositionEnd(input);
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+      });
+      expect(configApi.update).not.toHaveBeenCalled();
+      await waitFor(
+        () =>
+          expect(configApi.update).toHaveBeenCalledWith({
+            [field]:
+              field === "mediaRoots"
+                ? [final]
+                : field === "port"
+                  ? Number(final)
+                  : final,
+          }),
+        { timeout: 1500 },
+      );
+      expect(configApi.update).toHaveBeenCalledOnce();
+    },
+  );
+
+  it("开始组合输入会暂停该字段的旧计时，但其他设置仍可自动保存", async () => {
+    vi.mocked(configApi.update).mockResolvedValueOnce({
+      ok: true,
+      config: { ...baseConfig, port: 9090 },
+      requiresRestart: [],
+      mediaRootsChanged: false,
+    });
+    renderPanel();
+    const input = await screen.findByDisplayValue(baseConfig.host);
+    fireEvent.change(input, { target: { value: "pending.local" } });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    });
+    fireEvent.compositionStart(input);
+    fireEvent.change(screen.getByDisplayValue("8080"), {
+      target: { value: "9090" },
+    });
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+    });
+    expect(configApi.update).toHaveBeenCalledOnce();
+    expect(configApi.update).toHaveBeenCalledWith({ port: 9090 });
+    expect(input).toHaveValue("pending.local");
+    // 即使最终文字与组合前相同，也从 compositionend 重新计时。
+    fireEvent.compositionEnd(input);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 150));
+    });
+    expect(configApi.update).toHaveBeenCalledOnce();
+    await waitFor(
+      () =>
+        expect(configApi.update).toHaveBeenLastCalledWith({
+          host: "pending.local",
+        }),
+      { timeout: 1500 },
+    );
+    expect(configApi.update).toHaveBeenCalledTimes(2);
+  });
+
+  it("移除正在组合输入的媒体根后可以保存剩余目录，离开页面清理未提交输入", async () => {
+    vi.mocked(configApi.get).mockResolvedValue({
+      ...baseConfig,
+      mediaRoots: [baseConfig.mediaRoots[0], "/photos/remaining"],
+    });
+    vi.mocked(configApi.update).mockResolvedValue({
+      ok: true,
+      config: { ...baseConfig, mediaRoots: ["/photos/remaining"] },
+      requiresRestart: [],
+      mediaRootsChanged: false,
+    });
+    const view = renderPanel();
+    const input = await screen.findByDisplayValue(baseConfig.mediaRoots[0]);
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: "/photos/候选" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "删除此根目录" })[0]);
+    await waitFor(
+      () =>
+        expect(configApi.update).toHaveBeenCalledWith({
+          mediaRoots: ["/photos/remaining"],
+        }),
+      { timeout: 1500 },
+    );
+    const remaining = await screen.findByDisplayValue("/photos/remaining");
+    fireEvent.compositionStart(remaining);
+    fireEvent.change(remaining, { target: { value: "/photos/未确认" } });
+    view.unmount();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+    });
+    expect(configApi.update).toHaveBeenCalledOnce();
+  });
+
+  it("目录组合输入失焦保存当前文字，晚到的组合结束事件不会重复提交", async () => {
+    renderPanel();
+    const input = await screen.findByDisplayValue(baseConfig.cacheDir);
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: "/photos/确认文字" } });
+    fireEvent.blur(input);
+    await waitFor(() =>
+      expect(configApi.update).toHaveBeenCalledWith({
+        cacheDir: "/photos/确认文字",
+      }),
+    );
+    fireEvent.compositionEnd(input);
+    fireEvent.blur(input);
+    expect(configApi.update).toHaveBeenCalledOnce();
+  });
+
   it("媒体根目录停止输入后自动保存并提示重新扫描", async () => {
     vi.mocked(configApi.update).mockResolvedValue({
       ok: true,

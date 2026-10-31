@@ -2982,3 +2982,149 @@ test("设置媒体根按 Esc 撤销整组未提交内容并保留已经确认的
   await page.clock.runFor(700);
   expect(writes).toHaveLength(1);
 });
+
+test("设置自动保存等待组合输入确认，其他字段仍可保存", async ({ page }) => {
+  const config = (await (await page.request.get("/api/config")).json()) as {
+    mediaRoots: string[];
+    host: string;
+    port: number;
+  };
+  const current = { ...config };
+  const writes: Record<string, unknown>[] = [];
+  await page.route("**/api/config", async (route) => {
+    if (route.request().method() !== "PUT") return route.continue();
+    const patch = route.request().postDataJSON() as Record<string, unknown>;
+    writes.push(patch);
+    Object.assign(current, patch);
+    return route.fulfill({
+      json: {
+        ok: true,
+        config: current,
+        requiresRestart: [],
+        mediaRootsChanged: false,
+      },
+    });
+  });
+  const compose = async (
+    input: Locator,
+    phase: "start" | "end",
+    value: string,
+  ) => {
+    await input.evaluate(
+      (element, { phase, value }) => {
+        if (!(element instanceof HTMLInputElement))
+          throw new Error("expected input");
+        if (phase === "start") {
+          element.focus();
+          element.dispatchEvent(
+            new CompositionEvent("compositionstart", { bubbles: true }),
+          );
+        }
+        const setter = Object.getOwnPropertyDescriptor(
+          HTMLInputElement.prototype,
+          "value",
+        )?.set;
+        if (!setter) throw new Error("input value setter unavailable");
+        setter.call(element, value);
+        element.dispatchEvent(
+          new InputEvent("input", {
+            bubbles: true,
+            data: value,
+            inputType: "insertCompositionText",
+            isComposing: true,
+          }),
+        );
+        if (phase === "end")
+          element.dispatchEvent(
+            new CompositionEvent("compositionend", {
+              bubbles: true,
+              data: value,
+            }),
+          );
+      },
+      { phase, value },
+    );
+  };
+  await page.clock.install();
+  await page.goto("/settings");
+  const root = page.getByPlaceholder("E:\\照片 或 /home/user/pics").first();
+  await compose(root, "start", "/photos/候选目录");
+  await page.clock.runFor(1000);
+  expect(writes).toEqual([]);
+  await expect(root).toHaveValue("/photos/候选目录");
+  await compose(root, "end", "/photos/确认目录");
+  await page.clock.runFor(200);
+  expect(writes).toEqual([]);
+  const rootSaved = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PUT" &&
+      new URL(response.url()).pathname === "/api/config",
+  );
+  await page.clock.runFor(300);
+  expect((await rootSaved).ok()).toBe(true);
+  await expect
+    .poll(() => writes)
+    .toEqual([
+      { mediaRoots: ["/photos/确认目录", ...config.mediaRoots.slice(1)] },
+    ]);
+
+  // 依据服务端原值定位一次，后续不再用会随输入变化的 value 选择器。
+  const hostIndex = await page
+    .locator('input[type="text"]')
+    .evaluateAll(
+      (inputs, host) =>
+        inputs.findIndex((input) => (input as HTMLInputElement).value === host),
+      config.host,
+    );
+  expect(hostIndex).toBeGreaterThanOrEqual(0);
+  const host = page.locator('input[type="text"]').nth(hostIndex);
+  await page
+    .locator(`input[type="number"][value="${config.port}"]`)
+    .fill("9090");
+  await compose(host, "start", "候选.local");
+  const portSaved = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PUT" &&
+      new URL(response.url()).pathname === "/api/config",
+  );
+  await page.clock.runFor(700);
+  expect((await portSaved).ok()).toBe(true);
+  await expect.poll(() => writes.length).toBe(2);
+  expect(writes[1]).toEqual({ port: 9090 });
+  await expect(host).toHaveValue("候选.local");
+  await compose(host, "end", "localhost");
+  await page.clock.runFor(200);
+  expect(writes).toHaveLength(2);
+  const hostSaved = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PUT" &&
+      new URL(response.url()).pathname === "/api/config",
+  );
+  await page.clock.runFor(500);
+  expect((await hostSaved).ok()).toBe(true);
+  await expect.poll(() => writes.length).toBe(3);
+  expect(writes[2]).toEqual({ host: "localhost" });
+  const numberIndex = await page
+    .locator('input[type="number"]')
+    .evaluateAll((inputs) =>
+      inputs.findIndex((input) => (input as HTMLInputElement).value === "9090"),
+    );
+  expect(numberIndex).toBeGreaterThanOrEqual(0);
+  const numberInput = page.locator('input[type="number"]').nth(numberIndex);
+  await compose(numberInput, "start", "909");
+  await page.clock.runFor(1000);
+  expect(writes).toHaveLength(3);
+  await compose(numberInput, "end", "9091");
+  await page.clock.runFor(200);
+  expect(writes).toHaveLength(3);
+  const numberSaved = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PUT" &&
+      new URL(response.url()).pathname === "/api/config",
+  );
+  await page.clock.runFor(500);
+  expect((await numberSaved).ok()).toBe(true);
+  await expect.poll(() => writes.length).toBe(4);
+  expect(writes[3]).toEqual({ port: 9091 });
+  expect(JSON.stringify(writes)).not.toContain("候选");
+});

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   configApi,
@@ -11,7 +11,6 @@ import { updateFsCapabilities } from "../../hooks/useFsCapabilities";
 import { fileManagerErrorMessage } from "../../utils/fileManager";
 import { authApi } from "../../api/auth";
 import { ApiError } from "../../api/client";
-import { useDebounce } from "../../hooks/useDebounce";
 import { useScanSSE } from "../../hooks/useScanSSE";
 import { scanApi } from "../../api/scan";
 import { libraryQueryKeys } from "../../hooks/useLibrary";
@@ -246,50 +245,60 @@ export default function ServerConfigPanel() {
   const [mediaRootsDirty, setMediaRootsDirty] = useState(false);
   // 暂存用户输入:草稿,避免每次 onChange 都触发 PUT(输入体验更顺)
   const [draft, setDraft] = useState<ServerConfigPatch>({});
-  const debouncedMediaRoots = useDebounce(
+  const [composingFields, setComposingFields] = useState<
+    ReadonlyMap<keyof ServerConfigPatch, number>
+  >(() => new Map());
+  const debouncedMediaRoots = useAutosaveSnapshot(
     draft.mediaRoots,
     MEDIA_ROOTS_AUTOSAVE_DELAY,
+    composingFields.has("mediaRoots"),
   );
   const [accessTokenDraft, setAccessTokenDraft] = useState("");
   const [accessError, setAccessError] = useState("");
-  // 路径类字段用 onBlur 触发(不走 debounce);非路径类才用 debounce
-  const debouncedDraft = useDebounce(draft, 600);
+  // 按字段排除仍在组合输入的候选文字，不阻塞其他字段的自动保存。
+  const autosaveDraft = useMemo(
+    () =>
+      Object.fromEntries(
+        (Object.keys(draft) as (keyof ServerConfigPatch)[])
+          .filter((key) => !PATH_FIELDS.has(key) && !composingFields.has(key))
+          .map((key) => [key, draft[key]]),
+      ) as ServerConfigPatch,
+    [draft, composingFields],
+  );
+  const debouncedDraft = useAutosaveSnapshot(autosaveDraft, 600);
   // 当前"路径类草稿"按字段拆,onBlur 时取对应字段提交
   const pathDirtyRef = useRef<
     Partial<Record<keyof ServerConfigPatch, unknown>>
   >({});
   const flushRef = useRef<(patch: ServerConfigPatch) => void>(() => {});
 
-  // 把 debounced 草稿 flush 到后端(仅限非路径类字段)
-  const firstFlush = useRef(true);
+  // 只提交当前完整等待过保存间隔的快照，旧计时结果不能清掉新输入。
   useEffect(() => {
-    if (firstFlush.current) {
-      firstFlush.current = false;
-      return;
-    }
-    const keys = Object.keys(debouncedDraft);
+    if (!debouncedDraft) return;
+    const keys = Object.keys(debouncedDraft) as (keyof ServerConfigPatch)[];
     if (keys.length === 0) return;
-    // 过滤掉路径类(它们已通过 onBlur 单独提交)
-    const nonPathKeys = keys.filter((k) => !PATH_FIELDS.has(k));
-    if (nonPathKeys.length === 0) {
-      setDraft((d) => {
-        const next = { ...d };
-        nonPathKeys.forEach((k) => delete next[k as keyof ServerConfigPatch]);
-        return next;
+    flushRef.current(debouncedDraft);
+    setDraft((current) => {
+      const next = { ...current };
+      keys.forEach((key) => {
+        if (current[key] === debouncedDraft[key]) delete next[key];
       });
-      return;
-    }
-    const payload = Object.fromEntries(
-      nonPathKeys.map((k) => [k, debouncedDraft[k as keyof ServerConfigPatch]]),
-    ) as ServerConfigPatch;
-    flushRef.current(payload);
-    // 清掉已 flush 的字段
-    setDraft((d) => {
-      const next = { ...d };
-      nonPathKeys.forEach((k) => delete next[k as keyof ServerConfigPatch]);
       return next;
     });
   }, [debouncedDraft]);
+
+  function setFieldComposing(key: keyof ServerConfigPatch, active: boolean) {
+    if (!mounted.current) return;
+    setComposingFields((current) => {
+      const previous = current.get(key) ?? 0;
+      const count = Math.max(0, previous + (active ? 1 : -1));
+      if (previous === count) return current;
+      const next = new Map(current);
+      if (count > 0) next.set(key, count);
+      else next.delete(key);
+      return next;
+    });
+  }
 
   const update = useMutation({
     mutationFn: (patch: ServerConfigPatch) => configApi.update(patch),
@@ -469,6 +478,9 @@ export default function ServerConfigPanel() {
             }}
             onOpenInExplorer={openConfiguredDirectory}
             onCancel={() => cancelPathField("mediaRoots")}
+            onCompositionChange={(active) =>
+              setFieldComposing("mediaRoots", active)
+            }
           />
         </div>
       </div>
@@ -631,6 +643,9 @@ export default function ServerConfigPanel() {
                   }}
                   onCommit={isPath ? () => flushPathField(def.key) : undefined}
                   onCancel={() => cancelPathField(def.key)}
+                  onCompositionChange={(active) =>
+                    setFieldComposing(def.key, active)
+                  }
                 />
               );
             })}
@@ -672,6 +687,64 @@ export default function ServerConfigPanel() {
   );
 }
 
+// 仅在当前输入完整等待过间隔后返回快照；暂停、恢复和新输入都会让旧结果失效。
+function useAutosaveSnapshot<T>(
+  value: T,
+  delay: number,
+  paused = false,
+): T | undefined {
+  const [snapshot, setSnapshot] = useState<{ value: T } | null>(null);
+  useEffect(() => {
+    if (paused) {
+      setSnapshot(null);
+      return;
+    }
+    const timer = setTimeout(() => setSnapshot({ value }), delay);
+    return () => clearTimeout(timer);
+  }, [value, delay, paused]);
+  return !paused && snapshot !== null && snapshot.value === value
+    ? snapshot.value
+    : undefined;
+}
+
+function useConfigComposition(
+  onChange: (value: string) => void,
+  onCompositionChange: (active: boolean) => void,
+) {
+  const active = useRef(false);
+  const notify = useRef(onCompositionChange);
+  notify.current = onCompositionChange;
+  const clear = () => {
+    if (!active.current) return;
+    active.current = false;
+    notify.current(false);
+  };
+  useEffect(
+    () => () => {
+      if (active.current) {
+        active.current = false;
+        notify.current(false);
+      }
+    },
+    [],
+  );
+  return {
+    active,
+    start: () => {
+      if (active.current) return;
+      active.current = true;
+      notify.current(true);
+    },
+    finish: (value: string) => {
+      if (!active.current) return;
+      // 即使文字未变化也发布一次新草稿，从确认输入起重新计算保存间隔。
+      onChange(value);
+      clear();
+    },
+    clear,
+  };
+}
+
 // ---- 多根字段(独立组件)----
 
 function MediaRootsField({
@@ -681,6 +754,7 @@ function MediaRootsField({
   onChange,
   onOpenInExplorer,
   onCancel,
+  onCompositionChange,
 }: {
   roots: string[];
   status: FieldStatus;
@@ -688,6 +762,7 @@ function MediaRootsField({
   onChange: (next: string[]) => void;
   onOpenInExplorer: (path: string) => void;
   onCancel: () => void;
+  onCompositionChange: (active: boolean) => void;
 }) {
   // 始终渲染一个空槽位(即使当前为空),方便用户添加第一个根
   const list = roots.length === 0 ? [""] : roots;
@@ -741,6 +816,7 @@ function MediaRootsField({
             onPick={(picked) => updateAt(i, picked)}
             onChange={(nv) => updateAt(i, nv)}
             onCancel={onCancel}
+            onCompositionChange={onCompositionChange}
             removable={roots.length > 1}
             onRemove={() => removeAt(i)}
           />
@@ -770,6 +846,7 @@ function ConfigRow({
   onChange,
   onCommit,
   onCancel,
+  onCompositionChange,
 }: {
   def: FieldDef;
   value: string | number | boolean;
@@ -780,7 +857,16 @@ function ConfigRow({
   onChange: (v: string | number | boolean) => void;
   onCommit?: () => void;
   onCancel: () => void;
+  onCompositionChange: (active: boolean) => void;
 }) {
+  const composition = useConfigComposition((value) => {
+    if (def.kind === "number") {
+      const number = Number(value);
+      if (Number.isFinite(number)) onChange(number);
+    } else if (def.kind === "text") {
+      onChange(value);
+    }
+  }, onCompositionChange);
   return (
     <div className="flex items-center justify-between gap-4 px-4 py-3 text-sm">
       <div className="flex flex-col min-w-0">
@@ -805,6 +891,7 @@ function ConfigRow({
             onChange={(v) => onChange(v)}
             onCommit={onCommit}
             onCancel={onCancel}
+            onCompositionChange={onCompositionChange}
             onOpenInExplorer={
               value && String(value).length > 0 && allowOsOpen
                 ? () => openConfiguredDirectory(String(value))
@@ -820,6 +907,9 @@ function ConfigRow({
             type="text"
             value={String(value)}
             onChange={(e) => onChange(e.target.value)}
+            onCompositionStart={composition.start}
+            onCompositionEnd={(e) => composition.finish(e.currentTarget.value)}
+            onBlur={(e) => composition.finish(e.currentTarget.value)}
             className="bg-bg-subtle border border-border-faint rounded-md h-8 px-2.5 text-sm font-mono w-72 max-w-[40vw] focus:outline-none focus:border-accent"
           />
         ) : def.kind === "number" ? (
@@ -832,6 +922,9 @@ function ConfigRow({
               const n = Number(e.target.value);
               if (Number.isFinite(n)) onChange(n);
             }}
+            onCompositionStart={composition.start}
+            onCompositionEnd={(e) => composition.finish(e.currentTarget.value)}
+            onBlur={(e) => composition.finish(e.currentTarget.value)}
             className="bg-bg-subtle border border-border-faint rounded-md h-8 px-2.5 text-sm font-mono w-24 text-right tabular-nums focus:outline-none focus:border-accent"
           />
         ) : (
@@ -975,6 +1068,7 @@ interface PathFieldProps {
   onCommit?: () => void;
   /** 撤销当前配置字段未提交的草稿；媒体根以整组数组为单位 */
   onCancel: () => void;
+  onCompositionChange: (active: boolean) => void;
   /** 点击「在资源管理器中打开」时调用(undefined 时按钮隐藏) */
   onOpenInExplorer?: () => void;
   /** 用户确认服务端返回的完整目录路径后回调 */
@@ -994,6 +1088,7 @@ function PathField({
   onChange,
   onCommit,
   onCancel,
+  onCompositionChange,
   onOpenInExplorer,
   onPick,
   compact,
@@ -1004,6 +1099,7 @@ function PathField({
 }: PathFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [picking, setPicking] = useState(false);
+  const composition = useConfigComposition(onChange, onCompositionChange);
 
   // 提交:Enter / Blur
   const commit = () => onCommit?.();
@@ -1018,9 +1114,14 @@ function PathField({
         type="text"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        onBlur={commit}
+        onCompositionStart={composition.start}
+        onCompositionEnd={(e) => composition.finish(e.currentTarget.value)}
+        onBlur={(e) => {
+          composition.finish(e.currentTarget.value);
+          commit();
+        }}
         onKeyDown={(e) => {
-          if (e.nativeEvent.isComposing) return;
+          if (e.nativeEvent.isComposing || composition.active.current) return;
           if (e.key === "Enter") {
             e.preventDefault();
             (e.currentTarget as HTMLInputElement).blur();
@@ -1065,7 +1166,10 @@ function PathField({
       {removable && onRemove && (
         <button
           type="button"
-          onClick={onRemove}
+          onClick={() => {
+            composition.clear();
+            onRemove();
+          }}
           title="删除此根目录"
           className={`inline-flex items-center justify-center ${btnSize} rounded-md border border-border-faint text-fg-subtle hover:text-danger hover:border-danger/40 transition-colors`}
         >
