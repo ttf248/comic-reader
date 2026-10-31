@@ -16,6 +16,7 @@ import YearTimeline from "../components/home/YearTimeline";
 import { ContinueReadingHero, UnreadHero } from "../components/home/HomeHeroes";
 import { useUIStore } from "../store/uiStore";
 import { albumRoute, decodeFavPath } from "../utils/path";
+import { compareDatesDesc } from "../utils/date";
 import type { GalleryContextEntry } from "../utils/galleryContext";
 import {
   groupLibraryNodesByYear,
@@ -208,17 +209,6 @@ export default function Home() {
     [overview.nodes],
   );
 
-  const recentByCardID = useMemo(() => {
-    const dates = new Map<string, string>();
-    for (const node of overview.nodes) {
-      dates.set(
-        `${node.kind === "album" ? "a" : "c"}:${node.id}`,
-        node.date ?? node.modTime ?? "",
-      );
-    }
-    return dates;
-  }, [overview.nodes]);
-
   // 切换视图到 collection/smart 时清掉 yearFilter（年份只对 album 有意义）
   useEffect(() => {
     if (yearFilter !== null && view !== "all" && view !== "album") {
@@ -275,8 +265,8 @@ export default function Home() {
       case "recent":
         return withProgress.sort(
           (a, b) =>
-            +new Date(recentByCardID.get(b.id) ?? "") -
-            +new Date(recentByCardID.get(a.id) ?? ""),
+            compareDatesDesc(a.modTime, b.modTime) ||
+            a.title.localeCompare(b.title),
         );
       case "viewed":
         // history 命中按 openedAt 倒序;未命中(从未打开)排到末尾,
@@ -302,7 +292,6 @@ export default function Home() {
     yearFilter,
     yearFilterActive,
     dashboardProgressByID,
-    recentByCardID,
     viewedAtMap,
     minImageCount,
   ]);

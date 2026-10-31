@@ -28,12 +28,22 @@ try {
     [System.IO.File]::WriteAllBytes((Join-Path $sampleDir "page-$_.png"), $pngBytes)
   }
 
-  # 标签收藏需要由真实目录名解析，避免只验证前端模拟数据。
-  # 同标签至少两个相册才会生成智能合集。
-  1..2 | ForEach-Object {
-    $taggedDir = Join-Path (Join-Path $testRoot "media") "zz-[测试][空 格][C++][100%][字面%20][字面%2F][字面%25] tagged-$_"
-    New-Item -ItemType Directory -Path $taggedDir -Force | Out-Null
-    [System.IO.File]::WriteAllBytes((Join-Path $taggedDir "page.png"), $pngBytes)
+  # 标签和排序使用真实扫描素材；名称、目录修改时间及媒体业务日期故意不同序。
+  $taggedSamples = @(
+    @{ Name = "A"; Modified = "2023-01-01T00:00:00Z"; MediaModified = "2025-01-01T00:00:00Z" },
+    @{ Name = "M"; Modified = "2024-01-01T00:00:00Z"; MediaModified = "2000-01-01T00:00:00Z" },
+    @{ Name = "Z"; Modified = "2022-01-01T00:00:00Z"; MediaModified = "2030-01-01T00:00:00Z" }
+  )
+  $collectionDir = Join-Path (Join-Path $testRoot "media") "zz-sort-collection"
+  foreach ($parent in @((Join-Path $testRoot "media"), $collectionDir)) {
+    foreach ($sample in $taggedSamples) {
+      $taggedDir = Join-Path $parent ("zz-[测试][空 格][C++][100%][字面%20][字面%2F][字面%25] tagged-" + $sample.Name)
+      New-Item -ItemType Directory -Path $taggedDir -Force | Out-Null
+      $taggedImage = Join-Path $taggedDir "page.png"
+      [System.IO.File]::WriteAllBytes($taggedImage, $pngBytes)
+      [System.IO.File]::SetLastWriteTimeUtc($taggedImage, [DateTimeOffset]::Parse($sample.MediaModified).UtcDateTime)
+      [System.IO.Directory]::SetLastWriteTimeUtc($taggedDir, [DateTimeOffset]::Parse($sample.Modified).UtcDateTime)
+    }
   }
 
   # 超过两页的轻量素材，验证三个虚拟媒体网格的分页边界和远距离跳转。

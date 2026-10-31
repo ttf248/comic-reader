@@ -54,7 +54,15 @@ async function scannedNodes(request: APIRequestContext) {
   );
   expect(response.ok()).toBeTruthy();
   const body = (await response.json()) as {
-    page: { items: Array<{ id: string; name: string; imageCount?: number }> };
+    page: {
+      items: Array<{
+        id: string;
+        name: string;
+        imageCount?: number;
+        modTime?: string;
+        date?: string;
+      }>;
+    };
   };
   return body.page.items;
 }
@@ -1102,5 +1110,126 @@ test("中文和特殊字符标签通过编码链接正常打开", async ({ page 
           .first(),
       ).toBeVisible();
     });
+  }
+});
+
+test("六个列表的最近改排序使用真实修改时间", async ({ page }) => {
+  const nodes = await scannedNodes(page.request);
+  const prefix =
+    "zz-[测试][空 格][C++][100%][字面%20][字面%2F][字面%25] tagged-";
+  const samples = ["M", "A", "Z"].map((suffix) =>
+    nodes.find((node) => node.name === prefix + suffix)!,
+  );
+  for (const node of samples) expect(node).toBeDefined();
+  expect(Date.parse(samples[0].modTime ?? "")).toBeGreaterThan(
+    Date.parse(samples[1].modTime ?? ""),
+  );
+  expect(Date.parse(samples[0].date ?? "")).toBeLessThan(
+    Date.parse(samples[1].date ?? ""),
+  );
+  const collection = nodes.find((node) => node.name === "zz-sort-collection")!;
+  expect(collection).toBeDefined();
+  const children = (await (
+    await page.request.get(`/api/library/${collection.id}/children?limit=200`)
+  ).json()) as { page: { items: Array<{ id: string; name: string }> } };
+  const childIds = ["M", "A", "Z"].map(
+    (suffix) =>
+      children.page.items.find((node) => node.name === prefix + suffix)!.id,
+  );
+  const ids = samples.map((node) => node.id);
+  const original = (await (await page.request.get("/api/prefs")).json()) as {
+    favorites: string[];
+    maxRecent: number;
+    history: Array<{ albumId: string; name: string; imageCount: number }>;
+  };
+  try {
+    expect(
+      (
+        await page.request.patch("/api/prefs", {
+          data: { maxRecent: Math.max(3, original.maxRecent) },
+        })
+      ).ok(),
+    ).toBeTruthy();
+    expect((await page.request.delete("/api/history")).ok()).toBeTruthy();
+    for (const node of samples) {
+      expect(
+        (
+          await page.request.post("/api/favorites", {
+            data: { resourceId: node.id },
+          })
+        ).ok(),
+      ).toBeTruthy();
+      expect(
+        (
+          await page.request.post("/api/history", {
+            data: { albumId: node.id, name: node.name, imageCount: 1 },
+          })
+        ).ok(),
+      ).toBeTruthy();
+    }
+    const pages = [
+      ["/", ids],
+      [`/albums/${collection.id}`, childIds],
+      ["/favorites", ids],
+      ["/recents", ids],
+      ["/unread", ids],
+      [`/tags/${encodeURIComponent("测试")}`, ids],
+    ] as const;
+    for (const [path, expected] of pages) {
+      await test.step(path, async () => {
+        await page.goto(path);
+        await page.getByRole("combobox").fill(prefix);
+        if (path === "/") {
+          await page.getByRole("button", { name: "排序", exact: true }).click();
+          await page
+            .getByRole("button", { name: "按最近改", exact: true })
+            .click();
+        }
+        await expect
+          .poll(async () => {
+            await page.locator("main").evaluate((element) => {
+              element.scrollTop = element.scrollHeight;
+            });
+            return page
+              .locator('main [data-virtuoso-scroller] a[href^="/albums/"]')
+              .evaluateAll(
+                (links, expected) =>
+                  [
+                    ...new Set(
+                      links.map((link) =>
+                        decodeURIComponent(
+                          link.getAttribute("href")!.slice("/albums/".length),
+                        ),
+                      ),
+                    ),
+                  ].filter((id) => expected.includes(id)),
+                [...expected],
+              );
+          })
+          .toEqual([...expected]);
+      });
+    }
+  } finally {
+    for (const resourceId of ids)
+      if (!original.favorites.includes(resourceId))
+        expect(
+          (
+            await page.request.delete("/api/favorites", {
+              data: { resourceId },
+            })
+          ).ok(),
+        ).toBeTruthy();
+    expect(
+      (
+        await page.request.patch("/api/prefs", {
+          data: { maxRecent: original.maxRecent },
+        })
+      ).ok(),
+    ).toBeTruthy();
+    expect((await page.request.delete("/api/history")).ok()).toBeTruthy();
+    for (const entry of [...original.history].reverse())
+      expect(
+        (await page.request.post("/api/history", { data: entry })).ok(),
+      ).toBeTruthy();
   }
 });

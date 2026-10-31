@@ -10,6 +10,7 @@ import EmptyState from "../components/common/EmptyState";
 import { SparkleIcon, ShuffleIcon } from "../components/common/Icon";
 import type { GalleryContextEntry } from "../utils/galleryContext";
 import { albumRoute } from "../utils/path";
+import { compareDatesDesc } from "../utils/date";
 
 // 未读列表:跟 Recents / Favorites 同形,但源数据是「还没翻开过的相册」。
 //
@@ -45,10 +46,13 @@ export default function Unread() {
       case "name":
         return list.sort((a, b) => a.title.localeCompare(b.title));
       case "recent":
+        return list.sort(
+          (a, b) =>
+            compareDatesDesc(a.modTime, b.modTime) ||
+            a.title.localeCompare(b.title),
+        );
       case "viewed":
       default:
-        // Unread 都是「没看过」的,'viewed' 与 'recent' 都无意义,
-        // 直接走默认(保持入站顺序)或走 name。
         return list;
     }
   }, [cards, query, sortBy, minImageCount]);

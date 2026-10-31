@@ -41,6 +41,8 @@ export interface CardData {
   videoCount?: number;
   /** 图片数（仅 album 变体有意义），与 videoCount 一起区分纯视频相册。 */
   imageCount?: number;
+  /** 后端摘要中的修改时间，供列表的「最近改」排序使用。 */
+  modTime?: string;
   coverPath: string;
   /** 集合 / 智能视图的代表封面，按顺序最多展示四张；为空时回退到 coverPath。 */
   covers?: string[];

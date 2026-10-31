@@ -11,6 +11,7 @@ import { ListFilterBar } from "../components/common/ListFilterBar";
 import EmptyState from "../components/common/EmptyState";
 import { StarIcon } from "../components/common/Icon";
 import { decodeFavPath } from "../utils/path";
+import { compareDatesDesc } from "../utils/date";
 import type { GalleryContextEntry } from "../utils/galleryContext";
 import { historyApi } from "../api/prefs";
 import { useLibraryNodes, useLibraryTags } from "../hooks/useLibrary";
@@ -132,7 +133,11 @@ export default function Favorites() {
           return a.title.localeCompare(b.title);
         });
       case "recent":
-        return list.sort((a, b) => a.title.localeCompare(b.title));
+        return list.sort(
+          (a, b) =>
+            compareDatesDesc(a.modTime, b.modTime) ||
+            a.title.localeCompare(b.title),
+        );
       default:
         return list.sort((a, b) => a.title.localeCompare(b.title));
     }

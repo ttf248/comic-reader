@@ -16,6 +16,7 @@ export function nodeSummaryToCard(
     count: isAlbum ? (node.imageCount ?? 0) : (node.albumCount ?? 0),
     imageCount: isAlbum ? (node.imageCount ?? 0) : undefined,
     videoCount: isAlbum ? (node.videoCount ?? 0) : undefined,
+    modTime: node.modTime,
     coverPath: node.coverImage ?? "",
     covers: node.coverImages,
     coverKind: node.coverKind,

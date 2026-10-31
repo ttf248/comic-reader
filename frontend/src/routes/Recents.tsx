@@ -11,7 +11,7 @@ import { ListFilterBar } from "../components/common/ListFilterBar";
 import EmptyState from "../components/common/EmptyState";
 import { ClockIcon } from "../components/common/Icon";
 import { decodeFavPath } from "../utils/path";
-import { formatRelative } from "../utils/date";
+import { compareDatesDesc, formatRelative } from "../utils/date";
 import type { GalleryContextEntry } from "../utils/galleryContext";
 import { useLibraryNodes } from "../hooks/useLibrary";
 import { nodeSummaryToCard } from "../utils/libraryCard";
@@ -90,10 +90,14 @@ export default function Recents() {
       case "name":
         return list.sort((a, b) => a.title.localeCompare(b.title));
       case "recent":
+        return list.sort(
+          (a, b) =>
+            compareDatesDesc(a.modTime, b.modTime) ||
+            a.title.localeCompare(b.title),
+        );
       case "viewed":
       default:
-        // Recents 本身就是按 openedAt 倒序的列表,所以 'viewed' 与
-        // 'recent' 等价(history 项就是 recents 列表本身)
+        // 最近看沿用服务端按 openedAt 倒序的访问记录。
         return list;
     }
   }, [cards, query, sortBy, progressMap, minImageCount]);

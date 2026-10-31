@@ -19,6 +19,7 @@ import type { GalleryContextEntry } from "../utils/galleryContext";
 import { useTagAlbums } from "../hooks/useLibrary";
 import { nodeSummaryToCard } from "../utils/libraryCard";
 import { useReducedMotion } from "../hooks/useReducedMotion";
+import { compareDatesDesc } from "../utils/date";
 
 // 标签页：展示一个标签下的全部文件夹，支持排序、阅读进度、收藏。
 export default function Tag() {
@@ -81,7 +82,9 @@ export default function Tag() {
         );
       case "recent":
         return [...list].sort(
-          (a, b) => +new Date(b.modTime ?? "") - +new Date(a.modTime ?? ""),
+          (a, b) =>
+            compareDatesDesc(a.modTime, b.modTime) ||
+            a.name.localeCompare(b.name),
         );
       default:
         return [...list].sort((a, b) => a.name.localeCompare(b.name));

@@ -15,7 +15,7 @@ import YearTimeline from "../components/home/YearTimeline";
 import { groupAlbumsAndCollectionsByYear } from "../utils/albumGrouping";
 import EmptyState from "../components/common/EmptyState";
 import { decodeFavPath } from "../utils/path";
-import { formatRelative } from "../utils/date";
+import { compareDatesDesc, formatRelative } from "../utils/date";
 import { formatSize } from "../utils/format";
 import {
   ChevronLeftIcon,
@@ -77,6 +77,7 @@ interface CollectionDetail {
   displayName?: string;
   sourceRoot?: string;
   sourceName?: string;
+  modTime?: string;
   coverImage: string;
   coverImages?: string[];
   imageCount: number;
@@ -126,6 +127,7 @@ function collectionDetailFromSummary(
     displayName: summary.displayName,
     sourceRoot: summary.sourceRoot,
     sourceName: summary.sourceName,
+    modTime: summary.modTime,
     coverImage: summary.coverImage ?? "",
     coverImages: summary.coverImages,
     imageCount: summary.imageCount ?? 0,
@@ -881,6 +883,7 @@ function CollectionView({
       count: a.imageCount,
       imageCount: a.imageCount,
       videoCount: a.videoCount ?? 0,
+      modTime: a.modTime,
       coverPath: a.coverImage,
       coverKind: a.coverKind,
       to: `/albums/${encodeURIComponent(a.path)}`,
@@ -898,6 +901,7 @@ function CollectionView({
         to: `/albums/${encodeURIComponent(sub.path)}`,
         sourceRoot: sub.sourceRoot,
         sourceName: sub.sourceName,
+        modTime: sub.modTime,
       };
     });
     return [...albumCards, ...collCards];
@@ -911,8 +915,10 @@ function CollectionView({
       case "count":
         return items.sort((a, b) => b.count - a.count);
       case "recent":
-        return items.sort((a, b) =>
-          (b.title || "").localeCompare(a.title || ""),
+        return items.sort(
+          (a, b) =>
+            compareDatesDesc(a.modTime, b.modTime) ||
+            a.title.localeCompare(b.title),
         );
       case "viewed":
         // Album 详情没有完整 history 数据(子卡片可能很多),按 title 兜底
