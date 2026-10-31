@@ -156,7 +156,7 @@ func newHarness(t *testing.T) *harness {
 	api.Get("/favorites", handlers.FavoritesListHandler(prefsStore))
 	api.Post("/favorites", handlers.FavoriteAddHandler(prefsStore))
 	api.Delete("/favorites", handlers.FavoriteRemoveHandler(prefsStore))
-	api.Post("/favorites/prune", handlers.FavoritesPruneHandler(prefsStore, nil))
+	api.Post("/favorites/prune", handlers.FavoritesPruneHandler(prefsStore, catalog))
 	api.Get("/history", handlers.HistoryListHandler(prefsStore))
 	api.Post("/history", handlers.HistoryAddHandler(prefsStore))
 	api.Delete("/history", handlers.HistoryClearHandler(prefsStore))
@@ -574,6 +574,38 @@ func TestFavorites(t *testing.T) {
 	if len(got.Favorites) != 0 {
 		t.Errorf("after remove favorites=%v", got.Favorites)
 	}
+}
+
+func TestEmptyPreferencesResponsesUseArrays(t *testing.T) {
+	h := newHarness(t)
+	check := func(method, route string, request any, fields ...string) {
+		t.Helper()
+		response, body := h.do(t, method, route, request)
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("%s %s status=%d body=%s", method, route, response.StatusCode, body)
+		}
+		var payload map[string]json.RawMessage
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatal(err)
+		}
+		for _, field := range fields {
+			if !bytes.Equal(bytes.TrimSpace(payload[field]), []byte("[]")) {
+				t.Errorf("%s %s field %s=%s, want []", method, route, field, payload[field])
+			}
+		}
+	}
+	check("GET", "/api/prefs", nil, "favorites", "history")
+	check("GET", "/api/favorites", nil, "favorites")
+	check("GET", "/api/history", nil, "history")
+	check("PATCH", "/api/prefs", map[string]string{"theme": "dark"}, "favorites", "history")
+	id := "a_0000000000000000000001"
+	check("POST", "/api/favorites", map[string]string{"resourceId": id})
+	check("DELETE", "/api/favorites", map[string]string{"resourceId": id}, "favorites")
+	h.catalog.Publish(&models.ScanResult{}, []string{h.root})
+	check("POST", "/api/favorites/prune", nil, "removed")
+	check("POST", "/api/history", map[string]string{"albumId": id, "name": "sample"})
+	check("DELETE", "/api/history", nil)
+	check("GET", "/api/history", nil, "history")
 }
 
 func TestPrefs(t *testing.T) {

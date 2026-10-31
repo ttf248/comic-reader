@@ -171,7 +171,7 @@ func (s *PrefsStore) AddFavorite(resourceID string) ([]string, error) {
 	}
 	for _, f := range s.cached.Favorites {
 		if f == resourceID {
-			return append([]string(nil), s.cached.Favorites...), nil
+			return append([]string{}, s.cached.Favorites...), nil
 		}
 	}
 	next := clonePrefs(s.cached)
@@ -180,7 +180,7 @@ func (s *PrefsStore) AddFavorite(resourceID string) ([]string, error) {
 	if err := s.commitLocked(next); err != nil {
 		return nil, err
 	}
-	return append([]string(nil), s.cached.Favorites...), nil
+	return append([]string{}, s.cached.Favorites...), nil
 }
 
 // RemoveFavorite 移除收藏。
@@ -201,7 +201,7 @@ func (s *PrefsStore) RemoveFavorite(resourceID string) ([]string, error) {
 	if err := s.commitLocked(next); err != nil {
 		return nil, err
 	}
-	return append([]string(nil), s.cached.Favorites...), nil
+	return append([]string{}, s.cached.Favorites...), nil
 }
 
 // PruneInvalidFavorites 按调用方提供的当前资源目录移除已失效收藏。
@@ -223,7 +223,7 @@ func (s *PrefsStore) PruneInvalidFavorites(predicate func(string) bool) (removed
 	}
 	next.Favorites = out
 	if len(removed) == 0 {
-		return nil, nil
+		return []string{}, nil
 	}
 	if err := s.commitLocked(next); err != nil {
 		return removed, err
@@ -263,7 +263,7 @@ func (s *PrefsStore) AddHistory(entry models.HistoryEntry) ([]models.HistoryEntr
 	if err := s.commitLocked(next); err != nil {
 		return nil, err
 	}
-	return append([]models.HistoryEntry(nil), s.cached.History...), nil
+	return append([]models.HistoryEntry{}, s.cached.History...), nil
 }
 
 // ClearHistory 清空历史。
@@ -333,7 +333,7 @@ func (s *PrefsStore) commitLocked(next models.Prefs) error {
 
 func clonePrefs(p models.Prefs) models.Prefs {
 	out := p
-	out.Favorites = append([]string(nil), p.Favorites...)
-	out.History = append([]models.HistoryEntry(nil), p.History...)
+	out.Favorites = append([]string{}, p.Favorites...)
+	out.History = append([]models.HistoryEntry{}, p.History...)
 	return out
 }

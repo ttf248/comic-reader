@@ -405,3 +405,15 @@ test("离开相册会取消浏览器抽帧且不继续上传封面", async ({ pa
     release();
   }
 });
+
+test("空收藏返回数组且无失效项时清理显示零项成功", async ({ page }) => {
+  await scannedNodes(page.request);
+  const favorites = await page.request.get("/api/favorites");
+  expect(favorites.ok()).toBeTruthy();
+  expect((await favorites.json()).favorites).toEqual([]);
+  await page.goto("/settings");
+  await page.getByRole("button", { name: "清理", exact: true }).click();
+  await expect(
+    page.getByText("已清理 0 项失效收藏", { exact: true }),
+  ).toBeVisible();
+});

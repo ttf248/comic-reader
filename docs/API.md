@@ -176,10 +176,12 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 偏好文件只保存稳定资源 ID。加载时会丢弃不符合当前资源 ID 格式的记录，避免暴露本机路径。
 
+偏好响应中的 `favorites`、`history` 以及清理响应中的 `removed` 始终为数组；没有条目时返回 `[]`，不返回 `null`。删除最后一个收藏、清空最近访问和无变化清理同样遵循此约定。
+
 - `GET /api/prefs`、`PATCH /api/prefs`：读取或修改界面偏好。高频媒体活动不再混入偏好响应。
 - `GET /api/favorites`：返回 `{ "favorites": ["<resourceId>"] }`。
 - `POST /api/favorites`、`DELETE /api/favorites`：body 为 `{ "resourceId": "a_... | c_... | smart:<tag>" }`。
-- `POST /api/favorites/prune`：按当前资源目录移除已失效相册/集合 ID，不访问 ID 对应的文件路径；智能标签保留。资源目录尚未完成首次加载时返回 `409`，不会删除收藏。
+- `POST /api/favorites/prune`：按当前资源目录移除已失效相册/集合 ID，返回 `{ "removed": ["<resourceId>"] }`，不访问 ID 对应的文件路径；智能标签保留。资源目录尚未完成首次加载时返回 `409`，不会删除收藏。
 - `GET /api/history`、`DELETE /api/history`。
 - `POST /api/history`：body 为 `{ "albumId": "a_...", "name": "...", "imageCount": 42 }`。
 

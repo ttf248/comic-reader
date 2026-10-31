@@ -52,6 +52,46 @@ func tempStore(t *testing.T) *PrefsStore {
 	return NewPrefsStore(filepath.Join(t.TempDir(), "prefs.json"))
 }
 
+func TestPrefsStoreEmptyListsRemainArrays(t *testing.T) {
+	s := tempStore(t)
+	check := func(current *PrefsStore) {
+		t.Helper()
+		prefs, err := current.Get()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if prefs.Favorites == nil || prefs.History == nil {
+			t.Error("empty preference lists must remain non-nil")
+		}
+	}
+	check(s)
+	if _, err := s.AddFavorite(testAlbumID(1)); err != nil {
+		t.Fatal(err)
+	}
+	favorites, err := s.RemoveFavorite(testAlbumID(1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if favorites == nil || len(favorites) != 0 {
+		t.Error("remove last favorite must return empty array")
+	}
+	removed, err := s.PruneInvalidFavorites(func(string) bool { return true })
+	if err != nil {
+		t.Fatal(err)
+	}
+	if removed == nil || len(removed) != 0 {
+		t.Error("no-op prune must return empty array")
+	}
+	if _, err := s.AddHistory(models.HistoryEntry{AlbumID: testAlbumID(1), OpenedAt: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.ClearHistory(); err != nil {
+		t.Fatal(err)
+	}
+	check(s)
+	check(NewPrefsStore(s.path))
+}
+
 func TestPrefsStore_GetDefaultsWhenMissing(t *testing.T) {
 	s := tempStore(t)
 	p, err := s.Get()
