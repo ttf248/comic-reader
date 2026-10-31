@@ -76,9 +76,9 @@ ID 由根标识、资源类型和相对路径哈希生成；根目录与相对�
 ```text
 POST /api/scans
   → StartOrReuse（全局最多一个活动任务）
-  → Scanner.ScanWithContext（固定目录工作池 + 两阶段建树）
+  → prepareScanRoots（记录根身份与可读性）→ Scanner.scanRoots（可取消固定工作池 + 两阶段建树）
   → per-subscriber SSE broadcast
-  → complete: 验证 scan generation → ResourceCatalog.Publish（结果 + ID/分页索引单指针发布）
+  → complete: 复核根身份与可读性、验证 scan generation → ResourceCatalog.CommitScan（结果 + ID/分页索引单指针发布）
   → ScanResultCache.Set（仅负责持久化）→ SSE complete(libraryRevision)
   → GET /api/library/manifest + cursor pages（单次 Acquire 读取固定 revision）
 ```
@@ -90,6 +90,10 @@ POST /api/scans
 构建相册/集合树。因此并发数不随深度增长，也不存在父任务占满令牌后等待
 子任务的死锁。默认完整递归；仅测试或内部调用显式给出 `MaxDepth` 时截断，
 并在结果的 `warnings` 中说明。
+
+本轮开始时通过打开根目录、读取一个目录项及文件身份建立根快照，空根的 EOF 视为成功，不额外遍历目录树。同步入口和异步 runner 共用这份根身份；各根读取前后、整理后与 runner 提交前重新检查可读性，并以 `os.SameFile` 检测同一路径的新目录替换。根目录读取错误属于整轮失败；普通子目录读取失败先复核所属根，根仍有效才降级为告警。任一检查失败都不替换资源目录或扫描缓存。检查之间的外部文件系统改写不构成事务隔离，正常媒体增删也不被视为根身份变化。
+
+目录工作池使用每个根独立的子 context。发生致命读取错误、取消或正常返回时统一取消子 context、关闭任务通道并等待全部 worker；结果发送同时监听该 context，避免提前失败后阻塞在已无人接收的结果通道。
 
 ### 资源 ID 翻译
 
@@ -122,7 +126,7 @@ snapshot。stat 全部移到锁外，`flushDebounce=500ms` 异步落盘。
 - 终态任务短期保留供重连查询，随后自动回收。
 - SSE 中的 `currentPath` 只使用根别名和相对路径。
 
-扫描器保留目录层级：纯媒体目录形成相册；同时包含媒体和子目录时形成集合，并以“本目录媒体”虚拟相册表示当前层媒体。虚拟相册与集合共享真实物理目录，由资源 kind 生成不同 ID，不再使用不存在的 `.loose` 路径。文件和目录均使用自然排序；不可读目录、元数据失败和符号链接以脱敏告警返回。
+扫描器保留目录层级：纯媒体目录形成相册；同时包含媒体和子目录时形成集合，并以“本目录媒体”虚拟相册表示当前层媒体。虚拟相册与集合共享真实物理目录，由资源 kind 生成不同 ID，不再使用不存在的 `.loose` 路径。文件和目录均使用自然排序；普通子目录不可读、元数据失败和符号链接以脱敏告警返回，根目录失效则整轮失败。
 
 时间轴只消费扫描层产出的 `date`，不在前端重复解析名称。日期解析器保留 `captured > folder > modified` 的固定优先级；首轮快速扫描不遍历读取所有 EXIF，避免百万媒体库产生大量随机 I/O，未有拍摄时间时使用严格目录日期或媒体修改时间。
 

@@ -3,7 +3,6 @@ package services
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -73,6 +72,8 @@ const (
 	ScanOK ScanErrorKind = iota
 	ScanRootMissing
 	ScanRootNotDir
+	ScanRootUnreadable
+	ScanRootChanged
 )
 
 func (k ScanErrorKind) String() string {
@@ -81,6 +82,10 @@ func (k ScanErrorKind) String() string {
 		return "root missing"
 	case ScanRootNotDir:
 		return "root is not a directory"
+	case ScanRootUnreadable:
+		return "root is unreadable"
+	case ScanRootChanged:
+		return "root changed"
 	default:
 		return "ok"
 	}
@@ -138,32 +143,16 @@ func (s *Scanner) ScanWithContext(ctx context.Context, opts ScanOptions, hook Sc
 // Collections，并给每个 Album/Collection 填充 SourceRoot/SourceName 字段。
 // 跨根同名时，DisplayName 会加 "[SourceName] " 前缀避免歧义。
 func (s *Scanner) ScanWithHook(opts ScanOptions, hook ScanHook) (*models.ScanResult, error) {
-	roots := opts.effectiveRoots()
-	if len(roots) == 0 {
-		return nil, errors.New("root is empty")
+	roots, err := prepareScanRoots(opts)
+	if err != nil {
+		return nil, err
 	}
+	return s.scanRoots(opts, roots, hook)
+}
 
+func (s *Scanner) scanRoots(opts ScanOptions, roots []scanRoot, hook ScanHook) (*models.ScanResult, error) {
 	start := time.Now()
-
-	// 校验所有根并规范化
-	absRoots := make([]string, 0, len(roots))
-	for _, r := range roots {
-		abs, err := filepath.Abs(r)
-		if err != nil {
-			return nil, err
-		}
-		info, err := os.Stat(abs)
-		if err != nil {
-			if os.IsNotExist(err) {
-				return nil, &ScanError{Kind: ScanRootMissing, Path: r, Err: err}
-			}
-			return nil, err
-		}
-		if !info.IsDir() {
-			return nil, &ScanError{Kind: ScanRootNotDir, Path: r, Err: errors.New("not a directory")}
-		}
-		absRoots = append(absRoots, abs)
-	}
+	absRoots := scanRootPaths(roots)
 
 	var allTopAlbums []models.Album
 	var allTopCollections []models.Collection
@@ -171,10 +160,14 @@ func (s *Scanner) ScanWithHook(opts ScanOptions, hook ScanHook) (*models.ScanRes
 
 	// 每个根的目录总数动态发现，相册数量则累计整轮扫描，不能在换根时回退。
 	completedAlbums := 0
-	for rootIndex, absRoot := range absRoots {
+	for rootIndex, root := range roots {
 		if err := s.contextErr(); err != nil {
 			return nil, err
 		}
+		if err := root.validate(); err != nil {
+			return nil, err
+		}
+		absRoot := root.path
 		rootAlbums := 0
 		var rootHook ScanHook
 		if hook != nil {
@@ -186,12 +179,15 @@ func (s *Scanner) ScanWithHook(opts ScanOptions, hook ScanHook) (*models.ScanRes
 				hook(event)
 			}
 		}
-		records, warnings, err := s.scanDirectoryTree(absRoot, opts.MaxDepth, opts.Exclude, rootHook)
+		records, warnings, err := s.scanDirectoryTree(root, opts.MaxDepth, opts.Exclude, rootHook)
 		if err != nil {
 			return nil, err
 		}
 		completedAlbums += rootAlbums
 		if err := s.contextErr(); err != nil {
+			return nil, err
+		}
+		if err := root.validate(); err != nil {
 			return nil, err
 		}
 		topAlbums, topCollections := buildRootResult(absRoot, records)
@@ -223,6 +219,12 @@ func (s *Scanner) ScanWithHook(opts ScanOptions, hook ScanHook) (*models.ScanRes
 		})
 	}
 	smart := GroupByTag(allAlbums)
+	if err := s.contextErr(); err != nil {
+		return nil, err
+	}
+	if err := validateScanRoots(roots); err != nil {
+		return nil, err
+	}
 
 	rootsForResult := make([]string, len(absRoots))
 	copy(rootsForResult, absRoots)
@@ -325,36 +327,45 @@ type directoryScanResult struct {
 	record   directoryRecord
 	children []directoryTask
 	warnings []models.ScanWarning
+	err      error
 }
 
 // scanDirectoryTree 用一个固定工作池读取整棵目录树。协调器是唯一会向
 // jobs 写入的协程，worker 永远不等待自己派生的子任务，因而不会死锁。
 func (s *Scanner) scanDirectoryTree(
-	root string,
+	root scanRoot,
 	maxDepth int,
 	exclude ExcludeConfig,
 	hook ScanHook,
 ) (map[string]directoryRecord, []models.ScanWarning, error) {
+	ctx, cancel := context.WithCancel(s.ctx)
+	scoped := *s
+	scoped.ctx = ctx
 	workerCount := max(1, s.workers)
 	jobs := make(chan directoryTask)
 	results := make(chan directoryScanResult, workerCount)
 	var wg sync.WaitGroup
+	defer func() {
+		cancel()
+		close(jobs)
+		wg.Wait()
+	}()
 	for range workerCount {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for task := range jobs {
-				result := s.inspectDirectory(root, task, maxDepth, exclude)
+				result := scoped.inspectDirectory(root, task, maxDepth, exclude)
 				select {
 				case results <- result:
-				case <-s.ctx.Done():
+				case <-ctx.Done():
 					return
 				}
 			}
 		}()
 	}
 
-	queue := []directoryTask{{path: root}}
+	queue := []directoryTask{{path: root.path}}
 	records := make(map[string]directoryRecord)
 	var warnings []models.ScanWarning
 	active := 0
@@ -374,6 +385,9 @@ func (s *Scanner) scanDirectoryTree(
 			active++
 		case result := <-results:
 			active--
+			if result.err != nil {
+				return nil, nil, result.err
+			}
 			processed++
 			records[result.record.path] = result.record
 			warnings = append(warnings, result.warnings...)
@@ -390,19 +404,15 @@ func (s *Scanner) scanDirectoryTree(
 					AlbumsFound: albumsFound,
 				})
 			}
-		case <-s.ctx.Done():
-			close(jobs)
-			wg.Wait()
-			return nil, nil, s.ctx.Err()
+		case <-ctx.Done():
+			return nil, nil, ctx.Err()
 		}
 	}
-	close(jobs)
-	wg.Wait()
 	return records, warnings, nil
 }
 
 func (s *Scanner) inspectDirectory(
-	root string,
+	root scanRoot,
 	task directoryTask,
 	maxDepth int,
 	exclude ExcludeConfig,
@@ -410,8 +420,16 @@ func (s *Scanner) inspectDirectory(
 	result := directoryScanResult{record: directoryRecord{path: task.path}}
 	entries, err := os.ReadDir(task.path)
 	if err != nil {
+		if rootErr := root.validate(); rootErr != nil {
+			result.err = rootErr
+			return result
+		}
+		if task.depth == 0 {
+			result.err = scanRootReadError(root.path, err)
+			return result
+		}
 		result.warnings = append(result.warnings, models.ScanWarning{
-			Code: "directory_unreadable", Path: scanWarningPath(root, task.path), Message: "目录无法读取，已跳过",
+			Code: "directory_unreadable", Path: scanWarningPath(root.path, task.path), Message: "目录无法读取，已跳过",
 		})
 		return result
 	}
@@ -423,7 +441,7 @@ func (s *Scanner) inspectDirectory(
 		}
 		if entry.Type()&os.ModeSymlink != 0 {
 			result.warnings = append(result.warnings, models.ScanWarning{
-				Code: "symlink_skipped", Path: scanWarningPath(root, filepath.Join(task.path, entry.Name())), Message: "符号链接默认不跟随",
+				Code: "symlink_skipped", Path: scanWarningPath(root.path, filepath.Join(task.path, entry.Name())), Message: "符号链接默认不跟随",
 			})
 			continue
 		}
@@ -433,7 +451,7 @@ func (s *Scanner) inspectDirectory(
 			}
 			if depthLimited {
 				result.warnings = append(result.warnings, models.ScanWarning{
-					Code: "max_depth_reached", Path: scanWarningPath(root, task.path), Message: "已达到显式扫描深度上限",
+					Code: "max_depth_reached", Path: scanWarningPath(root.path, task.path), Message: "已达到显式扫描深度上限",
 				})
 				continue
 			}
@@ -462,7 +480,7 @@ func (s *Scanner) inspectDirectory(
 			modTime = info.ModTime()
 		} else {
 			result.warnings = append(result.warnings, models.ScanWarning{
-				Code: "metadata_unavailable", Path: scanWarningPath(root, fullPath), Message: "无法读取媒体元数据",
+				Code: "metadata_unavailable", Path: scanWarningPath(root.path, fullPath), Message: "无法读取媒体元数据",
 			})
 		}
 		file := fileEntry{path: fullPath, size: size, modTime: modTime}

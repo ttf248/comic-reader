@@ -232,7 +232,18 @@ func (r *AsyncScanRunner) run(state *ScanState, opts ScanOptions) {
 	defer close(state.done)
 	r.publish(state, ProgressEvent{ScanID: state.ID, Status: ScanStatusRunning})
 
+	roots, err := prepareScanRoots(opts)
+	if err != nil {
+		if state.Ctx.Err() != nil {
+			r.finishInterrupted(state, ScanStatusCancelled, context.Canceled)
+		} else {
+			r.finishInterrupted(state, ScanStatusError, err)
+		}
+		return
+	}
+	rootPaths := scanRootPaths(roots)
 	scanner := NewScanner()
+	scanner.ctx = state.Ctx
 	progress := 0
 	hook := func(ev ScanProgress) {
 		if state.Ctx.Err() != nil {
@@ -244,13 +255,16 @@ func (r *AsyncScanRunner) run(state *ScanState, opts ScanOptions) {
 			Progress:    progress,
 			Status:      ScanStatusRunning,
 			Phase:       ev.Phase,
-			CurrentPath: relativeScanPath(ev.CurrentPath, opts.effectiveRoots()),
+			CurrentPath: relativeScanPath(ev.CurrentPath, rootPaths),
 			AlbumsFound: ev.AlbumsFound,
 			ElapsedMs:   time.Since(state.StartedAt).Milliseconds(),
 		})
 	}
 
-	result, err := scanner.ScanWithContext(state.Ctx, opts, hook)
+	result, err := scanner.scanRoots(opts, roots, hook)
+	if err == nil {
+		err = validateScanRoots(roots)
+	}
 	if errors.Is(err, context.Canceled) || state.Ctx.Err() != nil {
 		r.finishInterrupted(state, ScanStatusCancelled, context.Canceled)
 		return
@@ -271,7 +285,7 @@ func (r *AsyncScanRunner) run(state *ScanState, opts ScanOptions) {
 	revision := uint64(0)
 	if r.catalog != nil {
 		result, revision = r.catalog.CommitScan(
-			result, opts.effectiveRoots(), r.cache, r.covers,
+			result, rootPaths, r.cache, r.covers,
 		)
 	} else if r.cache != nil {
 		r.cache.Set(result)
