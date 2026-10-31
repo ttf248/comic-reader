@@ -1,10 +1,18 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { LibraryNodeSummary } from "../api/library";
 import { historyApi } from "../api/prefs";
 import { useSearchStore } from "../store/searchStore";
+import { useUIStore } from "../store/uiStore";
 import Home from "./Home";
 import Album from "./Album";
 import Favorites from "./Favorites";
@@ -118,6 +126,8 @@ const expected = ["M新相册", "A中相册", "Z旧相册"];
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(historyApi.list).mockReset();
+  useUIStore.setState({ viewMode: "grid" });
   useSearchStore.getState().reset();
   useSearchStore.getState().setSortBy("recent");
   mocks.items = [
@@ -156,10 +166,12 @@ beforeEach(() => {
   });
 });
 
-function renderPage(path: string) {
-  const client = new QueryClient({
+function renderPage(
+  path: string,
+  client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
-  });
+  }),
+) {
   render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[path]}>
@@ -174,6 +186,7 @@ function renderPage(path: string) {
       </MemoryRouter>
     </QueryClientProvider>,
   );
+  return client;
 }
 
 it.each(pages)(
@@ -205,3 +218,107 @@ it.each(pages)(
     );
   },
 );
+
+const viewedHistory = [
+  {
+    albumId: "a_old",
+    name: "Z旧相册",
+    imageCount: 3,
+    openedAt: "2026-10-31T10:00:00Z",
+  },
+  {
+    albumId: "a_new",
+    name: "M新相册",
+    imageCount: 3,
+    openedAt: "2026-10-30T10:00:00Z",
+  },
+];
+const viewedExpected = ["Z旧相册", "M新相册", "A中相册"];
+const nameExpected = ["A中相册", "M新相册", "Z旧相册"];
+const sortablePages = pages.filter(([_name, path]) => path !== "/recents");
+const noticePages = pages.filter(
+  ([_name, path]) => path !== "/recents" && path !== "/favorites",
+);
+const order = () =>
+  within(screen.getByTestId("sort-results"))
+    .getAllByRole("listitem")
+    .map((item) => item.textContent);
+
+it.each(sortablePages)(
+  "%s 最近看按访问时间倒序，未访问相册置后",
+  async (_name, path) => {
+    useSearchStore.getState().setSortBy("viewed");
+    vi.mocked(historyApi.list).mockResolvedValue({ history: viewedHistory });
+    renderPage(path);
+    await waitFor(() => expect(order()).toEqual(viewedExpected));
+  },
+);
+
+it.each(
+  pages.filter(
+    ([_name, path]) => path === "/albums/c_root" || path === "/tags/测试",
+  ),
+)("%s 可以在当前页选择排序和列表视图", async (_name, path) => {
+  vi.mocked(historyApi.list).mockResolvedValue({ history: viewedHistory });
+  renderPage(path);
+  expect(historyApi.list).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole("button", { name: "排序" }));
+  fireEvent.click(screen.getByRole("button", { name: "按最近看" }));
+  await waitFor(() => expect(order()).toEqual(viewedExpected));
+  fireEvent.click(screen.getByRole("button", { name: "列表视图" }));
+  expect(useUIStore.getState().viewMode).toBe("list");
+  expect(historyApi.list).toHaveBeenCalledTimes(1);
+});
+
+it.each(noticePages)(
+  "%s 最近看读取失败保留卡片，重试后更新顺序",
+  async (_name, path) => {
+    useSearchStore.getState().setSortBy("viewed");
+    vi.mocked(historyApi.list)
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue({ history: viewedHistory });
+    renderPage(path);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "最近访问加载失败",
+    );
+    expect(order()).toEqual(nameExpected);
+    fireEvent.click(screen.getByRole("button", { name: "重试加载" }));
+    await waitFor(() => expect(order()).toEqual(viewedExpected));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(historyApi.list).toHaveBeenCalledTimes(2);
+  },
+);
+
+it("最近看读取中显示状态并保留可操作的卡片", () => {
+  useSearchStore.getState().setSortBy("viewed");
+  vi.mocked(historyApi.list).mockReturnValue(new Promise(() => {}));
+  renderPage("/unread");
+  expect(screen.getByRole("status")).toHaveTextContent("正在加载最近访问");
+  expect(order()).toEqual(nameExpected);
+});
+
+it("后台刷新失败保留上次访问顺序，切换名称排序后隐藏访问错误", async () => {
+  useSearchStore.getState().setSortBy("viewed");
+  vi.mocked(historyApi.list).mockResolvedValue({ history: viewedHistory });
+  const client = renderPage("/albums/c_root");
+  await waitFor(() => expect(order()).toEqual(viewedExpected));
+  vi.mocked(historyApi.list).mockRejectedValue(new Error("offline"));
+  await act(async () => {
+    await client.invalidateQueries({ queryKey: ["history"] });
+  });
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "仍使用已加载的访问记录",
+  );
+  expect(order()).toEqual(viewedExpected);
+  fireEvent.click(screen.getByRole("button", { name: "排序" }));
+  fireEvent.click(screen.getByRole("button", { name: "按名称" }));
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  expect(order()).toEqual(nameExpected);
+});
+
+it.each(noticePages)("%s 名称排序不读取访问历史", async (_name, path) => {
+  useSearchStore.getState().setSortBy("name");
+  renderPage(path);
+  await waitFor(() => expect(order()).toEqual(nameExpected));
+  expect(historyApi.list).not.toHaveBeenCalled();
+});

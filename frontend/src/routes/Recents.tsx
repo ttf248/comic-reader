@@ -2,8 +2,8 @@ import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSearchStore } from "../store/searchStore";
 import { useUIStore } from "../store/uiStore";
-import { useQuery } from "@tanstack/react-query";
-import { historyApi } from "../api/prefs";
+import type { Prefs } from "../api/prefs";
+import { useHistory } from "../hooks/useHistory";
 import { useImageActivities } from "../hooks/useImageActivity";
 import { useGalleryContextSync } from "../hooks/useGalleryContextSync";
 import AlbumGrid, { type CardData } from "../components/album/AlbumGrid";
@@ -16,8 +16,7 @@ import type { GalleryContextEntry } from "../utils/galleryContext";
 import { useLibraryNodes } from "../hooks/useLibrary";
 import { nodeSummaryToCard } from "../utils/libraryCard";
 
-const EMPTY_HISTORY: Awaited<ReturnType<typeof historyApi.list>>["history"] =
-  [];
+const EMPTY_HISTORY: Prefs["history"] = [];
 
 // 最近访问：从后端 history 列表中读取。带阅读进度。
 export default function Recents() {
@@ -27,11 +26,7 @@ export default function Recents() {
   const sortBy = useSearchStore((s) => s.sortBy);
   const minImageCount = useSearchStore((s) => s.minImageCount);
 
-  const historyQuery = useQuery({
-    queryKey: ["history"],
-    queryFn: () => historyApi.list(),
-    staleTime: 30 * 1000,
-  });
+  const historyQuery = useHistory();
 
   // history 顺序:OpenedAt 倒序
   const history = historyQuery.data?.history ?? EMPTY_HISTORY;

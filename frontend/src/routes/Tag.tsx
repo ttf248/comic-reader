@@ -20,6 +20,9 @@ import { useTagAlbums } from "../hooks/useLibrary";
 import { nodeSummaryToCard } from "../utils/libraryCard";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import { compareDatesDesc } from "../utils/date";
+import { useViewedSort } from "../hooks/useHistory";
+import { ListFilterBar } from "../components/common/ListFilterBar";
+import ViewedSortNotice from "../components/common/ViewedSortNotice";
 
 // 标签页：展示一个标签下的全部文件夹，支持排序、阅读进度、收藏。
 export default function Tag() {
@@ -41,6 +44,8 @@ export default function Tag() {
     () => albumsQuery.data?.items ?? [],
     [albumsQuery.data],
   );
+  const needsHistory = sortBy === "viewed" && albums.length > 0;
+  const { query: historyQuery, compareViewed } = useViewedSort(needsHistory);
 
   const totalImages = useMemo(
     () => albums.reduce((sum, album) => sum + (album.imageCount ?? 0), 0),
@@ -86,10 +91,14 @@ export default function Tag() {
             compareDatesDesc(a.modTime, b.modTime) ||
             a.name.localeCompare(b.name),
         );
+      case "viewed":
+        return [...list].sort(
+          (a, b) => compareViewed(a.id, b.id) || a.name.localeCompare(b.name),
+        );
       default:
         return [...list].sort((a, b) => a.name.localeCompare(b.name));
     }
-  }, [albums, query, sortBy]);
+  }, [albums, query, sortBy, compareViewed]);
 
   const cards: CardData[] = filtered.map((album) => ({
     ...nodeSummaryToCard(album),
@@ -232,13 +241,12 @@ export default function Tag() {
       </section>
 
       {/* 作品列表 */}
-      <section className="max-w-[1400px] mx-auto px-6 lg:px-10 pt-10 pb-10">
-        <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
-          <h2 className="font-display text-lg font-semibold">作品</h2>
-          <span className="text-xs text-fg-subtle tabular-nums">
-            {filtered.length} 个
-          </span>
-        </div>
+      <section
+        aria-label="作品列表"
+        className="max-w-[1400px] mx-auto pt-8 pb-10"
+      >
+        {needsHistory && <ViewedSortNotice query={historyQuery} />}
+        <ListFilterBar totalCount={cards.length} showMinImageFilter={false} />
         {filtered.length === 0 ? (
           <EmptyState
             title="没有匹配的作品"

@@ -5,6 +5,9 @@ import { useSearchStore } from "../store/searchStore";
 import { useFavorites } from "../hooks/useFavorites";
 import { useGalleryContextSync } from "../hooks/useGalleryContextSync";
 import { historyApi } from "../api/prefs";
+import { useViewedSort } from "../hooks/useHistory";
+import { ListFilterBar } from "../components/common/ListFilterBar";
+import ViewedSortNotice from "../components/common/ViewedSortNotice";
 import { syncHistoryCache } from "../utils/historyCache";
 import { thumbUrl } from "../api/thumbs";
 import { getVideoInfoBatch } from "../api/videos";
@@ -906,6 +909,8 @@ function CollectionView({
     });
     return [...albumCards, ...collCards];
   }, [detail]);
+  const needsHistory = sortBy === "viewed" && detail.albums.length > 0;
+  const { query: historyQuery, compareViewed } = useViewedSort(needsHistory);
 
   const filtered = useMemo(() => {
     const items = allCards.filter(
@@ -921,12 +926,15 @@ function CollectionView({
             a.title.localeCompare(b.title),
         );
       case "viewed":
-        // Album 详情没有完整 history 数据(子卡片可能很多),按 title 兜底
-        return items.sort((a, b) => a.title.localeCompare(b.title));
+        return items.sort(
+          (a, b) =>
+            compareViewed(decodeFavPath(a.to), decodeFavPath(b.to)) ||
+            a.title.localeCompare(b.title),
+        );
       default:
         return items.sort((a, b) => a.title.localeCompare(b.title));
     }
-  }, [allCards, query, sortBy]);
+  }, [allCards, query, sortBy, compareViewed]);
 
   const cards = filtered;
 
@@ -987,6 +995,8 @@ function CollectionView({
         </div>
       </div>
       <div className="flex-1 overflow-auto">
+        {needsHistory && <ViewedSortNotice query={historyQuery} />}
+        <ListFilterBar totalCount={cards.length} showMinImageFilter={false} />
         {/* 时间线只在 ≥2 个年份桶时才有意义:
             - 大多数子集合(如 2023年、B站、散图)子相册基本不带 4 位年份,
               全部进「其他」桶,1 张大年卡独享一整行,视觉比例严重失衡。

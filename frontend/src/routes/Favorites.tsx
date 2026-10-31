@@ -1,5 +1,4 @@
 import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useSearchStore } from "../store/searchStore";
 import { useUIStore } from "../store/uiStore";
@@ -13,7 +12,7 @@ import { StarIcon } from "../components/common/Icon";
 import { decodeFavPath } from "../utils/path";
 import { compareDatesDesc } from "../utils/date";
 import type { GalleryContextEntry } from "../utils/galleryContext";
-import { historyApi } from "../api/prefs";
+import { useViewedSort } from "../hooks/useHistory";
 import { useLibraryNodes, useLibraryTags } from "../hooks/useLibrary";
 import { nodeSummaryToCard, tagSummaryToCard } from "../utils/libraryCard";
 
@@ -27,19 +26,9 @@ export default function Favorites() {
   const minImageCount = useSearchStore((s) => s.minImageCount);
   const favoritesQuery = useFavorites();
   const { favorites } = favoritesQuery;
-  // 历史记录:sortBy='viewed' 时用最近「看过」时间排序
-  const historyQuery = useQuery({
-    queryKey: ["history"],
-    queryFn: () => historyApi.list(),
-    staleTime: 30_000,
-    enabled: sortBy === "viewed" && favorites.length > 0,
-  });
-  const viewedAtMap = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const h of historyQuery.data?.history ?? [])
-      m.set(h.albumId, h.openedAt);
-    return m;
-  }, [historyQuery.data]);
+  const needsHistory =
+    sortBy === "viewed" && favorites.some((id) => id.startsWith("a_"));
+  const { query: historyQuery, compareViewed } = useViewedSort(needsHistory);
 
   const nodeIds = useMemo(
     () => favorites.filter((id) => !id.startsWith("smart:")),
@@ -117,21 +106,11 @@ export default function Favorites() {
       case "count":
         return list.sort((a, b) => b.count - a.count);
       case "viewed":
-        return list.sort((a, b) => {
-          const aViewed =
-            a.variant === "album"
-              ? viewedAtMap.get(decodeFavPath(a.to))
-              : undefined;
-          const bViewed =
-            b.variant === "album"
-              ? viewedAtMap.get(decodeFavPath(b.to))
-              : undefined;
-          if (aViewed && bViewed)
-            return +new Date(bViewed) - +new Date(aViewed);
-          if (aViewed) return -1;
-          if (bViewed) return 1;
-          return a.title.localeCompare(b.title);
-        });
+        return list.sort(
+          (a, b) =>
+            compareViewed(decodeFavPath(a.to), decodeFavPath(b.to)) ||
+            a.title.localeCompare(b.title),
+        );
       case "recent":
         return list.sort(
           (a, b) =>
@@ -141,7 +120,7 @@ export default function Favorites() {
       default:
         return list.sort((a, b) => a.title.localeCompare(b.title));
     }
-  }, [cards, query, sortBy, progressMap, viewedAtMap, minImageCount]);
+  }, [cards, query, sortBy, progressMap, compareViewed, minImageCount]);
 
   // 收藏页的上下文：只让真正的相册参与上一本/下一本（智能合集不是「可翻页」对象）
   const favEntries = useMemo<GalleryContextEntry[]>(
@@ -160,8 +139,7 @@ export default function Favorites() {
   const favoritesFailed = favoritesQuery.isError;
   const nodesFailed = nodeIds.length > 0 && nodesQuery.isError;
   const tagsFailed = smartNames.length > 0 && tagsQuery.isError;
-  const historyFailed =
-    sortBy === "viewed" && favorites.length > 0 && historyQuery.isError;
+  const historyFailed = needsHistory && historyQuery.isError;
   const loadFailed =
     favoritesFailed || nodesFailed || tagsFailed || historyFailed;
   const detailsLoading =
@@ -171,7 +149,7 @@ export default function Favorites() {
     favoritesQuery.isFetching ||
     (nodeIds.length > 0 && nodesQuery.isFetching) ||
     (smartNames.length > 0 && tagsQuery.isFetching) ||
-    (sortBy === "viewed" && historyQuery.isFetching);
+    (needsHistory && historyQuery.isFetching);
   const retryLoad = () => {
     if (favoritesFailed) void favoritesQuery.refetch();
     if (nodesFailed) void nodesQuery.refetch();

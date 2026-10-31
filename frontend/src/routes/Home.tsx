@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { useSearchStore } from "../store/searchStore";
 import { useScanSSE } from "../hooks/useScanSSE";
@@ -7,11 +7,12 @@ import { useFavorites } from "../hooks/useFavorites";
 import { useMarkAlbumRead, useMarkAlbumsRead } from "../hooks/useImageActivity";
 import { useGalleryContextSync } from "../hooks/useGalleryContextSync";
 import { scanApi } from "../api/scan";
-import { historyApi } from "../api/prefs";
+import { useViewedSort } from "../hooks/useHistory";
 import { libraryApi } from "../api/library";
 import AlbumGrid, { type CardData } from "../components/album/AlbumGrid";
 import { ListFilterBar } from "../components/common/ListFilterBar";
 import EmptyState from "../components/common/EmptyState";
+import ViewedSortNotice from "../components/common/ViewedSortNotice";
 import YearTimeline from "../components/home/YearTimeline";
 import { ContinueReadingHero, UnreadHero } from "../components/home/HomeHeroes";
 import { useUIStore } from "../store/uiStore";
@@ -77,18 +78,9 @@ export default function Home() {
       ),
     [dashboard],
   );
-  // history 用于 sortBy='viewed':用最近「看过」时间(而非文件 mtime)排序。
-  // 注意:history 顺序是 openedAt 倒序,所以可以直接走 batch 缓存。
-  const { data: historyData } = useQuery({
-    queryKey: ["history"],
-    queryFn: () => historyApi.list(),
-    staleTime: 30_000,
-  });
-  const viewedAtMap = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const h of historyData?.history ?? []) m.set(h.albumId, h.openedAt);
-    return m;
-  }, [historyData]);
+  const needsHistory =
+    sortBy === "viewed" && overview.nodes.some((node) => node.kind === "album");
+  const { query: historyQuery, compareViewed } = useViewedSort(needsHistory);
 
   const startScan = useMutation({
     mutationFn: () => scanApi.start(),
@@ -269,18 +261,11 @@ export default function Home() {
             a.title.localeCompare(b.title),
         );
       case "viewed":
-        // history 命中按 openedAt 倒序;未命中(从未打开)排到末尾,
-        // 用 title 排序保稳定。album 变体才有「最近看过」的概念;
-        // collection/smart 走 title 兜底(没 history 概念)。
-        return withProgress.sort((a, b) => {
-          const aViewed = viewedAtMap.get(decodeFavPath(a.to));
-          const bViewed = viewedAtMap.get(decodeFavPath(b.to));
-          if (aViewed && bViewed)
-            return +new Date(bViewed) - +new Date(aViewed);
-          if (aViewed) return -1;
-          if (bViewed) return 1;
-          return a.title.localeCompare(b.title);
-        });
+        return withProgress.sort(
+          (a, b) =>
+            compareViewed(decodeFavPath(a.to), decodeFavPath(b.to)) ||
+            a.title.localeCompare(b.title),
+        );
       default:
         return withProgress.sort((a, b) => a.title.localeCompare(b.title));
     }
@@ -292,7 +277,7 @@ export default function Home() {
     yearFilter,
     yearFilterActive,
     dashboardProgressByID,
-    viewedAtMap,
+    compareViewed,
     minImageCount,
   ]);
 
@@ -460,6 +445,7 @@ export default function Home() {
       </section>
 
       {/* === 视图筛选 === */}
+      {hasContent && needsHistory && <ViewedSortNotice query={historyQuery} />}
       {hasContent && (
         <ListFilterBar
           viewChips={[

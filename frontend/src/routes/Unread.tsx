@@ -9,8 +9,10 @@ import { ListFilterBar } from "../components/common/ListFilterBar";
 import EmptyState from "../components/common/EmptyState";
 import { SparkleIcon, ShuffleIcon } from "../components/common/Icon";
 import type { GalleryContextEntry } from "../utils/galleryContext";
-import { albumRoute } from "../utils/path";
+import { albumRoute, decodeFavPath } from "../utils/path";
 import { compareDatesDesc } from "../utils/date";
+import { useViewedSort } from "../hooks/useHistory";
+import ViewedSortNotice from "../components/common/ViewedSortNotice";
 
 // 未读列表:跟 Recents / Favorites 同形,但源数据是「还没翻开过的相册」。
 //
@@ -27,6 +29,8 @@ export default function Unread() {
   const minImageCount = useSearchStore((s) => s.minImageCount);
   const pushToast = useUIStore((s) => s.pushToast);
   const { cards, count, total, isLoading } = useUnreadAlbums();
+  const needsHistory = sortBy === "viewed" && cards.length > 0;
+  const { query: historyQuery, compareViewed } = useViewedSort(needsHistory);
 
   const filtered = useMemo(() => {
     const list = cards
@@ -52,10 +56,15 @@ export default function Unread() {
             a.title.localeCompare(b.title),
         );
       case "viewed":
+        return list.sort(
+          (a, b) =>
+            compareViewed(decodeFavPath(a.to), decodeFavPath(b.to)) ||
+            a.title.localeCompare(b.title),
+        );
       default:
         return list;
     }
-  }, [cards, query, sortBy, minImageCount]);
+  }, [cards, query, sortBy, minImageCount, compareViewed]);
 
   // 跨卷翻页(N / P)需要这个 list,跟 Recents/Favorites 一致
   const entries = useMemo<GalleryContextEntry[]>(
@@ -104,6 +113,7 @@ export default function Unread() {
         </p>
       </section>
 
+      {needsHistory && <ViewedSortNotice query={historyQuery} />}
       {count > 0 && <ListFilterBar totalCount={filtered.length} />}
 
       {isLoading && count === 0 ? (

@@ -6,6 +6,7 @@ import { useTagAlbums } from "../hooks/useLibrary";
 import { useFavorites } from "../hooks/useFavorites";
 import { useImageActivities } from "../hooks/useImageActivity";
 import { useSearchStore } from "../store/searchStore";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("../hooks/useLibrary", () => ({ useTagAlbums: vi.fn() }));
 vi.mock("../hooks/useFavorites", () => ({ useFavorites: vi.fn() }));
@@ -27,11 +28,17 @@ vi.mock("../components/album/AlbumGrid", () => ({
 
 function renderTag(path = "/tags/%E6%97%85%E8%A1%8C") {
   return render(
-    <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route path="/tags/*" element={<Tag />} />
-      </Routes>
-    </MemoryRouter>,
+    <QueryClientProvider
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
+    >
+      <MemoryRouter initialEntries={[path]}>
+        <Routes>
+          <Route path="/tags/*" element={<Tag />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
   );
 }
 

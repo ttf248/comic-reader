@@ -67,6 +67,54 @@ async function scannedNodes(request: APIRequestContext) {
   return body.page.items;
 }
 
+const taggedSortPrefix =
+  "zz-[测试][空 格][C++][100%][字面%20][字面%2F][字面%25] tagged-";
+
+async function sortFixture(request: APIRequestContext) {
+  const nodes = await scannedNodes(request);
+  const rootAlbums = ["A", "M", "Z"].map((suffix) =>
+    nodes.find((node) => node.name === taggedSortPrefix + suffix)!,
+  );
+  for (const node of rootAlbums) expect(node).toBeDefined();
+  const collection = nodes.find((node) => node.name === "zz-sort-collection")!;
+  expect(collection).toBeDefined();
+  const response = await request.get(
+    `/api/library/${collection.id}/children?limit=200`,
+  );
+  expect(response.ok()).toBeTruthy();
+  const children = (await response.json()) as {
+    page: { items: Array<{ id: string; name: string; imageCount?: number }> };
+  };
+  const childAlbums = ["A", "M", "Z"].map((suffix) =>
+    children.page.items.find(
+      (node) => node.name === taggedSortPrefix + suffix,
+    )!,
+  );
+  for (const node of childAlbums) expect(node).toBeDefined();
+  return { rootAlbums, childAlbums, collectionId: collection.id };
+}
+
+async function restoreHistory(
+  request: APIRequestContext,
+  original: {
+    maxRecent: number;
+    history: Array<{ albumId: string; name: string; imageCount: number }>;
+  },
+) {
+  expect(
+    (
+      await request.patch("/api/prefs", {
+        data: { maxRecent: original.maxRecent },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  expect((await request.delete("/api/history")).ok()).toBeTruthy();
+  for (const entry of [...original.history].reverse())
+    expect(
+      (await request.post("/api/history", { data: entry })).ok(),
+    ).toBeTruthy();
+}
+
 test("扫描并打开示例相册", async ({ page }) => {
   // 服务带一个不存在的目录启动，仍可通过设置接口修复后扫描。
   const configResponse = await page.request.get("/api/config");
@@ -1233,3 +1281,210 @@ test("六个列表的最近改排序使用真实修改时间", async ({ page }) 
       ).toBeTruthy();
   }
 });
+
+test("六个列表支持按最近看排序，集合与标签具有当前页排序入口", async ({
+  page,
+}) => {
+  const { rootAlbums, childAlbums, collectionId } = await sortFixture(
+    page.request,
+  );
+  const original = (await (await page.request.get("/api/prefs")).json()) as {
+    favorites: string[];
+    maxRecent: number;
+    history: Array<{ albumId: string; name: string; imageCount: number }>;
+  };
+  try {
+    expect(
+      (
+        await page.request.patch("/api/prefs", {
+          data: { maxRecent: Math.max(4, original.maxRecent) },
+        })
+      ).ok(),
+    ).toBeTruthy();
+    expect((await page.request.delete("/api/history")).ok()).toBeTruthy();
+    for (const node of [
+      rootAlbums[1],
+      childAlbums[1],
+      rootAlbums[2],
+      childAlbums[2],
+    ])
+      expect(
+        (
+          await page.request.post("/api/history", {
+            data: { albumId: node.id, name: node.name, imageCount: 1 },
+          })
+        ).ok(),
+      ).toBeTruthy();
+    for (const node of rootAlbums)
+      expect(
+        (
+          await page.request.post("/api/favorites", {
+            data: { resourceId: node.id },
+          })
+        ).ok(),
+      ).toBeTruthy();
+    const expectedRoot = [rootAlbums[2].id, rootAlbums[1].id, rootAlbums[0].id];
+    const expectedChildren = [
+      childAlbums[2].id,
+      childAlbums[1].id,
+      childAlbums[0].id,
+    ];
+    const pages = [
+      ["/", expectedRoot],
+      [`/albums/${collectionId}`, expectedChildren],
+      ["/favorites", expectedRoot],
+      ["/recents", expectedRoot.slice(0, 2)],
+      ["/unread", expectedRoot],
+      [`/tags/${encodeURIComponent("测试")}`, expectedRoot],
+    ] as const;
+    for (const [path, expected] of pages) {
+      await test.step(path, async () => {
+        await page.goto(path);
+        await page.getByRole("combobox").fill(taggedSortPrefix);
+        await page.getByRole("button", { name: "排序", exact: true }).click();
+        await page
+          .getByRole("button", { name: "按最近看", exact: true })
+          .click();
+        await expect
+          .poll(async () => {
+            await page.locator("main").evaluate((element) => {
+              element.scrollTop = element.scrollHeight;
+            });
+            return page
+              .locator('main [data-virtuoso-scroller] a[href^="/albums/"]')
+              .evaluateAll(
+                (links, expected) =>
+                  [
+                    ...new Set(
+                      links.map((link) =>
+                        decodeURIComponent(
+                          link.getAttribute("href")!.slice("/albums/".length),
+                        ),
+                      ),
+                    ),
+                  ].filter((id) => expected.includes(id)),
+                [...expected],
+              );
+          })
+          .toEqual([...expected]);
+        await page
+          .getByRole("button", { name: "列表视图", exact: true })
+          .click();
+        await expect(
+          page
+            .locator(
+              `main [data-virtuoso-scroller] a[href="/albums/${expected[0]}"]`,
+            )
+            .first(),
+        ).toHaveCSS("display", "flex");
+      });
+    }
+  } finally {
+    for (const node of rootAlbums)
+      if (!original.favorites.includes(node.id))
+        expect(
+          (
+            await page.request.delete("/api/favorites", {
+              data: { resourceId: node.id },
+            })
+          ).ok(),
+        ).toBeTruthy();
+    await restoreHistory(page.request, original);
+  }
+});
+
+for (const name of ["home", "collection", "unread", "tag"] as const) {
+  test(`${name} 最近看读取失败保留列表并可重试`, async ({ page }) => {
+    const { rootAlbums, childAlbums, collectionId } = await sortFixture(
+      page.request,
+    );
+    const original = (await (await page.request.get("/api/prefs")).json()) as {
+      maxRecent: number;
+      history: Array<{ albumId: string; name: string; imageCount: number }>;
+    };
+    try {
+      expect(
+        (
+          await page.request.patch("/api/prefs", {
+            data: { maxRecent: Math.max(2, original.maxRecent) },
+          })
+        ).ok(),
+      ).toBeTruthy();
+      expect((await page.request.delete("/api/history")).ok()).toBeTruthy();
+      for (const node of [rootAlbums[2], childAlbums[2]])
+        expect(
+          (
+            await page.request.post("/api/history", {
+              data: { albumId: node.id, name: node.name, imageCount: 1 },
+            })
+          ).ok(),
+        ).toBeTruthy();
+      let blocked = true;
+      await page.route("**/api/history", async (route) => {
+        if (route.request().method() !== "GET" || !blocked)
+          return route.continue();
+        await route.fulfill({
+          status: 500,
+          json: { code: "test_unavailable", message: "unavailable" },
+        });
+      });
+      const paths = {
+        home: "/",
+        collection: `/albums/${collectionId}`,
+        unread: "/unread",
+        tag: `/tags/${encodeURIComponent("测试")}`,
+      };
+      await page.goto(paths[name]);
+      await page.getByRole("combobox").fill(taggedSortPrefix);
+      await page.getByRole("button", { name: "排序", exact: true }).click();
+      await page.getByRole("button", { name: "按最近看", exact: true }).click();
+      const alert = page.getByRole("alert");
+      await expect(alert).toContainText("最近访问加载失败", {
+        timeout: 15_000,
+      });
+      await expect(alert).toContainText("暂按名称排序");
+      const albums = name === "collection" ? childAlbums : rootAlbums;
+      const ids = albums.map((node) => node.id);
+      const currentOrder = () =>
+        page
+          .locator('main [data-virtuoso-scroller] a[href^="/albums/"]')
+          .evaluateAll(
+            (links, ids) =>
+              [
+                ...new Set(
+                  links.map((link) =>
+                    decodeURIComponent(
+                      link.getAttribute("href")!.slice("/albums/".length),
+                    ),
+                  ),
+                ),
+              ].filter((id) => ids.includes(id)),
+            ids,
+          );
+      await expect.poll(currentOrder).toEqual(ids);
+      if (name === "collection" || name === "tag") {
+        for (const theme of ["light", "dark"] as const) {
+          await page.emulateMedia({
+            colorScheme: theme,
+            reducedMotion: "reduce",
+          });
+          await expect(page.locator("html")).toHaveAttribute(
+            "data-theme",
+            theme,
+          );
+          await page.screenshot({
+            path: test.info().outputPath(`viewed-${name}-${theme}.png`),
+          });
+        }
+      }
+      blocked = false;
+      await alert
+        .getByRole("button", { name: "重试加载", exact: true })
+        .click();
+      await expect.poll(currentOrder).toEqual([ids[2], ids[0], ids[1]]);
+      await expect(alert).toHaveCount(0);
+    } finally {
+      await restoreHistory(page.request, original);
+    }
+  });
+}
