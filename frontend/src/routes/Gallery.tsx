@@ -73,7 +73,6 @@ export default function Gallery() {
     0,
     Math.floor(Number(params.get("index") ?? 0) || 0),
   );
-  const name = params.get("name") ?? "画廊";
   // type=video 走 VideoPlayer；其它（含未传）走 ImageGallery。
   // 视频播放进度将在独立模型中持久化，不能复用相册的页码进度。
   const typeParam = (params.get("type") ?? "image") as "image" | "video";
@@ -168,17 +167,22 @@ export default function Gallery() {
   // 因此阅读器无需为这个小状态额外请求含完整媒体数组的相册详情。
   const [hasCustomCover, setHasCustomCover] = useState(false);
   const albumSummaryQuery = useLibraryNodes(pathParam ? [pathParam] : []);
+  const albumSummary = albumSummaryQuery.data?.items.find(
+    (item) => item.id === pathParam,
+  );
+  const name =
+    albumSummary?.displayName ||
+    albumSummary?.name ||
+    params.get("name") ||
+    "画廊";
   // 当前展示的文件路径。Gallery 中段才计算 isVideo/images/videos/index → current，
   // 但 onSetCover 要读这个值。放进 ref 让 callback 拿到最新值而不需要把 current
   // 提前到 useCallback 之前（避免引入 forward reference）。
   const currentRef = useRef<string | null>(null);
 
   useEffect(() => {
-    const summary = albumSummaryQuery.data?.items.find(
-      (item) => item.id === pathParam,
-    );
-    setHasCustomCover(Boolean(summary?.hasCustomCover));
-  }, [albumSummaryQuery.data, pathParam]);
+    setHasCustomCover(Boolean(albumSummary?.hasCustomCover));
+  }, [albumSummary?.hasCustomCover, pathParam]);
 
   // 拉图 + 恢复阅读进度：依赖 pathParam 变化。
   //
@@ -348,29 +352,24 @@ export default function Gallery() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready, pathParam, isVideo]);
 
-  // 把这次打开写进 history
+  // 标题和图片总数来自相册摘要，不用 URL 提示或当前视频列表改写访问记录。
+  const historyReady = ready && albumSummary?.kind === "album";
+  const historyName = albumSummary?.displayName || albumSummary?.name || "";
+  const historyImageCount = albumSummary?.imageCount ?? 0;
   useEffect(() => {
-    if (!pathParam || !ready) return;
+    if (!pathParam || !historyReady) return;
     historyApi
       .add({
         albumId: pathParam,
-        name,
-        imageCount: isVideo ? videos.length : images.length,
+        name: historyName,
+        imageCount: historyImageCount,
       })
       .then(() => {
         // 让 Recents 立刻刷新，而不是等 30s 缓存过期
         queryClient.invalidateQueries({ queryKey: ["history"] });
       })
       .catch(() => {});
-  }, [
-    pathParam,
-    name,
-    videos.length,
-    images.length,
-    isVideo,
-    queryClient,
-    ready,
-  ]);
+  }, [pathParam, historyName, historyImageCount, queryClient, historyReady]);
 
   // 切换图片/视频时关闭信息面板 + 防抖持久化进度
   useEffect(() => {

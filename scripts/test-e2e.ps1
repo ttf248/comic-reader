@@ -50,6 +50,7 @@ try {
   New-Item -ItemType Directory -Path $mixedCoverDir -Force | Out-Null
   [System.IO.File]::WriteAllBytes((Join-Path $mixedCoverDir "clip.webm"), $videoBytes)
   [System.IO.File]::WriteAllBytes((Join-Path $mixedCoverDir "page.png"), $pngBytes)
+  [System.IO.File]::WriteAllBytes((Join-Path $mixedCoverDir "page-2.png"), $pngBytes)
 
   $mediaPathYaml = (Join-Path $testRoot "media").Replace("\", "/")
   $cachePathYaml = (Join-Path $testRoot "cache").Replace("\", "/")

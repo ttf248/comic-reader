@@ -33,7 +33,7 @@ async function scannedNodes(request: APIRequestContext) {
   );
   expect(response.ok()).toBeTruthy();
   const body = (await response.json()) as {
-    page: { items: Array<{ id: string; name: string }> };
+    page: { items: Array<{ id: string; name: string; imageCount?: number }> };
   };
   return body.page.items;
 }
@@ -463,3 +463,38 @@ test("新打开相册立即出现在最近阅读，媒体分页不重复记录�
   ).toBeVisible();
   expect(historyWrites).toBe(1);
 });
+
+for (const albumName of ["sample-mixed-cover", "sample-video-cover"]) {
+  test(`${albumName} 视频阅读标题和历史采用真实相册摘要`, async ({ page }) => {
+    const nodes = await scannedNodes(page.request);
+    const album = nodes.find((node) => node.name === albumName);
+    expect(album).toBeDefined();
+    const imageCount = albumName === "sample-mixed-cover" ? 2 : 0;
+    expect(album!.imageCount ?? 0).toBe(imageCount);
+    expect((await page.request.delete("/api/history")).ok()).toBeTruthy();
+    let writes = 0;
+    page.on("request", (request) => {
+      if (
+        new URL(request.url()).pathname === "/api/history" &&
+        request.method() === "POST"
+      )
+        writes++;
+    });
+    const hint =
+      albumName === "sample-mixed-cover"
+        ? `&name=${encodeURIComponent("URL旧标题")}`
+        : "";
+    await page.goto(`/gallery?path=${album!.id}&type=video${hint}`);
+    await expect(page.locator("header h1")).toContainText(albumName);
+    await expect
+      .poll(async () => {
+        const response = await page.request.get("/api/history");
+        const result = (await response.json()) as {
+          history: Array<{ albumId: string; name: string; imageCount: number }>;
+        };
+        return result.history[0];
+      })
+      .toMatchObject({ albumId: album!.id, name: albumName, imageCount });
+    expect(writes).toBe(1);
+  });
+}

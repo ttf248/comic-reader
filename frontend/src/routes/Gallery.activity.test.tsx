@@ -81,7 +81,7 @@ vi.mock("../components/gallery/PageSlider", () => ({
   default: () => null,
 }));
 vi.mock("../components/gallery/GalleryHeader", () => ({
-  default: () => null,
+  default: ({ name }: { name: string }) => <h1>{name}</h1>,
 }));
 vi.mock("../components/gallery/GalleryControls", () => ({
   default: () => null,
@@ -152,6 +152,97 @@ describe("Gallery 媒体活动恢复门禁", () => {
       total: 3,
     });
   }
+
+  it.each([0, 7])(
+    "视频阅读按相册摘要展示名称并记录 %s 张图片",
+    async (imageCount) => {
+      mocks.getVideo.mockResolvedValue({ positionMs: 0, durationMs: 100_000 });
+      mocks.nodes.mockResolvedValue({
+        revision: 1,
+        missing: [],
+        items: [
+          {
+            id: albumId,
+            kind: "album",
+            name: "真实相册",
+            displayName: "相册展示名",
+            coverImages: [],
+            imageCount,
+            videoCount: 2,
+          },
+        ],
+      });
+      mocks.media.mockResolvedValue({
+        revision: 1,
+        total: imageCount + 2,
+        items: [
+          ...Array.from({ length: imageCount }, (_, index) => ({
+            id: `f_photo_${index}`,
+            kind: "image",
+            name: `${index}.jpg`,
+            index,
+            kindIndex: index,
+          })),
+          ...[videoId, "f_video_2"].map((id, index) => ({
+            id,
+            kind: "video",
+            name: `${index}.mp4`,
+            index: imageCount + index,
+            kindIndex: index,
+          })),
+        ],
+      });
+      renderGallery(
+        `path=${albumId}&type=video&name=${encodeURIComponent("URL旧标题")}`,
+      );
+      await waitFor(() =>
+        expect(screen.getByRole("heading")).toHaveTextContent("相册展示名"),
+      );
+      await waitFor(() =>
+        expect(mocks.historyAdd).toHaveBeenCalledWith({
+          albumId,
+          name: "相册展示名",
+          imageCount,
+        }),
+      );
+      expect(mocks.historyAdd).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it("摘要晚于媒体列表到达时不把 URL 标题先写进历史", async () => {
+    const summary =
+      deferred<Awaited<ReturnType<typeof libraryApi.queryNodes>>>();
+    mocks.nodes.mockReturnValue(summary.promise);
+    mockImages();
+    mocks.getImage.mockResolvedValue({ pageIndex: 0 });
+    renderGallery(`path=${albumId}&name=${encodeURIComponent("URL旧标题")}`);
+    await screen.findByTestId("image-gallery");
+    expect(mocks.historyAdd).not.toHaveBeenCalled();
+    await act(async () => {
+      summary.resolve({
+        revision: 1,
+        missing: [],
+        items: [
+          {
+            id: albumId,
+            kind: "album",
+            name: "真实相册",
+            displayName: "真实相册",
+            coverImages: [],
+            imageCount: 3,
+          },
+        ],
+      });
+    });
+    await waitFor(() =>
+      expect(mocks.historyAdd).toHaveBeenCalledWith({
+        albumId,
+        name: "真实相册",
+        imageCount: 3,
+      }),
+    );
+    expect(mocks.historyAdd).toHaveBeenCalledTimes(1);
+  });
 
   it("图片保存失败持续提示，重试保存当前页后清除提示", async () => {
     mockImages();
