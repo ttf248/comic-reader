@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -11,12 +12,12 @@ import (
 	"github.com/tianlongxiang/local-gallery/internal/services"
 )
 
-// AsyncScanStartHandler 启动异步扫描，返回 scan_id。
+// AsyncScanStartHandler 启动异步扫描，返回 scanId。
 //
-// POST /api/scan/start
+// POST /api/scans
 func AsyncScanStartHandler(runner *services.AsyncScanRunner, mgr *config.Manager) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		id, _, reused, err := runner.StartOrReuse(ScanOptionsFromConfig(mgr))
+		id, reused, err := runner.StartOrReuse(ScanOptionsFromConfig(mgr))
 		if err != nil {
 			return writeError(c, fiber.StatusBadRequest, "scan_start_failed", "unable to start scan")
 		}
@@ -45,18 +46,22 @@ func excludeFromConfig(mgr *config.Manager) services.ExcludeConfig {
 	)
 }
 
+type scanEventSource interface {
+	Subscribe(string) (<-chan services.ProgressEvent, func(), bool)
+}
+
 // AsyncScanEventsHandler SSE 事件流。
 //
-// GET /api/scan/:id/events
-func AsyncScanEventsHandler(runner *services.AsyncScanRunner) fiber.Handler {
+// GET /api/scans/:id/events
+func AsyncScanEventsHandler(runner scanEventSource) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		id := c.Params("id")
 		if id == "" {
 			return writeError(c, fiber.StatusBadRequest, "missing_scan_id", "missing scan id")
 		}
 
-		state := runner.Get(id)
-		if state == nil {
+		events, unsubscribe, ok := runner.Subscribe(id)
+		if !ok {
 			return writeError(c, fiber.StatusNotFound, "scan_not_found", "scan not found")
 		}
 
@@ -65,54 +70,50 @@ func AsyncScanEventsHandler(runner *services.AsyncScanRunner) fiber.Handler {
 		c.Set("Connection", "keep-alive")
 		c.Set("X-Accel-Buffering", "no")
 
-		// 已完成：直接发最终事件后返回
-		if state.Status != services.ScanStatusRunning &&
-			state.Status != services.ScanStatusPending {
-			ev := services.ProgressEvent{
-				ScanID:          id,
-				Progress:        100,
-				Status:          state.Status,
-				AlbumsFound:     len(state.Albums),
-				LibraryRevision: state.Revision,
-			}
-			if state.Result != nil {
-				ev.AlbumsFound = state.Result.AlbumCount
-			}
-			if state.Err != nil && state.Status == services.ScanStatusError {
-				// 扫描器内部错误可能包含本地绝对路径，公共响应只返回
-				// 稳定错误类型；详细原因保留在服务端诊断范围内。
-				ev.Error = "scan failed"
-			}
-			writeSSE(c, string(ev.Status), ev)
-			return nil
-		}
-
-		events, unsubscribe, ok := runner.Subscribe(id)
-		if !ok {
-			return writeError(c, fiber.StatusNotFound, "scan_not_found", "scan not found")
-		}
-
-		// 流式推送；每个连接使用独立订阅，不会与其它客户端竞争消费。
+		// Subscribe 原子返回当前快照；终态重连也沿用原事件，不重建统计。
 		c.Response().SetBodyStreamWriter(func(w *bufio.Writer) {
 			defer unsubscribe()
-			defer w.Flush()
-			for ev := range events {
-				data, _ := json.Marshal(ev)
-				fmt.Fprintf(w, "event: %s\ndata: %s\n\n", ev.Status, data)
-				w.Flush()
-				if ev.Status != services.ScanStatusRunning {
-					return
-				}
-			}
+			streamScanEvents(w, events, 15*time.Second)
 		})
 
 		return nil
 	}
 }
 
+func streamScanEvents(w *bufio.Writer, events <-chan services.ProgressEvent, heartbeat time.Duration) {
+	ticker := time.NewTicker(heartbeat)
+	defer ticker.Stop()
+	for {
+		select {
+		case ev, ok := <-events:
+			if !ok {
+				return
+			}
+			data, _ := json.Marshal(ev)
+			if _, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", ev.Status, data); err != nil {
+				return
+			}
+			if err := w.Flush(); err != nil {
+				return
+			}
+			if ev.Status != services.ScanStatusPending && ev.Status != services.ScanStatusRunning {
+				return
+			}
+		case <-ticker.C:
+			// 注释心跳不会触发前端进度事件；无新进度时也能发现断开的连接。
+			if _, err := fmt.Fprint(w, ": keep-alive\n\n"); err != nil {
+				return
+			}
+			if err := w.Flush(); err != nil {
+				return
+			}
+		}
+	}
+}
+
 // AsyncScanCancelHandler 取消正在进行的扫描。
 //
-// DELETE /api/scan/:id
+// DELETE /api/scans/:id
 func AsyncScanCancelHandler(runner *services.AsyncScanRunner) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		id := c.Params("id")
@@ -128,7 +129,7 @@ func AsyncScanCancelHandler(runner *services.AsyncScanRunner) fiber.Handler {
 	}
 }
 
-// ScanCacheClearHandler 强制清空扫描结果缓存（POST /api/scan/cache/clear）。
+// ScanCacheClearHandler 强制清空扫描结果缓存（DELETE /api/library）。
 //
 // 同时清掉 ScanResultCache 内存和磁盘 scan_cache.json 文件。
 // 清空后 manifest 不再可用；前端应提示用户「建议重新扫描」。
@@ -152,10 +153,4 @@ func ScanCacheClearHandler(
 		}
 		return c.JSON(fiber.Map{"ok": true})
 	}
-}
-
-func writeSSE(c *fiber.Ctx, event string, payload any) {
-	data, _ := json.Marshal(payload)
-	c.Set("Content-Type", "text/event-stream")
-	fmt.Fprintf(c, "event: %s\ndata: %s\n\n", event, data)
 }

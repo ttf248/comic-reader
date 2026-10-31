@@ -4,6 +4,7 @@ package integration_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"image"
@@ -39,6 +40,7 @@ type harness struct {
 	prefs   string
 	mgr     *config.Manager
 	catalog *services.ResourceCatalog
+	runner  *services.AsyncScanRunner
 }
 
 func newHarness(t *testing.T) *harness {
@@ -112,6 +114,7 @@ func newHarness(t *testing.T) *harness {
 		t.Fatalf("thumbnail: %v", err)
 	}
 	runner := services.NewAsyncScanRunner()
+	t.Cleanup(func() { _ = runner.Shutdown(context.Background()) })
 	catalog := services.NewResourceCatalog()
 	unreadIndex := services.NewUnreadLibraryIndex()
 	runner.SetCatalog(catalog)
@@ -126,9 +129,9 @@ func newHarness(t *testing.T) *harness {
 			"version":   "test",
 		})
 	})
-	api.Post("/scan/start", handlers.AsyncScanStartHandler(runner, mgr))
-	api.Get("/scan/:id/events", handlers.AsyncScanEventsHandler(runner))
-	api.Delete("/scan/:id", handlers.AsyncScanCancelHandler(runner))
+	api.Post("/scans", handlers.AsyncScanStartHandler(runner, mgr))
+	api.Get("/scans/:id/events", handlers.AsyncScanEventsHandler(runner))
+	api.Delete("/scans/:id", handlers.AsyncScanCancelHandler(runner))
 	api.Get("/library/manifest", handlers.LibraryManifestHandler(catalog))
 	api.Get("/library/:id/children", handlers.LibraryChildrenPageHandler(catalog))
 	api.Post("/library/nodes/query", handlers.LibraryNodesQueryHandler(catalog))
@@ -176,7 +179,7 @@ func newHarness(t *testing.T) *harness {
 	api.Get("/cache/stats", handlers.CacheStatsHandler(mgr, cacheStats))
 	api.Post("/cache/clear", handlers.CacheClearHandler(thumbs, nil, nil, nil, cacheStats))
 
-	return &harness{app, root, cache, prefs, mgr, catalog}
+	return &harness{app, root, cache, prefs, mgr, catalog, runner}
 }
 
 func (h *harness) do(t *testing.T, method, path string, body interface{}) (*http.Response, []byte) {
@@ -245,7 +248,7 @@ func TestHealth(t *testing.T) {
 
 func TestAsyncScanAndSSE(t *testing.T) {
 	h := newHarness(t)
-	res, body := h.do(t, "POST", "/api/scan/start", nil)
+	res, body := h.do(t, "POST", "/api/scans", nil)
 	if res.StatusCode != 200 {
 		t.Fatalf("start status=%d", res.StatusCode)
 	}
@@ -259,7 +262,7 @@ func TestAsyncScanAndSSE(t *testing.T) {
 
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
-		er, eb := h.do(t, "GET", "/api/scan/"+sr.ScanID+"/events", nil)
+		er, eb := h.do(t, "GET", "/api/scans/"+sr.ScanID+"/events", nil)
 		if er.StatusCode != 200 {
 			t.Fatalf("events status=%d", er.StatusCode)
 		}
@@ -277,7 +280,7 @@ func TestAsyncScanAndSSE(t *testing.T) {
 
 func (h *harness) scanLibrary(t *testing.T) (*http.Response, []byte) {
 	t.Helper()
-	res, body := h.do(t, http.MethodPost, "/api/scan/start", nil)
+	res, body := h.do(t, http.MethodPost, "/api/scans", nil)
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("start status=%d body=%s", res.StatusCode, body)
 	}

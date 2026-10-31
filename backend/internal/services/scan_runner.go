@@ -42,7 +42,6 @@ type ScanState struct {
 	StartedAt  time.Time
 	FinishedAt time.Time
 	Progress   int
-	Albums     []models.Album
 	Result     *models.ScanResult
 	Err        error
 	Generation uint64
@@ -75,28 +74,22 @@ func (r *AsyncScanRunner) SetCache(cache *ScanResultCache)              { r.cach
 func (r *AsyncScanRunner) SetCatalog(catalog *ResourceCatalog)          { r.catalog = catalog }
 func (r *AsyncScanRunner) SetCoverOverrides(covers *CoverOverrideStore) { r.covers = covers }
 
-// Start 保持原有调用形式；重复启动时复用当前任务。
-func (r *AsyncScanRunner) Start(opts ScanOptions) (string, <-chan ProgressEvent, error) {
-	id, events, _, err := r.StartOrReuse(opts)
-	return id, events, err
-}
-
 // StartOrReuse 保证全进程同一时间只有一个扫描任务。
-func (r *AsyncScanRunner) StartOrReuse(opts ScanOptions) (string, <-chan ProgressEvent, bool, error) {
+// 启动不创建进度订阅；消费方通过 Subscribe 显式订阅并负责释放。
+func (r *AsyncScanRunner) StartOrReuse(opts ScanOptions) (string, bool, error) {
 	if len(opts.Roots) == 0 {
-		return "", nil, false, errors.New("root is required")
+		return "", false, errors.New("root is required")
 	}
 
 	r.mu.Lock()
 	if r.closed {
 		r.mu.Unlock()
-		return "", nil, false, errors.New("scan runner is shutting down")
+		return "", false, errors.New("scan runner is shutting down")
 	}
 	if active := r.states[r.activeID]; active != nil && isActiveScan(active.Status) {
-		ch := r.subscribeLocked(active)
 		id := active.ID
 		r.mu.Unlock()
-		return id, ch, true, nil
+		return id, true, nil
 	}
 
 	id := uuid.New().String()
@@ -114,11 +107,10 @@ func (r *AsyncScanRunner) StartOrReuse(opts ScanOptions) (string, <-chan Progres
 	state.lastEvent = ProgressEvent{ScanID: id, Status: ScanStatusPending}
 	r.states[id] = state
 	r.activeID = id
-	ch := r.subscribeLocked(state)
 	r.mu.Unlock()
 
 	go r.run(state, opts)
-	return id, ch, false, nil
+	return id, false, nil
 }
 
 func (r *AsyncScanRunner) Cancel(id string) bool {
@@ -151,7 +143,6 @@ func (r *AsyncScanRunner) Get(id string) *ScanState {
 		return nil
 	}
 	cp := *state
-	cp.Albums = append([]models.Album(nil), state.Albums...)
 	cp.subs = nil
 	return &cp
 }

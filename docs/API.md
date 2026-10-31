@@ -83,6 +83,10 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 订阅扫描事件。事件名为 `pending`、`running`、`complete`、`cancelled` 或 `error`；`currentPath` 仅包含根别名和相对路径。
 
+`pending` 和 `running` 都保持连接，只有终态或通道关闭才结束正常推送；空闲期间每 15 秒发送 `: keep-alive` 注释心跳，心跳不包含业务事件。写入或刷新失败后释放当前订阅，不取消扫描任务或其他客户端的订阅。
+
+重新连接会先收到最新事件快照，保留原事件的进度、阶段、已发现数量、`elapsedMs` 与 `libraryRevision`（如有）；已结束任务返回原始终态后关闭连接，不将取消或失败进度强制改为 100%。内部扫描错误仍只公开 `scan failed`，未知或已过保留期的任务返回 `404 scan_not_found`。
+
 ### `DELETE /api/scans/:scanId`
 
 取消扫描。取消信号会终止目录读取，取消后的任务不得写入图像库缓存。

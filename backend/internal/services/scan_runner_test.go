@@ -18,7 +18,7 @@ func TestOfflineScanKeepsPublishedSnapshot(t *testing.T) {
 	runner := NewAsyncScanRunner()
 	runner.SetCache(cache)
 	t.Cleanup(func() { _ = runner.Shutdown(context.Background()) })
-	_, events, err := runner.Start(ScanOptions{Roots: []string{root, filepath.Join(root, "offline")}})
+	_, events, err := startSubscribedScan(t, runner, ScanOptions{Roots: []string{root, filepath.Join(root, "offline")}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -47,6 +47,59 @@ func TestBlankScanRootsNeverSelectWorkingDirectory(t *testing.T) {
 	}
 }
 
+func TestAsyncScanRunnerReuseDoesNotCreateUnownedSubscriptions(t *testing.T) {
+	runner := NewAsyncScanRunner()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	state := &ScanState{ID: "scan-owned", Ctx: ctx, Cancel: cancel, Status: ScanStatusRunning, subs: make(map[chan ProgressEvent]struct{})}
+	runner.states[state.ID] = state
+	runner.activeID = state.ID
+	id, reused, err := runner.StartOrReuse(ScanOptions{Roots: []string{t.TempDir()}})
+	if err != nil || !reused || id != state.ID {
+		t.Fatalf("reuse: id=%q reused=%v err=%v", id, reused, err)
+	}
+	if len(state.subs) != 0 {
+		t.Fatalf("starting a scan created %d subscriptions without an owner", len(state.subs))
+	}
+}
+
+func TestAsyncScanRunnerSubscriptionsHaveIndependentOwners(t *testing.T) {
+	runner := NewAsyncScanRunner()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	state := &ScanState{ID: "scan-owned", Ctx: ctx, Cancel: cancel, Status: ScanStatusRunning, subs: make(map[chan ProgressEvent]struct{})}
+	state.lastEvent = ProgressEvent{ScanID: state.ID, Status: ScanStatusRunning}
+	runner.states[state.ID] = state
+	first, releaseFirst, ok := runner.Subscribe(state.ID)
+	if !ok {
+		t.Fatal("first subscription unavailable")
+	}
+	defer releaseFirst()
+	second, releaseSecond, ok := runner.Subscribe(state.ID)
+	if !ok {
+		t.Fatal("second subscription unavailable")
+	}
+	defer releaseSecond()
+	<-first
+	<-second
+	releaseFirst()
+	if _, open := <-first; open {
+		t.Fatal("released subscription is still open")
+	}
+	if ctx.Err() != nil {
+		t.Fatal("releasing a subscriber cancelled the scan")
+	}
+	runner.publish(state, ProgressEvent{ScanID: state.ID, Status: ScanStatusRunning, Progress: 17})
+	if event := <-second; event.Progress != 17 {
+		t.Fatalf("remaining subscriber lost progress: %+v", event)
+	}
+	releaseSecond()
+	releaseSecond()
+	if len(state.subs) != 0 {
+		t.Fatalf("released subscriptions retained: %d", len(state.subs))
+	}
+}
+
 func TestAsyncScanRunner_HappyPath(t *testing.T) {
 	root := t.TempDir()
 	mkdirAll(t, filepathJoin(root, "album1"))
@@ -55,7 +108,7 @@ func TestAsyncScanRunner_HappyPath(t *testing.T) {
 	touchAll(t, filepathJoin(root, "album2", "1.png"))
 
 	runner := NewAsyncScanRunner()
-	id, events, err := runner.Start(ScanOptions{Roots: []string{root}})
+	id, events, err := startSubscribedScan(t, runner, ScanOptions{Roots: []string{root}})
 	if err != nil {
 		t.Fatalf("Start: %v", err)
 	}
@@ -121,7 +174,7 @@ func TestAsyncScanRunner_Cancel(t *testing.T) {
 	}
 
 	runner := NewAsyncScanRunner()
-	id, events, err := runner.Start(ScanOptions{Roots: []string{root}})
+	id, events, err := startSubscribedScan(t, runner, ScanOptions{Roots: []string{root}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,14 +222,24 @@ func TestAsyncScanRunner_ReusesActiveScanAndBroadcasts(t *testing.T) {
 		touchAll(t, filepathJoin(dir, "1.jpg"))
 	}
 	runner := NewAsyncScanRunner()
-	id1, events1, reused1, err := runner.StartOrReuse(ScanOptions{Roots: []string{root}})
+	id1, reused1, err := runner.StartOrReuse(ScanOptions{Roots: []string{root}})
 	if err != nil || reused1 {
 		t.Fatalf("first start reused=%v err=%v", reused1, err)
 	}
-	id2, events2, reused2, err := runner.StartOrReuse(ScanOptions{Roots: []string{root}})
+	id2, reused2, err := runner.StartOrReuse(ScanOptions{Roots: []string{root}})
 	if err != nil || !reused2 || id1 != id2 {
 		t.Fatalf("second start id=%q reused=%v err=%v", id2, reused2, err)
 	}
+	events1, release1, ok := runner.Subscribe(id1)
+	if !ok {
+		t.Fatal("first subscription unavailable")
+	}
+	defer release1()
+	events2, release2, ok := runner.Subscribe(id2)
+	if !ok {
+		t.Fatal("second subscription unavailable")
+	}
+	defer release2()
 
 	for index, events := range []<-chan ProgressEvent{events1, events2} {
 		deadline := time.After(5 * time.Second)
@@ -205,7 +268,7 @@ func TestAsyncScanRunner_DoesNotBlockWithoutEventConsumer(t *testing.T) {
 		touchAll(t, filepathJoin(dir, "1.jpg"))
 	}
 	runner := NewAsyncScanRunner()
-	id, _, err := runner.Start(ScanOptions{Roots: []string{root}})
+	id, _, err := runner.StartOrReuse(ScanOptions{Roots: []string{root}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -223,7 +286,7 @@ func TestAsyncScanRunner_DoesNotBlockWithoutEventConsumer(t *testing.T) {
 
 func TestAsyncScanRunner_MissingRoot(t *testing.T) {
 	runner := NewAsyncScanRunner()
-	_, _, err := runner.Start(ScanOptions{Roots: nil})
+	_, _, err := runner.StartOrReuse(ScanOptions{Roots: nil})
 	if err == nil {
 		t.Error("expected error for empty root")
 	}
@@ -251,7 +314,7 @@ func TestAsyncScanRunner_ShutdownCancelsAndRejectsNewScans(t *testing.T) {
 		touchAll(t, filepathJoin(dir, "1.jpg"))
 	}
 	runner := NewAsyncScanRunner()
-	id, _, err := runner.Start(ScanOptions{Roots: []string{root}})
+	id, _, err := runner.StartOrReuse(ScanOptions{Roots: []string{root}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -264,8 +327,8 @@ func TestAsyncScanRunner_ShutdownCancelsAndRejectsNewScans(t *testing.T) {
 	if state == nil || state.Status != ScanStatusCancelled {
 		t.Fatalf("state after shutdown=%+v", state)
 	}
-	if _, _, err := runner.Start(ScanOptions{Roots: []string{root}}); err == nil {
-		t.Fatal("Start should reject new scans after shutdown")
+	if _, _, err := runner.StartOrReuse(ScanOptions{Roots: []string{root}}); err == nil {
+		t.Fatal("StartOrReuse should reject new scans after shutdown")
 	}
 }
 
@@ -281,7 +344,7 @@ func TestAsyncScanRunner_InvalidatePreventsOldLibraryRevival(t *testing.T) {
 	runner := NewAsyncScanRunner()
 	runner.SetCatalog(catalog)
 	runner.SetCache(cache)
-	id, _, err := runner.Start(ScanOptions{Roots: []string{root}})
+	id, _, err := runner.StartOrReuse(ScanOptions{Roots: []string{root}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -295,6 +358,20 @@ func TestAsyncScanRunner_InvalidatePreventsOldLibraryRevival(t *testing.T) {
 	if catalog.Ready() || cache.Get() != nil {
 		t.Fatal("invalidated scan republished an obsolete library")
 	}
+}
+
+func startSubscribedScan(t *testing.T, runner *AsyncScanRunner, opts ScanOptions) (string, <-chan ProgressEvent, error) {
+	t.Helper()
+	id, _, err := runner.StartOrReuse(opts)
+	if err != nil {
+		return "", nil, err
+	}
+	events, release, ok := runner.Subscribe(id)
+	if !ok {
+		t.Fatal("new scan subscription unavailable")
+	}
+	t.Cleanup(release)
+	return id, events, nil
 }
 
 // helpers（避免引入 strconv/filepath 到测试包根）

@@ -226,7 +226,7 @@ func main() {
 	// 暴露给前端。
 	if scanCache.Get() == nil && len(currentRoots) > 0 {
 		go func() {
-			id, _, startErr := runner.Start(handlers.ScanOptionsFromConfig(mgr))
+			id, _, startErr := runner.StartOrReuse(handlers.ScanOptionsFromConfig(mgr))
 			if startErr != nil {
 				log.Printf("启动自动扫描失败: %v", startErr)
 				return
