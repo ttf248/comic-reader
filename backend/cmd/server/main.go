@@ -318,6 +318,7 @@ func main() {
 	api.Post("/thumbs/:id/cover", resourceParam, handlers.ThumbCoverHandler(thumbs))
 	api.Post("/fs/open", middleware.LoopbackOnly(), handlers.FsOpenResourceHandler(mgr, resourceCatalog, safetyState, middleware.OpenInOS))
 	api.Get("/admin/fs/open", middleware.LoopbackOnly(), handlers.FsOpenHandler(mgr))
+	api.Post("/admin/fs/directories", middleware.LoopbackOnly(), handlers.DirectoriesHandler())
 
 	// 配置读写
 	api.Get("/config", middleware.LoopbackOnly(), handlers.ConfigGetHandler(mgr))

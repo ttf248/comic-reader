@@ -7,6 +7,7 @@ import {
   type Route,
 } from "@playwright/test";
 import type { VideoInfo, VideoInfoBatchItem } from "../../src/api/videos";
+import type { DirectoryPage } from "../../src/api/fs";
 
 async function renderedColors(locator: Locator, properties: string[]) {
   return locator.evaluate((element, properties) => {
@@ -2702,4 +2703,175 @@ test("图片属性使用文件ID并支持失败重试和小屏关闭", async ({ 
   } finally {
     await restoreHistory(page.request, original);
   }
+});
+
+test("设置目录选择使用真实路径，取消不保存且焦点留在弹窗内", async ({
+  page,
+}) => {
+  const config = (await (await page.request.get("/api/config")).json()) as {
+    mediaRoots: string[];
+    cacheDir: string;
+  };
+  const response = await page.request.post("/api/admin/fs/directories", {
+    data: { directory: config.mediaRoots[0] },
+  });
+  expect(response.ok()).toBe(true);
+  const actual = (await response.json()) as DirectoryPage;
+  expect(actual.items.length).toBeGreaterThan(0);
+  const writes: unknown[] = [];
+  await page.route("**/api/config", async (route) => {
+    if (route.request().method() !== "PUT") return route.continue();
+    writes.push(route.request().postDataJSON());
+    await route.fulfill({
+      status: 400,
+      json: { code: "test_blocked", message: "audit: no config write" },
+    });
+  });
+  await page.goto("/settings");
+  const rootInput = page
+    .getByPlaceholder("E:\\照片 或 /home/user/pics")
+    .first();
+  const picker = rootInput
+    .locator("..")
+    .getByRole("button", { name: "选择本地目录", exact: true });
+  await picker.click();
+  const dialog = page.getByRole("dialog", { name: "选择目录", exact: true });
+  const address = dialog.getByRole("textbox", {
+    name: "目录路径",
+    exact: true,
+  });
+  const useDirectory = dialog.getByRole("button", {
+    name: "使用此目录",
+    exact: true,
+  });
+  await expect(address).toHaveValue(actual.directory);
+  await expect(useDirectory).toBeEnabled();
+  await expect(address).toBeFocused();
+  await useDirectory.focus();
+  await page.keyboard.press("Tab");
+  await expect(
+    dialog.getByRole("button", { name: "关闭", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(useDirectory).toBeFocused();
+  await page.keyboard.press("Control+h");
+  await expect(page).toHaveURL(/\/settings$/);
+  await dialog
+    .getByRole("button", { name: actual.items[0].name, exact: true })
+    .click();
+  await expect(address).toHaveValue(actual.items[0].path);
+  await expect(useDirectory).toBeEnabled();
+  for (const theme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    await page.screenshot({
+      path: test.info().outputPath(`directory-picker-${theme}.png`),
+    });
+  }
+  await page.setViewportSize({ width: 390, height: 660 });
+  const bounds = await dialog.boundingBox();
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);
+  expect(bounds!.y).toBeGreaterThanOrEqual(0);
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
+  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(660);
+  await page.screenshot({
+    path: test.info().outputPath("directory-picker-mobile.png"),
+  });
+  await page.keyboard.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(picker).toBeFocused();
+  await expect(rootInput).toHaveValue(config.mediaRoots[0]);
+  expect(writes).toEqual([]);
+  await picker.click();
+  await expect(useDirectory).toBeEnabled();
+  await address.fill(config.cacheDir);
+  await expect(useDirectory).toBeDisabled();
+  await address.press("Enter");
+  await expect(useDirectory).toBeEnabled();
+  const selected = await address.inputValue();
+  await useDirectory.click();
+  await expect(dialog).toHaveCount(0);
+  await expect
+    .poll(() => writes)
+    .toEqual([{ mediaRoots: [selected, ...config.mediaRoots.slice(1)] }]);
+});
+
+test("设置目录选择可分页和错误重试，完整保留 POSIX 路径", async ({ page }) => {
+  const config = (await (
+    await page.request.get("/api/config")
+  ).json()) as Record<string, unknown>;
+  const original = "/mnt/photos/archive";
+  const selected = "/other/原图 [100%] #";
+  const writes: unknown[] = [];
+  let fail = true;
+  await page.route("**/api/config", (route) => {
+    if (route.request().method() === "PUT") {
+      writes.push(route.request().postDataJSON());
+      return route.fulfill({
+        json: {
+          ok: true,
+          config: { ...config, mediaRoots: [selected] },
+          requiresRestart: [],
+          mediaRootsChanged: false,
+        },
+      });
+    }
+    return route.fulfill({ json: { ...config, mediaRoots: [original] } });
+  });
+  await page.route("**/api/admin/fs/directories", async (route) => {
+    const body = route.request().postDataJSON() as {
+      directory: string;
+      after: string;
+    };
+    if (body.directory === selected && fail)
+      return route.fulfill({
+        status: 500,
+        json: { code: "directory_read_failed", message: "private C:\\secret" },
+      });
+    const result: DirectoryPage =
+      body.directory === selected
+        ? {
+            directory: selected,
+            parent: "/other",
+            roots: ["/"],
+            items: [],
+            nextAfter: "",
+          }
+        : {
+            directory: original,
+            parent: "/mnt/photos",
+            roots: ["/"],
+            items: [{ name: body.after ? "第二页" : "第一页", path: selected }],
+            nextAfter: body.after ? "" : "第一页",
+          };
+    return route.fulfill({ json: result });
+  });
+  await page.goto("/settings");
+  const rootInput = page.getByPlaceholder("E:\\照片 或 /home/user/pics");
+  await rootInput
+    .locator("..")
+    .getByRole("button", { name: "选择本地目录", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "选择目录", exact: true });
+  await dialog
+    .getByRole("button", { name: "加载更多目录", exact: true })
+    .click();
+  await expect(
+    dialog.getByRole("button", { name: "第一页", exact: true }),
+  ).toBeVisible();
+  await dialog.getByRole("button", { name: "第二页", exact: true }).click();
+  await expect(dialog.getByRole("alert")).toHaveText(/无法读取目录/);
+  await expect(dialog).not.toContainText("private");
+  await expect(
+    dialog.getByRole("button", { name: "使用此目录", exact: true }),
+  ).toBeDisabled();
+  expect(writes).toEqual([]);
+  fail = false;
+  await dialog.getByRole("button", { name: "重试", exact: true }).click();
+  await expect(
+    dialog.getByRole("textbox", { name: "目录路径", exact: true }),
+  ).toHaveValue(selected);
+  await dialog.getByRole("button", { name: "使用此目录", exact: true }).click();
+  await expect.poll(() => writes).toEqual([{ mediaRoots: [selected] }]);
+  await expect(rootInput).toHaveValue(selected);
 });

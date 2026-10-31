@@ -2,6 +2,14 @@ import { api } from "./client";
 
 // 服务端 fs 接口封装。
 export const fsApi = {
+  directories(directory: string, after = "", signal?: AbortSignal) {
+    return api<DirectoryPage>("/api/admin/fs/directories", {
+      method: "POST",
+      body: { directory, after },
+      signal,
+      cache: "no-store",
+    });
+  },
   openInExplorer(id: string) {
     return api<{ ok: boolean }>("/api/fs/open", {
       body: { id },
@@ -27,4 +35,12 @@ export const fsApi = {
 
 export interface FsCapabilities {
   allowOsOpen: boolean;
+}
+
+export interface DirectoryPage {
+  directory: string;
+  parent: string;
+  roots: string[];
+  items: { name: string; path: string }[];
+  nextAfter: string;
 }

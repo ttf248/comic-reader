@@ -67,7 +67,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 ### `GET /api/config` / `PUT /api/config`
 
-读取或更新 `config.yaml`。这是唯一允许返回绝对配置路径的接口，只接受服务端回环地址请求；远程请求返回 `403 local_access_required`。
+读取或更新 `config.yaml`。与下文的目录选择接口同属允许处理绝对路径的本机配置管理例外，只接受服务端回环地址请求；远程请求返回 `403 local_access_required`。
 
 可更新字段：`mediaRoots`、`host`、`port`、`accessMode`、`accessToken`、`cacheDir`、`thumbSizeW`、`thumbSizeH`、`thumbCacheSize`、`cacheMaxAgeDays`、`ffmpegPath`、`allowOsOpen`、`staticDir`、`skipHidden`、`excludePatterns`、`systemFiles`。`accessToken` 永不在 GET/PUT 响应中回显，只返回 `accessTokenConfigured`。
 
@@ -244,6 +244,33 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 | 403 | `os_open_disabled` / `local_access_required` | 系统打开未开启或请求来自远程 |
 | 404 | `resource_not_found` | ID 无效、已过期、路径不在当前根中、含链接、资源不可用或类型已变化 |
 | 500 | `os_open_failed` | 校验或系统打开依赖不可用，或系统打开执行失败 |
+
+### `POST /api/admin/fs/directories`
+
+设置页的目录选择接口，沿用 `AccessGate` 的认证、Host 和同源校验，且额外要求回环地址；LAN 认证成功的远程客户端仍返回 `403 local_access_required`。不受 `allowOsOpen` 控制，不会启动系统文件管理器。
+
+请求体为 `{ "directory": "<目录路径>", "after": "<上一页游标>" }`。两字段可省略：空目录从服务进程用户的主目录开始，空游标读取第一页。相对路径按服务进程 CWD 解析，成功结果返回规范化、解析链接后的完整路径。该接口有意允许浏览媒体根之外的目录，供新增媒体根、缓存和静态资源配置使用。
+
+```json
+{
+  "directory": "/home/user/photos",
+  "parent": "/home/user",
+  "roots": ["/"],
+  "items": [{ "name": "旅行", "path": "/home/user/photos/旅行" }],
+  "nextAfter": ""
+}
+```
+
+`roots` 为 Windows 逻辑盘根列表，或 macOS/Linux 的 `/`；文件系统根的 `parent` 为空。仅返回直属目录，跳过普通文件和目录链接；按目录名的 UTF-8 字节序升序，每页最多 200 项。`nextAfter` 非空时用原值请求下一页；为空时已到末页。分页使用实时文件系统视图，目录发生变化后可重新前往该目录刷新。响应 `Cache-Control: no-store`，完整路径只用于设置组件的临时状态，不写入浏览器持久化 store；请求路径放在 JSON body 中，访问日志不记录 body。
+
+| 状态 | code | 含义 |
+| --- | --- | --- |
+| 400 | `invalid_directory_request` | 请求体非法、路径含 NUL 或目标不是目录 |
+| 403 | `directory_access_denied` | 服务进程没有读取目录的权限 |
+| 404 | `directory_not_found` | 目录不存在或离线 |
+| 500 | `directory_read_failed` | 目录读取失败，错误信息不包含完整路径 |
+
+浏览、翻页和取消不修改文件或配置。确认选择后，前端把返回的完整路径提交给现有 `PUT /api/config`；媒体根沿用停止输入 450ms 后保存，缓存与静态目录立即保存并保留需重启提示。
 
 ### 媒体目录离线与初始设置
 

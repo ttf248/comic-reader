@@ -15,6 +15,7 @@ import { useDebounce } from "../../hooks/useDebounce";
 import { useScanSSE } from "../../hooks/useScanSSE";
 import { scanApi } from "../../api/scan";
 import { libraryQueryKeys } from "../../hooks/useLibrary";
+import DirectoryPicker from "./DirectoryPicker";
 import {
   CheckIcon,
   AlertIcon,
@@ -955,7 +956,7 @@ interface PathFieldProps {
   onCommit?: () => void;
   /** 点击「在资源管理器中打开」时调用(undefined 时按钮隐藏) */
   onOpenInExplorer?: () => void;
-  /** 点击「选择目录」拿到路径后回调(可以是文件选择器返回的 basename 路径片段) */
+  /** 用户确认服务端返回的完整目录路径后回调 */
   onPick: (picked: string) => void;
   /** 紧凑模式(用于 ConfigRow 内):按钮图标更小 */
   compact?: boolean;
@@ -979,59 +980,8 @@ function PathField({
   removable,
   onRemove,
 }: PathFieldProps) {
-  const pushToast = useUIStore((s) => s.pushToast);
   const inputRef = useRef<HTMLInputElement>(null);
   const [picking, setPicking] = useState(false);
-
-  // 「选择目录」:用浏览器原生 showDirectoryPicker(Chrome/Edge 支持)。
-  // 拿到的 FileSystemDirectoryHandle 不能直接给完整绝对路径(出于浏览器安全),
-  // 只能取 handle.name(basename)+ 父目录名。降级时提示用户复制粘贴。
-  async function handlePick() {
-    if (picking) return;
-    if (typeof window.showDirectoryPicker !== "function") {
-      pushToast({
-        kind: "info",
-        message: "当前浏览器不支持「选择目录」API,请直接复制粘贴路径到输入框",
-        ttl: 4000,
-      });
-      inputRef.current?.focus();
-      return;
-    }
-    setPicking(true);
-    try {
-      const handle = await window.showDirectoryPicker({ mode: "read" });
-      // handle.name 是目录 basename;无法拿到完整绝对路径(浏览器安全限制)
-      // 仍然把 basename 填入,并保留旧路径前缀,降低用户输入量
-      const baseName = handle.name;
-      // 尝试从旧 value 推断父目录;如果旧值也是 basename,就直接替换
-      const parts = value.split(/[\\/]/).filter(Boolean);
-      let newValue: string;
-      if (parts.length <= 1) {
-        // 旧值就是单段(basename),直接替换
-        newValue = baseName;
-      } else {
-        // 旧值是完整路径,把最后一段替换成 baseName
-        parts[parts.length - 1] = baseName;
-        newValue = parts.join("\\");
-      }
-      onPick(newValue);
-      pushToast({
-        kind: "info",
-        message: `已填入目录名「${baseName}」;浏览器为安全只暴露 basename,完整路径请手动补全`,
-        ttl: 5000,
-      });
-    } catch (e: unknown) {
-      // 用户取消选择:不报错
-      if (!(e instanceof DOMException && e.name === "AbortError")) {
-        pushToast({
-          kind: "error",
-          message: "选择目录失败:" + errorMessage(e, "未知错误"),
-        });
-      }
-    } finally {
-      setPicking(false);
-    }
-  }
 
   // 提交:Enter / Blur
   const commit = () => onCommit?.();
@@ -1062,16 +1012,11 @@ function PathField({
       {/* 「选择目录」 */}
       <button
         type="button"
-        onClick={handlePick}
-        disabled={picking}
-        title="选择本地目录(浏览器原生选择器;部分浏览器会填入 basename)"
+        onClick={() => setPicking(true)}
+        title="选择本地目录"
         className={`inline-flex items-center justify-center ${btnSize} rounded-md border border-border-faint text-fg-muted hover:text-fg hover:border-border-strong transition-colors disabled:opacity-40`}
       >
-        {picking ? (
-          <span className="inline-block w-3 h-3 rounded-full border-2 border-fg-muted border-t-transparent animate-spin" />
-        ) : (
-          <FolderSearchIcon size={iconSize} />
-        )}
+        <FolderSearchIcon size={iconSize} />
       </button>
       {/* 「在资源管理器中打开」 */}
       {onOpenInExplorer && (
@@ -1097,6 +1042,17 @@ function PathField({
       )}
       {/* 状态指示 */}
       {withStatus && <StatusBadge status={status} />}
+      {picking && (
+        <DirectoryPicker
+          initialDirectory={value}
+          onClose={() => setPicking(false)}
+          onPick={(directory) => {
+            onPick(directory);
+            onCommit?.();
+            setPicking(false);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1110,10 +1066,6 @@ async function openConfiguredDirectory(path: string): Promise<void> {
   } catch (e: unknown) {
     ui.pushToast({ kind: "error", message: fileManagerErrorMessage(e) });
   }
-}
-
-function errorMessage(error: unknown, fallback: string): string {
-  return error instanceof Error ? error.message : fallback;
 }
 
 function Toggle({

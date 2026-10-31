@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
 import {
   act,
   render,
@@ -37,6 +37,7 @@ vi.mock("../../api/fs", () => ({
     capabilities: vi.fn(),
     openConfiguredPath: vi.fn(),
     openInExplorer: vi.fn(),
+    directories: vi.fn(),
   },
 }));
 
@@ -60,6 +61,17 @@ const baseConfig = {
   systemFiles: [],
   excludePatterns: [],
 };
+
+beforeAll(() => {
+  Object.assign(HTMLDialogElement.prototype, {
+    showModal(this: HTMLDialogElement) {
+      this.open = true;
+    },
+    close(this: HTMLDialogElement) {
+      this.open = false;
+    },
+  });
+});
 
 function renderPanel() {
   const qc = new QueryClient({
@@ -93,6 +105,13 @@ describe("ServerConfigPanel", () => {
     vi.mocked(authApi.logout).mockResolvedValue(undefined);
     vi.mocked(fsApi.capabilities).mockResolvedValue({ allowOsOpen: false });
     vi.mocked(fsApi.openConfiguredPath).mockResolvedValue({ ok: true });
+    vi.mocked(fsApi.directories).mockResolvedValue({
+      directory: "/other/photos [100%] #",
+      parent: "/other",
+      roots: ["/"],
+      items: [],
+      nextAfter: "",
+    });
     // 重置 toasts
     useUIStore.setState({ toasts: [] });
   });
@@ -105,6 +124,52 @@ describe("ServerConfigPanel", () => {
     expect(screen.getByDisplayValue("0.0.0.0")).toBeInTheDocument();
     expect(screen.getByDisplayValue("8080")).toBeInTheDocument();
   });
+
+  it("浏览或取消目录选择不改配置，确认后自动保存完整媒体根路径", async () => {
+    renderPanel();
+    const input = await screen.findByPlaceholderText(
+      "E:\\照片 或 /home/user/pics",
+    );
+    const pickerButton = within(input.parentElement!).getByRole("button", {
+      name: "选择本地目录",
+    });
+    fireEvent.click(pickerButton);
+    await screen.findByDisplayValue("/other/photos [100%] #");
+    expect(configApi.update).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "取消" }));
+    expect(input).toHaveValue(baseConfig.mediaRoots[0]);
+    expect(configApi.update).not.toHaveBeenCalled();
+    fireEvent.click(pickerButton);
+    await screen.findByDisplayValue("/other/photos [100%] #");
+    fireEvent.click(screen.getByRole("button", { name: "使用此目录" }));
+    await waitFor(() =>
+      expect(configApi.update).toHaveBeenCalledWith({
+        mediaRoots: ["/other/photos [100%] #"],
+      }),
+    );
+    expect(configApi.update).toHaveBeenCalledOnce();
+  });
+
+  it.each(["cacheDir", "staticDir"] as const)(
+    "确认选择 %s 后立即保存，不再等待输入框失焦",
+    async (key) => {
+      renderPanel();
+      const input = await screen.findByDisplayValue(baseConfig[key]);
+      fireEvent.click(
+        within(input.parentElement!).getByRole("button", {
+          name: "选择本地目录",
+        }),
+      );
+      await screen.findByDisplayValue("/other/photos [100%] #");
+      fireEvent.click(screen.getByRole("button", { name: "使用此目录" }));
+      await waitFor(() =>
+        expect(configApi.update).toHaveBeenCalledWith({
+          [key]: "/other/photos [100%] #",
+        }),
+      );
+      expect(configApi.update).toHaveBeenCalledOnce();
+    },
+  );
 
   it("远程访问设置时显示仅本机提示而不是永久加载", async () => {
     vi.mocked(configApi.get).mockRejectedValue(
