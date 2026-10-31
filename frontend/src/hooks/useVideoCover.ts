@@ -44,9 +44,8 @@ const SERVER_POLL_TIMEOUT_MS = 20_000;
  * v2 流程（服务端有 ffmpeg 时）:
  *   1) 挂载时 HEAD 探测 /api/thumbs/:fileId
  *   2) 200 → ready (秒出)
- *   3) 404 + code=video_cover_missing → 服务端在后台异步抽帧,前端用
- *      短轮询重试 HEAD;超时仍未命中 → 进入 missing/extracting 状态,
- *      改由浏览器抽帧
+ *   3) 404 → 短轮询重试 HEAD;超时仍未命中 → missing/extracting，改由浏览器抽帧
+ *   4) 网络错误或其他 HTTP 失败 → error，可由用户重试
  *
  * 浏览器抽帧流程（服务端无 ffmpeg 时）:
  *   1) HEAD 404 → extracting
@@ -84,39 +83,53 @@ export function useVideoCover(
       return;
     }
     let cancelled = false;
+    const controller = new AbortController();
+    let timedOut = false;
     startedRef.current = false;
     setSt("loading");
 
     // 短轮询:服务端 ffmpeg 抽帧是同步的(在我们 GET 的时候才触发),
     // 但 1) 多个用户同时 GET 时 ffmpeg 进程池可能忙;2) 大视频抽帧偶尔
     // 超过 500ms。所以这里给一个最多 20s 的递增轮询,覆盖服务端慢启动场景。
-    const start = Date.now();
     let delay = SERVER_POLL_INITIAL_MS;
-    let stopped = false;
+    const timeout = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+      if (!cancelled) setSt("missing");
+    }, SERVER_POLL_TIMEOUT_MS);
 
     const poll = async (): Promise<void> => {
-      while (!stopped && !cancelled) {
-        const r = await fetch(thumbUrl(videoPath), { method: "HEAD" });
-        if (cancelled) return;
-        if (r.ok) {
-          setSt("ready");
-          return;
+      try {
+        while (!controller.signal.aborted) {
+          const r = await fetch(thumbUrl(videoPath), {
+            method: "HEAD",
+            signal: controller.signal,
+          });
+          if (cancelled || timedOut) return;
+          if (r.ok) {
+            setSt("ready");
+            return;
+          }
+          if (r.status !== 404) {
+            setSt("error");
+            return;
+          }
+          await waitForProbeRetry(delay, controller.signal);
+          delay = Math.min(delay * 1.5, SERVER_POLL_MAX_MS);
         }
-        if (Date.now() - start > SERVER_POLL_TIMEOUT_MS) {
-          // 超时:服务端抽帧很久还没好,降级到浏览器抽帧
-          // (浏览器抽帧仍可能工作,只是慢)
-          setSt("missing");
-          return;
-        }
-        await new Promise((res) => setTimeout(res, delay));
-        delay = Math.min(delay * 1.5, SERVER_POLL_MAX_MS);
+      } catch {
+        // 主动取消不报告失败；超时已进入浏览器抽帧，网络故障则提供重试。
+        if (!cancelled && !timedOut) setSt("error");
+      } finally {
+        window.clearTimeout(timeout);
       }
     };
     void poll();
 
     return () => {
       cancelled = true;
-      stopped = true;
+      window.clearTimeout(timeout);
+      controller.abort();
     };
     // 封面上传成功后也再检查一次
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -151,6 +164,24 @@ export function useVideoCover(
 
   const url = videoPath ? thumbUrl(videoPath) : "";
   return { status, url, retry, enabled: !!videoPath };
+}
+
+function waitForProbeRetry(delay: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const abort = () => {
+      window.clearTimeout(timer);
+      reject(new DOMException("cover probe cancelled", "AbortError"));
+    };
+    const timer = window.setTimeout(() => {
+      signal.removeEventListener("abort", abort);
+      resolve();
+    }, delay);
+    signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) {
+      signal.removeEventListener("abort", abort);
+      abort();
+    }
+  });
 }
 
 /**

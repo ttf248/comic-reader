@@ -284,3 +284,36 @@ test("浏览器抽帧上传后封面可通过原资源 URL 显示", async ({ pag
     .poll(() => cover.evaluate((image: HTMLImageElement) => image.naturalWidth))
     .toBeGreaterThan(0);
 });
+
+test("封面探测断网后可重试且没有未处理异常", async ({ page }) => {
+  const nodes = await scannedNodes(page.request);
+  const album = nodes.find((node) => node.name === "sample-video-cover");
+  expect(album).toBeDefined();
+  const response = await page.request.get(`/api/albums/${album!.id}/media`);
+  const media = (await response.json()) as {
+    page: { items: Array<{ id: string }> };
+  };
+  const fileId = media.page.items[0].id;
+  const errors: string[] = [];
+  let fail = true;
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.route(`**/api/thumbs/${fileId}`, async (route) => {
+    if (fail && route.request().method() === "HEAD")
+      await route.abort("failed");
+    else await route.continue();
+  });
+  await page.goto(`/albums/${album!.id}`);
+  const retry = page.getByRole("button", { name: "重试", exact: true }).first();
+  await expect(retry).toBeVisible();
+  expect(errors).toEqual([]);
+  fail = false;
+  await retry.click();
+  const cover = page.getByRole("img", {
+    name: "sample-video-cover",
+    exact: true,
+  });
+  await expect
+    .poll(() => cover.evaluate((image: HTMLImageElement) => image.naturalWidth))
+    .toBeGreaterThan(0);
+  expect(errors).toEqual([]);
+});
