@@ -896,8 +896,9 @@ func TestVideoInfo(t *testing.T) {
 func TestVideoStream_FaststartRemux(t *testing.T) {
 	ffmpeg := os.Getenv("FFMPEG_PATH")
 	if ffmpeg == "" {
-		if _, err := os.Stat(`C:\dev\local-gallery\bin\ffmpeg\windows\amd64\ffmpeg.exe`); err == nil {
-			ffmpeg = `C:\dev\local-gallery\bin\ffmpeg\windows\amd64\ffmpeg.exe`
+		bundled := filepath.Join("..", "..", config.DefaultFFmpegPath)
+		if services.FFmpegAvailableAt(bundled) {
+			ffmpeg = bundled
 		} else if p, err := exec.LookPath("ffmpeg"); err == nil {
 			ffmpeg = p
 		}

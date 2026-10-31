@@ -302,6 +302,8 @@ local-gallery/
 
 端到端脚本使用独立的系统临时目录保存前后端产物和测试数据，结束后统一清理，支持与本地运行实例并行验证。
 
+faststart 集成测试优先使用测试进程的 `FFMPEG_PATH`，未指定时查找仓库默认位置及 `PATH` 中可执行的 ffmpeg；工具不可用时跳过该用例。此变量只供测试选择工具，不覆盖应用的 `config.yaml`。
+
 **改动业务逻辑必须同步改测试**——后端 handler / service / middleware → `go test`；前端组件 / hook / store → Vitest；跨层主链路 → integration / e2e。
 
 ---
