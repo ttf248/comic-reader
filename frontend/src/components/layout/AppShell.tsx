@@ -188,6 +188,9 @@ export default function AppShell() {
         progress={scanSse.progress}
         onCancel={cancelScan}
         isCancelling={isCancellingScan}
+        connectionState={scanSse.connectionState}
+        onReconnect={scanSse.reconnect}
+        onStopTracking={scanSse.reset}
       />
       <HelpOverlay open={helpOpen} onClose={() => setHelpOpen(false)} />
     </div>

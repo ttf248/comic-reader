@@ -712,7 +712,7 @@ export default function ServerConfigPanel() {
               <span>媒体根目录配置已确认，建议重新扫描以刷新媒体库</span>
             </div>
             <button
-              disabled={!save.canScan}
+              disabled={!save.canScan || scanSSE.isRunning}
               onClick={async () => {
                 try {
                   const { scanId } = await scanApi.start();

@@ -157,54 +157,49 @@ export async function api<T>(
 //
 // options.events：要监听的事件名列表（后端用 `event: <name>` 推送时必须显式列出）；
 //   不传则只监听默认的 'message' 事件（无 `event:` 前缀）。
-// options.onError：连接错误回调（含网络抖动、readyState 进入 CLOSED）。
+// options.onError：原生连接错误及其重连状态，不包含名为 error 的业务消息。
 // options.signal：外部 AbortSignal，触发时自动关闭 EventSource。
 export function sse(
   path: string,
   onEvent: (eventName: string, data: unknown) => void,
   options: {
     events?: string[];
-    onError?: (err: Event) => void;
+    onError?: (err: Event, state: "reconnecting" | "closed") => void;
     signal?: AbortSignal;
   } = {},
 ): () => void {
+  if (options.signal?.aborted) return () => {};
   const url = API_BASE ? `${API_BASE}${path}` : path;
   const es = new EventSource(url);
-
-  const handler = (e: MessageEvent) => {
+  let active = true;
+  const handler = (event: Event) => {
+    if (!active || !(event instanceof MessageEvent)) return;
+    let data: unknown = event.data;
     try {
-      onEvent(e.type, JSON.parse(e.data));
+      data = JSON.parse(event.data);
     } catch {
-      onEvent(e.type, e.data);
+      /* 非 JSON 消息保留原始文本。 */
     }
+    onEvent(event.type, data);
   };
-
-  // 默认监听 EventSource 的 message 事件（服务端未声明 event: 时使用）。
-  es.addEventListener("message", handler);
-  // 注册指定事件名
-  for (const name of options.events ?? []) {
-    es.addEventListener(name, handler);
-  }
-
-  es.onerror = (e) => {
-    if (options.onError) options.onError(e);
+  const onConnectionError = (event: Event) => {
+    if (!active || event instanceof MessageEvent) return;
+    options.onError?.(
+      event,
+      es.readyState === EventSource.CONNECTING ? "reconnecting" : "closed",
+    );
   };
-
-  // 外部 signal 触发时关闭
-  let onAbort: (() => void) | null = null;
-  if (options.signal) {
-    if (options.signal.aborted) {
-      es.close();
-    } else {
-      onAbort = () => es.close();
-      options.signal.addEventListener("abort", onAbort, { once: true });
-    }
-  }
-
-  return () => {
+  const events = new Set(["message", ...(options.events ?? [])]);
+  for (const name of events) es.addEventListener(name, handler);
+  es.addEventListener("error", onConnectionError);
+  function close() {
+    if (!active) return;
+    active = false;
     es.close();
-    if (options.signal && onAbort) {
-      options.signal.removeEventListener("abort", onAbort);
-    }
-  };
+    for (const name of events) es.removeEventListener(name, handler);
+    es.removeEventListener("error", onConnectionError);
+    options.signal?.removeEventListener("abort", close);
+  }
+  options.signal?.addEventListener("abort", close, { once: true });
+  return close;
 }

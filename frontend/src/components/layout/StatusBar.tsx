@@ -20,7 +20,13 @@ export default function StatusBar() {
   // 状态栏只在「正在扫描」时给一个极简提示，方便用户瞥一眼。
   let leftLabel = "就绪";
   if (sse.isRunning) {
-    leftLabel = `扫描中 · 已发现 ${sse.progress?.albumsFound ?? 0} 个文件夹`;
+    leftLabel =
+      sse.connectionState === "reconnecting" ||
+      sse.connectionState === "disconnected"
+        ? "扫描进度连接中断 · 结果待确认"
+        : sse.connectionState === "connecting"
+          ? "正在连接扫描进度"
+          : `扫描中 · 已发现 ${sse.progress?.albumsFound ?? 0} 个文件夹`;
   } else if (sse.isError) {
     leftLabel = "扫描失败";
   } else if (manifest) {

@@ -53,7 +53,9 @@ export default function Toolbar({
   // 始终一致;输入框优先跳过(由 useKeyboard 内置,避免与浏览器
   // 「保存网页」冲突)。
   useKeyboard({
-    "ctrl+s": () => startScan.mutate(),
+    "ctrl+s": () => {
+      if (!startScan.isPending && !sse.isRunning) startScan.mutate();
+    },
   });
 
   useEffect(() => {

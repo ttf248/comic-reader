@@ -29,21 +29,54 @@ function ensureStoreWatch() {
     if (state.scanId) startSubscription(state.scanId);
     else closeConnection();
   });
+  const { scanId, progress } = useScanStore.getState();
+  if (
+    scanId &&
+    (progress?.status === "pending" || progress?.status === "running")
+  )
+    startSubscription(scanId);
+}
+
+function isProgressEvent(
+  data: unknown,
+  scanId: string,
+  eventName: string,
+): data is ProgressEvent {
+  if (!data || typeof data !== "object") return false;
+  const event = data as Record<string, unknown>;
+  return (
+    event.scanId === scanId &&
+    event.status === eventName &&
+    SCAN_EVENTS.includes(eventName) &&
+    typeof event.progress === "number" &&
+    Number.isFinite(event.progress) &&
+    typeof event.albumsFound === "number" &&
+    Number.isFinite(event.albumsFound) &&
+    event.albumsFound >= 0 &&
+    typeof event.elapsedMs === "number" &&
+    Number.isFinite(event.elapsedMs) &&
+    event.elapsedMs >= 0 &&
+    ["phase", "currentPath", "error"].every(
+      (key) => event[key] === undefined || typeof event[key] === "string",
+    )
+  );
 }
 
 function startSubscription(scanId: string) {
-  // 切到新 scanId 前先关旧连接
-  if (currentAbort) {
-    currentAbort.abort();
-    currentAbort = null;
-  }
+  closeConnection();
   const ac = new AbortController();
   currentAbort = ac;
+  useScanStore.getState().setConnectionState("connecting");
+  const isCurrent = () =>
+    !ac.signal.aborted &&
+    currentAbort === ac &&
+    useScanStore.getState().scanId === scanId;
 
   sse(
-    `/api/scans/${scanId}/events`,
-    (_eventName, data) => {
-      const ev = data as ProgressEvent;
+    `/api/scans/${encodeURIComponent(scanId)}/events`,
+    (eventName, data) => {
+      if (!isCurrent() || !isProgressEvent(data, scanId, eventName)) return;
+      const ev = data;
       useScanStore.getState().setProgress(ev);
       if (
         ev.status === "complete" ||
@@ -61,6 +94,14 @@ function startSubscription(scanId: string) {
     {
       events: SCAN_EVENTS,
       signal: ac.signal,
+      onError: (_event, state) => {
+        if (isCurrent())
+          useScanStore
+            .getState()
+            .setConnectionState(
+              state === "closed" ? "disconnected" : "reconnecting",
+            );
+      },
     },
   );
 }
@@ -82,16 +123,44 @@ export function useScanSSE() {
   // 直接读 zustand store（reactive：scanId/progress 变化自动 re-render 调用方）
   const scanId = useScanStore((s) => s.scanId);
   const progress = useScanStore((s) => s.progress);
+  const connectionState = useScanStore((s) => s.connectionState);
 
   return {
     scanId,
     progress,
+    connectionState,
     isRunning: progress?.status === "running" || progress?.status === "pending",
     isComplete: progress?.status === "complete",
     isCancelled: progress?.status === "cancelled",
     isError: progress?.status === "error",
     // 启动扫描：写 store.scanId，模块级 watcher 自动开 EventSource。
-    startWith: (id: string) => useScanStore.getState().setActive(id),
+    startWith: (id: string) => {
+      const state = useScanStore.getState();
+      if (state.scanId === id) {
+        if (
+          state.connectionState === "disconnected" ||
+          state.connectionState === "reconnecting"
+        )
+          startSubscription(id);
+        return;
+      }
+      state.setActive(id);
+    },
     reset: () => useScanStore.getState().clear(),
+    reconnect: () => {
+      const state = useScanStore.getState();
+      if (
+        !state.scanId ||
+        (state.progress?.status !== "pending" &&
+          state.progress?.status !== "running")
+      )
+        return;
+      if (
+        state.connectionState !== "disconnected" &&
+        state.connectionState !== "reconnecting"
+      )
+        return;
+      startSubscription(state.scanId);
+    },
   };
 }

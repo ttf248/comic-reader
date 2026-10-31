@@ -24,6 +24,7 @@ const FADE_DELAY_MS = 5000;
 
 import { useEffect, useState } from "react";
 import { ProgressEvent } from "../../api/scan";
+import type { ScanConnectionState } from "../../store/scanStore";
 import {
   CloseIcon,
   CheckIcon,
@@ -31,12 +32,16 @@ import {
   ScanIcon,
   ChevronDownIcon,
   ChevronUpIcon,
+  RefreshIcon,
 } from "../common/Icon";
 
 interface Props {
   progress: ProgressEvent | null;
   onCancel?: () => void;
   isCancelling?: boolean;
+  connectionState?: ScanConnectionState;
+  onReconnect?: () => void;
+  onStopTracking?: () => void;
   /** 强制展开（例如首次出现时；之后交由用户折叠） */
   defaultExpanded?: boolean;
 }
@@ -46,6 +51,9 @@ export default function ScanProgress({
   onCancel,
   isCancelling = false,
   defaultExpanded = true,
+  connectionState = "connected",
+  onReconnect,
+  onStopTracking,
 }: Props) {
   const [collapsed, setCollapsed] = useState(!defaultExpanded);
   const [phase, setPhase] = useState<"in" | "visible" | "out">("in");
@@ -71,7 +79,7 @@ export default function ScanProgress({
     }
     setShowTerminal(false);
     setPhase("visible");
-  }, [progress]);
+  }, [progress, connectionState]);
 
   if (!progress) return null;
   if (phase === "out") return null;
@@ -104,6 +112,10 @@ export default function ScanProgress({
   const isRunning =
     progress.status === "running" || progress.status === "pending";
   const isComplete = progress.status === "complete";
+  const connectionLost =
+    isRunning &&
+    (connectionState === "reconnecting" || connectionState === "disconnected");
+  const isConnecting = isRunning && connectionState === "connecting";
   const isError =
     progress.status === "error" || progress.status === "cancelled";
   const pct = Math.max(0, Math.min(100, progress.progress));
@@ -119,19 +131,29 @@ export default function ScanProgress({
       : "bg-accent";
 
   // 状态文案 + 图标
-  const StatusIcon = isComplete ? CheckIcon : isError ? AlertIcon : ScanIcon;
+  const StatusIcon = isComplete
+    ? CheckIcon
+    : isError || connectionLost
+      ? AlertIcon
+      : ScanIcon;
   const statusText = isComplete
     ? "扫描完成"
     : progress.status === "cancelled"
       ? "已取消"
       : progress.status === "error"
         ? "扫描失败"
-        : "扫描中";
+        : connectionLost
+          ? "进度连接中断"
+          : isConnecting
+            ? "正在连接进度"
+            : "扫描中";
   const statusColor = isComplete
     ? "text-success"
     : isError
       ? "text-danger"
-      : "text-fg";
+      : connectionLost
+        ? "text-warning"
+        : "text-fg";
 
   const phaseLabel =
     progress.phase === "smart-grouping"
@@ -186,6 +208,17 @@ export default function ScanProgress({
             <ChevronUpIcon size={12} className="text-fg-subtle shrink-0" />
           </button>
 
+          {connectionLost && onReconnect && (
+            <button
+              type="button"
+              onClick={onReconnect}
+              aria-label="重新连接进度"
+              title="重新连接进度"
+              className="mr-2 p-1 rounded text-warning hover:bg-bg-subtle shrink-0"
+            >
+              <RefreshIcon size={12} />
+            </button>
+          )}
           {isRunning && onCancel && (
             <button
               type="button"
@@ -230,15 +263,17 @@ export default function ScanProgress({
             >
               <ChevronDownIcon size={12} />
             </button>
-            <button
-              type="button"
-              onClick={() => setPhase("out")}
-              className="p-1 rounded text-fg-muted hover:text-fg hover:bg-bg-subtle transition-colors"
-              title="关闭"
-              aria-label="关闭扫描卡片"
-            >
-              <CloseIcon size={12} />
-            </button>
+            {!isRunning && (
+              <button
+                type="button"
+                onClick={() => setPhase("out")}
+                className="p-1 rounded text-fg-muted hover:text-fg hover:bg-bg-subtle transition-colors"
+                title="关闭"
+                aria-label="关闭扫描卡片"
+              >
+                <CloseIcon size={12} />
+              </button>
+            )}
           </div>
 
           {/* 进度条 */}
@@ -286,6 +321,41 @@ export default function ScanProgress({
             )}
           </div>
 
+          {connectionLost && (
+            <div
+              className="px-3.5 pb-3 space-y-2 text-[11px] text-warning"
+              role="alert"
+            >
+              <p>
+                {connectionState === "reconnecting"
+                  ? "正在自动重连，扫描结果尚未确认。"
+                  : "扫描结果尚未确认，请重新连接进度。"}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {onReconnect && (
+                  <button
+                    type="button"
+                    onClick={onReconnect}
+                    className="h-8 px-3 rounded-md border border-warning/40 hover:bg-bg-subtle text-warning"
+                  >
+                    重新连接进度
+                  </button>
+                )}
+                {onStopTracking && (
+                  <button
+                    type="button"
+                    onClick={onStopTracking}
+                    className="h-8 px-3 rounded-md border border-border text-fg-muted hover:bg-bg-subtle"
+                  >
+                    停止跟踪
+                  </button>
+                )}
+              </div>
+              {onStopTracking && (
+                <p className="text-fg-muted">停止跟踪不会取消后台扫描。</p>
+              )}
+            </div>
+          )}
           {/* 取消按钮（running 态时） */}
           {isRunning && onCancel && (
             <div className="px-3.5 pb-3">

@@ -1,5 +1,5 @@
-import { create } from 'zustand'
-import type { ProgressEvent } from '../api/scan'
+import { create } from "zustand";
+import type { ProgressEvent } from "../api/scan";
 
 // 扫描状态共享 store：
 //   - 单一来源：所有「当前扫描进度 / 状态」走这里
@@ -10,14 +10,18 @@ import type { ProgressEvent } from '../api/scan'
 //   const { progress, isRunning } = useScanStore()
 //   useScanStore.getState().setActive(scanId)
 
-export type ScanStatus = ProgressEvent['status']
+export type ScanStatus = ProgressEvent["status"];
+export type ScanConnectionState =
+  "idle" | "connecting" | "connected" | "reconnecting" | "disconnected";
 
 interface ScanState {
-  scanId: string | null
-  progress: ProgressEvent | null
-  setActive: (id: string) => void
-  setProgress: (p: ProgressEvent) => void
-  clear: () => void
+  scanId: string | null;
+  progress: ProgressEvent | null;
+  connectionState: ScanConnectionState;
+  setActive: (id: string) => void;
+  setProgress: (p: ProgressEvent) => void;
+  setConnectionState: (state: ScanConnectionState) => void;
+  clear: () => void;
 }
 
 // 起始 placeholder：用户点「重新扫描」后，UI 立即能看到「扫描中」卡片
@@ -26,16 +30,28 @@ function makePending(id: string): ProgressEvent {
   return {
     scanId: id,
     progress: 0,
-    status: 'pending',
+    status: "pending",
     albumsFound: 0,
     elapsedMs: 0,
-  }
+  };
 }
 
 export const useScanStore = create<ScanState>((set) => ({
   scanId: null,
   progress: null,
-  setActive: (id) => set({ scanId: id, progress: makePending(id) }),
-  setProgress: (p) => set({ progress: p }),
-  clear: () => set({ scanId: null, progress: null }),
-}))
+  connectionState: "idle",
+  setActive: (id) =>
+    set({
+      scanId: id,
+      progress: makePending(id),
+      connectionState: "connecting",
+    }),
+  setProgress: (p) =>
+    set({
+      progress: p,
+      connectionState:
+        p.status === "pending" || p.status === "running" ? "connected" : "idle",
+    }),
+  setConnectionState: (connectionState) => set({ connectionState }),
+  clear: () => set({ scanId: null, progress: null, connectionState: "idle" }),
+}));

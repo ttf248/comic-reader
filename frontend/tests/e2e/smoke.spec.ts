@@ -220,6 +220,157 @@ test("扫描并打开示例相册", async ({ page }) => {
   await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("2");
 });
 
+for (const recovery of ["manual", "automatic"] as const) {
+  test(`扫描进度连接中断后${recovery === "manual" ? "手动" : "自动"}恢复同一任务，不重复启动扫描`, async ({
+    page,
+  }) => {
+    await scannedNodes(page.request);
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    const urls: string[] = [];
+    let starts = 0;
+    page.on("request", (request) => {
+      if (request.url().endsWith("/api/scans") && request.method() === "POST")
+        starts++;
+    });
+    let release = () => {};
+    const gate = new Promise<void>((done) => {
+      release = done;
+    });
+    const tasks: Promise<void>[] = [];
+    let closing = false;
+    await page.route("**/api/scans/*/events", (route) => {
+      const attempt = urls.push(route.request().url());
+      const task = (async () => {
+        if (attempt === 1) {
+          if (recovery === "manual")
+            return route.fulfill({
+              status: 503,
+              json: { code: "test_disconnect", message: "进度连接暂不可用" },
+            });
+          const scanId = new URL(route.request().url()).pathname.split("/")[3];
+          return route.fulfill({
+            contentType: "text/event-stream",
+            body: `retry: 1000\n\nevent: running\ndata: ${JSON.stringify({ scanId, status: "running", progress: 37, albumsFound: 7, elapsedMs: 500 })}\n\n`,
+          });
+        }
+        await gate;
+        if (closing) return route.abort().catch(() => {});
+        const response = await route.fetch();
+        await route.fulfill({ response }).catch(() => {});
+      })();
+      tasks.push(task);
+      return task;
+    });
+    try {
+      await page.clock.install();
+      await page.goto("/settings");
+      const scan = page.getByTitle("扫描 (Ctrl+S)", { exact: true });
+      await scan.click();
+      const card = page.getByTestId("scan-progress");
+      await expect(card).toContainText("进度连接中断");
+      await expect(page.locator("footer")).toContainText("扫描进度连接中断");
+      await expect(scan).toBeDisabled();
+      await page.keyboard.press("Control+s");
+      await page.clock.runFor(100);
+      expect(starts).toBe(1);
+      if (recovery === "manual") {
+        await page.clock.runFor(6000);
+        await expect(card).toBeVisible();
+        await page.getByRole("link", { name: /^未读/ }).click();
+        await expect(card).toContainText("进度连接中断");
+        await page.getByRole("link", { name: "设置", exact: true }).click();
+        await page.getByRole("button", { name: "折叠扫描详情" }).click();
+        await page
+          .getByRole("button", { name: "重新连接进度", exact: true })
+          .evaluate((element) => {
+            const button = element as HTMLButtonElement;
+            button.click();
+            button.click();
+          });
+        await expect(card).toContainText("正在连接进度");
+      } else {
+        await expect(card).toContainText("37%");
+        await expect(card).toContainText("正在自动重连");
+      }
+      await expect.poll(() => urls.length).toBe(2);
+      expect(urls[0]).toBe(urls[1]);
+      release();
+      await expect(card).toContainText("扫描完成");
+      expect(starts).toBe(1);
+      expect(errors).toEqual([]);
+    } finally {
+      closing = true;
+      release();
+      await page.close();
+      await Promise.allSettled(tasks);
+    }
+  });
+}
+
+test("扫描进度任务无法读取时可停止跟踪，停止操作不取消或重新启动后台扫描", async ({
+  page,
+}) => {
+  await scannedNodes(page.request);
+  let starts = 0;
+  let cancels = 0;
+  page.on("request", (request) => {
+    if (request.method() === "POST" && request.url().endsWith("/api/scans"))
+      starts++;
+    if (
+      request.method() === "DELETE" &&
+      new URL(request.url()).pathname.startsWith("/api/scans/")
+    )
+      cancels++;
+  });
+  await page.route("**/api/scans/*/events", (route) =>
+    route.fulfill({
+      status: 404,
+      json: { code: "scan_not_found", message: "scan not found" },
+    }),
+  );
+  await page.goto("/settings");
+  const scan = page.getByTitle("扫描 (Ctrl+S)", { exact: true });
+  await scan.click();
+  const card = page.getByTestId("scan-progress");
+  await expect(card).toContainText("进度连接中断");
+  await expect(scan).toBeDisabled();
+  await card.getByRole("button", { name: "停止跟踪", exact: true }).click();
+  await expect(card).toHaveCount(0);
+  await expect(scan).toBeEnabled();
+  expect(starts).toBe(1);
+  expect(cancels).toBe(0);
+});
+
+test("扫描 error 业务事件显示任务失败，连接错误不混入业务进度", async ({
+  page,
+}) => {
+  await scannedNodes(page.request);
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  let subscriptions = 0;
+  await page.route("**/api/scans/*/events", (route) => {
+    subscriptions++;
+    const scanId = new URL(route.request().url()).pathname.split("/")[3];
+    return route.fulfill({
+      contentType: "text/event-stream",
+      body: `event: error\ndata: ${JSON.stringify({ scanId, status: "error", progress: 0, albumsFound: 0, elapsedMs: 500, error: "scan failed" })}\n\n`,
+    });
+  });
+  await page.goto("/settings");
+  const scan = page.getByRole("button", { name: "重新扫描", exact: true });
+  await scan.click();
+  const card = page.getByTestId("scan-progress");
+  await expect(card).toContainText("扫描失败");
+  await expect(card).toContainText("scan failed");
+  await expect(card.getByRole("button", { name: "重新连接进度" })).toHaveCount(
+    0,
+  );
+  await expect(scan).toBeEnabled();
+  expect(subscriptions).toBe(1);
+  expect(errors).toEqual([]);
+});
+
 test("设置页可加载服务端配置", async ({ page }) => {
   await page.goto("/settings");
   await expect(
@@ -2769,11 +2920,21 @@ test("设置目录选择使用真实路径，取消不保存且焦点留在弹�
     });
   }
   await page.setViewportSize({ width: 390, height: 660 });
-  const bounds = await dialog.boundingBox();
-  expect(bounds!.x).toBeGreaterThanOrEqual(0);
-  expect(bounds!.y).toBeGreaterThanOrEqual(0);
-  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(390);
-  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(660);
+  await expect
+    .poll(
+      async () => {
+        const bounds = await dialog.boundingBox();
+        return (
+          bounds !== null &&
+          bounds.x >= 0 &&
+          bounds.y >= 0 &&
+          bounds.x + bounds.width <= 390 &&
+          bounds.y + bounds.height <= 660
+        );
+      },
+      { message: "等待缩放后的目录弹窗完整位于视口内" },
+    )
+    .toBe(true);
   await page.screenshot({
     path: test.info().outputPath("directory-picker-mobile.png"),
   });
