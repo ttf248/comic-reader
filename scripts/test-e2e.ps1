@@ -1,5 +1,5 @@
 # scripts/test-e2e.ps1
-# 使用临时媒体目录与临时二进制运行真实全栈 Playwright 测试。
+# 使用临时媒体、独立前端产物与临时二进制运行真实全栈 Playwright 测试。
 
 $ErrorActionPreference = "Stop"
 
@@ -7,6 +7,7 @@ $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $backendRoot = Join-Path $repoRoot "backend"
 $frontendRoot = Join-Path $repoRoot "frontend"
 $testRoot = Join-Path ([System.IO.Path]::GetTempPath()) "local-gallery-e2e-$([guid]::NewGuid().ToString('N').Substring(0, 8))"
+$staticRoot = Join-Path $testRoot "frontend"
 $sampleDir = Join-Path (Join-Path $testRoot "media") "sample-album"
 $portListener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
 $portListener.Start()
@@ -82,7 +83,7 @@ try {
 
   $mediaPathYaml = (Join-Path $testRoot "media").Replace("\", "/")
   $cachePathYaml = (Join-Path $testRoot "cache").Replace("\", "/")
-  $staticPathYaml = (Join-Path $frontendRoot "dist").Replace("\", "/")
+  $staticPathYaml = $staticRoot.Replace("\", "/")
   $config = @"
 mediaRoots:
   - "$mediaPathYaml"
@@ -95,8 +96,15 @@ staticDir: "$staticPathYaml"
   [System.IO.File]::WriteAllText($cfgPath, $config, [System.Text.UTF8Encoding]::new($false))
 
   Write-Host "[1/4] 构建前端与临时后端..." -ForegroundColor Cyan
+  # Vite 会清理输出目录；必须确认目标仅为当前测试根下的独立子目录。
+  if ([System.IO.Path]::GetDirectoryName([System.IO.Path]::GetFullPath($staticRoot)) -ne
+      [System.IO.Path]::GetFullPath($testRoot)) { throw "拒绝构建到当前测试目录之外的路径" }
   Push-Location $frontendRoot
-  try { npm run build; if ($LASTEXITCODE -ne 0) { throw "前端构建失败" } } finally { Pop-Location }
+  try {
+    # 保留字面分隔符，避免 npm.ps1 吞掉传给 Vite 的构建参数。
+    npm run build '--' '--outDir' $staticRoot '--emptyOutDir'
+    if ($LASTEXITCODE -ne 0) { throw "前端构建失败" }
+  } finally { Pop-Location }
   Push-Location $backendRoot
   try { go build -o $serverPath ./cmd/server; if ($LASTEXITCODE -ne 0) { throw "后端构建失败" } } finally { Pop-Location }
 

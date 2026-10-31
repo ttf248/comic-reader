@@ -298,6 +298,8 @@ local-gallery/
 | 全栈构建 | `scripts/build.ps1` 或 VSCode 任务 `build: all`             |
 | 提交已暂存文件并推送 | `pwsh -File scripts/publish.ps1 -Message "feat: ..."`      |
 
+端到端脚本使用独立的系统临时目录保存前后端产物和测试数据，结束后统一清理，支持与本地运行实例并行验证。
+
 **改动业务逻辑必须同步改测试**——后端 handler / service / middleware → `go test`；前端组件 / hook / store → Vitest；跨层主链路 → integration / e2e。
 
 ---
