@@ -73,7 +73,8 @@ export interface ServerConfigUpdateResponse {
 }
 
 export const configApi = {
-  get: (signal?: AbortSignal) => api<ServerConfig>("/api/config", { signal }),
+  get: (signal?: AbortSignal) =>
+    api<ServerConfig>("/api/config", { signal, cache: "no-store" }),
 
   update: (patch: ServerConfigPatch) =>
     api<ServerConfigUpdateResponse>("/api/config", {

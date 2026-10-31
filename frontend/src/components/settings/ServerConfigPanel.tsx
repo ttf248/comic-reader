@@ -1,10 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  useMutation,
-  useMutationState,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   configApi,
   type ServerConfig,
@@ -14,11 +9,13 @@ import { useUIStore } from "../../store/uiStore";
 import { fsApi } from "../../api/fs";
 import { updateFsCapabilities } from "../../hooks/useFsCapabilities";
 import { fileManagerErrorMessage } from "../../utils/fileManager";
-import { authApi } from "../../api/auth";
 import { ApiError } from "../../api/client";
 import { useScanSSE } from "../../hooks/useScanSSE";
 import { scanApi } from "../../api/scan";
-import { libraryQueryKeys } from "../../hooks/useLibrary";
+import {
+  useServerConfigSave,
+  type FieldStatus,
+} from "../../hooks/useServerConfigSave";
 import DirectoryPicker from "./DirectoryPicker";
 import {
   CheckIcon,
@@ -30,10 +27,6 @@ import {
   FolderOpenIcon,
   FolderSearchIcon,
 } from "../common/Icon";
-
-// 单个字段的保存状态。
-type FieldStatus = "idle" | "saving" | "saved" | "error";
-const CONFIG_SAVE_KEY = ["server-config", "save"] as const;
 
 // 哪些字段改动后需要重启才生效。
 const REQUIRES_RESTART = new Set([
@@ -208,19 +201,6 @@ export default function ServerConfigPanel() {
   });
 
   const [status, setStatus] = useState<StatusMap>({});
-  // 同一 QueryClient 下共享保存状态，离开再进入时仍显示进行中的最新值。
-  const pendingPatches = useMutationState<ServerConfigPatch>({
-    filters: { mutationKey: CONFIG_SAVE_KEY, exact: true, status: "pending" },
-    select: (mutation) => mutation.state.variables as ServerConfigPatch,
-  });
-  const pendingValues = useMemo(
-    () =>
-      pendingPatches.reduce<ServerConfigPatch>(
-        (values, patch) => ({ ...values, ...patch }),
-        {},
-      ),
-    [pendingPatches],
-  );
   const mounted = useRef(false);
   // 每个字段独立计时；再次保存或离开面板时取消旧提示的清理任务。
   const savedTimers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -261,16 +241,17 @@ export default function ServerConfigPanel() {
     });
   }
 
-  const [mediaRootsDirty, setMediaRootsDirty] = useState(false);
   // 暂存用户输入:草稿,避免每次 onChange 都触发 PUT(输入体验更顺)
   const [draft, setDraft] = useState<ServerConfigPatch>({});
+  const save = useServerConfigSave(draft, setFieldStatus);
+  const { update, pendingValues, failedValues } = save;
   const [composingFields, setComposingFields] = useState<
     ReadonlyMap<keyof ServerConfigPatch, number>
   >(() => new Map());
   const debouncedMediaRoots = useAutosaveSnapshot(
     draft.mediaRoots,
     MEDIA_ROOTS_AUTOSAVE_DELAY,
-    composingFields.has("mediaRoots"),
+    composingFields.has("mediaRoots") || save.isReading,
   );
   const [accessTokenDraft, setAccessTokenDraft] = useState("");
   const [accessError, setAccessError] = useState("");
@@ -284,7 +265,11 @@ export default function ServerConfigPanel() {
       ) as ServerConfigPatch,
     [draft, composingFields],
   );
-  const debouncedDraft = useAutosaveSnapshot(autosaveDraft, 600);
+  const debouncedDraft = useAutosaveSnapshot(
+    autosaveDraft,
+    600,
+    save.isReading,
+  );
   // 当前"路径类草稿"按字段拆,onBlur 时取对应字段提交
   const pathDirtyRef = useRef<
     Partial<Record<keyof ServerConfigPatch, unknown>>
@@ -318,55 +303,6 @@ export default function ServerConfigPanel() {
       return next;
     });
   }
-
-  const update = useMutation({
-    mutationKey: CONFIG_SAVE_KEY,
-    scope: { id: "server-config" },
-    mutationFn: (patch: ServerConfigPatch) => configApi.update(patch),
-    onMutate: async (patch) => {
-      await qc.cancelQueries({ queryKey: ["server-config"], exact: true });
-      setFieldStatus(Object.keys(patch), "saving");
-    },
-    onSuccess: async (resp, patch) => {
-      const keys = Object.keys(patch);
-      // 写入期间也可能开始新读取；先取消它，避免晚到的旧响应覆盖确认值。
-      await qc.cancelQueries({ queryKey: ["server-config"], exact: true });
-      qc.setQueryData(["server-config"], resp.config);
-
-      // 标记 MediaRoots 变脏 → 提示用户重新扫描
-      if (resp.mediaRootsChanged) {
-        // 后端会丢弃旧扫描快照；同步删除所有前端摘要，不能让旧库短暂回显。
-        qc.removeQueries({ queryKey: libraryQueryKeys.root });
-        if (mounted.current) setMediaRootsDirty(true);
-      }
-      // 保存结果已确认权限，直接发布，避免额外健康请求失败或旧响应覆盖。
-      if (keys.includes("allowOsOpen")) {
-        updateFsCapabilities(qc, resp.config.allowOsOpen);
-      }
-      // 串行保存也涵盖会话切换，后续写请求不能抢在新会话建立前发出。
-      if (resp.config.accessMode === "lan" && patch.accessToken) {
-        await authApi.login(patch.accessToken);
-      } else if (patch.accessMode === "local") {
-        await authApi.logout().catch(() => {});
-      }
-      setFieldStatus(keys, "saved");
-      // 重启字段提示
-      const needRestart = resp.requiresRestart ?? [];
-      const changedRestart = needRestart.filter((f) => keys.includes(f));
-      if (changedRestart.length > 0) {
-        pushToast({
-          kind: "info",
-          message: `${changedRestart.join(", ")} 修改后需要重启后端才能生效`,
-          ttl: 4500,
-        });
-      }
-    },
-    onError: (err: unknown, patch) => {
-      setFieldStatus(Object.keys(patch ?? {}), "error");
-      const msg = err instanceof Error ? err.message : "保存失败";
-      pushToast({ kind: "error", message: msg });
-    },
-  });
 
   function flush(patch: ServerConfigPatch) {
     update.mutate(patch);
@@ -434,11 +370,17 @@ export default function ServerConfigPanel() {
   function cancelPathField(key: keyof ServerConfigPatch) {
     // 先同步失效待提交引用，避免随后的 blur 或旧 debounce 再次保存。
     delete pathDirtyRef.current[key];
+    save.clearFailedFields([key]);
     setDraft((current) => {
       const next = { ...current };
       delete next[key];
       return next;
     });
+  }
+
+  function confirmPathField(key: keyof ServerConfigPatch) {
+    if (pathDirtyRef.current[key] !== undefined) flushPathField(key);
+    else save.retryFailed([key]);
   }
 
   if (isLoading) {
@@ -472,263 +414,329 @@ export default function ServerConfigPanel() {
   const fieldValue = (
     key: keyof ServerConfigPatch,
   ): string | number | boolean => {
-    // 当前编辑 > 已进入保存流程的最新值 > 服务端确认值。
+    // 当前编辑 > 最新保存中值 > 保留的失败输入 > 服务端确认值。
     if (key in draft && draft[key] !== undefined) {
       return draft[key] as never;
     }
     if (pendingValues[key] !== undefined) return pendingValues[key] as never;
+    if (failedValues[key as keyof typeof failedValues] !== undefined)
+      return failedValues[key as keyof typeof failedValues] as never;
     return (data as ServerConfig)[key as keyof ServerConfig] as never;
   };
   const fieldStatus = (key: keyof ServerConfigPatch): FieldStatus => {
     if (draft[key] !== undefined) return "idle";
     if (pendingValues[key] !== undefined) return "saving";
+    if (failedValues[key as keyof typeof failedValues] !== undefined)
+      return "error";
     return status[key] ?? "idle";
   };
 
   return (
     <div className="space-y-6">
-      {/* 媒体库 — 多根(独立渲染) */}
-      <div>
-        <div className="text-[11px] uppercase tracking-[0.18em] text-fg-muted font-medium mb-2 px-1">
-          媒体库
-        </div>
-        <div className="bg-bg-elevated border border-border-faint rounded-md overflow-hidden">
-          <MediaRootsField
-            // 当前草稿覆盖保存中的值，再回退到服务端确认的目录；未配置时为空。
-            roots={
-              draft.mediaRoots ??
-              pendingValues.mediaRoots ??
-              data.mediaRoots ??
-              []
-            }
-            status={fieldStatus("mediaRoots")}
-            allowOsOpen={data.allowOsOpen}
-            onChange={(next) => {
-              setDraft((d) => ({ ...d, mediaRoots: next }));
-              pathDirtyRef.current.mediaRoots = next;
-              setStatus((s) =>
-                s["mediaRoots"] === "saved" ? { ...s, mediaRoots: "idle" } : s,
-              );
-            }}
-            onOpenInExplorer={openConfiguredDirectory}
-            onCancel={() => cancelPathField("mediaRoots")}
-            onCompositionChange={(active) =>
-              setFieldComposing("mediaRoots", active)
-            }
-          />
-        </div>
-      </div>
-
-      {/* 扫描 — 排除规则(独立渲染,行为与 MediaRootsField 类似但用 textarea) */}
-      <div>
-        <div className="text-[11px] uppercase tracking-[0.18em] text-fg-muted font-medium mb-2 px-1">
-          扫描
-        </div>
-        <div className="bg-bg-elevated border border-border-faint rounded-md overflow-hidden">
-          <ExcludeRulesField
-            patterns={
-              draft.excludePatterns ??
-              pendingValues.excludePatterns ??
-              data.excludePatterns ??
-              []
-            }
-            systemFiles={
-              draft.systemFiles ??
-              pendingValues.systemFiles ??
-              data.systemFiles ??
-              []
-            }
-            skipHidden={
-              draft.skipHidden ?? pendingValues.skipHidden ?? data.skipHidden
-            }
-            patternsStatus={fieldStatus("excludePatterns")}
-            systemFilesStatus={fieldStatus("systemFiles")}
-            skipHiddenStatus={fieldStatus("skipHidden")}
-            onPatternsChange={(next) => {
-              setDraft((d) => ({ ...d, excludePatterns: next }));
-              pathDirtyRef.current.excludePatterns = next;
-              setStatus((s) =>
-                s["excludePatterns"] === "saved"
-                  ? { ...s, excludePatterns: "idle" }
-                  : s,
-              );
-            }}
-            onSystemFilesChange={(next) => {
-              setDraft((d) => ({ ...d, systemFiles: next }));
-              pathDirtyRef.current.systemFiles = next;
-              setStatus((s) =>
-                s["systemFiles"] === "saved"
-                  ? { ...s, systemFiles: "idle" }
-                  : s,
-              );
-            }}
-            onSkipHiddenChange={(v) => {
-              setDraft((d) => ({ ...d, skipHidden: v }));
-              setStatus((s) =>
-                s["skipHidden"] === "saved" ? { ...s, skipHidden: "idle" } : s,
-              );
-            }}
-            onPatternsCommit={() => flushPathField("excludePatterns")}
-            onSystemFilesCommit={() => flushPathField("systemFiles")}
-          />
-        </div>
-      </div>
-
-      <div>
-        <div className="text-[11px] uppercase tracking-[0.18em] text-fg-muted font-medium mb-2 px-1">
-          访问控制
-        </div>
-        <div className="bg-bg-elevated border border-border-faint rounded-md px-4 py-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="text-sm text-fg">
-                {data.accessMode === "lan" ? "局域网令牌保护" : "仅本机访问"}
-              </div>
-              <p className="text-xs text-fg-subtle mt-1 leading-5 max-w-xl">
-                {data.accessMode === "lan"
-                  ? "远程浏览器必须用令牌换取 8 小时会话；令牌不会回显。"
-                  : "默认模式，所有 API 只允许运行服务的计算机访问。"}
-              </p>
-            </div>
-            <span className="shrink-0 rounded-full border border-border px-2 py-1 text-[10px] uppercase tracking-wider text-fg-muted">
-              {data.accessMode === "lan" ? "LAN" : "LOCAL"}
-            </span>
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <input
-              type="password"
-              value={accessTokenDraft}
-              onChange={(event) => {
-                setAccessTokenDraft(event.target.value);
-                setAccessError("");
-              }}
-              autoComplete="new-password"
-              spellCheck={false}
-              maxLength={256}
-              aria-label={
-                data.accessMode === "lan" ? "新访问令牌" : "LAN 访问令牌"
-              }
-              placeholder={
-                data.accessMode === "lan" && data.accessTokenConfigured
-                  ? "输入至少 32 位新令牌以轮换"
-                  : "至少 32 个无空白字符"
-              }
-              className="h-9 min-w-72 flex-1 rounded-md border border-border-faint bg-bg-subtle px-3 font-mono text-sm focus:outline-none focus:border-accent"
-            />
-            <button
-              type="button"
-              disabled={update.isPending || accessTokenDraft.trim().length < 32}
-              onClick={() => void enableLANAccess()}
-              className="h-9 px-3 rounded-md bg-accent text-accent-contrast text-xs font-medium disabled:opacity-50"
-            >
-              {data.accessMode === "lan" ? "轮换令牌" : "开启 LAN 访问"}
-            </button>
-            {data.accessMode === "lan" && (
-              <button
-                type="button"
-                disabled={update.isPending}
-                onClick={() => void disableLANAccess()}
-                className="h-9 px-3 rounded-md border border-border text-xs text-fg-muted hover:bg-bg-hover disabled:opacity-50"
-              >
-                切换为仅本机
-              </button>
+      {save.hasFailures && (
+        <div
+          role="alert"
+          className="rounded-md border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-fg space-y-2"
+        >
+          <p>
+            部分配置的保存结果未能确认。可重试保留的输入，或重新读取当前配置。
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            {save.isReading ? (
+              <>
+                <span className="text-xs text-fg-muted">正在重新读取配置…</span>
+                <button
+                  type="button"
+                  onClick={save.cancelRead}
+                  className="h-8 px-3 rounded-md border border-border text-xs hover:bg-bg-hover"
+                >
+                  取消读取
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  disabled={!save.canRetry}
+                  onClick={() => save.retryFailed()}
+                  className="h-8 px-3 rounded-md bg-accent text-accent-contrast text-xs disabled:opacity-50"
+                >
+                  重试保存
+                </button>
+                <button
+                  type="button"
+                  disabled={save.hasPending}
+                  onClick={() => void save.readCurrent()}
+                  className="h-8 px-3 rounded-md border border-border text-xs hover:bg-bg-hover disabled:opacity-50"
+                >
+                  重新读取配置
+                </button>
+              </>
             )}
           </div>
-          {accessError && (
-            <p role="alert" className="mt-2 text-xs text-danger">
-              {accessError}
-            </p>
-          )}
-          <p className="mt-2 text-[11px] text-fg-subtle">
-            对外访问还需将监听地址设为局域网 IP 或
-            0.0.0.0；修改监听地址需重启。内置服务不提供
-            TLS，请仅用于可信家庭网络。
-          </p>
-        </div>
-      </div>
-
-      {FIELDS.map((group) => (
-        <div key={group.section}>
-          <div className="text-[11px] uppercase tracking-[0.18em] text-fg-muted font-medium mb-2 px-1">
-            {group.section}
-          </div>
-          <div className="bg-bg-elevated border border-border-faint rounded-md divide-y divide-border-faint overflow-hidden">
-            {group.defs.map((def) => {
-              const statusKey = def.key;
-              const st = fieldStatus(statusKey);
-              const requiresRestart = REQUIRES_RESTART.has(def.key as string);
-              const isPath = PATH_FIELDS.has(def.key as string);
-              return (
-                <ConfigRow
-                  key={def.key}
-                  def={def}
-                  value={fieldValue(def.key)}
-                  status={st}
-                  requiresRestart={requiresRestart}
-                  isPath={isPath}
-                  allowOsOpen={data.allowOsOpen}
-                  onChange={(v) => {
-                    // 每次输入只更新草稿;非路径字段 debounce 后再 flush,
-                    // 路径字段由 onBlur 触发 flush
-                    setDraft((d) => ({ ...d, [def.key]: v as never }));
-                    if (isPath) {
-                      pathDirtyRef.current[def.key] = v;
-                      setStatus((s) =>
-                        s[statusKey] === "saved"
-                          ? { ...s, [statusKey]: "idle" }
-                          : s,
-                      );
-                    } else {
-                      setStatus((s) =>
-                        s[statusKey] === "saved"
-                          ? { ...s, [statusKey]: "idle" }
-                          : s,
-                      );
-                    }
-                  }}
-                  onCommit={isPath ? () => flushPathField(def.key) : undefined}
-                  onCancel={() => cancelPathField(def.key)}
-                  onCompositionChange={(active) =>
-                    setFieldComposing(def.key, active)
-                  }
-                />
-              );
-            })}
-          </div>
-        </div>
-      ))}
-
-      {mediaRootsDirty && (
-        <div className="bg-accent/5 border border-accent/30 rounded-md px-4 py-3 flex items-center justify-between gap-3 text-sm">
-          <div className="flex items-center gap-2 text-fg">
-            <RefreshIcon size={14} />
-            <span>媒体根目录已变更,旧扫描结果已清空,建议重新扫描</span>
-          </div>
-          <button
-            onClick={async () => {
-              try {
-                const { scanId } = await scanApi.start();
-                scanSSE.startWith(scanId);
-                setMediaRootsDirty(false);
-                pushToast({ kind: "success", message: "已开始重新扫描" });
-              } catch {
-                pushToast({ kind: "error", message: "启动扫描失败" });
-              }
-            }}
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-accent/40 text-accent hover:bg-accent/10 text-xs transition-colors"
-          >
-            <RefreshIcon size={11} />
-            立即重新扫描
-          </button>
         </div>
       )}
+      <fieldset disabled={save.isReading} className="min-w-0 space-y-6">
+        {/* 媒体库 — 多根(独立渲染) */}
+        <div>
+          <div className="text-[11px] uppercase tracking-[0.18em] text-fg-muted font-medium mb-2 px-1">
+            媒体库
+          </div>
+          <div className="bg-bg-elevated border border-border-faint rounded-md overflow-hidden">
+            <MediaRootsField
+              // 草稿优先，其次是保存中与失败的输入，最后使用服务端确认值。
+              roots={
+                draft.mediaRoots ??
+                pendingValues.mediaRoots ??
+                failedValues.mediaRoots ??
+                data.mediaRoots ??
+                []
+              }
+              status={fieldStatus("mediaRoots")}
+              allowOsOpen={data.allowOsOpen}
+              onChange={(next) => {
+                setDraft((d) => ({ ...d, mediaRoots: next }));
+                pathDirtyRef.current.mediaRoots = next;
+                setStatus((s) =>
+                  s["mediaRoots"] === "saved"
+                    ? { ...s, mediaRoots: "idle" }
+                    : s,
+                );
+              }}
+              onOpenInExplorer={openConfiguredDirectory}
+              onCancel={() => cancelPathField("mediaRoots")}
+              onConfirm={() => save.retryFailed(["mediaRoots"])}
+              onCompositionChange={(active) =>
+                setFieldComposing("mediaRoots", active)
+              }
+            />
+          </div>
+        </div>
 
-      <div className="text-xs text-fg-subtle leading-relaxed px-1">
-        配置文件路径:
-        <code className="font-mono text-fg-muted">{data.configPath}</code>;
-        改完自动写回 YAML,无需手动保存。
-      </div>
+        {/* 扫描 — 排除规则(独立渲染,行为与 MediaRootsField 类似但用 textarea) */}
+        <div>
+          <div className="text-[11px] uppercase tracking-[0.18em] text-fg-muted font-medium mb-2 px-1">
+            扫描
+          </div>
+          <div className="bg-bg-elevated border border-border-faint rounded-md overflow-hidden">
+            <ExcludeRulesField
+              patterns={
+                draft.excludePatterns ??
+                pendingValues.excludePatterns ??
+                failedValues.excludePatterns ??
+                data.excludePatterns ??
+                []
+              }
+              systemFiles={
+                draft.systemFiles ??
+                pendingValues.systemFiles ??
+                failedValues.systemFiles ??
+                data.systemFiles ??
+                []
+              }
+              skipHidden={
+                draft.skipHidden ??
+                pendingValues.skipHidden ??
+                failedValues.skipHidden ??
+                data.skipHidden
+              }
+              patternsStatus={fieldStatus("excludePatterns")}
+              systemFilesStatus={fieldStatus("systemFiles")}
+              skipHiddenStatus={fieldStatus("skipHidden")}
+              onPatternsChange={(next) => {
+                setDraft((d) => ({ ...d, excludePatterns: next }));
+                pathDirtyRef.current.excludePatterns = next;
+                setStatus((s) =>
+                  s["excludePatterns"] === "saved"
+                    ? { ...s, excludePatterns: "idle" }
+                    : s,
+                );
+              }}
+              onSystemFilesChange={(next) => {
+                setDraft((d) => ({ ...d, systemFiles: next }));
+                pathDirtyRef.current.systemFiles = next;
+                setStatus((s) =>
+                  s["systemFiles"] === "saved"
+                    ? { ...s, systemFiles: "idle" }
+                    : s,
+                );
+              }}
+              onSkipHiddenChange={(v) => {
+                setDraft((d) => ({ ...d, skipHidden: v }));
+                setStatus((s) =>
+                  s["skipHidden"] === "saved"
+                    ? { ...s, skipHidden: "idle" }
+                    : s,
+                );
+              }}
+              onPatternsCommit={() => flushPathField("excludePatterns")}
+              onSystemFilesCommit={() => flushPathField("systemFiles")}
+            />
+          </div>
+        </div>
+
+        <div>
+          <div className="text-[11px] uppercase tracking-[0.18em] text-fg-muted font-medium mb-2 px-1">
+            访问控制
+          </div>
+          <div className="bg-bg-elevated border border-border-faint rounded-md px-4 py-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-sm text-fg">
+                  {data.accessMode === "lan" ? "局域网令牌保护" : "仅本机访问"}
+                </div>
+                <p className="text-xs text-fg-subtle mt-1 leading-5 max-w-xl">
+                  {data.accessMode === "lan"
+                    ? "远程浏览器必须用令牌换取 8 小时会话；令牌不会回显。"
+                    : "默认模式，所有 API 只允许运行服务的计算机访问。"}
+                </p>
+              </div>
+              <span className="shrink-0 rounded-full border border-border px-2 py-1 text-[10px] uppercase tracking-wider text-fg-muted">
+                {data.accessMode === "lan" ? "LAN" : "LOCAL"}
+              </span>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <input
+                type="password"
+                value={accessTokenDraft}
+                onChange={(event) => {
+                  setAccessTokenDraft(event.target.value);
+                  setAccessError("");
+                }}
+                autoComplete="new-password"
+                spellCheck={false}
+                maxLength={256}
+                aria-label={
+                  data.accessMode === "lan" ? "新访问令牌" : "LAN 访问令牌"
+                }
+                placeholder={
+                  data.accessMode === "lan" && data.accessTokenConfigured
+                    ? "输入至少 32 位新令牌以轮换"
+                    : "至少 32 个无空白字符"
+                }
+                className="h-9 min-w-72 flex-1 rounded-md border border-border-faint bg-bg-subtle px-3 font-mono text-sm focus:outline-none focus:border-accent"
+              />
+              <button
+                type="button"
+                disabled={
+                  update.isPending || accessTokenDraft.trim().length < 32
+                }
+                onClick={() => void enableLANAccess()}
+                className="h-9 px-3 rounded-md bg-accent text-accent-contrast text-xs font-medium disabled:opacity-50"
+              >
+                {data.accessMode === "lan" ? "轮换令牌" : "开启 LAN 访问"}
+              </button>
+              {data.accessMode === "lan" && (
+                <button
+                  type="button"
+                  disabled={update.isPending}
+                  onClick={() => void disableLANAccess()}
+                  className="h-9 px-3 rounded-md border border-border text-xs text-fg-muted hover:bg-bg-hover disabled:opacity-50"
+                >
+                  切换为仅本机
+                </button>
+              )}
+            </div>
+            {accessError && (
+              <p role="alert" className="mt-2 text-xs text-danger">
+                {accessError}
+              </p>
+            )}
+            <p className="mt-2 text-[11px] text-fg-subtle">
+              对外访问还需将监听地址设为局域网 IP 或
+              0.0.0.0；修改监听地址需重启。内置服务不提供
+              TLS，请仅用于可信家庭网络。
+            </p>
+          </div>
+        </div>
+
+        {FIELDS.map((group) => (
+          <div key={group.section}>
+            <div className="text-[11px] uppercase tracking-[0.18em] text-fg-muted font-medium mb-2 px-1">
+              {group.section}
+            </div>
+            <div className="bg-bg-elevated border border-border-faint rounded-md divide-y divide-border-faint overflow-hidden">
+              {group.defs.map((def) => {
+                const statusKey = def.key;
+                const st = fieldStatus(statusKey);
+                const requiresRestart = REQUIRES_RESTART.has(def.key as string);
+                const isPath = PATH_FIELDS.has(def.key as string);
+                return (
+                  <ConfigRow
+                    key={def.key}
+                    def={def}
+                    value={fieldValue(def.key)}
+                    status={st}
+                    requiresRestart={requiresRestart}
+                    isPath={isPath}
+                    allowOsOpen={data.allowOsOpen}
+                    onChange={(v) => {
+                      // 每次输入只更新草稿;非路径字段 debounce 后再 flush,
+                      // 路径字段由 onBlur 触发 flush
+                      setDraft((d) => ({ ...d, [def.key]: v as never }));
+                      if (isPath) {
+                        pathDirtyRef.current[def.key] = v;
+                        setStatus((s) =>
+                          s[statusKey] === "saved"
+                            ? { ...s, [statusKey]: "idle" }
+                            : s,
+                        );
+                      } else {
+                        setStatus((s) =>
+                          s[statusKey] === "saved"
+                            ? { ...s, [statusKey]: "idle" }
+                            : s,
+                        );
+                      }
+                    }}
+                    onCommit={
+                      isPath ? () => flushPathField(def.key) : undefined
+                    }
+                    onConfirm={() => confirmPathField(def.key)}
+                    onCancel={() => cancelPathField(def.key)}
+                    onCompositionChange={(active) =>
+                      setFieldComposing(def.key, active)
+                    }
+                  />
+                );
+              })}
+            </div>
+          </div>
+        ))}
+
+        {save.needsScan && (
+          <div className="bg-accent/5 border border-accent/30 rounded-md px-4 py-3 flex items-center justify-between gap-3 text-sm">
+            <div className="flex items-center gap-2 text-fg">
+              <RefreshIcon size={14} />
+              <span>媒体根目录配置已确认，建议重新扫描以刷新媒体库</span>
+            </div>
+            <button
+              disabled={!save.canScan}
+              onClick={async () => {
+                try {
+                  const { scanId } = await scanApi.start();
+                  scanSSE.startWith(scanId);
+                  save.clearScanNotice();
+                  pushToast({ kind: "success", message: "已开始重新扫描" });
+                } catch {
+                  pushToast({ kind: "error", message: "启动扫描失败" });
+                }
+              }}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-accent/40 text-accent hover:bg-accent/10 text-xs transition-colors disabled:opacity-50"
+            >
+              <RefreshIcon size={11} />
+              立即重新扫描
+            </button>
+          </div>
+        )}
+
+        <div className="text-xs text-fg-subtle leading-relaxed px-1">
+          配置文件路径:
+          <code className="font-mono text-fg-muted">{data.configPath}</code>;
+          改完自动写回 YAML,无需手动保存。
+        </div>
+      </fieldset>
     </div>
   );
 }
@@ -800,6 +808,7 @@ function MediaRootsField({
   onChange,
   onOpenInExplorer,
   onCancel,
+  onConfirm,
   onCompositionChange,
 }: {
   roots: string[];
@@ -808,6 +817,7 @@ function MediaRootsField({
   onChange: (next: string[]) => void;
   onOpenInExplorer: (path: string) => void;
   onCancel: () => void;
+  onConfirm: () => void;
   onCompositionChange: (active: boolean) => void;
 }) {
   // 始终渲染一个空槽位(即使当前为空),方便用户添加第一个根
@@ -862,6 +872,7 @@ function MediaRootsField({
             onPick={(picked) => updateAt(i, picked)}
             onChange={(nv) => updateAt(i, nv)}
             onCancel={onCancel}
+            onConfirm={onConfirm}
             onCompositionChange={onCompositionChange}
             removable={roots.length > 1}
             onRemove={() => removeAt(i)}
@@ -892,6 +903,7 @@ function ConfigRow({
   onChange,
   onCommit,
   onCancel,
+  onConfirm,
   onCompositionChange,
 }: {
   def: FieldDef;
@@ -903,6 +915,7 @@ function ConfigRow({
   onChange: (v: string | number | boolean) => void;
   onCommit?: () => void;
   onCancel: () => void;
+  onConfirm: () => void;
   onCompositionChange: (active: boolean) => void;
 }) {
   const composition = useConfigComposition((value) => {
@@ -937,6 +950,7 @@ function ConfigRow({
             onChange={(v) => onChange(v)}
             onCommit={onCommit}
             onCancel={onCancel}
+            onConfirm={onConfirm}
             onCompositionChange={onCompositionChange}
             onOpenInExplorer={
               value && String(value).length > 0 && allowOsOpen
@@ -1112,6 +1126,7 @@ interface PathFieldProps {
   placeholder?: string;
   onChange: (v: string) => void;
   onCommit?: () => void;
+  onConfirm: () => void;
   /** 撤销当前配置字段未提交的草稿；媒体根以整组数组为单位 */
   onCancel: () => void;
   onCompositionChange: (active: boolean) => void;
@@ -1133,6 +1148,7 @@ function PathField({
   placeholder,
   onChange,
   onCommit,
+  onConfirm,
   onCancel,
   onCompositionChange,
   onOpenInExplorer,
@@ -1170,6 +1186,7 @@ function PathField({
           if (e.nativeEvent.isComposing || composition.active.current) return;
           if (e.key === "Enter") {
             e.preventDefault();
+            onConfirm();
             (e.currentTarget as HTMLInputElement).blur();
           } else if (e.key === "Escape") {
             e.preventDefault();

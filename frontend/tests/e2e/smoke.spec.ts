@@ -3230,6 +3230,179 @@ for (const failFirst of [false, true]) {
   });
 }
 
+test("配置保存失败离开后仍保留输入，按 Enter 显式重试且不自动重放", async ({
+  page,
+}) => {
+  const config = (await (
+    await page.request.get("/api/config")
+  ).json()) as Record<string, unknown>;
+  let current = { ...config, mediaRoots: [(config.mediaRoots as string[])[0]] };
+  const writes: Record<string, unknown>[] = [];
+  let release = () => {};
+  const gate = new Promise<void>((done) => {
+    release = done;
+  });
+  const tasks: Promise<void>[] = [];
+  let closing = false;
+  await page.route("**/api/config", (route) => {
+    if (route.request().method() !== "PUT")
+      return route.fulfill({ json: current });
+    const patch = route.request().postDataJSON() as Record<string, unknown>;
+    const attempt = writes.push(patch);
+    const task = (async () => {
+      if (attempt === 1) {
+        await gate;
+        if (closing) return route.abort().catch(() => {});
+        await route.fulfill({
+          status: 500,
+          json: { code: "test_failure", message: "保存中断" },
+        });
+      } else {
+        current = { ...current, ...patch };
+        await route.fulfill({
+          json: {
+            ok: true,
+            config: current,
+            requiresRestart: [],
+            mediaRootsChanged: false,
+          },
+        });
+      }
+    })();
+    tasks.push(task);
+    return task;
+  });
+  try {
+    await page.clock.install();
+    await page.goto("/settings");
+    const input = page.getByPlaceholder("E:\\照片 或 /home/user/pics");
+    await input.fill("/retry/photos");
+    await page.clock.runFor(500);
+    await expect.poll(() => writes.length).toBe(1);
+    await page.getByRole("link", { name: /^主页/ }).click();
+    const failed = page.waitForResponse(
+      (response) =>
+        response.request().method() === "PUT" &&
+        response.url().endsWith("/api/config"),
+    );
+    release();
+    expect((await failed).status()).toBe(500);
+    await page.getByRole("link", { name: "设置", exact: true }).click();
+    await expect(input).toHaveValue("/retry/photos");
+    await expect(page.getByRole("button", { name: "重试保存" })).toBeVisible();
+    await page.clock.runFor(1500);
+    expect(writes).toHaveLength(1);
+    await input.press("Enter");
+    await expect.poll(() => writes.length).toBe(2);
+    await expect(page.getByRole("button", { name: "重试保存" })).toHaveCount(0);
+    await expect(input).toHaveValue("/retry/photos");
+    expect(writes).toEqual([
+      { mediaRoots: ["/retry/photos"] },
+      { mediaRoots: ["/retry/photos"] },
+    ]);
+    await expect(
+      page.getByText("媒体根目录配置已确认，建议重新扫描以刷新媒体库"),
+    ).toBeVisible();
+  } finally {
+    closing = true;
+    release();
+    await page.close();
+    await Promise.allSettled(tasks);
+  }
+});
+
+test("配置失败后可取消重新读取，迟到结果不覆盖新读取且其他草稿继续保存", async ({
+  page,
+}) => {
+  const config = (await (
+    await page.request.get("/api/config")
+  ).json()) as Record<string, unknown>;
+  let current = { ...config };
+  let holdRead = false;
+  let held = false;
+  let release = () => {};
+  const gate = new Promise<void>((done) => {
+    release = done;
+  });
+  const tasks: Promise<void>[] = [];
+  const writes: Record<string, unknown>[] = [];
+  let closing = false;
+  await page.route("**/api/config", (route) => {
+    const task = (async () => {
+      if (route.request().method() === "PUT") {
+        const patch = route.request().postDataJSON() as Record<string, unknown>;
+        writes.push(patch);
+        if (patch.cacheDir !== undefined)
+          return route.fulfill({
+            status: 500,
+            json: { code: "test_failure", message: "保存中断" },
+          });
+        current = { ...current, ...patch };
+        return route.fulfill({
+          json: {
+            ok: true,
+            config: current,
+            requiresRestart: [],
+            mediaRootsChanged: false,
+          },
+        });
+      }
+      const snapshot = { ...current };
+      if (holdRead) {
+        held = true;
+        await gate;
+      }
+      if (closing) return route.abort().catch(() => {});
+      await route.fulfill({ json: snapshot }).catch(() => {});
+    })();
+    tasks.push(task);
+    return task;
+  });
+  try {
+    await page.clock.install();
+    await page.goto("/settings");
+    const cache = page.getByPlaceholder(
+      "存放缩略图 / 扫描结果 / 用户偏好，修改后需重启",
+      { exact: true },
+    );
+    await cache.fill("/failed/cache");
+    await cache.press("Tab");
+    await expect(page.getByLabel("保存失败", { exact: true })).toBeVisible();
+    await expect(cache).toHaveValue("/failed/cache");
+    const port = page.locator(`input[value="${String(config.port)}"]`);
+    const editedPort = Number(config.port) === 9001 ? 9002 : 9001;
+    const portInput = page.getByRole("spinbutton").last();
+    await expect(port).toHaveCount(1);
+    await portInput.fill(String(editedPort));
+    holdRead = true;
+    await page.getByRole("button", { name: "重新读取配置" }).click();
+    await expect.poll(() => held).toBe(true);
+    await expect(cache).toBeDisabled();
+    await expect(portInput).toHaveValue(String(editedPort));
+    await page.clock.runFor(1000);
+    expect(writes).toHaveLength(1);
+    await page.getByRole("button", { name: "取消读取" }).click();
+    await expect(cache).toBeEnabled();
+    holdRead = false;
+    current = { ...current, cacheDir: "/confirmed/cache" };
+    await page.getByRole("button", { name: "重新读取配置" }).click();
+    await expect(cache).toHaveValue("/confirmed/cache");
+    release();
+    await page.clock.runFor(50);
+    await expect(cache).toHaveValue("/confirmed/cache");
+    await expect(portInput).toHaveValue(String(editedPort));
+    await page.clock.runFor(650);
+    await expect.poll(() => writes.length).toBe(2);
+    expect(writes[1]).toEqual({ port: editedPort });
+    await expect(page.getByRole("button", { name: "重试保存" })).toHaveCount(0);
+  } finally {
+    closing = true;
+    release();
+    await page.close();
+    await Promise.allSettled(tasks);
+  }
+});
+
 test("配置保存等待 LAN 会话建立后再发送后续写入", async ({ page }) => {
   const config = (await (
     await page.request.get("/api/config")

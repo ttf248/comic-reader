@@ -17,6 +17,7 @@ import { authApi } from "../../api/auth";
 import { ApiError } from "../../api/client";
 import { fsApi } from "../../api/fs";
 import { fsCapabilitiesQueryKey } from "../../hooks/useFsCapabilities";
+import { libraryQueryKeys } from "../../hooks/useLibrary";
 
 // Mock the config API
 vi.mock("../../api/config", () => ({
@@ -674,7 +675,7 @@ describe("ServerConfigPanel", () => {
         }),
       { timeout: 1500 },
     );
-    expect(await screen.findByText(/媒体根目录已变更/)).toBeInTheDocument();
+    expect(await screen.findByText(/媒体根目录配置已确认/)).toBeInTheDocument();
   });
 
   it("多根：补全新增根目录后自动保存", async () => {
@@ -729,6 +730,287 @@ describe("ServerConfigPanel", () => {
       expect(toasts.some((t) => t.message.includes("invalid port"))).toBe(true);
     });
   });
+
+  it.each(["cacheDir", "mediaRoots"] as const)(
+    "%s 保存失败保留输入，显式重试且不自动重复写入",
+    async (key) => {
+      const retry = deferred<ReturnType<typeof savedConfig>>();
+      let attempts = 0;
+      vi.mocked(configApi.update).mockImplementation(() =>
+        ++attempts === 1
+          ? Promise.reject(new Error("连接中断"))
+          : retry.promise,
+      );
+      renderPanel();
+      const input = await screen.findByDisplayValue(
+        key === "cacheDir" ? baseConfig.cacheDir : baseConfig.mediaRoots[0],
+      );
+      fireEvent.change(input, { target: { value: "/recovery/photos" } });
+      if (key === "cacheDir") fireEvent.blur(input);
+      await screen.findByLabelText("保存失败");
+      expect(input).toHaveValue("/recovery/photos");
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 800));
+      });
+      expect(configApi.update).toHaveBeenCalledOnce();
+      const button = screen.getByRole("button", { name: "重试保存" });
+      fireEvent.click(button);
+      fireEvent.click(button);
+      await waitFor(() => expect(configApi.update).toHaveBeenCalledTimes(2));
+      const value =
+        key === "mediaRoots" ? ["/recovery/photos"] : "/recovery/photos";
+      expect(configApi.update).toHaveBeenLastCalledWith({ [key]: value });
+      await act(async () => {
+        retry.resolve(savedConfig({ [key]: value }));
+      });
+      await waitFor(() =>
+        expect(
+          screen.queryByRole("button", { name: "重试保存" }),
+        ).not.toBeInTheDocument(),
+      );
+      expect(input).toHaveValue("/recovery/photos");
+    },
+  );
+
+  it.each([
+    ["allowOsOpen", false],
+    ["cacheMaxSizeMB", 0],
+    ["excludePatterns", []],
+  ] as const)("%s 的失败值保留 false、零和空数组", async (key, value) => {
+    const original = {
+      ...baseConfig,
+      allowOsOpen: true,
+      excludePatterns: ["old_*"],
+    };
+    vi.mocked(configApi.get).mockResolvedValue(original);
+    let attempts = 0;
+    vi.mocked(configApi.update).mockImplementation(() =>
+      ++attempts === 1
+        ? Promise.reject(new Error("保存中断"))
+        : Promise.resolve(savedConfig({ [key]: value })),
+    );
+    renderPanel();
+    let input: HTMLElement;
+    if (key === "allowOsOpen") {
+      input = await screen.findByRole("switch", {
+        name: "允许在系统文件管理器中打开",
+      });
+      fireEvent.click(input);
+    } else if (key === "cacheMaxSizeMB") {
+      input = await screen.findByDisplayValue(
+        String(baseConfig.cacheMaxSizeMB),
+      );
+      fireEvent.change(input, { target: { value: "0" } });
+    } else {
+      input = await screen.findByDisplayValue("old_*");
+      fireEvent.change(input, { target: { value: "" } });
+      fireEvent.blur(input);
+    }
+    await screen.findByLabelText("保存失败");
+    if (key === "allowOsOpen")
+      expect(input).toHaveAttribute("aria-checked", "false");
+    else expect(input).toHaveValue(key === "cacheMaxSizeMB" ? 0 : "");
+    fireEvent.click(screen.getByRole("button", { name: "重试保存" }));
+    await waitFor(() => expect(configApi.update).toHaveBeenCalledTimes(2));
+    expect(configApi.update).toHaveBeenLastCalledWith({ [key]: value });
+  });
+
+  it("旧请求失败不恢复到新的组合输入上，之后只保存新值", async () => {
+    const first = deferred<ReturnType<typeof savedConfig>>();
+    vi.mocked(configApi.update).mockImplementation((patch) =>
+      patch.host === "old"
+        ? first.promise
+        : Promise.resolve(savedConfig({ host: patch.host })),
+    );
+    renderPanel();
+    const input = await screen.findByDisplayValue(baseConfig.host);
+    fireEvent.change(input, { target: { value: "old" } });
+    await waitFor(() => expect(configApi.update).toHaveBeenCalledOnce());
+    fireEvent.compositionStart(input);
+    fireEvent.change(input, { target: { value: "新候选" } });
+    await act(async () => {
+      first.reject(new Error("旧保存失败"));
+    });
+    expect(input).toHaveValue("新候选");
+    expect(
+      screen.queryByRole("button", { name: "重试保存" }),
+    ).not.toBeInTheDocument();
+    fireEvent.compositionEnd(input, { data: "new", target: { value: "new" } });
+    await waitFor(() => expect(configApi.update).toHaveBeenCalledTimes(2));
+    expect(configApi.update).toHaveBeenLastCalledWith({ host: "new" });
+    await waitFor(() =>
+      expect(screen.queryByLabelText("保存失败")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("离开后发生的失败在重新进入时恢复，并可按 Enter 重试路径", async () => {
+    const first = deferred<ReturnType<typeof savedConfig>>();
+    let attempts = 0;
+    vi.mocked(configApi.update).mockImplementation(() =>
+      ++attempts === 1
+        ? first.promise
+        : Promise.resolve(savedConfig({ cacheDir: "/retry/cache" })),
+    );
+    const view = renderPanel();
+    const input = await screen.findByDisplayValue(baseConfig.cacheDir);
+    fireEvent.change(input, { target: { value: "/retry/cache" } });
+    fireEvent.blur(input);
+    await waitFor(() => expect(configApi.update).toHaveBeenCalledOnce());
+    view.unmount();
+    await act(async () => {
+      first.reject(new Error("迟到的失败"));
+    });
+    renderPanel(view.queryClient);
+    const restored = await screen.findByDisplayValue("/retry/cache");
+    await screen.findByRole("button", { name: "重试保存" });
+    fireEvent.keyDown(restored, { key: "Enter" });
+    fireEvent.blur(restored);
+    await waitFor(() => expect(configApi.update).toHaveBeenCalledTimes(2));
+    expect(configApi.update).toHaveBeenLastCalledWith({
+      cacheDir: "/retry/cache",
+    });
+  });
+
+  it("重新读取失败或取消保留失败输入，迟到响应不能回退后续读取", async () => {
+    vi.mocked(configApi.update).mockRejectedValue(new Error("写入中断"));
+    const { queryClient } = renderPanel();
+    const input = await screen.findByDisplayValue(baseConfig.cacheDir);
+    fireEvent.change(input, { target: { value: "/failed/cache" } });
+    fireEvent.blur(input);
+    await screen.findByLabelText("保存失败");
+    vi.mocked(configApi.get).mockRejectedValue(new Error("读取中断"));
+    fireEvent.click(screen.getByRole("button", { name: "重新读取配置" }));
+    await screen.findByRole("button", { name: "重新读取配置" });
+    expect(input).toHaveValue("/failed/cache");
+    const late = deferred<ServerConfig>();
+    let signal: AbortSignal | undefined;
+    vi.mocked(configApi.get).mockImplementation((currentSignal) => {
+      signal = currentSignal;
+      return late.promise;
+    });
+    fireEvent.click(screen.getByRole("button", { name: "重新读取配置" }));
+    expect(input).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "取消读取" }));
+    expect(signal?.aborted).toBe(true);
+    expect(input).toBeEnabled();
+    vi.mocked(configApi.get).mockResolvedValue({
+      ...baseConfig,
+      cacheDir: "/confirmed/cache",
+    });
+    fireEvent.click(screen.getByRole("button", { name: "重新读取配置" }));
+    await waitFor(() => expect(input).toHaveValue("/confirmed/cache"));
+    await act(async () => {
+      late.resolve({ ...baseConfig, cacheDir: "/stale/cache" });
+    });
+    expect(input).toHaveValue("/confirmed/cache");
+    expect(queryClient.getQueryData(["server-config"])).toMatchObject({
+      cacheDir: "/confirmed/cache",
+    });
+    expect(
+      screen.queryByRole("button", { name: "重试保存" }),
+    ).not.toBeInTheDocument();
+    expect(configApi.update).toHaveBeenCalledOnce();
+  });
+
+  it("重新读取期间暂停其他草稿的自动保存，成功后保留并继续保存", async () => {
+    vi.mocked(configApi.update).mockImplementation((patch) =>
+      patch.cacheDir
+        ? Promise.reject(new Error("写入中断"))
+        : Promise.resolve(savedConfig({ port: patch.port })),
+    );
+    const view = renderPanel();
+    const cache = await screen.findByDisplayValue(baseConfig.cacheDir);
+    fireEvent.change(cache, { target: { value: "/failed/cache" } });
+    fireEvent.blur(cache);
+    await screen.findByLabelText("保存失败");
+    const read = deferred<ServerConfig>();
+    vi.mocked(configApi.get).mockImplementation(() => read.promise);
+    const port = screen.getByDisplayValue(String(baseConfig.port));
+    fireEvent.change(port, { target: { value: "9000" } });
+    fireEvent.click(screen.getByRole("button", { name: "重新读取配置" }));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 800));
+    });
+    expect(configApi.update).toHaveBeenCalledOnce();
+    expect(port).toHaveValue(9000);
+    await act(async () => {
+      read.resolve(baseConfig);
+    });
+    expect(port).toHaveValue(9000);
+    await waitFor(() => expect(configApi.update).toHaveBeenCalledTimes(2));
+    expect(configApi.update).toHaveBeenLastCalledWith({ port: 9000 });
+    view.unmount();
+  });
+
+  it("Esc 丢弃缓存目录的失败输入，不重放保存", async () => {
+    vi.mocked(configApi.update).mockRejectedValue(new Error("写入中断"));
+    renderPanel();
+    const input = await screen.findByDisplayValue(baseConfig.cacheDir);
+    fireEvent.change(input, { target: { value: "/failed/cache" } });
+    fireEvent.blur(input);
+    await screen.findByLabelText("保存失败");
+    fireEvent.keyDown(input, { key: "Escape" });
+    fireEvent.blur(input);
+    expect(input).toHaveValue(baseConfig.cacheDir);
+    expect(screen.queryByLabelText("保存失败")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "重试保存" }),
+    ).not.toBeInTheDocument();
+    expect(configApi.update).toHaveBeenCalledOnce();
+  });
+
+  it("根目录丢失确认后重试即使返回未变更也清理旧媒体库", async () => {
+    let attempts = 0;
+    vi.mocked(configApi.update).mockImplementation(() =>
+      ++attempts === 1
+        ? Promise.reject(new Error("确认丢失"))
+        : Promise.resolve(savedConfig({ mediaRoots: ["/confirmed/root"] })),
+    );
+    const { queryClient } = renderPanel();
+    const cachedKey = [...libraryQueryKeys.root, "recovery-check"];
+    queryClient.setQueryData(cachedKey, { old: true });
+    const input = await screen.findByDisplayValue(baseConfig.mediaRoots[0]);
+    fireEvent.change(input, { target: { value: "/confirmed/root" } });
+    await screen.findByLabelText("保存失败");
+    fireEvent.click(screen.getByRole("button", { name: "重试保存" }));
+    await screen.findByText(/媒体根目录配置已确认/);
+    expect(queryClient.getQueryData(cachedKey)).toBeUndefined();
+    expect(input).toHaveValue("/confirmed/root");
+  });
+
+  it.each(["配置写入", "会话建立"] as const)(
+    "LAN %s失败不进入通用重试或恢复缓存",
+    async (stage) => {
+      const token = "recovery-test-token-01234567890123456789";
+      vi.mocked(configApi.update).mockResolvedValue(
+        savedConfig({ accessMode: "lan", accessTokenConfigured: true }),
+      );
+      if (stage === "配置写入")
+        vi.mocked(configApi.update).mockRejectedValue(
+          new Error("配置写入失败"),
+        );
+      else
+        vi.mocked(authApi.login).mockRejectedValue(new Error("会话建立失败"));
+      const { queryClient } = renderPanel();
+      fireEvent.change(await screen.findByLabelText("LAN 访问令牌"), {
+        target: { value: token },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "开启 LAN 访问" }));
+      await screen.findByText("访问配置未完成，请确认令牌后重试");
+      expect(
+        screen.queryByRole("button", { name: "重试保存" }),
+      ).not.toBeInTheDocument();
+      expect(
+        JSON.stringify(
+          queryClient
+            .getQueryCache()
+            .getAll()
+            .map((query) => query.state.data),
+        ),
+      ).not.toContain(token);
+      expect(configApi.update).toHaveBeenCalledOnce();
+    },
+  );
 
   it("排除模式：编辑+blur 触发 PATCH,空行 trim 掉", async () => {
     renderPanel();
