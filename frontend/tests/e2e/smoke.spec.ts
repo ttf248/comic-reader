@@ -1,4 +1,23 @@
-import { expect, test, type APIRequestContext } from "@playwright/test";
+import {
+  expect,
+  test,
+  type APIRequestContext,
+  type Locator,
+} from "@playwright/test";
+
+async function renderedColors(locator: Locator, properties: string[]) {
+  return locator.evaluate((element, properties) => {
+    const context = document.createElement("canvas").getContext("2d");
+    if (!context) throw new Error("无法读取渲染颜色");
+    const style = getComputedStyle(element);
+    return properties.map((property) => {
+      context.clearRect(0, 0, 1, 1);
+      context.fillStyle = style.getPropertyValue(property);
+      context.fillRect(0, 0, 1, 1);
+      return Array.from(context.getImageData(0, 0, 1, 1).data);
+    });
+  }, properties);
+}
 
 interface ManifestResponse {
   manifest: { scannedAt: string; roots: Array<{ id: string }> };
@@ -654,6 +673,14 @@ test("设置读取失败可重试，恢复后显示阅读设置", async ({ page 
   for (const theme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: theme });
     await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    const [border, background] = await renderedColors(alert, [
+      "border-top-color",
+      "background-color",
+    ]);
+    expect(border[3]).toBe(77);
+    expect(background[3]).toBe(13);
+    expect(border[0]).toBeGreaterThan(border[1] * 1.8);
+    expect(background[0]).toBeGreaterThan(background[1] * 1.8);
     await page.screenshot({
       path: test.info().outputPath(`settings-error-${theme}.png`),
     });
@@ -819,5 +846,55 @@ test("收藏写入成功后列表刷新失败仍保留已确认的状态", async
         ).ok(),
       ).toBeTruthy();
     }
+  }
+});
+
+test("主题令牌在明暗模式和六种强调色下保持边框及透明背景", async ({ page }) => {
+  await page.goto("/settings");
+  const root = page.locator("html");
+  const themeSwitcher = page
+    .getByRole("button", { name: "浅色", exact: true })
+    .locator("..");
+  const activeNavigation = page.getByRole("link", {
+    name: "设置",
+    exact: true,
+  });
+  for (const theme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+    await expect(root).toHaveAttribute("data-theme", theme);
+    const [expectedBorder, expectedSubtle] = await renderedColors(root, [
+      "--border-faint",
+      "--bg-subtle",
+    ]);
+    const [headerBorder] = await renderedColors(page.locator("header"), [
+      "border-bottom-color",
+    ]);
+    expect(headerBorder).toEqual(expectedBorder);
+    const [subtleBackground] = await renderedColors(themeSwitcher, [
+      "background-color",
+    ]);
+    expect(subtleBackground[3]).toBe(102);
+    for (const channel of [0, 1, 2])
+      expect(
+        Math.abs(subtleBackground[channel] - expectedSubtle[channel]),
+      ).toBeLessThanOrEqual(2);
+    for (const [accent, name] of [
+      ["graphite", "石墨"],
+      ["indigo", "靛蓝"],
+      ["rose", "绯红"],
+      ["forest", "森林"],
+      ["ochre", "琥珀"],
+      ["plum", "紫罗兰"],
+    ]) {
+      await page.getByRole("button", { name, exact: true }).click();
+      await expect(root).toHaveAttribute("data-accent", accent);
+      const expected = await renderedColors(root, ["--accent-soft", "--fg"]);
+      expect(
+        await renderedColors(activeNavigation, ["background-color", "color"]),
+      ).toEqual(expected);
+    }
+    await page.screenshot({
+      path: test.info().outputPath(`theme-tokens-${theme}.png`),
+    });
   }
 });

@@ -1,47 +1,52 @@
-import type { Config } from 'tailwindcss'
+import type { Config } from "tailwindcss";
+
+// 保留完整 CSS 颜色 token，同时让 /30 等透明度修饰符参与生成。
+const tokenColor = (name: string) =>
+  `color-mix(in srgb, var(--${name}) calc(<alpha-value> * 100%), transparent)`;
 
 export default {
-  content: ['./index.html', './src/**/*.{ts,tsx}'],
+  content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        // 主题 token 在 tokens.css 中定义；这里用 CSS 变量引用。
-        bg: 'var(--bg)',
-        'bg-elevated': 'var(--bg-elevated)',
-        'bg-subtle': 'var(--bg-subtle)',
-        'bg-strong': 'var(--bg-strong)',
-        fg: 'var(--fg)',
-        'fg-muted': 'var(--fg-muted)',
-        'fg-subtle': 'var(--fg-subtle)',
-        accent: 'var(--accent)',
-        'accent-hover': 'var(--accent-hover)',
-        'accent-soft': 'var(--accent-soft)',
-        'accent-fg': 'var(--accent-fg)',
-        'accent-contrast': 'var(--accent-contrast)',
-        'on-accent': 'var(--accent-fg)',
-        border: 'var(--border)',
-        'border-strong': 'var(--border-strong)',
-        danger: 'var(--danger)',
-        success: 'var(--success)',
-        warning: 'var(--warning)',
+        // 主题颜色统一从 tokens.css 取得，不在工具类中重复维护色值。
+        bg: tokenColor("bg"),
+        "bg-elevated": tokenColor("bg-elevated"),
+        "bg-subtle": tokenColor("bg-subtle"),
+        "bg-strong": tokenColor("bg-strong"),
+        fg: tokenColor("fg"),
+        "fg-muted": tokenColor("fg-muted"),
+        "fg-subtle": tokenColor("fg-subtle"),
+        accent: tokenColor("accent"),
+        "accent-hover": tokenColor("accent-hover"),
+        "accent-soft": tokenColor("accent-soft"),
+        "accent-fg": tokenColor("accent-fg"),
+        "accent-contrast": tokenColor("accent-contrast"),
+        "on-accent": tokenColor("accent-fg"),
+        border: tokenColor("border"),
+        "border-strong": tokenColor("border-strong"),
+        "border-faint": tokenColor("border-faint"),
+        danger: tokenColor("danger"),
+        success: tokenColor("success"),
+        warning: tokenColor("warning"),
       },
       borderRadius: {
-        sm: 'var(--radius-sm)',
-        md: 'var(--radius-md)',
-        lg: 'var(--radius-lg)',
+        sm: "var(--radius-sm)",
+        md: "var(--radius-md)",
+        lg: "var(--radius-lg)",
       },
       boxShadow: {
-        sm: 'var(--shadow-sm)',
-        md: 'var(--shadow-md)',
-        lg: 'var(--shadow-lg)',
+        sm: "var(--shadow-sm)",
+        md: "var(--shadow-md)",
+        lg: "var(--shadow-lg)",
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        display: ['Inter', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'SF Mono', 'Menlo', 'monospace'],
+        sans: ["Inter", "system-ui", "sans-serif"],
+        display: ["Inter", "system-ui", "sans-serif"],
+        mono: ["JetBrains Mono", "SF Mono", "Menlo", "monospace"],
       },
     },
   },
-  darkMode: ['class', '[data-theme="dark"]'],
+  darkMode: ["class", '[data-theme="dark"]'],
   plugins: [],
-} satisfies Config
+} satisfies Config;
