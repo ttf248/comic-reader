@@ -40,7 +40,9 @@
 - 缩略图：`"<sha256(JPEG 响应字节)>"`，尺寸变化或视频封面重写都会重新验证实际内容
 - 媒体文件：`"<hex_mtime_ns>-<hex_size>"`
 
-客户端带 `If-None-Match` 命中相同 ETag 时返回 `304 Not Modified` + 空 body。缩略图先取得内存或磁盘缓存中的实际 JPEG 再校验；原图使用文件元数据校验。`If-None-Match` 比较是字面相等（**必须**包含双引号）。原图、视频和缩略图使用 `Cache-Control: private, no-cache`，成功及 304 响应保留此策略；原图和视频的 200、206、304 均携带 ETag。稳定资源地址不按一天的新鲜期跳过服务器验证，Range 行为保持不变。
+客户端带 `If-None-Match` 命中当前 ETag 时返回 `304 Not Modified` + 空 body。按 [RFC 9110 §13.1.2](https://www.rfc-editor.org/rfc/rfc9110.html#section-13.1.2) 使用弱比较：当前 ETag 为 `"abc"` 时，`W/"abc"`、`"old", "abc"` 均可命中；`*` 对存在的资源也返回 304。重复字段行按逗号列表合并，引号内的逗号属于标识内容。标识仍须带双引号，格式错误的列表不命中；该弱比较不用于 If-Range。
+
+缩略图先取得内存或磁盘缓存中的实际 JPEG 再校验；原图和视频以实际发送文件的元数据校验。源文件不存在或失效时先返回 404，通配符不绕过源校验。原图、视频和缩略图使用 `Cache-Control: private, no-cache`，成功及 304 响应保留此策略；原图和视频的 200、206、304 均携带 ETag。缓存条件命中先于 Range 判断，304 不携带 Content-Range。
 
 原图和视频在没有 `If-None-Match` 时支持 `If-Modified-Since`，按文件修改时间的秒精度返回 304，并保留 ETag、Last-Modified 与缓存策略。两者同时出现时以 `If-None-Match` 为准；ETag 未命中不会被时间条件再次判为 304。304 不携带媒体字节，客户端仍可复用已验证的内容。
 

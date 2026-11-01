@@ -41,7 +41,7 @@ func ThumbHandler(svc *services.ThumbnailService) fiber.Handler {
 		etag := fmt.Sprintf(`"%x"`, sha256.Sum256(data))
 		c.Set("ETag", etag)
 		c.Set("Cache-Control", "private, no-cache")
-		if c.Get("If-None-Match") == etag {
+		if mediaIfNoneMatch(mediaIfNoneMatchValue(c), etag) {
 			return c.SendStatus(fiber.StatusNotModified)
 		}
 		c.Set("Content-Type", "image/jpeg")
