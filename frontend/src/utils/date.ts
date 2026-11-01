@@ -30,6 +30,16 @@ export function formatRelative(iso: string | undefined | null): string {
   return d.toLocaleDateString("zh-CN", { month: "short", day: "numeric" });
 }
 
+// 绝对时间（本地化）：用于属性 / 信息面板这类需要精确到分钟的展示。
+// 空值、无法解析或零值时间返回 "—"
+export function formatDateTime(iso: string | undefined | null): string {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(+date)) return "—";
+  if (date.getFullYear() <= 1) return "—";
+  return date.toLocaleString("zh-CN", { hour12: false });
+}
+
 // 距离今天多少天的友好描述（粗颗粒度：天/月/年）。
 //   - < 1 天 → "刚刚"
 //   - 1 天 → "昨天"

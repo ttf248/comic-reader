@@ -2,6 +2,7 @@ import { CloseIcon } from '../common/Icon'
 import CopyButton from '../common/CopyButton'
 import { useImageInfo } from '../../hooks/useImageInfo'
 import { formatSize } from '../../utils/format'
+import { formatDateTime } from '../../utils/date'
 
 interface Props {
   absPath: string | null
@@ -40,7 +41,7 @@ export default function ImageInfoPanel({ absPath, onClose }: Props) {
             <Row label="尺寸" value={`${info.width} × ${info.height}`} />
             <Row label="格式" value={info.format.toUpperCase()} />
             <Row label="大小" value={formatSize(info.size)} />
-            <Row label="修改时间" value={info.mtime} />
+            <Row label="修改时间" value={formatDateTime(info.mtime)} />
             <Row
               label="目录"
               value={info.dir}
@@ -49,7 +50,7 @@ export default function ImageInfoPanel({ absPath, onClose }: Props) {
               copyValue={info.dir}
             />
             <Row
-              label="路径"
+              label="文件 ID"
               value={info.path}
               mono
               copyable

@@ -2,6 +2,7 @@ import { useEffect, useId, useRef } from "react";
 import { useImageInfo } from "../../hooks/useImageInfo";
 import { useLibraryNodes } from "../../hooks/useLibrary";
 import { formatSize } from "../../utils/format";
+import { formatDateTime } from "../../utils/date";
 import { CloseIcon } from "./Icon";
 import CopyButton from "./CopyButton";
 
@@ -154,7 +155,7 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
               value={`${node.mediaCount ?? (node.imageCount ?? 0) + (node.videoCount ?? 0)} 项`}
             />
             <Field label="大小" value={formatSize(node.folderSize ?? 0)} />
-            <Field label="修改时间" value={formatModified(node.modTime)} />
+            <Field label="修改时间" value={formatDateTime(node.modTime)} />
             {!!node.tags?.length && (
               <Field label="标签" value={node.tags.join(" · ")} />
             )}
@@ -188,10 +189,10 @@ function ImageProperties({ fileId }: { fileId: string }) {
           <Field label="格式" value={info.format.toUpperCase()} />
           <Field label="尺寸" value={`${info.width} × ${info.height} px`} />
           <Field label="大小" value={formatSize(info.size)} />
-          <Field label="修改时间" value={formatModified(info.mtime)} />
+          <Field label="修改时间" value={formatDateTime(info.mtime)} />
           <Field label="目录" value={info.dir} mono copyable />
           <Field label="校验和" value={info.checksum} mono copyable />
-          <Field label="路径" value={info.path} mono copyable />
+          <Field label="文件 ID" value={info.path} mono copyable />
         </dl>
       )}
     </>
@@ -230,13 +231,6 @@ function LoadError({
       </button>
     </div>
   );
-}
-
-function formatModified(value: string | undefined) {
-  const date = new Date(value ?? "");
-  return !value || value.startsWith("0001-01-01") || Number.isNaN(+date)
-    ? "—"
-    : date.toLocaleString("zh-CN", { hour12: false });
 }
 
 function Field({
