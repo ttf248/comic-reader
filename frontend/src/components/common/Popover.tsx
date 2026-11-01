@@ -5,13 +5,17 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactElement,
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { handleMenuKeyDown } from "../../utils/menuKeyboard";
+import {
+  ENABLED_MENU_ITEM_SELECTOR,
+  handleMenuKeyDown,
+} from "../../utils/menuKeyboard";
 
 type TriggerProps = {
   "aria-expanded"?: boolean;
@@ -30,6 +34,7 @@ interface Props {
   onOpenChange?: (open: boolean) => void;
   /** 菜单容器类名（用于覆盖默认样式）。 */
   className?: string;
+  "aria-label"?: string;
 }
 
 // 轻量弹出层：点 trigger 切换；点击外部或 Esc 关闭。
@@ -43,6 +48,7 @@ export default function Popover({
   open: controlled,
   onOpenChange,
   className = "",
+  "aria-label": ariaLabel,
 }: Props) {
   const [internal, setInternal] = useState(false);
   const open = controlled ?? internal;
@@ -60,8 +66,8 @@ export default function Popover({
   const menuFocusedRef = useRef(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
-  // 计算位置：portal 到 body
-  useEffect(() => {
+  // 绘制前计算位置：portal 到 body
+  useLayoutEffect(() => {
     if (!open) {
       setPos(null);
       return;
@@ -100,8 +106,9 @@ export default function Popover({
     };
   }, [open, setOpen]);
 
-  // 菜单打开后把焦点交给第一项，关闭后返回 trigger，避免键盘用户失去位置。
-  useEffect(() => {
+  // 绘制前把焦点交给菜单，避免快速按 Esc 时事件仍落在 trigger 上。
+  // 关闭后返回 trigger，避免键盘用户失去位置。
+  useLayoutEffect(() => {
     if (!open) {
       if (wasOpenRef.current) {
         const trigger = triggerRef.current?.querySelector<HTMLElement>(
@@ -124,8 +131,8 @@ export default function Popover({
     wasOpenRef.current = true;
     if (!pos || menuFocusedRef.current) return;
     focusedMenuRef.current = menuRef.current;
-    const firstItem = menuRef.current?.querySelector<HTMLButtonElement>(
-      '[role="menuitem"]:not(:disabled)',
+    const firstItem = menuRef.current?.querySelector<HTMLElement>(
+      ENABLED_MENU_ITEM_SELECTOR,
     );
     (firstItem ?? menuRef.current)?.focus();
     menuFocusedRef.current = true;
@@ -162,6 +169,7 @@ export default function Popover({
             <div
               ref={menuRef}
               role="menu"
+              aria-label={ariaLabel}
               tabIndex={-1}
               onKeyDown={(event) =>
                 handleMenuKeyDown(event, () => setOpen(false))

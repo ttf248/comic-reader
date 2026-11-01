@@ -4,20 +4,12 @@ import {
   type AccentKey,
 } from "../../store/uiStore";
 import { SunIcon, MoonIcon, MonitorIcon, CheckIcon } from "./Icon";
-import { useState, useEffect, useRef } from "react";
-
-const ACCENT_PREVIEWS: { id: AccentKey; color: string }[] = [
-  { id: "graphite", color: "#18181b" },
-  { id: "indigo", color: "#4f46e5" },
-  { id: "rose", color: "#e11d48" },
-  { id: "forest", color: "#059669" },
-  { id: "ochre", color: "#d97706" },
-  { id: "plum", color: "#7c3aed" },
-];
+import { ACCENT_SWATCHES } from "../../hooks/useTheme";
+import Popover from "./Popover";
 
 // 主题切换：
-//  - compact：单按钮，按顺序循环切换 light/dark/system
-//  - default：下拉菜单，可分别选主题与强调色
+//  - compact：主题与强调色菜单，可连续选择后用 Esc 或外部焦点关闭
+//  - default：设置页内联的三态主题按钮
 export default function ThemeSwitcher({
   compact = false,
 }: {
@@ -75,102 +67,95 @@ function CompactSwitch({
   accent: AccentKey;
   setAccent: (a: AccentKey) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const onClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node))
-        setOpen(false);
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    setTimeout(() => {
-      window.addEventListener("mousedown", onClick);
-      window.addEventListener("keydown", onKey);
-    }, 0);
-    return () => {
-      window.removeEventListener("mousedown", onClick);
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
-
   const cur =
     theme === "light" ? SunIcon : theme === "dark" ? MoonIcon : MonitorIcon;
   const Icon = cur;
   const accentColor =
-    ACCENT_PREVIEWS.find((a) => a.id === accent)?.color ?? "#18181b";
+    ACCENT_SWATCHES.find((a) => a.id === accent)?.light ??
+    ACCENT_SWATCHES[0].light;
 
   return (
-    <div ref={ref} className="relative">
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center justify-center w-8 h-8 rounded-md text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors relative"
-        title={`主题: ${theme === "light" ? "浅色" : theme === "dark" ? "深色" : "系统"} · 强调色`}
+    <Popover
+      aria-label="主题与强调色"
+      className="w-[240px] p-2 fade-in"
+      trigger={
+        <button
+          type="button"
+          className="inline-flex items-center justify-center w-8 h-8 rounded-md text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors relative"
+          title={`主题: ${theme === "light" ? "浅色" : theme === "dark" ? "深色" : "系统"} · 强调色`}
+        >
+          <Icon size={14} />
+          <span
+            className="absolute bottom-1 right-1 w-1.5 h-1.5 rounded-full ring-2 ring-bg-elevated"
+            style={{ background: accentColor }}
+          />
+        </button>
+      }
+    >
+      <div className="text-[10px] uppercase tracking-[0.18em] text-fg-subtle px-2 py-1.5">
+        主题
+      </div>
+      <div
+        role="group"
+        aria-label="主题"
+        className="grid grid-cols-3 gap-1 px-1"
       >
-        <Icon size={14} />
-        <span
-          className="absolute bottom-1 right-1 w-1.5 h-1.5 rounded-full ring-2 ring-bg-elevated"
-          style={{ background: accentColor }}
-        />
-      </button>
-      {open && (
-        <div className="absolute right-0 top-full mt-1.5 w-[240px] bg-bg-elevated border border-border rounded-lg shadow-lg z-40 p-2 fade-up">
-          <div className="text-[10px] uppercase tracking-[0.18em] text-fg-subtle px-2 py-1.5">
-            主题
-          </div>
-          <div className="grid grid-cols-3 gap-1 px-1">
-            {[
-              { v: "light", l: "浅色" },
-              { v: "dark", l: "深色" },
-              { v: "system", l: "系统" },
-            ].map((o) => {
-              const active = theme === o.v;
-              return (
-                <button
-                  key={o.v}
-                  onClick={() => setTheme(o.v as ThemePref)}
-                  className={`relative h-8 rounded text-xs transition-colors ${
-                    active
-                      ? "bg-accent text-accent-contrast"
-                      : "text-fg-muted hover:bg-bg-subtle hover:text-fg"
-                  }`}
-                >
-                  {o.l}
-                  {active && (
-                    <CheckIcon
-                      size={10}
-                      className="absolute top-0.5 right-0.5"
-                    />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-          <div className="text-[10px] uppercase tracking-[0.18em] text-fg-subtle px-2 pt-3 pb-1.5">
-            强调色
-          </div>
-          <div className="grid grid-cols-6 gap-1.5 px-1">
-            {ACCENT_PREVIEWS.map((a) => {
-              const active = accent === a.id;
-              return (
-                <button
-                  key={a.id}
-                  onClick={() => setAccent(a.id)}
-                  className="relative w-7 h-7 rounded-full transition-transform hover:scale-110"
-                  style={{ background: a.color }}
-                  title={a.id}
-                >
-                  {active && (
-                    <span className="absolute inset-0 ring-2 ring-fg ring-offset-2 ring-offset-bg-elevated rounded-full" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
+        {[
+          { v: "light", l: "浅色" },
+          { v: "dark", l: "深色" },
+          { v: "system", l: "系统" },
+        ].map((o) => {
+          const active = theme === o.v;
+          return (
+            <button
+              key={o.v}
+              type="button"
+              role="menuitemradio"
+              aria-checked={active}
+              onClick={() => setTheme(o.v as ThemePref)}
+              className={`relative h-8 rounded text-xs transition-colors ${
+                active
+                  ? "bg-accent text-accent-contrast"
+                  : "text-fg-muted hover:bg-bg-subtle hover:text-fg"
+              }`}
+            >
+              {o.l}
+              {active && (
+                <CheckIcon size={10} className="absolute top-0.5 right-0.5" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+      <div className="text-[10px] uppercase tracking-[0.18em] text-fg-subtle px-2 pt-3 pb-1.5">
+        强调色
+      </div>
+      <div
+        role="group"
+        aria-label="强调色"
+        className="grid grid-cols-6 gap-1.5 px-1"
+      >
+        {ACCENT_SWATCHES.map((a) => {
+          const active = accent === a.id;
+          return (
+            <button
+              key={a.id}
+              type="button"
+              role="menuitemradio"
+              aria-checked={active}
+              onClick={() => setAccent(a.id)}
+              className="relative w-7 h-7 rounded-full transition-transform hover:scale-110"
+              style={{ background: a.light }}
+              title={a.name}
+              aria-label={a.name}
+            >
+              {active && (
+                <span className="absolute inset-0 ring-2 ring-fg ring-offset-2 ring-offset-bg-elevated rounded-full" />
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </Popover>
   );
 }

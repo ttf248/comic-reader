@@ -1569,6 +1569,109 @@ test("收藏写入成功后列表刷新失败仍保留已确认的状态", async
   }
 });
 
+test("主题菜单隔离页面快捷键，支持键盘连续选择并持久保存", async ({ page }) => {
+  const album = (await scannedNodes(page.request)).find(
+    (node) => node.name === "sample-album",
+  )!;
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.goto(`/albums/${album.id}`);
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  const initialURL = page.url();
+  let backgroundActions = 0;
+  const errors: string[] = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  page.on("request", (request) => {
+    if (
+      ["/api/scans", "/api/albums/random"].includes(
+        new URL(request.url()).pathname,
+      )
+    )
+      backgroundActions++;
+  });
+  const root = page.locator("html");
+  const trigger = page.getByRole("button", { name: /^主题:/ });
+  await trigger.click();
+  const menu = page.getByRole("menu", { name: "主题与强调色" });
+  const light = menu.getByRole("menuitemradio", { name: "浅色", exact: true });
+  const dark = menu.getByRole("menuitemradio", { name: "深色", exact: true });
+  await expect(light).toBeFocused();
+  const triggerBox = await trigger.boundingBox();
+  const menuBox = await menu.boundingBox();
+  expect(triggerBox).not.toBeNull();
+  expect(menuBox).not.toBeNull();
+  expect(
+    Math.abs(menuBox!.x + menuBox!.width - triggerBox!.x - triggerBox!.width),
+  ).toBeLessThanOrEqual(1);
+  for (const key of ["u", "r", "?", "/", "Control+s"])
+    await page.keyboard.press(key);
+  await expect(light).toBeFocused();
+  await expect(page).toHaveURL(initialURL);
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+  expect(backgroundActions).toBe(0);
+  await page.keyboard.press("ArrowDown");
+  await expect(dark).toBeFocused();
+  await expect(root).toHaveAttribute("data-theme", "light");
+  await page.keyboard.press("Enter");
+  await expect(root).toHaveAttribute("data-theme", "dark");
+  await expect(dark).toHaveAttribute("aria-checked", "true");
+  await expect(menu).toBeVisible();
+  await page.keyboard.press("End");
+  await expect(
+    menu.getByRole("menuitemradio", { name: "紫罗兰" }),
+  ).toBeFocused();
+  await page.keyboard.press("ArrowDown");
+  await expect(light).toBeFocused();
+  const indigo = menu.getByRole("menuitemradio", { name: "靛蓝" });
+  await indigo.focus();
+  await page.keyboard.press("Space");
+  await expect(root).toHaveAttribute("data-accent", "indigo");
+  await expect(indigo).toHaveAttribute("aria-checked", "true");
+  await expect(menu).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(menu).not.toBeVisible();
+  await expect(trigger).toBeFocused();
+  await page.reload();
+  await expect(root).toHaveAttribute("data-theme", "dark");
+  await expect(root).toHaveAttribute("data-accent", "indigo");
+  await trigger.click();
+  await expect(dark).toHaveAttribute("aria-checked", "true");
+  await expect(indigo).toHaveAttribute("aria-checked", "true");
+  expect(errors).toEqual([]);
+});
+
+test("主题菜单保留 Tab 操作和外部焦点，关闭后恢复页面快捷键", async ({
+  page,
+}) => {
+  await scannedNodes(page.request);
+  await page.goto("/settings");
+  const trigger = page.getByRole("button", { name: /^主题:/ });
+  const menu = page.getByRole("menu", { name: "主题与强调色" });
+  await trigger.click();
+  await expect(
+    menu.getByRole("menuitemradio", { name: "浅色", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(
+    menu.getByRole("menuitemradio", { name: "深色", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(
+    menu.getByRole("menuitemradio", { name: "浅色", exact: true }),
+  ).toBeFocused();
+  const search = page.getByRole("combobox");
+  await search.click();
+  await expect(menu).not.toBeVisible();
+  await expect(search).toBeFocused();
+  for (let attempt = 0; attempt < 5; attempt++) {
+    await trigger.click();
+    await page.keyboard.press("Escape");
+    await expect(menu).not.toBeVisible();
+    await expect(trigger).toBeFocused();
+  }
+  await page.keyboard.press("u");
+  await expect(page).toHaveURL(/\/unread$/);
+});
+
 test("主题令牌在明暗模式和六种强调色下保持边框及透明背景", async ({ page }) => {
   await page.goto("/settings");
   const root = page.locator("html");

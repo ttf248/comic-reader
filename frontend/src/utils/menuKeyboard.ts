@@ -1,5 +1,8 @@
 import type { KeyboardEvent } from "react";
 
+export const ENABLED_MENU_ITEM_SELECTOR =
+  ':is([role="menuitem"], [role="menuitemradio"]):not(:disabled):not([aria-disabled="true"])';
+
 // 菜单拥有焦点时隔离背景快捷键，保留菜单项原生的 Space/Enter 激活。
 export function handleMenuKeyDown(
   event: KeyboardEvent<HTMLElement>,
@@ -27,7 +30,7 @@ export function handleMenuKeyDown(
   event.preventDefault();
   const items = Array.from(
     event.currentTarget.querySelectorAll<HTMLElement>(
-      '[role="menuitem"]:not(:disabled):not([aria-disabled="true"])',
+      ENABLED_MENU_ITEM_SELECTOR,
     ),
   );
   if (items.length === 0) return;
