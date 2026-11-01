@@ -317,13 +317,70 @@ func TestVideoFaststartService_Resolve_CorruptCacheRebuilds(t *testing.T) {
 		t.Fatalf("truncate: %v", err)
 	}
 
-	// 第二次:现在缓存文件存在但 size=0,应触发重建
-	// 我们的 isFaststart 路径只对"完全没缓存"生效,size=0 的文件
-	// Resolve 当前实现会视为"缓存命中但内容是垃圾",不重新 remux。
-	// 此测试先记当前行为,作为未来改进的触发点(已知限制,不影响主流程)。
-	got2, _ := s.Resolve(src, nil)
-	_ = got2
-	// 主断言:行为可预测即可(不强制 re-remux;生产环境坏缓存极少出现)
+	// 空文件不得作为命中返回，应重新生成完整的 faststart 缓存。
+	got2, status2 := s.Resolve(src, nil)
+	if got2 != got1 || status2 != StatusRemuxed || mustStat(t, got2).Size() == 0 || !isFaststart(got2) {
+		t.Fatalf("empty cache was not rebuilt: path=%q status=%v", got2, status2)
+	}
+	entries, err := os.ReadDir(filepath.Dir(got2))
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("remux left temporary files: entries=%v err=%v", entries, err)
+	}
+}
+
+func TestVideoFaststartService_Resolve_DirectoryCacheFallsBack(t *testing.T) {
+	ff := findFFmpegFaststart(t)
+	s := NewVideoFaststartService(FaststartOptions{CacheDir: t.TempDir(), FFmpeg: ff})
+	src := generateNonFaststartMP4(t, ff)
+	fi := mustStat(t, src)
+	cachePath := filepath.Join(s.cacheDir, "video-faststart", faststartKey(src, fi.ModTime(), fi.Size())+".mp4")
+	if err := os.MkdirAll(cachePath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(cachePath, "index.html")
+	if err := os.WriteFile(marker, []byte("preserve-directory-content"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, status := s.Resolve(src, fi)
+	if got != src || status != StatusFallback {
+		t.Errorf("directory cache: path=%q status=%v, want source fallback", got, status)
+	}
+	if data, err := os.ReadFile(marker); err != nil || string(data) != "preserve-directory-content" {
+		t.Fatalf("invalid cache directory was modified: data=%q err=%v", data, err)
+	}
+}
+
+func TestVideoCacheLinksAreNotHits(t *testing.T) {
+	ff := findFFmpegFaststart(t)
+	src := generateFaststartMP4(t, ff)
+	cache := t.TempDir()
+	foreign := filepath.Join(t.TempDir(), "foreign.mp4")
+	if err := os.WriteFile(foreign, []byte("foreign-cache-bytes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	fi := mustStat(t, src)
+	faststart := NewVideoFaststartService(FaststartOptions{CacheDir: cache, FFmpeg: ff})
+	transcode := NewTranscodeService(TranscodeOptions{CacheDir: cache, FFmpeg: ff})
+	for _, cachePath := range []string{
+		filepath.Join(cache, "video-faststart", faststartKey(src, fi.ModTime(), fi.Size())+".mp4"),
+		transcode.cachePathFor(transcode.cacheKey(src, fi)),
+	} {
+		if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(foreign, cachePath); err != nil {
+			t.Skipf("file symlinks unavailable: %v", err)
+		}
+	}
+	if path, status := faststart.Resolve(src, fi); path != src || status != StatusFast {
+		t.Errorf("faststart followed cache link: path=%q status=%v", path, status)
+	}
+	if info := transcode.GetStatus(src); info.Status != TranscodeStatusFailed {
+		t.Errorf("transcode accepted cache link: %+v", info)
+	}
+	if data, err := os.ReadFile(foreign); err != nil || string(data) != "foreign-cache-bytes" {
+		t.Fatalf("cache link target was modified: data=%q err=%v", data, err)
+	}
 }
 
 func TestVideoFaststartService_StatsCounters(t *testing.T) {

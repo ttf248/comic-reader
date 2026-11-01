@@ -64,17 +64,17 @@ func VideoHandler(transcode *services.TranscodeService, faststart *services.Vide
 		serveInfo := srcInfo
 		if transcode != nil {
 			if p, st := transcode.Resolve(path, srcInfo); st == services.TranscodeStatusCached {
-				servePath = p
-				// 转码缓存是新文件,需要重新 stat 拿 mtime/size
-				if fi, err := os.Stat(p); err == nil {
+				// 缓存可能在 Resolve 后被清理或替换，发送前复核并复用元数据。
+				if fi, err := os.Lstat(p); err == nil && fi.Mode().IsRegular() && fi.Size() > 0 {
+					servePath = p
 					serveInfo = fi
 				}
 			}
 		}
 		if servePath == path && faststart != nil {
 			if p, _ := faststart.Resolve(path, srcInfo); p != path {
-				servePath = p
-				if fi, err := os.Stat(p); err == nil {
+				if fi, err := os.Lstat(p); err == nil && fi.Mode().IsRegular() && fi.Size() > 0 {
+					servePath = p
 					serveInfo = fi
 				}
 			}

@@ -64,7 +64,7 @@ func (s FaststartStatus) String() string {
 }
 
 // VideoFaststartService 把「非 faststart 的 MP4」自动重封装为 faststart 形式
-// 并缓存,供 /api/videos 流式发送。
+// 并缓存，供 /api/media/:fileId 流式发送。
 //
 // 为什么需要:
 //
@@ -75,8 +75,8 @@ func (s FaststartStatus) String() string {
 //
 // 工作流:
 //
-//  1. 客户端 GET /api/videos?path=<abs> 触发
-//  2. handler 调 Resolve(abs) 得到 (servePath, status)
+//  1. 客户端 GET /api/media/:fileId 触发
+//  2. handler 调 Resolve(abs, info) 得到 (servePath, status)
 //  3. 缓存命中: 立刻返回缓存文件路径
 //     缓存未命中且 ffmpeg 可用: ffmpeg -c copy -movflags +faststart 重封装,
 //     结果写盘,下次直接命中
@@ -193,7 +193,7 @@ func (s *VideoFaststartService) CacheDir() string {
 // Resolve 决定 /api/media 是否要 remux,以及 remux 缓存是否命中。
 //
 // info 可选非 nil:handler 端已 stat 过源文件,这里复用,省一次 syscall。
-// 传 nil 时本函数内部 stat(向后兼容)。
+// 传 nil 时本函数内部读取源文件信息。
 func (s *VideoFaststartService) Resolve(absPath string, info os.FileInfo) (servePath string, status FaststartStatus) {
 	if s == nil {
 		return absPath, StatusFallback
@@ -233,7 +233,7 @@ func (s *VideoFaststartService) Resolve(absPath string, info os.FileInfo) (serve
 	cachedPath := filepath.Join(s.cacheDir, "video-faststart", key+".mp4")
 
 	// 1) 缓存命中 → 直接发缓存文件
-	if _, err := os.Stat(cachedPath); err == nil {
+	if _, err := statVideoCache(cachedPath); err == nil {
 		return cachedPath, StatusRemuxed
 	}
 
@@ -257,7 +257,7 @@ func (s *VideoFaststartService) Resolve(absPath string, info os.FileInfo) (serve
 	v, err, _ := s.flight.Do(key, func() (interface{}, error) {
 		// 双重检查:进入临界区后再查一次磁盘,避免上一个协程刚写完
 		// 被本协程再次重写。
-		if _, err := os.Stat(cachedPath); err == nil {
+		if _, err := statVideoCache(cachedPath); err == nil {
 			return cachedPath, nil
 		}
 		if err := s.remux(absPath, cachedPath); err != nil {
@@ -268,7 +268,7 @@ func (s *VideoFaststartService) Resolve(absPath string, info os.FileInfo) (serve
 	if err != nil {
 		// ffmpeg 失败 / 写盘失败:回退到原文件(handler 仍能正常发出去,
 		// 只是失去 faststart 优化)。注意记到 stderr 方便排查。
-		fmt.Fprintf(os.Stderr, "faststart remux failed for %s: %v\n", absPath, err)
+		fmt.Fprintln(os.Stderr, "faststart remux failed; serving source video")
 		return absPath, StatusFallback
 	}
 	return v.(string), StatusRemuxed
@@ -413,25 +413,27 @@ func containsAtom(data []byte, want string) bool {
 // 失败:含 ffmpeg 进程未启动(→ ErrFaststartUnavailable)与 ffmpeg
 // 跑了但退出非 0(→ 具体错误,handler 端统一 fallback)。
 func (s *VideoFaststartService) remux(srcPath, dstPath string) error {
-	if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
-		return fmt.Errorf("create cache subdir: %w", err)
+	tmpPath, err := newVideoCacheTemp(dstPath)
+	if err != nil {
+		return fmt.Errorf("create remux temporary file: %w", err)
 	}
+	defer os.Remove(tmpPath)
 	ctx, cancel := context.WithTimeout(context.Background(), s.timeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, s.ffmpeg,
 		"-hide_banner",
 		"-loglevel", "error",
-		"-y", // 覆盖已存在的部分写入
+		"-y", // 只写本次生成独占的临时文件
 		"-i", srcPath,
 		"-c", "copy",
 		"-movflags", "+faststart",
 		"-f", "mp4",
-		dstPath,
+		tmpPath,
 	)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
-	err := cmd.Run()
+	err = cmd.Run()
 	if err != nil {
 		if cmd.ProcessState == nil {
 			// 进程根本没起来(ffmpeg 路径失效、权限不足)→ unavailable
@@ -446,10 +448,11 @@ func (s *VideoFaststartService) remux(srcPath, dstPath string) error {
 		}
 		return fmt.Errorf("faststart remux: %s", msg)
 	}
-	// 兜底校验:ffmpeg 退出 0 但 dst 不存在或为空,按失败处理
-	fi, statErr := os.Stat(dstPath)
-	if statErr != nil || fi.Size() == 0 {
-		return fmt.Errorf("faststart remux produced empty output: stat=%v", statErr)
+	if _, err := statVideoCache(tmpPath); err != nil {
+		return fmt.Errorf("faststart remux produced invalid output: %w", err)
+	}
+	if err := os.Rename(tmpPath, dstPath); err != nil {
+		return fmt.Errorf("publish faststart cache: %w", err)
 	}
 	return nil
 }

@@ -343,6 +343,93 @@ func TestTranscodeService_GetStatus_NotStarted(t *testing.T) {
 	}
 }
 
+func TestTranscodeService_InvalidCacheIsNotCached(t *testing.T) {
+	ff := findFFmpegTranscode(t)
+	src := generateH264TestVideo(t, ff)
+	for _, kind := range []string{"empty", "directory", "empty-directory"} {
+		t.Run(kind, func(t *testing.T) {
+			opts := TranscodeOptions{CacheDir: t.TempDir(), FFmpeg: ff, Timeout: 30 * time.Second}
+			// 不注入元数据服务，确保该夹具走实际转码路径。
+			s := NewTranscodeService(opts)
+			t.Cleanup(func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				if err := s.Shutdown(ctx); err != nil {
+					t.Error(err)
+				}
+			})
+			s.Resolve(src, nil)
+			if !waitFor(t, 30*time.Second, func() bool { return s.GetStatus(src).Status == TranscodeStatusCached }) {
+				t.Fatalf("initial transcode failed: %+v", s.GetStatus(src))
+			}
+			cachePath := s.cachePathFor(s.cacheKey(src, mustStat(t, src)))
+			// 旧固定临时路径上的条目不属于当前生成，不能删除或覆盖。
+			oldTemp := cachePath + ".tmp"
+			if err := os.WriteFile(oldTemp, []byte("preserve-old-temporary-entry"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if kind == "empty" {
+				if err := os.Truncate(cachePath, 0); err != nil {
+					t.Fatal(err)
+				}
+			} else {
+				if err := os.Rename(cachePath, cachePath+".original"); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.Mkdir(cachePath, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if kind == "directory" {
+					if err := os.WriteFile(filepath.Join(cachePath, "index.html"), []byte("preserve-directory-content"), 0o644); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			if info := s.GetStatus(src); info.Status != TranscodeStatusFailed {
+				t.Errorf("completed job accepted %s cache: %+v", kind, info)
+			}
+			// 重建服务覆盖进程重启后的磁盘缓存判定。
+			fresh := NewTranscodeService(opts)
+			if info := fresh.GetStatus(src); info.Status != TranscodeStatusFailed {
+				t.Errorf("fresh service accepted %s cache: %+v", kind, info)
+			}
+			got, status := s.Resolve(src, nil)
+			if got != src || (status != TranscodeStatusQueued && status != TranscodeStatusRunning) {
+				t.Errorf("invalid cache was reused: path=%q status=%v", got, status)
+			}
+			s.mu.Lock()
+			job := s.inflight[src]
+			s.mu.Unlock()
+			select {
+			case <-job.done:
+			case <-time.After(30 * time.Second):
+				t.Fatal("retry did not finish")
+			}
+			info := s.GetStatus(src)
+			if data, err := os.ReadFile(oldTemp); err != nil || string(data) != "preserve-old-temporary-entry" {
+				t.Fatalf("unowned temporary entry was modified: data=%q err=%v", data, err)
+			}
+			if kind == "empty" {
+				if info.Status != TranscodeStatusCached || mustStat(t, cachePath).Size() == 0 || !isFaststart(cachePath) {
+					t.Fatalf("empty cache was not rebuilt: %+v", info)
+				}
+			} else {
+				if info.Status != TranscodeStatusFailed {
+					t.Errorf("directory cache retry: %+v, want failed", info)
+				}
+				if !mustStat(t, cachePath).IsDir() {
+					t.Fatal("invalid cache directory was removed")
+				}
+				if kind == "directory" {
+					if data, err := os.ReadFile(filepath.Join(cachePath, "index.html")); err != nil || string(data) != "preserve-directory-content" {
+						t.Fatalf("invalid cache directory was modified: data=%q err=%v", data, err)
+					}
+				}
+			}
+		})
+	}
+}
+
 func TestTranscodeService_GetStatus_NotFound(t *testing.T) {
 	ff := findFFmpegTranscode(t)
 	s := NewTranscodeService(TranscodeOptions{CacheDir: t.TempDir(), FFmpeg: ff})

@@ -79,7 +79,7 @@ func (s TranscodeStatus) MarshalJSON() ([]byte, error) {
 	return []byte(`"` + s.String() + `"`), nil
 }
 
-// TranscodeInfo 当前一次转码任务的细节,供 /api/videos/transcode/status 用。
+// TranscodeInfo 当前一次转码任务的细节，供 /api/videos/:fileId/transcode/status 用。
 //
 // 字段:
 //   - Status  上面那一组常量
@@ -233,7 +233,7 @@ func DefaultTranscodeProfile() TranscodeProfile {
 }
 
 // TranscodeService 把"非浏览器通用编码"的视频转成 H.264 + AAC 在 MP4 容器里,
-// 缓存到本地,供 /api/videos 直接 SendFile。
+// 缓存到本地，供 /api/media/:fileId 直接 SendFile。
 //
 // 与 FaststartService 的关系:
 //   - Faststart: 不重编码,只挪 moov,处理"moov 在末尾"问题
@@ -379,7 +379,7 @@ func (s *TranscodeService) CacheDir() string {
 	return s.cacheDir
 }
 
-// Resolve 决定 /api/videos 应该发送哪个文件,以及当前转码状态。
+// Resolve 决定 /api/media/:fileId 应该发送哪个文件，以及当前转码状态。
 //
 // 返回 (servePath, status):
 //   - TranscodeStatusNotNeeded: 浏览器能直发,servePath=absPath(交给 FaststartService)
@@ -393,7 +393,7 @@ func (s *TranscodeService) CacheDir() string {
 // Resolve 返回 error 让 handler 500。
 //
 // info 可选非 nil:handler 端已 stat 过源文件,这里复用,省一次 syscall。
-// 传 nil 时本函数内部 stat(向后兼容)。
+// 传 nil 时本函数内部读取源文件信息。
 func (s *TranscodeService) Resolve(absPath string, info os.FileInfo) (servePath string, status TranscodeStatus) {
 	if s == nil {
 		return absPath, TranscodeStatusSkipped
@@ -440,7 +440,7 @@ func (s *TranscodeService) Resolve(absPath string, info os.FileInfo) (servePath 
 	// 缓存命中
 	key := s.cacheKey(absPath, fi)
 	cachePath := s.cachePathFor(key)
-	if _, err := os.Stat(cachePath); err == nil {
+	if _, err := statVideoCache(cachePath); err == nil {
 		s.markCached(absPath)
 		return cachePath, TranscodeStatusCached
 	}
@@ -453,7 +453,7 @@ func (s *TranscodeService) Resolve(absPath string, info os.FileInfo) (servePath 
 	}
 }
 
-// GetStatus 查询当前转码状态(用于 /api/videos/transcode/status)。
+// GetStatus 查询当前转码状态（用于 /api/videos/:fileId/transcode/status）。
 //
 // 不阻塞:直接读 inflight / cached / 文件 stat 综合判断。
 //
@@ -518,16 +518,16 @@ func (s *TranscodeService) GetStatus(absPath string) TranscodeInfo {
 				info.Error = publicTranscodeError(jobErr)
 			}
 		case TranscodeStatusCached:
-			// job 标 cached 但可能文件还没完全落盘;查一下 stat 兜底
+			// 已发布的缓存仍可能被外部删除、清空或替换，重新校验条目。
 			key := s.cacheKey(absPath, fi)
 			cachePath := s.cachePathFor(key)
-			if _, err := os.Stat(cachePath); err == nil {
+			if _, err := statVideoCache(cachePath); err == nil {
 				info.Status = TranscodeStatusCached
 				info.Progress = 1.0
 			} else {
-				// 文件被删了(比如 ClearCache);fallback 到 failed
+				// 缓存失效，下一次 Resolve 可重新生成。
 				info.Status = TranscodeStatusFailed
-				info.Error = "cache file missing"
+				info.Error = "cache file missing or invalid"
 			}
 		}
 		return info
@@ -536,7 +536,7 @@ func (s *TranscodeService) GetStatus(absPath string) TranscodeInfo {
 	// 2) 没 inflight 但文件已存在 → 进程重启后命中磁盘缓存
 	key := s.cacheKey(absPath, fi)
 	cachePath := s.cachePathFor(key)
-	if _, err := os.Stat(cachePath); err == nil {
+	if _, err := statVideoCache(cachePath); err == nil {
 		info.Status = TranscodeStatusCached
 		info.Progress = 1.0
 		s.markCached(absPath)
@@ -551,8 +551,8 @@ func (s *TranscodeService) GetStatus(absPath string) TranscodeInfo {
 
 // Cancel 取消正在跑的转码(同一 path)。
 //
-// 已写盘的部分不删除 — 留着下次访问时由 stat 失败重新触发。
-// 取消后状态会变成 TranscodeStatusFailed,前端可以再触发一次。
+// 临时输出由生成流程清理，已发布缓存不受影响。
+// 取消后任务状态变为 TranscodeStatusFailed，前端可以再次触发。
 func (s *TranscodeService) Cancel(absPath string) {
 	if s == nil {
 		return
@@ -1002,8 +1002,6 @@ func (s *TranscodeService) ensureRunning(absPath, cachePath string, fi os.FileIn
 			job.status = TranscodeStatusFailed
 			job.err = err
 			job.mu.Unlock()
-			// 失败时尝试删除半截文件,避免下次 stat 误判 cached
-			os.Remove(cachePath)
 		} else {
 			job.mu.Lock()
 			job.status = TranscodeStatusCached
@@ -1042,25 +1040,18 @@ func (s *TranscodeService) isClosed() bool {
 // progress=continue / out_time_ms=N;V1 只取 out_time_ms / duration 算比值,
 // 写回 job.progress 字段并广播给订阅者(SSE)。
 //
-// 写盘策略:ffmpeg 直接写 dstPath,失败时 cleanup 阶段删除。
-// 但如果 ffmpeg 进程在 cmd.Wait() 返回非 0 时**还没释放文件句柄**(Windows 上
-// 偶发),os.Remove 会失败,下次 stat 又看到半截文件,被错判为 cached →
-// 浏览器拿到 moov atom 缺失的 MP4 报 "MEDIA_ERR_SRC_NOT_SUPPORTED"。
-//
-// 改用 .tmp 中间文件 + 成功后 os.Rename(原子)的写法,保证 cachePath 永远
-// 要么不存在、要么是完整的 MP4。
+// 使用独占临时文件，校验成功后在同目录原子发布；失败只清理本次临时文件，
+// 不删除或改写最终路径上的其他条目。
 func (s *TranscodeService) transcode(
 	ctx context.Context,
 	srcPath, dstPath string,
 	fi os.FileInfo,
 	job *transcodeJob,
 ) error {
-	if err := os.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
-		return fmt.Errorf("create cache dir: %w", err)
+	tmpPath, err := newVideoCacheTemp(dstPath)
+	if err != nil {
+		return fmt.Errorf("create transcode temporary file: %w", err)
 	}
-	tmpPath := dstPath + ".tmp"
-	// 清理可能残留的旧 .tmp(上次的转码失败留下的)
-	_ = os.Remove(tmpPath)
 	// 成功 rename 后为 no-op；取消、超时或 ffmpeg 失败时清理半成品。
 	defer os.Remove(tmpPath)
 
@@ -1163,14 +1154,11 @@ func (s *TranscodeService) transcode(
 	}
 
 	// 校验输出文件
-	outInfo, statErr := os.Stat(tmpPath)
-	if statErr != nil || outInfo.Size() == 0 {
-		os.Remove(tmpPath) // 清理半截文件
-		return fmt.Errorf("transcode produced empty output: stat=%v", statErr)
+	if _, err := statVideoCache(tmpPath); err != nil {
+		return fmt.Errorf("transcode produced invalid output: %w", err)
 	}
 	// 原子 rename:dstPath 只会以完整形式出现,不会被读到半截文件
 	if err := os.Rename(tmpPath, dstPath); err != nil {
-		os.Remove(tmpPath)
 		return fmt.Errorf("rename transcode output: %w", err)
 	}
 	return nil

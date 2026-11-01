@@ -158,6 +158,8 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 响应前确认源路径仍为普通文件；扫描后被目录或其他非普通文件替换时，图片返回 `404 media_not_found`，视频返回 `404 video_not_found`。此检查先于 ETag、Range、转码缓存选择和文件发送，不返回目录重定向或携带本地路径的 `Location`，也不因条件请求返回 304。源文件恢复后，原 ID 可继续使用。
 
+视频派生缓存仅命中非空普通文件，不跟随缓存条目自身的链接。空文件、目录及链接不会直接发送或用于 304 协商；空缓存按需重新生成，生成失败时沿用后续 faststart 或源文件流程，不返回缓存目录重定向。目录占位及其内容保留。
+
 ### `GET /api/thumbs/:fileId`
 
 返回 JPEG 缩略图。视频尚无封面时返回 `404` 和 `code: video_cover_missing`。
@@ -212,6 +214,8 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 - `GET /api/videos/:fileId/transcode/status`
 - `GET /api/videos/:fileId/transcode/events`
 - `POST /api/videos/:fileId/transcode/cancel`
+
+转码状态查询（`/status`）及视频信息响应中的 `cached` 要求当前缓存仍为非空普通文件。已完成任务的缓存丢失、清空或变为非普通文件后，查询状态为 `failed`；下一次媒体请求可重新排队生成。目录占位导致发布失败时保持 `failed`，不删除占位目录。
 
 ## 收藏、历史与媒体活动
 
