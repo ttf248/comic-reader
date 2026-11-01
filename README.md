@@ -317,7 +317,7 @@ local-gallery/
 | [docs/SHORTCUTS.md](./docs/SHORTCUTS.md)       | 快捷键全集（含视频播放器）               |
 | [docs/RELEASE.md](./docs/RELEASE.md)            | 手动验证、推送、版本线与发布包             |
 
-`?` 在应用里随时唤起可搜索的帮助浮层。
+`?` 可唤起可搜索的帮助浮层。打开后聚焦搜索，Tab 在浮层内循环；背景快捷键暂停响应，Esc、关闭按钮或点击遮罩关闭后回到原控件。
 
 ---
 

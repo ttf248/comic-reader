@@ -934,6 +934,118 @@ for (const mode of ["double", "continuous"] as const) {
   });
 }
 
+test("快捷键帮助限制焦点与背景操作，关闭后恢复入口并清空搜索", async ({
+  page,
+}) => {
+  await page.goto("/settings");
+  const opener = page.getByRole("button", { name: "快捷键帮助", exact: true });
+  await opener.click();
+  const dialog = page.getByRole("dialog", { name: "快捷键", exact: true });
+  const search = dialog.getByRole("textbox", { name: "搜索快捷键" });
+  const close = dialog.getByRole("button", { name: "关闭", exact: true });
+  await expect(search).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(close).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(search).toBeFocused();
+  await search.fill("不存在的快捷键");
+  await expect(
+    dialog.getByText("没有匹配「不存在的快捷键」的快捷键"),
+  ).toBeVisible();
+  await page.keyboard.press("Tab");
+  await expect(
+    dialog.getByRole("button", { name: "清除", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(close).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(search).toBeFocused();
+  await dialog.getByRole("button", { name: "清除", exact: true }).click();
+  await expect(search).toBeFocused();
+  await expect(search).toHaveValue("");
+  await close.focus();
+  await page.keyboard.press("u");
+  await page.keyboard.press("/");
+  await expect(page).toHaveURL(/\/settings$/);
+  await expect(close).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(dialog).not.toBeVisible();
+  await expect(opener).toBeFocused();
+  await opener.click();
+  await expect(search).toBeFocused();
+  await expect(search).toHaveValue("");
+  await close.focus();
+  await page.keyboard.press("Space");
+  await expect(dialog).not.toBeVisible();
+  await expect(opener).toBeFocused();
+  await opener.click();
+  await expect(dialog).toBeVisible();
+  await page.mouse.click(2, 2);
+  await expect(dialog).not.toBeVisible();
+  await expect(opener).toBeFocused();
+});
+
+for (const kind of ["image", "video"] as const) {
+  test(`${kind} 阅读器帮助不穿透按键，Esc 先关闭帮助再返回相册`, async ({
+    page,
+  }) => {
+    const nodes = await scannedNodes(page.request);
+    const album = nodes.find(
+      (node) =>
+        node.name ===
+        (kind === "image" ? "sample-album" : "sample-video-shortcuts"),
+    )!;
+    expect(album).toBeDefined();
+    await page.goto(`/albums/${album.id}`);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText(
+      album.name,
+    );
+    await page.goto(`/gallery?path=${album.id}&type=${kind}&index=0`);
+    const video = page.locator("video");
+    if (kind === "video") {
+      await expect
+        .poll(() =>
+          video.evaluate((element: HTMLVideoElement) => element.readyState),
+        )
+        .toBeGreaterThanOrEqual(1);
+      await video.evaluate((element: HTMLVideoElement) => {
+        element.pause();
+        element.muted = false;
+        element.currentTime = 5;
+      });
+    } else await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("1");
+    const opener = page.getByTitle("更多", { exact: true });
+    await opener.click();
+    await page.getByRole("menuitem", { name: "快捷键", exact: false }).click();
+    const dialog = page.getByRole("dialog", { name: "快捷键", exact: true });
+    await expect(
+      dialog.getByRole("textbox", { name: "搜索快捷键" }),
+    ).toBeFocused();
+    await dialog.getByRole("button", { name: "关闭", exact: true }).focus();
+    await page.keyboard.press("ArrowRight");
+    if (kind === "video") {
+      await page.keyboard.press("k");
+      await page.keyboard.press("m");
+      await expect
+        .poll(() =>
+          video.evaluate((element: HTMLVideoElement) => element.currentTime),
+        )
+        .toBeCloseTo(5, 1);
+      expect(
+        await video.evaluate(
+          (element: HTMLVideoElement) => element.paused && !element.muted,
+        ),
+      ).toBe(true);
+    } else await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("1");
+    await page.keyboard.press("Escape");
+    await expect(dialog).not.toBeVisible();
+    await expect(page).toHaveURL(/\/gallery\?/);
+    await expect(opener).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(page).toHaveURL(new RegExp(`/albums/${album.id}$`));
+  });
+}
+
 for (const failure of ["history", "nodes"] as const) {
   test(`最近阅读 ${failure} 读取失败不显示为空且可重试`, async ({ page }) => {
     const nodes = await scannedNodes(page.request);
