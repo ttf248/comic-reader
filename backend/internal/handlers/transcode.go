@@ -16,7 +16,7 @@ import (
 
 // TranscodeStatusHandler 返回指定视频的转码状态。
 //
-//	GET /api/videos/transcode/status?path=<absolute>
+//	GET /api/videos/:fileId/transcode/status
 //
 // 响应:
 //
@@ -28,8 +28,7 @@ import (
 //	}
 //
 // 设计:
-//   - 不阻塞:只读 in-memory 状态 / stat 文件,响应 < 50ms
-//   - 前端轮询用:V1 阶段用 polling(V2 换 SSE)
+//   - 查询任务、源文件能力与当前磁盘缓存，语义与 SSE 终态快照一致
 //   - 路径必须在任一 mediaRoots 之下(安全中间件),扩展名必须在
 //     models.VideoExts 白名单内
 func TranscodeStatusHandler(svc *services.TranscodeService) fiber.Handler {
@@ -60,7 +59,7 @@ func TranscodeStatusHandler(svc *services.TranscodeService) fiber.Handler {
 
 // TranscodeCancelHandler 取消正在跑的转码。
 //
-//	POST /api/videos/transcode/cancel?path=<absolute>
+//	POST /api/videos/:fileId/transcode/cancel
 //
 // 响应:
 //
@@ -93,8 +92,8 @@ func TranscodeCancelHandler(svc *services.TranscodeService) fiber.Handler {
 //	GET /api/videos/:id/transcode/events
 //
 // 事件类型(`event:` 字段):
-//   - "progress"  { status, progress, etaSec, error }   任何状态变更
-//   - "done"      终态(cached / failed / cancelled) 关闭前最后一条
+//   - "progress"  { status, progress, etaSec, error }   排队或运行快照
+//   - "done"      无活动任务时的当前状态，携带完整快照后关闭
 //
 // 客户端用 EventSource 订阅;断线后由 service 端 cancel 函数清理
 // subscriber。30s 心跳(空注释行)防止代理超时。
@@ -133,15 +132,12 @@ func TranscodeEventsHandler(svc *services.TranscodeService) fiber.Handler {
 				select {
 				case info, ok := <-events:
 					if !ok {
-						// channel 关闭:发送 done 事件后退出
-						fmt.Fprintf(w, "event: done\ndata: {}\n\n")
-						w.Flush()
 						return
 					}
 					data, _ := json.Marshal(info)
 					eventName := "progress"
-					if info.Status == services.TranscodeStatusCached ||
-						info.Status == services.TranscodeStatusFailed {
+					if info.Status != services.TranscodeStatusQueued &&
+						info.Status != services.TranscodeStatusRunning {
 						eventName = "done"
 					}
 					fmt.Fprintf(w, "event: %s\ndata: %s\n\n", eventName, data)

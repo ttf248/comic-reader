@@ -741,6 +741,9 @@ func TestTranscodeService_Subscribe_RunningJob(t *testing.T) {
 	// 应该立即收到当前状态(Queued / Running)
 	select {
 	case info := <-events:
+		if info.Status == TranscodeStatusCached {
+			return // 小视频可能在订阅前已完成，终态重放同样有效。
+		}
 		if info.Status != TranscodeStatusQueued && info.Status != TranscodeStatusRunning {
 			t.Errorf("first event status=%v, want Queued/Running", info.Status)
 		}
@@ -973,44 +976,37 @@ func TestTranscodeService_AutoSelectsCodec(t *testing.T) {
 	t.Logf("resolved codec: %s", got)
 }
 
-// TestTranscodeService_SubscribeDedup 验证 Subscribe 不会把同一个 channel
-// 重复加进 job.subs。dedup 失败的话终态广播会对同一 channel 多次 close
-// → panic(close of closed channel)。
-//
-// 通过直接构造 + 重复 Subscribe 同一 channel 不可行(API 每次新建 channel),
-// 这里改为单元级测:在 Subscribe 内拿一个 channel 后,手动把同一个 channel
-// 再次塞入 job.subs,触发广播时不应 panic。
-func TestTranscodeService_SubscribeDedup(t *testing.T) {
+func TestTranscodeService_SubscriptionsAreIndependent(t *testing.T) {
 	s := NewTranscodeService(TranscodeOptions{CacheDir: t.TempDir(), FFmpeg: ""})
 	job := &transcodeJob{
 		done:   make(chan struct{}),
 		status: TranscodeStatusQueued,
 	}
-	s.mu.Lock()
 	s.inflight["/fake/path.mp4"] = job
-	s.mu.Unlock()
-
-	// 第一次 Subscribe
-	ch, cancel := s.Subscribe("/fake/path.mp4")
-	defer cancel()
-
-	// 验证 job.subs 里有 1 个订阅者
-	job.mu.Lock()
-	if got := len(job.subs); got != 1 {
-		job.mu.Unlock()
-		t.Fatalf("expected 1 subscriber after first Subscribe, got %d", got)
+	first, cancelFirst := s.Subscribe("/fake/path.mp4")
+	second, cancelSecond := s.Subscribe("/fake/path.mp4")
+	defer cancelFirst()
+	defer cancelSecond()
+	if (<-first).Status != TranscodeStatusQueued || (<-second).Status != TranscodeStatusQueued {
+		t.Fatal("subscribers did not receive the initial state")
 	}
-	// 通过再 Subscribe 时把同一 channel 塞入并触发 dedup 路径:
-	// 实际 Subscribe 内部走"已存在就 skip append"逻辑,但它只 skip 同一 channel。
-	// 验证:从 job.subs 拿 ch 再次 append 应能通过 dedup 检查不重复。
-	for _, existing := range job.subs {
-		if existing != ch {
-			t.Fatalf("job.subs[0] should equal returned ch")
+	cancelFirst()
+	cancelFirst()
+	if len(job.subs) != 1 {
+		t.Fatalf("cancelling one subscription affected the other: count=%d", len(job.subs))
+	}
+	select {
+	case _, ok := <-first:
+		if ok {
+			t.Error("cancelled subscription retained events")
 		}
+	case <-time.After(time.Second):
+		t.Fatal("cancelled subscription did not close")
 	}
-	job.mu.Unlock()
-	// 触发广播:不重复 close 同一 channel(已在内部 dedup 中走同一路径)
-	// 这里只验证 dedup 逻辑不重复 append。
+	job.status = TranscodeStatusFailed
+	job.err = errors.New("private command failure")
+	s.broadcast(job)
+	assertTranscodeTerminalReplay(t, second, TranscodeInfo{Status: TranscodeStatusFailed, Error: "transcode failed"})
 }
 
 func TestParseProgressLine(t *testing.T) {

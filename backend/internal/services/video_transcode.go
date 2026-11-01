@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -603,71 +604,50 @@ func (s *TranscodeService) Shutdown(ctx context.Context) error {
 //     任务结束时 channel 关闭
 //   - cancel: 取消订阅(handler 端 SSE 断开时调用,防止 channel 泄漏)
 //
-// 多次订阅同一个 absPath 是支持的,每个订阅者独立收到事件。
-// absPath 当前没有任务时,events 立即 emit 一个 TranscodeInfo(status=failed)
-// 然后关闭。
+// 多次订阅同一个 absPath 时，每个订阅者独立收到事件。
+// 排队或运行中的任务在锁内注册并发送当前快照；其他情况复用 GetStatus
+// 校验当前缓存与能力，发送一次终态快照后关闭，不保留已结束任务的订阅。
+// cancel 可重复调用，移除订阅并关闭对应通道。
 func (s *TranscodeService) Subscribe(absPath string) (<-chan TranscodeInfo, func()) {
 	events := make(chan TranscodeInfo, 8)
-	cancel := func() {}
-
-	if s == nil {
-		close(events)
-		return events, cancel
-	}
-
-	s.mu.Lock()
-	job, ok := s.inflight[absPath]
-	if !ok {
-		s.mu.Unlock()
-		// 当前没任务:立刻 emit failed,关闭
-		events <- TranscodeInfo{
-			Status:   TranscodeStatusFailed,
-			Progress: 0,
-			Error:    "no transcode task for this path",
-		}
-		close(events)
-		return events, cancel
-	}
-
-	// 立刻 emit 当前快照(订阅者不用等下一次更新)
-	job.mu.Lock()
-	snap := TranscodeInfo{
-		Status:   job.status,
-		Progress: job.progress,
-	}
-	if job.status == TranscodeStatusFailed && job.err != nil {
-		snap.Error = publicTranscodeError(job.err)
-	}
-	// dedup:同一个 channel 不重复加入,避免终态广播多次 close。
-	already := false
-	for _, ch := range job.subs {
-		if ch == events {
-			already = true
-			break
-		}
-	}
-	if !already {
-		job.subs = append(job.subs, events)
-	}
-	// 在 job 锁内投递初始快照，避免终态广播关闭 channel 后再发送。
-	events <- snap
-	job.mu.Unlock()
-	s.mu.Unlock()
-
-	// 取消订阅:从 subs 里删除自己
-	cancel = func() {
-		s.mu.Lock()
-		defer s.mu.Unlock()
-		job.mu.Lock()
-		defer job.mu.Unlock()
-		for i, ch := range job.subs {
-			if ch == events {
-				job.subs = append(job.subs[:i], job.subs[i+1:]...)
-				break
+	for {
+		if s != nil {
+			s.mu.Lock()
+			job, ok := s.inflight[absPath]
+			if ok && !s.closed {
+				job.mu.Lock()
+				if job.status == TranscodeStatusQueued || job.status == TranscodeStatusRunning {
+					job.subs = append(job.subs, events)
+					events <- TranscodeInfo{Status: job.status, Progress: job.progress}
+					job.mu.Unlock()
+					s.mu.Unlock()
+					return events, func() {
+						job.mu.Lock()
+						defer job.mu.Unlock()
+						for i, ch := range job.subs {
+							if ch == events {
+								job.subs = slices.Delete(job.subs, i, i+1)
+								close(events)
+								return
+							}
+						}
+					}
+				}
+				job.mu.Unlock()
 			}
+			s.mu.Unlock()
 		}
+
+		// 探测和磁盘检查在锁外执行。检查期间出现活动任务时，回到锁内
+		// 注册，避免把一个活动快照当作终态发出并遗漏后续进度。
+		info := s.GetStatus(absPath)
+		if info.Status == TranscodeStatusQueued || info.Status == TranscodeStatusRunning {
+			continue
+		}
+		events <- info
+		close(events)
+		return events, func() {}
 	}
-	return events, cancel
 }
 
 // ClearCache 清空整个转码缓存目录,返回删除文件数和释放字节数。
@@ -1257,15 +1237,15 @@ func (s *TranscodeService) broadcast(job *transcodeJob) {
 		return
 	}
 
-	subs := append([]chan TranscodeInfo(nil), job.subs...)
-	job.mu.Unlock()
-	for _, ch := range subs {
+	// 进度发送同样持有 job 锁，避免终态或取消关闭通道后再发送。
+	for _, ch := range job.subs {
 		select {
 		case ch <- info:
 		default:
 			// 订阅者慢,丢掉这次更新;下次更新会覆盖
 		}
 	}
+	job.mu.Unlock()
 }
 
 // publicTranscodeError 将内部命令错误映射为稳定且不包含本地路径的公开文案。

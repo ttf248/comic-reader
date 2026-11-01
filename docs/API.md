@@ -215,7 +215,9 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 - `GET /api/videos/:fileId/transcode/events`
 - `POST /api/videos/:fileId/transcode/cancel`
 
-转码状态查询（`/status`）及视频信息响应中的 `cached` 要求当前缓存仍为非空普通文件。已完成任务的缓存丢失、清空或变为非普通文件后，查询状态为 `failed`；下一次媒体请求可重新排队生成。目录占位导致发布失败时保持 `failed`，不删除占位目录。
+转码状态查询（`/status`）、视频信息响应及进度流终态快照中的 `cached` 要求当前缓存仍为非空普通文件。已完成任务的缓存丢失、清空或变为非普通文件后，查询与重新订阅状态为 `failed`；下一次媒体请求可重新排队生成。目录占位导致发布失败时保持 `failed`，不删除占位目录。
+
+`/events` 使用 SSE。排队与运行中的任务发送 `event: progress`，结束时发送一条 `event: done` 并关闭连接；事件 data 均为 `{ status, progress, etaSec, error? }`。没有活动任务时，按当前状态查询结果发送一条完整的 `done` 快照后关闭：磁盘缓存可用为 `cached`，原生可播放为 `not_needed`，工具不可用为 `unavailable`，未启动或缓存失效为 `failed`。迟到或重复订阅同样复核当前状态，不发送空对象作为终态，不因内存中缺少任务记录而误报缓存不可用。
 
 ## 收藏、历史与媒体活动
 
