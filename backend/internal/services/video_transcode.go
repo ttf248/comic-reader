@@ -16,8 +16,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"golang.org/x/sync/singleflight"
 )
 
 // ErrTranscodeUnavailable ffmpeg 不可用 / 路径无效 / 不可执行。
@@ -25,6 +23,8 @@ import (
 // 与 FaststartUnavailable 同语义：转码是优化项不是必需项，
 // 拿到此错误应回退到发原文件,而不是 5xx。
 var ErrTranscodeUnavailable = errors.New("transcode unavailable")
+
+var errTranscodeSourceChanged = errors.New("video source changed")
 
 // TranscodeStatus 转码解析状态。
 //
@@ -253,12 +253,9 @@ type TranscodeService struct {
 	concurrency int
 	sem         chan struct{}
 
-	// 同 key 同一时刻只跑一次 ffmpeg。
-	flight singleflight.Group
-
 	mu       sync.Mutex
-	inflight map[string]*transcodeJob // absPath -> job
-	cached   map[string]struct{}      // absPath -> 已经成功缓存(避免重复 stat)
+	inflight map[string]*transcodeJob // absPath -> 当前版本任务
+	retired  []*transcodeJob          // 已取消但尚未回收的旧版本任务
 	closed   bool
 
 	// 可用性探测缓存:Available() 跑 `ffmpeg -version` 50-200ms;
@@ -275,10 +272,11 @@ type TranscodeService struct {
 }
 
 type transcodeJob struct {
-	cancel context.CancelFunc
-	done   chan struct{}
-	status TranscodeStatus
-	err    error
+	cachePath string // 不可变，包含源文件路径、大小、修改时间及 profile 的派生键。
+	cancel    context.CancelFunc
+	done      chan struct{}
+	status    TranscodeStatus
+	err       error
 
 	mu       sync.Mutex
 	progress float64              // 最新进度(0-1)
@@ -333,7 +331,6 @@ func NewTranscodeService(opts TranscodeOptions) *TranscodeService {
 		concurrency: concurrency,
 		sem:         make(chan struct{}, concurrency),
 		inflight:    make(map[string]*transcodeJob),
-		cached:      make(map[string]struct{}),
 	}
 }
 
@@ -432,6 +429,13 @@ func (s *TranscodeService) Resolve(absPath string, info os.FileInfo) (servePath 
 			return absPath, TranscodeStatusFailed
 		}
 	}
+	if !fi.Mode().IsRegular() {
+		return absPath, TranscodeStatusFailed
+	}
+	cachePath := s.cachePathFor(s.cacheKey(absPath, fi))
+	if !s.cancelStaleJob(absPath, cachePath, fi) {
+		return absPath, TranscodeStatusFailed
+	}
 
 	// 浏览器已经能播 → 不需要转码
 	if !s.needsTranscode(absPath, ext) {
@@ -439,10 +443,7 @@ func (s *TranscodeService) Resolve(absPath string, info os.FileInfo) (servePath 
 	}
 
 	// 缓存命中
-	key := s.cacheKey(absPath, fi)
-	cachePath := s.cachePathFor(key)
 	if _, err := statVideoCache(cachePath); err == nil {
-		s.markCached(absPath)
 		return cachePath, TranscodeStatusCached
 	}
 
@@ -456,26 +457,29 @@ func (s *TranscodeService) Resolve(absPath string, info os.FileInfo) (servePath 
 
 // GetStatus 查询当前转码状态（用于 /api/videos/:fileId/transcode/status）。
 //
-// 不阻塞:直接读 inflight / cached / 文件 stat 综合判断。
-//
-// 顺序:inflight job 优先于文件 stat —— 否则 ffmpeg 正在写盘时
-// 文件已存在但内容不完整,会被错判为 cached。
+// 已原子发布的缓存优先；任务状态只属于同一源文件版本。
 func (s *TranscodeService) GetStatus(absPath string) TranscodeInfo {
+	info, _ := s.currentState(absPath)
+	return info
+}
+
+// currentState 为查询与订阅提供同一快照，仅返回当前版本的活动任务。
+func (s *TranscodeService) currentState(absPath string) (TranscodeInfo, *transcodeJob) {
 	info := TranscodeInfo{Status: TranscodeStatusUnknown, Progress: 0}
 	if s == nil {
 		info.Status = TranscodeStatusSkipped
-		return info
+		return info, nil
 	}
 	if s.isClosed() {
 		info.Status = TranscodeStatusUnavailable
-		return info
+		return info, nil
 	}
 
 	fi, err := os.Stat(absPath)
-	if err != nil {
+	if err != nil || !fi.Mode().IsRegular() {
 		info.Status = TranscodeStatusFailed
 		info.Error = "source not found"
-		return info
+		return info, nil
 	}
 
 	ext := strings.ToLower(filepath.Ext(absPath))
@@ -483,25 +487,32 @@ func (s *TranscodeService) GetStatus(absPath string) TranscodeInfo {
 	case ".mp4", ".m4v", ".mov", ".mkv", ".webm", ".avi":
 	default:
 		info.Status = TranscodeStatusSkipped
-		return info
+		return info, nil
 	}
 
 	if !s.Available() {
 		info.Status = TranscodeStatusUnavailable
-		return info
+		return info, nil
 	}
 
 	if !s.needsTranscode(absPath, ext) {
 		info.Status = TranscodeStatusNotNeeded
 		info.Progress = 1.0
-		return info
+		return info, nil
 	}
 
-	// 1) 优先看 inflight — 正在跑就用真实进度
+	cachePath := s.cachePathFor(s.cacheKey(absPath, fi))
+	// 最终文件仅在生成成功后发布，不会命中正在写入的临时文件。
+	if _, err := statVideoCache(cachePath); err == nil {
+		info.Status = TranscodeStatusCached
+		info.Progress = 1
+		return info, nil
+	}
+
 	s.mu.Lock()
 	job, ok := s.inflight[absPath]
 	s.mu.Unlock()
-	if ok {
+	if ok && job.cachePath == cachePath {
 		job.mu.Lock()
 		info.Progress = job.progress
 		jobStatus := job.status
@@ -511,43 +522,32 @@ func (s *TranscodeService) GetStatus(absPath string) TranscodeInfo {
 		switch jobStatus {
 		case TranscodeStatusRunning:
 			info.Status = TranscodeStatusRunning
+			return info, job
 		case TranscodeStatusQueued:
 			info.Status = TranscodeStatusQueued
+			return info, job
 		case TranscodeStatusFailed:
 			info.Status = TranscodeStatusFailed
 			if jobErr != nil {
 				info.Error = publicTranscodeError(jobErr)
 			}
 		case TranscodeStatusCached:
-			// 已发布的缓存仍可能被外部删除、清空或替换，重新校验条目。
-			key := s.cacheKey(absPath, fi)
-			cachePath := s.cachePathFor(key)
+			// 首次检查后任务可能刚完成发布，再确认一次以覆盖该转换窗口。
 			if _, err := statVideoCache(cachePath); err == nil {
 				info.Status = TranscodeStatusCached
-				info.Progress = 1.0
+				info.Progress = 1
 			} else {
-				// 缓存失效，下一次 Resolve 可重新生成。
 				info.Status = TranscodeStatusFailed
 				info.Error = "cache file missing or invalid"
 			}
 		}
-		return info
+		return info, nil
 	}
 
-	// 2) 没 inflight 但文件已存在 → 进程重启后命中磁盘缓存
-	key := s.cacheKey(absPath, fi)
-	cachePath := s.cachePathFor(key)
-	if _, err := statVideoCache(cachePath); err == nil {
-		info.Status = TranscodeStatusCached
-		info.Progress = 1.0
-		s.markCached(absPath)
-		return info
-	}
-
-	// 3) 都没在跑 → 算 failed(可能是上次失败留下的状态,或从未启动)
+	// 旧版本任务不代表当前文件已启动转码。
 	info.Status = TranscodeStatusFailed
 	info.Error = "transcode not started"
-	return info
+	return info, nil
 }
 
 // Cancel 取消正在跑的转码(同一 path)。
@@ -576,7 +576,7 @@ func (s *TranscodeService) Shutdown(ctx context.Context) error {
 	}
 	s.mu.Lock()
 	s.closed = true
-	jobs := make([]*transcodeJob, 0, len(s.inflight))
+	jobs := append([]*transcodeJob(nil), s.retired...)
 	for _, job := range s.inflight {
 		jobs = append(jobs, job)
 	}
@@ -594,6 +594,9 @@ func (s *TranscodeService) Shutdown(ctx context.Context) error {
 			return ctx.Err()
 		}
 	}
+	s.mu.Lock()
+	s.retired = nil
+	s.mu.Unlock()
 	return nil
 }
 
@@ -611,10 +614,11 @@ func (s *TranscodeService) Shutdown(ctx context.Context) error {
 func (s *TranscodeService) Subscribe(absPath string) (<-chan TranscodeInfo, func()) {
 	events := make(chan TranscodeInfo, 8)
 	for {
-		if s != nil {
+		info, current := s.currentState(absPath)
+		if current != nil {
 			s.mu.Lock()
 			job, ok := s.inflight[absPath]
-			if ok && !s.closed {
+			if ok && job == current && !s.closed {
 				job.mu.Lock()
 				if job.status == TranscodeStatusQueued || job.status == TranscodeStatusRunning {
 					job.subs = append(job.subs, events)
@@ -636,14 +640,9 @@ func (s *TranscodeService) Subscribe(absPath string) (<-chan TranscodeInfo, func
 				job.mu.Unlock()
 			}
 			s.mu.Unlock()
-		}
-
-		// 探测和磁盘检查在锁外执行。检查期间出现活动任务时，回到锁内
-		// 注册，避免把一个活动快照当作终态发出并遗漏后续进度。
-		info := s.GetStatus(absPath)
-		if info.Status == TranscodeStatusQueued || info.Status == TranscodeStatusRunning {
 			continue
 		}
+
 		events <- info
 		close(events)
 		return events, func() {}
@@ -654,10 +653,6 @@ func (s *TranscodeService) Subscribe(absPath string) (<-chan TranscodeInfo, func
 //
 // 与 VideoFaststartService.ClearCache / ThumbnailService.ClearAll 对齐:
 // 即使目录为空也返回 (0, 0, nil),前端能拿到确定的"无操作"结果。
-//
-// 关键差异:除了删盘,还要清掉内存 cached map(已 transcode 完成的
-// 路径集合,避免下次访问时 stat 命中后被误判为"已缓存"而读不到文件
-// ——stat 是会读盘,但 cached 命中跳过 stat 也可能踩到刚删的窗口)。
 func (s *TranscodeService) ClearCache() (deleted int, freedBytes int64, err error) {
 	if s == nil || s.cacheDir == "" {
 		return 0, 0, nil
@@ -678,9 +673,6 @@ func (s *TranscodeService) ClearCache() (deleted int, freedBytes int64, err erro
 		deleted++
 		return nil
 	})
-	s.mu.Lock()
-	s.cached = make(map[string]struct{})
-	s.mu.Unlock()
 	if rmErr := os.RemoveAll(dir); rmErr != nil {
 		return deleted, freedBytes, rmErr
 	}
@@ -819,13 +811,6 @@ func (s *TranscodeService) Evict(maxBytes int64, maxAgeDays int) (deleted int, f
 		}
 	}
 
-	// 清理 in-memory cache(可能指向被删的文件)
-	if deleted > 0 {
-		s.mu.Lock()
-		s.cached = make(map[string]struct{})
-		s.mu.Unlock()
-	}
-
 	return deleted, freedBytes, nil
 }
 
@@ -887,11 +872,19 @@ func (s *TranscodeService) cachePathFor(key string) string {
 	return filepath.Join(s.cacheDir, "video-transcode", key+".mp4")
 }
 
-// markCached 记录已成功缓存(纯内存,避免重复 stat)。
-func (s *TranscodeService) markCached(absPath string) {
+// cancelStaleJob 在媒体请求观察到新版本时取消旧工作，缓存命中和无需转码也适用。
+func (s *TranscodeService) cancelStaleJob(absPath, cachePath string, expected os.FileInfo) bool {
 	s.mu.Lock()
-	s.cached[absPath] = struct{}{}
+	job := s.inflight[absPath]
+	if job != nil && job.cachePath != cachePath && !transcodeSourceMatches(absPath, expected) {
+		s.mu.Unlock()
+		return false
+	}
 	s.mu.Unlock()
+	if job != nil && job.cachePath != cachePath && job.cancel != nil {
+		job.cancel()
+	}
+	return true
 }
 
 // ensureRunning 启动或复用一次转码任务。
@@ -900,56 +893,49 @@ func (s *TranscodeService) markCached(absPath string) {
 //  1. sem 槽位空 → 立刻开 ffmpeg 进程
 //  2. sem 满   → 状态 TranscodeStatusQueued,等前面的让出槽位
 //
-// singleflight 防止同一 key 在 10 个并发请求下启动 10 个 ffmpeg 进程。
-// 第一次调用开 ffmpeg,后续调用复用同一个 inflight job。
-//
-// 注意:已完成(成功或失败)的 inflight entry 不能复用 —— 调用方
-// 应该走 Resolve() 顶部的 cache hit / file mtime 改变路径。
-// 如果到这里发现 inflight 已 done,等价于没有 inflight,直接开新任务。
+// 在同一个临界区内比较版本并占位，只有同版本活动任务可以复用。
+// 被替换的任务取消后仍保留到回收完成，Shutdown 会等待所有版本。
 func (s *TranscodeService) ensureRunning(absPath, cachePath string, fi os.FileInfo) (string, TranscodeStatus) {
 	s.mu.Lock()
 	if s.closed {
 		s.mu.Unlock()
 		return absPath, TranscodeStatusUnavailable
 	}
-	if job, ok := s.inflight[absPath]; ok {
-		// 已结束?清掉重新开(防止 mtime 变了之后用旧 job 误导状态)
+	// 请求可能携带较早的 Stat；源版本的确认与任务替换放在同一临界区，
+	// 避免迟到的旧请求取消已经启动的新版本任务。
+	if !transcodeSourceMatches(absPath, fi) {
+		s.mu.Unlock()
+		return absPath, TranscodeStatusFailed
+	}
+	var previousCancel context.CancelFunc
+	if existing, ok := s.inflight[absPath]; ok {
+		if existing.cachePath == cachePath {
+			existing.mu.Lock()
+			status := existing.status
+			existing.mu.Unlock()
+			if status == TranscodeStatusQueued || status == TranscodeStatusRunning {
+				s.mu.Unlock()
+				return absPath, status
+			}
+		}
+		previousCancel = existing.cancel
+		s.retired = append(s.retired, existing)
+	}
+	s.retired = slices.DeleteFunc(s.retired, func(job *transcodeJob) bool {
 		select {
 		case <-job.done:
-			delete(s.inflight, absPath)
+			return true
 		default:
-			job.mu.Lock()
-			status := job.status
-			job.mu.Unlock()
-			s.mu.Unlock()
-			return absPath, status
+			return false
 		}
-	}
-	s.mu.Unlock()
-
+	})
 	ctx, cancel := context.WithTimeout(context.Background(), s.timeout)
-	// 占位(防止 race:两个 ensureRunning 同时进来都会拿到 inflight=nil)
-	job := &transcodeJob{
-		cancel: cancel,
-		done:   make(chan struct{}),
-		status: TranscodeStatusQueued,
-	}
-	s.mu.Lock()
-	if s.closed {
-		s.mu.Unlock()
-		cancel()
-		return absPath, TranscodeStatusUnavailable
-	}
-	if existing, ok := s.inflight[absPath]; ok {
-		s.mu.Unlock()
-		cancel()
-		existing.mu.Lock()
-		status := existing.status
-		existing.mu.Unlock()
-		return absPath, status
-	}
+	job := &transcodeJob{cachePath: cachePath, cancel: cancel, done: make(chan struct{}), status: TranscodeStatusQueued}
 	s.inflight[absPath] = job
 	s.mu.Unlock()
+	if previousCancel != nil {
+		previousCancel()
+	}
 
 	// 异步执行
 	go func() {
@@ -986,7 +972,6 @@ func (s *TranscodeService) ensureRunning(absPath, cachePath string, fi os.FileIn
 			job.mu.Lock()
 			job.status = TranscodeStatusCached
 			job.mu.Unlock()
-			s.markCached(absPath)
 		}
 		// 进度置 1.0 让 GetStatus / SSE 看到完成
 		job.mu.Lock()
@@ -1028,6 +1013,9 @@ func (s *TranscodeService) transcode(
 	fi os.FileInfo,
 	job *transcodeJob,
 ) error {
+	if !transcodeSourceMatches(srcPath, fi) {
+		return errTranscodeSourceChanged
+	}
 	tmpPath, err := newVideoCacheTemp(dstPath)
 	if err != nil {
 		return fmt.Errorf("create transcode temporary file: %w", err)
@@ -1137,11 +1125,20 @@ func (s *TranscodeService) transcode(
 	if _, err := statVideoCache(tmpPath); err != nil {
 		return fmt.Errorf("transcode produced invalid output: %w", err)
 	}
+	if !transcodeSourceMatches(srcPath, fi) {
+		return errTranscodeSourceChanged
+	}
 	// 原子 rename:dstPath 只会以完整形式出现,不会被读到半截文件
 	if err := os.Rename(tmpPath, dstPath); err != nil {
 		return fmt.Errorf("rename transcode output: %w", err)
 	}
 	return nil
+}
+
+func transcodeSourceMatches(path string, expected os.FileInfo) bool {
+	current, err := os.Stat(path)
+	return err == nil && expected != nil && current.Mode().IsRegular() &&
+		current.Size() == expected.Size() && current.ModTime().Equal(expected.ModTime())
 }
 
 // splitLine 取第一行 + 剩余 buffer,没换行就返回 ok=false 让外层继续累积。
@@ -1251,6 +1248,8 @@ func (s *TranscodeService) broadcast(job *transcodeJob) {
 // publicTranscodeError 将内部命令错误映射为稳定且不包含本地路径的公开文案。
 func publicTranscodeError(err error) string {
 	switch {
+	case errors.Is(err, errTranscodeSourceChanged):
+		return "video source changed"
 	case errors.Is(err, context.Canceled):
 		return "transcode cancelled"
 	case errors.Is(err, context.DeadlineExceeded):

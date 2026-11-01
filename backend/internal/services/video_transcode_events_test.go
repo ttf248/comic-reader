@@ -9,6 +9,22 @@ import (
 	"time"
 )
 
+func newTranscodeEventFixture(t *testing.T) (*TranscodeService, string) {
+	t.Helper()
+	src := filepath.Join(t.TempDir(), "source.mp4")
+	if err := os.WriteFile(src, []byte("source-video"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s := NewTranscodeService(TranscodeOptions{CacheDir: t.TempDir(), FFmpeg: "capability-prechecked"})
+	s.availOnce.Do(func() { s.avail = true })
+	return s, src
+}
+
+func transcodeEventJob(t *testing.T, s *TranscodeService, src string, status TranscodeStatus) *transcodeJob {
+	t.Helper()
+	return &transcodeJob{cachePath: s.cachePathFor(s.cacheKey(src, mustStat(t, src))), done: make(chan struct{}), status: status}
+}
+
 func TestTranscodeSubscriptionReplaysCurrentTerminalStatus(t *testing.T) {
 	for _, state := range []string{"cached-job", "failed-job", "empty-cache", "directory-cache", "missing-cache", "disk-cache", "not-started", "closed"} {
 		t.Run(state, func(t *testing.T) {
@@ -41,7 +57,7 @@ func TestTranscodeSubscriptionReplaysCurrentTerminalStatus(t *testing.T) {
 			}
 			var job *transcodeJob
 			if state != "disk-cache" && state != "not-started" && state != "closed" {
-				job = &transcodeJob{done: make(chan struct{}), status: TranscodeStatusCached, progress: 1}
+				job = &transcodeJob{cachePath: cachePath, done: make(chan struct{}), status: TranscodeStatusCached, progress: 1}
 				if state == "failed-job" {
 					job.status = TranscodeStatusFailed
 					job.err = fmt.Errorf("ffmpeg failed for %s", src)
@@ -93,11 +109,11 @@ func TestTranscodeSubscriptionDoesNotLoseConcurrentCompletion(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(cachePath, []byte("published-cache"), 0o644); err != nil {
-		t.Fatal(err)
-	}
 	for range 20 {
-		job := &transcodeJob{done: make(chan struct{}), status: TranscodeStatusRunning}
+		if err := os.Remove(cachePath); err != nil && !os.IsNotExist(err) {
+			t.Fatal(err)
+		}
+		job := &transcodeJob{cachePath: cachePath, done: make(chan struct{}), status: TranscodeStatusRunning}
 		s.inflight[src] = job
 		var subscribers sync.WaitGroup
 		start := make(chan struct{})
@@ -132,6 +148,9 @@ func TestTranscodeSubscriptionDoesNotLoseConcurrentCompletion(t *testing.T) {
 			}()
 		}
 		close(start)
+		if err := os.WriteFile(cachePath, []byte("published-cache"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 		job.mu.Lock()
 		job.status = TranscodeStatusCached
 		job.progress = 1
@@ -162,13 +181,13 @@ func assertTranscodeTerminalReplay(t *testing.T, events <-chan TranscodeInfo, wa
 }
 
 func TestTranscodeBroadcastAndCancellationAreSerialized(t *testing.T) {
-	s := NewTranscodeService(TranscodeOptions{CacheDir: t.TempDir()})
+	s, src := newTranscodeEventFixture(t)
 	for range 100 {
-		job := &transcodeJob{done: make(chan struct{}), status: TranscodeStatusRunning}
-		s.inflight["active.mp4"] = job
+		job := transcodeEventJob(t, s, src, TranscodeStatusRunning)
+		s.inflight[src] = job
 		var releases []func()
 		for range 8 {
-			_, release := s.Subscribe("active.mp4")
+			_, release := s.Subscribe(src)
 			releases = append(releases, release)
 		}
 		var workers sync.WaitGroup

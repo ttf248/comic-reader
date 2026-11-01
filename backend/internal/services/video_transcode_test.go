@@ -686,13 +686,10 @@ func TestTranscodeService_Subscribe_NotStarted(t *testing.T) {
 }
 
 func TestTranscodeService_SubscribeTerminalEventIsSanitizedAndCloses(t *testing.T) {
-	s := NewTranscodeService(TranscodeOptions{CacheDir: t.TempDir(), FFmpeg: "missing"})
-	job := &transcodeJob{
-		done:   make(chan struct{}),
-		status: TranscodeStatusRunning,
-	}
-	s.inflight["secret.mp4"] = job
-	events, cancel := s.Subscribe("secret.mp4")
+	s, src := newTranscodeEventFixture(t)
+	job := transcodeEventJob(t, s, src, TranscodeStatusRunning)
+	s.inflight[src] = job
+	events, cancel := s.Subscribe(src)
 	defer cancel()
 	<-events // 初始快照
 
@@ -977,14 +974,11 @@ func TestTranscodeService_AutoSelectsCodec(t *testing.T) {
 }
 
 func TestTranscodeService_SubscriptionsAreIndependent(t *testing.T) {
-	s := NewTranscodeService(TranscodeOptions{CacheDir: t.TempDir(), FFmpeg: ""})
-	job := &transcodeJob{
-		done:   make(chan struct{}),
-		status: TranscodeStatusQueued,
-	}
-	s.inflight["/fake/path.mp4"] = job
-	first, cancelFirst := s.Subscribe("/fake/path.mp4")
-	second, cancelSecond := s.Subscribe("/fake/path.mp4")
+	s, src := newTranscodeEventFixture(t)
+	job := transcodeEventJob(t, s, src, TranscodeStatusQueued)
+	s.inflight[src] = job
+	first, cancelFirst := s.Subscribe(src)
+	second, cancelSecond := s.Subscribe(src)
 	defer cancelFirst()
 	defer cancelSecond()
 	if (<-first).Status != TranscodeStatusQueued || (<-second).Status != TranscodeStatusQueued {
