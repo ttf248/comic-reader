@@ -25,7 +25,9 @@ var ErrFFmpegUnavailable = errors.New("ffmpeg unavailable")
 // VideoCoverExtractor 用 ffmpeg 在服务端抽一帧作为视频封面。
 //
 // 抽帧策略:取视频时长 10% 位置的一帧(夹到 1~3s,避免片头黑屏),缩放到
-// 服务端缩略图尺寸(width × height,JPEG quality 85)。
+// 服务端缩略图尺寸(width × height,JPEG quality 85)。定位点必须落在视频流
+// 之内:短视频(片段本身短于 1s)越过画面末尾时 ffmpeg 解不出任何帧,此时
+// 改取片头帧(见 seekPosition)。
 //
 // 与前端浏览器抽帧的差异:
 //   - 不依赖浏览器加载整段视频(对 1GB+ 视频关键省时)
@@ -165,7 +167,10 @@ func (e *VideoCoverExtractor) FFprobePath() string {
 // ffmpeg -i 解析 stdout。
 func (e *VideoCoverExtractor) probeDuration(ctx context.Context, absPath string) (float64, error) {
 	if e.ffprobePath != "" {
-		if d, err := e.probeDurationViaFFprobe(ctx, absPath); err == nil && d > 0 {
+		if d, err := e.probeStreamDuration(ctx, absPath); err == nil && d > 0 {
+			return d, nil
+		}
+		if d, err := e.probeFormatDuration(ctx, absPath); err == nil && d > 0 {
 			return d, nil
 		}
 	}
@@ -175,7 +180,7 @@ func (e *VideoCoverExtractor) probeDuration(ctx context.Context, absPath string)
 	return e.probeDurationViaFFmpeg(ctx, absPath)
 }
 
-func (e *VideoCoverExtractor) probeDurationViaFFprobe(ctx context.Context, absPath string) (float64, error) {
+func (e *VideoCoverExtractor) probeFormatDuration(ctx context.Context, absPath string) (float64, error) {
 	cmd := exec.CommandContext(ctx, e.ffprobePath,
 		"-v", "error",
 		"-show_entries", "format=duration",
@@ -188,7 +193,32 @@ func (e *VideoCoverExtractor) probeDurationViaFFprobe(ctx context.Context, absPa
 	if err := cmd.Run(); err != nil {
 		return 0, err
 	}
-	s := strings.TrimSpace(out.String())
+	return parseDurationValue(out.String())
+}
+
+// probeStreamDuration 读第一条视频流的时长(秒)。
+//
+// 容器时长会被音频轨道拉长(音轨比画面长时 format.duration = 音轨长度),
+// 按容器时长定位可能落到画面之外,ffmpeg 一帧都解不出来。
+func (e *VideoCoverExtractor) probeStreamDuration(ctx context.Context, absPath string) (float64, error) {
+	cmd := exec.CommandContext(ctx, e.ffprobePath,
+		"-v", "error",
+		"-select_streams", "v:0",
+		"-show_entries", "stream=duration",
+		"-of", "default=noprint_wrappers=1:nokey=1",
+		absPath,
+	)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	if err := cmd.Run(); err != nil {
+		return 0, err
+	}
+	return parseDurationValue(out.String())
+}
+
+func parseDurationValue(raw string) (float64, error) {
+	s := strings.TrimSpace(raw)
 	if s == "" || s == "N/A" {
 		return 0, errors.New("empty duration")
 	}
@@ -222,6 +252,29 @@ func (e *VideoCoverExtractor) probeDurationViaFFmpeg(ctx context.Context, absPat
 	return h*3600 + m*60 + s, nil
 }
 
+// seekPosition 根据视频时长计算抽帧位置(秒)。
+//
+// 常规策略:取时长的 10%,夹到 seekMin~seekMax(默认 1~3s),避开片头黑屏。
+// 例外:短视频。seekMin 默认 1s,对 0.3s 之类的小片段来说已经是片尾之后 ——
+// ffmpeg 在那里解不出任何帧(输出为空),服务端抽帧必然失败,只能退回浏览器
+// 抽帧(前端还要先空轮询 20s)。这类片段直接取片头帧,一定存在。
+func (e *VideoCoverExtractor) seekPosition(duration float64) float64 {
+	if duration <= 0 {
+		return e.seekMin
+	}
+	seek := duration * e.seekRatio
+	if seek < e.seekMin {
+		seek = e.seekMin
+	}
+	if seek > e.seekMax {
+		seek = e.seekMax
+	}
+	if seek >= duration {
+		return 0
+	}
+	return seek
+}
+
 // Extract 在服务端抽一帧作为视频封面,返回 JPEG 字节(已按 Width/Height 缩放)。
 //
 // 失败(ffmpeg 不可用 / 视频解码失败 / ffmpeg 进程超时)返回错误。
@@ -236,19 +289,41 @@ func (e *VideoCoverExtractor) Extract(absPath string) ([]byte, error) {
 	defer cancel()
 
 	// 1) 拿时长,计算 seek 位置
-	seek := 1.0
-	if d, derr := e.probeDuration(ctx, absPath); derr == nil && d > 0 {
-		seek = d * e.seekRatio
-		if seek < e.seekMin {
-			seek = e.seekMin
-		}
-		if seek > e.seekMax {
-			seek = e.seekMax
-		}
+	duration := 0.0
+	if d, derr := e.probeDuration(ctx, absPath); derr == nil {
+		duration = d
 	}
+	seek := e.seekPosition(duration)
 
 	// 2) 抽帧到 stdout
-	//
+	out, err := e.runExtract(ctx, absPath, seek)
+	if (err != nil || len(out) == 0) && seek > 0 {
+		// 定位点仍可能落在画面之外(时长探测不准 / 画面比音轨短):
+		// 退回片头帧重试一次 —— 片头帧一定存在。
+		out, err = e.runExtract(ctx, absPath, 0)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if len(out) == 0 {
+		return nil, errors.New("ffmpeg produced empty output")
+	}
+	// 兜底:ffmpeg 抽出来的图有可能不是 1:1 精确尺寸(参数解析 round),
+	// 强制过一遍 imaging 走标准化 resize,保证 UI 看到的就是 Width×Height。
+	img, err := jpeg.Decode(bytes.NewReader(out))
+	if err != nil {
+		// 也可能是 PNG(罕见);用 image.Decode 兜底
+		img, _, err = image.Decode(bytes.NewReader(out))
+		if err != nil {
+			return nil, fmt.Errorf("decode ffmpeg output: %w", err)
+		}
+	}
+	thumb := imaging.Fit(img, e.width, e.height, imaging.Lanczos)
+	return encodeJPEG(thumb, e.quality)
+}
+
+// runExtract 调用 ffmpeg 抽一帧,JPEG 字节直接从 stdout 返回。
+func (e *VideoCoverExtractor) runExtract(ctx context.Context, absPath string, seek float64) ([]byte, error) {
 	// -ss 在 -i 之前:fast seek(只解码到目标位置),对长视频关键。
 	// -frames:v 1:只要一帧就退出。
 	// scale + pad:保持比例 letterbox 到目标尺寸,跟 imaging.Fit 行为一致。
@@ -292,22 +367,7 @@ func (e *VideoCoverExtractor) Extract(absPath string) ([]byte, error) {
 		}
 		return nil, fmt.Errorf("ffmpeg extract: %s", errStr)
 	}
-	out := stdout.Bytes()
-	if len(out) == 0 {
-		return nil, errors.New("ffmpeg produced empty output")
-	}
-	// 兜底:ffmpeg 抽出来的图有可能不是 1:1 精确尺寸(参数解析 round),
-	// 强制过一遍 imaging 走标准化 resize,保证 UI 看到的就是 Width×Height。
-	img, err := jpeg.Decode(bytes.NewReader(out))
-	if err != nil {
-		// 也可能是 PNG(罕见);用 image.Decode 兜底
-		img, _, err = image.Decode(bytes.NewReader(out))
-		if err != nil {
-			return nil, fmt.Errorf("decode ffmpeg output: %w", err)
-		}
-	}
-	thumb := imaging.Fit(img, e.width, e.height, imaging.Lanczos)
-	return encodeJPEG(thumb, e.quality)
+	return stdout.Bytes(), nil
 }
 
 // jpegQualityToFfmpeg 把 libjpeg 的 1-100 映射到 ffmpeg -q:v(2-31, 越小越好)。

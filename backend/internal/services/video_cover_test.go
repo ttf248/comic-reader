@@ -124,6 +124,71 @@ func TestVideoCoverExtractor_Extract(t *testing.T) {
 	}
 }
 
+// generateShortTestVideo 生成一段极短视频(默认 0.3s):定位点若按默认的 1s
+// 会落到画面之外,ffmpeg 解不出任何帧。
+func generateShortTestVideo(t testing.TB, ffmpegPath string) string {
+	t.Helper()
+	dir := t.TempDir()
+	out := filepath.Join(dir, "short.mp4")
+	cmd := exec.Command(ffmpegPath,
+		"-y", "-hide_banner", "-loglevel", "error",
+		"-f", "lavfi", "-i", "color=c=blue:s=320x240:d=0.3:r=10",
+		"-c:v", "libx264", "-pix_fmt", "yuv420p",
+		out,
+	)
+	if outBytes, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("generate short test video: %v\n%s", err, outBytes)
+	}
+	return out
+}
+
+func TestVideoCoverExtractor_SeekPosition(t *testing.T) {
+	ex := NewVideoCoverExtractor(VideoCoverOptions{FFmpegPath: "ffmpeg"})
+	cases := []struct {
+		name     string
+		duration float64
+		want     float64
+	}{
+		{"未知时长按默认 1s", 0, 1},
+		{"短视频落在画面之外时取片头帧", 0.3, 0},
+		{"刚好等于时长也取片头帧", 1, 0},
+		{"常规视频取时长的 10%", 20, 2},
+		{"时长比例不足 1s 时抬到 1s", 5, 1},
+		{"时长比例超过 3s 时压到 3s", 120, 3},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ex.seekPosition(tc.duration); got != tc.want {
+				t.Errorf("seekPosition(%v) = %v, want %v", tc.duration, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestVideoCoverExtractor_Extract_ShortClip(t *testing.T) {
+	ff := findFFmpeg(t)
+	vidPath := generateShortTestVideo(t, ff)
+	ex := NewVideoCoverExtractor(VideoCoverOptions{
+		FFmpegPath: ff,
+		Width:      320,
+		Height:     350,
+		Quality:    85,
+		Timeout:    10 * 1e9, // 10s
+	})
+	// 0.3s 的片段:定位点必须落在画面之内,否则服务端抽帧拿不到任何帧,
+	// 只能退回浏览器抽帧(前端会先空轮询 20s,封面一直是坏的)。
+	data, err := ex.Extract(vidPath)
+	if err != nil {
+		t.Fatalf("Extract short clip: %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatal("Extract returned empty data for short clip")
+	}
+	if _, err := jpeg.Decode(bytes.NewReader(data)); err != nil {
+		t.Fatalf("decode extracted jpeg: %v", err)
+	}
+}
+
 func TestVideoCoverExtractor_Extract_NotFound(t *testing.T) {
 	ff := findFFmpeg(t)
 	ex := NewVideoCoverExtractor(VideoCoverOptions{FFmpegPath: ff})
