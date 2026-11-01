@@ -3,9 +3,17 @@ import { api, API_BASE } from "./client";
 // 视频原始流 URL（供 <video src=...> 使用）。
 //
 // 后端 /api/media/:id 支持 Range，前端拖动进度条时浏览器自动按需分段。
-export function videoUrl(fileId: string): string {
-  const p = `/api/media/${encodeURIComponent(fileId)}`;
+export function videoUrl(fileId: string, playbackId: string): string {
+  const p = `/api/media/${encodeURIComponent(fileId)}?playback=${encodeURIComponent(playbackId)}`;
   return API_BASE ? `${API_BASE}${p}` : p;
+}
+
+// 每次播放尝试使用独立标识，避免浏览器复用上一段解码缓冲；同次 Range 沿用此 URL。
+// 标识只隔离浏览器资源，不选择服务端文件，也不携带路径或鉴权信息。
+export function createVideoPlaybackId(): string {
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), (value) =>
+    value.toString(16).padStart(2, "0"),
+  ).join("");
 }
 
 // 视频元信息。

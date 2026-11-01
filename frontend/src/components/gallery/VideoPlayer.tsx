@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   videoUrl,
+  createVideoPlaybackId,
   getTranscodeStatus,
   type TranscodeStatus,
 } from "../../api/videos";
@@ -52,6 +53,10 @@ export default function VideoPlayer({
   const restoredSourceRef = useRef<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
+  const mediaURL = useMemo(
+    () => videoUrl(src, `${createVideoPlaybackId()}-${retryKey}`),
+    [src, retryKey],
+  );
   const [transcodeStatus, setTranscodeStatus] =
     useState<TranscodeStatus | null>(null);
 
@@ -204,7 +209,7 @@ export default function VideoPlayer({
         key={
           `${src}#${retryKey}` /* 切视频 / 手动重试时强制重挂载，避免 src 缓存问题 */
         }
-        src={videoUrl(src)}
+        src={mediaURL}
         controls
         autoPlay
         playsInline

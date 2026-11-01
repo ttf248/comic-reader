@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { getVideoInfoBatch, VIDEO_INFO_BATCH_LIMIT } from "./videos";
+import { getVideoInfoBatch, VIDEO_INFO_BATCH_LIMIT, videoUrl } from "./videos";
+
+it("播放 URL 编码资源 ID 与播放标识", () => {
+  expect(videoUrl("f_测试", "attempt +/?")).toBe(
+    "/api/media/f_%E6%B5%8B%E8%AF%95?playback=attempt%20%2B%2F%3F",
+  );
+});
 
 describe("getVideoInfoBatch", () => {
   afterEach(() => {

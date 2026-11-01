@@ -1,4 +1,4 @@
-import { videoUrl } from "../api/videos";
+import { createVideoPlaybackId, videoUrl } from "../api/videos";
 
 const FRAME_MAX_W = 1920;
 const CAPTURE_TIMEOUT_MS = 30_000;
@@ -82,7 +82,7 @@ export function captureVideoFrame(
     video.addEventListener("seeked", onSeeked, { once: true });
     video.addEventListener("error", onError, { once: true });
     signal?.addEventListener("abort", onAbort, { once: true });
-    video.src = videoUrl(fileId);
+    video.src = videoUrl(fileId, createVideoPlaybackId());
   });
 }
 

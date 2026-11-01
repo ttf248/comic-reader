@@ -48,7 +48,9 @@ function seekFrame() {
 
 it("直接使用媒体 URL，抽取限宽 JPEG 后释放解码器和 canvas", async () => {
   const result = captureVideoFrame("f_clip");
-  expect(video.getAttribute("src")).toBe("/api/media/f_clip");
+  const url = new URL(video.src);
+  expect(url.pathname).toBe("/api/media/f_clip");
+  expect(url.searchParams.get("playback")).toBeTruthy();
   expect(video.preload).toBe("metadata");
   seekFrame();
   await expect(result).resolves.toBe(jpeg);
@@ -68,6 +70,19 @@ it("短视频定位在片尾之前", async () => {
   expect(video.currentTime).toBeCloseTo(0.15);
   video.dispatchEvent(new Event("seeked"));
   await expect(result).resolves.toBe(jpeg);
+});
+
+it("连续抽帧使用独立播放 URL", async () => {
+  const controller = new AbortController();
+  const first = captureVideoFrame("f_updated", controller.signal);
+  const rejected = expect(first).rejects.toMatchObject({ name: "AbortError" });
+  const firstURL = video.getAttribute("src");
+  controller.abort();
+  await rejected;
+  const second = captureVideoFrame("f_updated");
+  expect(video.getAttribute("src")).not.toBe(firstURL);
+  seekFrame();
+  await expect(second).resolves.toBe(jpeg);
 });
 
 it("时长不可用时等待第 0 帧数据再绘制", async () => {

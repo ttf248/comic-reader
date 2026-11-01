@@ -1,14 +1,32 @@
 import { fireEvent, render, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import VideoPlayer from "./VideoPlayer";
+import { getTranscodeStatus } from "../../api/videos";
+
+const { playbackId } = vi.hoisted(() => ({ playbackId: vi.fn() }));
 
 vi.mock("../../api/videos", () => ({
-  videoUrl: (fileId: string) => `/api/media/${fileId}`,
+  videoUrl: (fileId: string, token: string) =>
+    `/api/media/${fileId}?playback=${token}`,
+  createVideoPlaybackId: playbackId,
   getTranscodeStatus: vi.fn(() => new Promise(() => {})),
 }));
 
+vi.mock("./TranscodeProgress", () => ({
+  default: ({ onReady }: { onReady?: () => void }) => (
+    <button onClick={onReady}>模拟转码完成</button>
+  ),
+}));
+
 describe("VideoPlayer 活动恢复", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    let sequence = 0;
+    playbackId.mockImplementation(() => `attempt-${++sequence}`);
+    vi.mocked(getTranscodeStatus).mockImplementation(
+      () => new Promise(() => {}),
+    );
+  });
 
   it("元数据就绪后恢复毫秒活动换算的秒位置", async () => {
     const onMetaLoaded = vi.fn();
@@ -35,7 +53,9 @@ describe("VideoPlayer 活动恢复", () => {
     fireEvent.timeUpdate(video);
     expect(onProgress).toHaveBeenCalledWith(43);
     await waitFor(() =>
-      expect(video.getAttribute("src")).toBe("/api/media/f_video"),
+      expect(video.getAttribute("src")).toBe(
+        "/api/media/f_video?playback=attempt-1-0",
+      ),
     );
   });
 
@@ -48,5 +68,38 @@ describe("VideoPlayer 活动恢复", () => {
     });
     fireEvent.loadedMetadata(video);
     expect(video.currentTime).toBe(99.9);
+  });
+
+  it("普通重绘沿用播放 URL，重试和切回同视频使用新 URL", () => {
+    const view = render(<VideoPlayer src="f_first" />);
+    const first = document.querySelector("video") as HTMLVideoElement;
+    const firstURL = first.getAttribute("src");
+    view.rerender(<VideoPlayer src="f_first" onProgress={vi.fn()} />);
+    expect(first.getAttribute("src")).toBe(firstURL);
+    fireEvent.error(first);
+    fireEvent.click(view.getByRole("button", { name: /^重试$/ }));
+    const retried = document.querySelector("video") as HTMLVideoElement;
+    expect(retried).not.toBe(first);
+    expect(retried.getAttribute("src")).not.toBe(firstURL);
+    const retryURL = retried.getAttribute("src");
+    view.rerender(<VideoPlayer src="f_other" />);
+    view.rerender(<VideoPlayer src="f_first" />);
+    const returnedURL = document.querySelector("video")?.getAttribute("src");
+    expect(returnedURL).not.toBe(firstURL);
+    expect(returnedURL).not.toBe(retryURL);
+  });
+
+  it("转码完成后使用新播放 URL，避免复用原编码缓冲", async () => {
+    vi.mocked(getTranscodeStatus)
+      .mockResolvedValueOnce({ status: "running", progress: 0.2, etaSec: 0 })
+      .mockResolvedValue({ status: "cached", progress: 1, etaSec: 0 });
+    const view = render(<VideoPlayer src="f_transcoding" />);
+    const originalURL = document.querySelector("video")?.getAttribute("src");
+    fireEvent.click(await view.findByRole("button", { name: "模拟转码完成" }));
+    await waitFor(() =>
+      expect(document.querySelector("video")?.getAttribute("src")).not.toBe(
+        originalURL,
+      ),
+    );
   });
 });

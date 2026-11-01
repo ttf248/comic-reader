@@ -38,7 +38,9 @@
 - 缩略图：`"<sha256(JPEG 响应字节)>"`，尺寸变化或视频封面重写都会重新验证实际内容
 - 媒体文件：`"<hex_mtime_ns>-<hex_size>"`
 
-客户端带 `If-None-Match` 命中相同 ETag 时返回 `304 Not Modified` + 空 body。缩略图先取得内存或磁盘缓存中的实际 JPEG 再校验；原图使用文件元数据校验。`If-None-Match` 比较是字面相等（**必须**包含双引号）。原图与缩略图使用 `Cache-Control: private, no-cache`，稳定 URL 不会长期跳过服务器验证。
+客户端带 `If-None-Match` 命中相同 ETag 时返回 `304 Not Modified` + 空 body。缩略图先取得内存或磁盘缓存中的实际 JPEG 再校验；原图使用文件元数据校验。`If-None-Match` 比较是字面相等（**必须**包含双引号）。原图、视频和缩略图使用 `Cache-Control: private, no-cache`，成功及 304 响应保留此策略；原图和视频的 200、206、304 均携带 ETag。稳定资源地址不按一天的新鲜期跳过服务器验证，Range 行为保持不变。
+
+原图和视频在没有 `If-None-Match` 时支持 `If-Modified-Since`，按文件修改时间的秒精度返回 304，并保留 ETag、Last-Modified 与缓存策略。两者同时出现时以 `If-None-Match` 为准；ETag 未命中不会被时间条件再次判为 304。304 不携带媒体字节，客户端仍可复用已验证的内容。
 
 4xx 响应（视频 `video_cover_missing` 404、源文件不存在等）**不**带 ETag —— 4xx 状态本身是临时的（cover 抽帧后变 200），不能让浏览器把 404 缓存住。
 
@@ -155,6 +157,8 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 ### `GET /api/media/:fileId`
 
 发送图片或视频。支持 ETag；视频支持 Range，并按需经过转码和 faststart 管线。
+
+前端视频消费使用 `/api/media/:fileId?playback=<不透明播放标识>`。每次播放切换、重试、转码后重新加载和抽帧生成新标识，同次播放的多个 Range 请求沿用同一 URL；标识用于隔离浏览器媒体缓冲。服务端仍只按文件 ID 校验权限并选择当前文件，`playback` 不选择文件版本、不传递路径或凭据，也不替代收藏、历史和活动记录中的资源 ID。直接使用不带标识的资源地址仍须重新验证 HTTP 缓存。
 
 响应前确认源路径仍为普通文件；扫描后被目录或其他非普通文件替换时，图片返回 `404 media_not_found`，视频返回 `404 video_not_found`。此检查先于 ETag、Range、转码缓存选择和文件发送，不返回目录重定向或携带本地路径的 `Location`，也不因条件请求返回 304。源文件恢复后，原 ID 可继续使用。
 

@@ -86,15 +86,12 @@ func VideoHandler(transcode *services.TranscodeService, faststart *services.Vide
 		// 304 优先于 Range:浏览器会重新发不带 If-None-Match 的 Range
 		// 拿到实际片段,这是 HTTP 标准行为,主流浏览器都遵守。
 		etag := videoETag(serveInfo)
-		c.Set("ETag", etag)
-		if match := c.Get("If-None-Match"); match != "" && match == etag {
+		if mediaNotModified(c, etag, serveInfo.ModTime()) {
 			return c.SendStatus(fiber.StatusNotModified)
 		}
 
 		c.Set("Content-Type", videoMime(servePath))
 		c.Set("Accept-Ranges", "bytes")
-		// 视频比图片大得多，缓存时间短一些（1 天）
-		c.Set("Cache-Control", "public, max-age=86400")
 		return c.SendFile(servePath, false)
 	}
 }

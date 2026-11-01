@@ -57,8 +57,7 @@ func ImageHandler() fiber.Handler {
 		}
 		// ETag + 304 协商(命中 If-None-Match 时直接返回,不发 body)
 		etag := imageETag(info)
-		c.Set("ETag", etag)
-		if match := c.Get("If-None-Match"); match != "" && match == etag {
+		if mediaNotModified(c, etag, info.ModTime()) {
 			return c.SendStatus(fiber.StatusNotModified)
 		}
 		// HEIC/HEIF 等不常见格式显式声明 Content-Type，避免 Fiber
@@ -67,7 +66,6 @@ func ImageHandler() fiber.Handler {
 		if ext == ".heic" || ext == ".heif" {
 			c.Set("Content-Type", "image/heic")
 		}
-		c.Set("Cache-Control", "private, no-cache")
 		return c.SendFile(path, false)
 	}
 }

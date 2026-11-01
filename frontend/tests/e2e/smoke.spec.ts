@@ -626,12 +626,18 @@ test("离开相册会取消浏览器抽帧且不继续上传封面", async ({ pa
     probes++;
     await route.fulfill({ status: 404 });
   });
-  await page.route(`**/api/media/${fileId}`, async (route) => {
-    started++;
-    await waiting;
-    // 取消后的请求可能已从浏览器路由表移除。
-    await route.continue().catch(() => {});
-  });
+  await page.route(
+    (url) => url.pathname === `/api/media/${fileId}`,
+    async (route) => {
+      expect(
+        new URL(route.request().url()).searchParams.get("playback"),
+      ).toBeTruthy();
+      started++;
+      await waiting;
+      // 取消后的请求可能已从浏览器路由表移除。
+      await route.continue().catch(() => {});
+    },
+  );
   try {
     await page.goto(`/albums/${album!.id}`);
     await expect.poll(() => probes).toBeGreaterThan(0);
