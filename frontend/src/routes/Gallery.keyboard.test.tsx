@@ -231,4 +231,34 @@ describe("Gallery 按媒体类型隔离快捷键", () => {
       "图片已看完 · 还有 3 个视频",
     );
   });
+
+  it("视频阅读器的更多菜单不说图片，也不提供没有实现的图片信息", async () => {
+    renderGallery("video");
+    await currentVideo();
+    await act(async () => {
+      fireEvent.click(screen.getByTitle("更多"));
+    });
+    const items = screen
+      .getAllByRole("menuitem")
+      .map((el) => el.textContent ?? "")
+      .join("|");
+    expect(items).toContain("第一个视频");
+    expect(items).toContain("最后一个视频");
+    expect(items).not.toContain("图片");
+  });
+
+  it("图片阅读器的更多菜单保留图片信息与张数说法", async () => {
+    renderGallery("image");
+    await screen.findByTestId("image-gallery");
+    await act(async () => {
+      fireEvent.click(screen.getByTitle("更多"));
+    });
+    const items = screen
+      .getAllByRole("menuitem")
+      .map((el) => el.textContent ?? "")
+      .join("|");
+    expect(items).toContain("图片信息");
+    expect(items).toContain("第一张");
+    expect(items).toContain("最后张");
+  });
 });

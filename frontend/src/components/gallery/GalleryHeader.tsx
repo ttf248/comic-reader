@@ -60,6 +60,7 @@ interface Props {
 // - glass 半透明，沉浸但不抢戏
 // - 暗色背景下用浅色文字；hover 用白色
 // - 菜单里收纳：图片信息 / 快捷键帮助 / 上一本/下一本 / 第一张/最后张
+//   （视频模式下不显示图片信息面板，跳转项也改用"视频"的说法）
 export default function GalleryHeader({
   name,
   index,
@@ -184,11 +185,13 @@ export default function GalleryHeader({
         }
       >
         <PopoverLabel>阅读</PopoverLabel>
-        <PopoverItem onClick={onToggleInfo}>
-          <InfoIcon size={12} />
-          <span>图片信息</span>
-          <span className="ml-auto text-[10px] text-fg-subtle">I</span>
-        </PopoverItem>
+        {!isVideo && (
+          <PopoverItem onClick={onToggleInfo}>
+            <InfoIcon size={12} />
+            <span>图片信息</span>
+            <span className="ml-auto text-[10px] text-fg-subtle">I</span>
+          </PopoverItem>
+        )}
         <PopoverItem onClick={onToggleHelp}>
           <KeyboardIcon size={12} />
           <span>快捷键</span>
@@ -227,11 +230,11 @@ export default function GalleryHeader({
         <PopoverSeparator />
         <PopoverLabel>跳转</PopoverLabel>
         <PopoverItem onClick={jumpToFirst}>
-          <span>第一张</span>
+          <span>{isVideo ? "第一个视频" : "第一张"}</span>
           <span className="ml-auto text-[10px] text-fg-subtle">Home</span>
         </PopoverItem>
         <PopoverItem onClick={jumpToLast}>
-          <span>最后张</span>
+          <span>{isVideo ? "最后一个视频" : "最后张"}</span>
           <span className="ml-auto text-[10px] text-fg-subtle">End</span>
         </PopoverItem>
       </Popover>
