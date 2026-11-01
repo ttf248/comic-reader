@@ -12,6 +12,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/disintegration/imaging"
 )
 
 func TestThumbnailHotReloadChangesCachedDimensions(t *testing.T) {
@@ -102,6 +104,90 @@ func newTestService(t *testing.T) *ThumbnailService {
 		t.Fatalf("NewThumbnailService: %v", err)
 	}
 	return svc
+}
+
+// TestFitToThumbnailMatchesDirectLanczos 验证「先 Box 预缩放再 Lanczos」
+// 与直接 Lanczos 的结果在平滑图像上基本一致。
+//
+// 预缩放是缩略图提速的关键：24MP 原图直接跑 Lanczos 仅缩放一步就要
+// 40ms 以上。误差过大说明预缩放参数需要调整。
+func TestFitToThumbnailMatchesDirectLanczos(t *testing.T) {
+	const w, h = 2400, 1800
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			// 平滑的低频渐变：真实照片的局部统计特征更接近这种分布。
+			img.Set(x, y, color.RGBA{
+				R: uint8(40 + 180*x/w),
+				G: uint8(60 + 150*y/h),
+				B: uint8((x + y) % 200),
+				A: 255,
+			})
+		}
+	}
+	direct := imaging.Fit(img, 320, 350, imaging.Lanczos)
+	stepped := fitToThumbnail(img, 320, 350)
+	if direct.Bounds() != stepped.Bounds() {
+		t.Fatalf("size mismatch: direct=%v stepped=%v", direct.Bounds(), stepped.Bounds())
+	}
+	var sum float64
+	count := 0
+	for y := 0; y < direct.Bounds().Dy(); y++ {
+		for x := 0; x < direct.Bounds().Dx(); x++ {
+			dr, dg, db, _ := direct.At(x, y).RGBA()
+			sr, sg, sb, _ := stepped.At(x, y).RGBA()
+			sum += float64(absInt(int(dr)-int(sr)) + absInt(int(dg)-int(sg)) + absInt(int(db)-int(sb)))
+			count += 3
+		}
+	}
+	mean := sum / float64(count) / 257.0 // 16bit → 8bit
+	if mean > 3 {
+		t.Errorf("预缩放与直接 Lanczos 平均误差过大: %.2f (>3/255)", mean)
+	}
+}
+
+func absInt(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
+}
+
+// TestDecodePixelWeightUsesImageHeader 验证像素权重取自图片头，
+// 且读不到图片头时退回保守的大图权重（宁可少并行也不要打爆内存）。
+func TestDecodePixelWeightUsesImageHeader(t *testing.T) {
+	dir := t.TempDir()
+	src := makeTestImage(t, dir, "big.jpg", 2000, 1500) // 3MP
+	weight, err := decodePixelWeight(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if weight != 3 {
+		t.Errorf("weight=%d, want 3 (2000x1500 = 3MP)", weight)
+	}
+
+	small := makeTestImage(t, dir, "small.jpg", 100, 100)
+	weight, err = decodePixelWeight(small)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if weight != 1 {
+		t.Errorf("weight=%d, want 1", weight)
+	}
+
+	// 非图片文件读不到头部：不能报错（解码阶段才给真正的错误），
+	// 但要按大图保守处理。
+	broken := filepath.Join(dir, "broken.jpg")
+	if err := os.WriteFile(broken, []byte("not an image"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	weight, err = decodePixelWeight(broken)
+	if err != nil {
+		t.Fatalf("读不到图片头不应报错: %v", err)
+	}
+	if weight != thumbnailUnknownPixelWeight {
+		t.Errorf("weight=%d, want %d", weight, thumbnailUnknownPixelWeight)
+	}
 }
 
 func TestCacheKey_StableAndUnique(t *testing.T) {
