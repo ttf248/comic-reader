@@ -138,7 +138,9 @@ export default function GlobalSearch() {
                 <div className="text-sm truncate">{h.name}</div>
                 <div className="text-[11px] text-fg-subtle truncate">
                   {h.kind === "album"
-                    ? "文件夹"
+                    ? h.virtual
+                      ? "本目录媒体"
+                      : "文件夹"
                     : h.kind === "smartCollection"
                       ? "标签"
                       : "集合"}

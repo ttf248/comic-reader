@@ -897,8 +897,10 @@ function CollectionView({
     const albumCards: CardData[] = albums.map((a) => ({
       id: "a:" + a.path,
       variant: "album",
-      title: a.name,
-      subtitle: a.virtual ? "本目录媒体" : a.tags.join(" · "),
+      // 散图在集合内已有父目录做上下文，标题回到语义名：否则 "2011年"
+      // 集合里会出现一张同样叫 "2011年" 的卡片（location 就是父目录名）。
+      title: a.virtual ? "本目录媒体" : a.name,
+      subtitle: a.virtual ? "" : a.tags.join(" · "),
       count: a.imageCount,
       imageCount: a.imageCount,
       videoCount: a.videoCount ?? 0,

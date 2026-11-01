@@ -133,6 +133,65 @@ describe("Album", () => {
     expect(screen.getByText("春游")).toBeInTheDocument();
   });
 
+  it("集合内的散图卡片用语义名，不与父集合重名", () => {
+    vi.mocked(useLibraryNodes).mockReturnValue({
+      data: {
+        revision: 4,
+        missing: [],
+        items: [
+          {
+            id: "c_year",
+            kind: "collection",
+            name: "2011年",
+            displayName: "2011年",
+            coverImage: "f_cover",
+            coverImages: ["f_cover"],
+            albumCount: 2,
+            imageCount: 8,
+          },
+        ],
+      },
+      isLoading: false,
+    } as never);
+    vi.mocked(useLibraryChildren).mockReturnValue({
+      data: {
+        revision: 4,
+        total: 2,
+        items: [
+          {
+            id: "a_loose",
+            kind: "album",
+            name: "本目录媒体",
+            displayName: "本目录媒体",
+            virtual: true,
+            location: "2011年",
+            coverImage: "f_loose",
+            coverImages: ["f_loose"],
+            imageCount: 102,
+          },
+          {
+            id: "a_trip",
+            kind: "album",
+            name: "春游",
+            displayName: "春游",
+            coverImage: "f_trip",
+            coverImages: ["f_trip"],
+            imageCount: 8,
+          },
+        ],
+      },
+      isLoading: false,
+    } as never);
+
+    renderAlbum();
+
+    // 父集合标题是 "2011年"；散图卡片不能也叫 "2011年"，否则同名卡片
+    // 会让人以为集合里还有一个叫 "2011年" 的子相册。
+    expect(screen.getByText("本目录媒体")).toBeInTheDocument();
+    expect(screen.queryByText("2011年")).toBeInTheDocument();
+    expect(screen.getAllByText("2011年")).toHaveLength(1);
+  });
+
   it("节点查询未完成时显示加载态", () => {
     vi.mocked(useLibraryNodes).mockReturnValue({
       data: undefined,

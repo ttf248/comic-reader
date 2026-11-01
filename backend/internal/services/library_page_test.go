@@ -313,6 +313,10 @@ func TestLibrarySummaryCarriesVirtualAlbumLocation(t *testing.T) {
 		hits[0].Name != filepath.Base(fixture.root) {
 		t.Fatalf("search by location hits=%+v", hits)
 	}
+	// 散图命中要带 virtual 标记：它的展示名是目录路径，和同名集合难区分。
+	if !hits[0].Virtual {
+		t.Fatalf("search hit should mark virtual album: %+v", hits[0])
+	}
 }
 
 func TestRandomLibraryAlbumAndActivitySummaryUsePublishedIndex(t *testing.T) {

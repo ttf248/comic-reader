@@ -4,6 +4,8 @@ export interface SearchHit {
   kind: "album" | "collection" | "smartCollection";
   path: string;
   name: string;
+  /** 散图（"本目录媒体"）：name 是归属目录路径，与同名集合区分靠这个标记。 */
+  virtual?: boolean;
   tags?: string[];
   count: number;
   coverImage?: string;

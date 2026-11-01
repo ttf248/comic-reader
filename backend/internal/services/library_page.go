@@ -100,9 +100,12 @@ type LibraryTagSummary struct {
 
 // LibrarySearchHit 是预计算搜索索引的对外条目，不包含目录树或绝对路径。
 type LibrarySearchHit struct {
-	Kind       string   `json:"kind"`
-	Path       string   `json:"path"`
-	Name       string   `json:"name"`
+	Kind string `json:"kind"`
+	Path string `json:"path"`
+	Name string `json:"name"`
+	// Virtual 标记散图（"本目录媒体"）。它的 Name 是归属目录路径，
+	// 与同名集合难以区分，前端据此显示类型标签。
+	Virtual    bool     `json:"virtual,omitempty"`
 	Tags       []string `json:"tags,omitempty"`
 	Count      int      `json:"count"`
 	CoverImage string   `json:"coverImage,omitempty"`
@@ -269,7 +272,10 @@ func buildLibrarySearchIndex(index *libraryPageIndex) []LibrarySearchHit {
 	for _, album := range index.albums {
 		hits = append(hits, LibrarySearchHit{
 			Kind: "album", Path: album.ID, Name: searchHitName(album),
-			Tags: append([]string(nil), album.Tags...), Count: album.ImageCount, CoverImage: album.CoverImage,
+			Virtual:    album.Virtual,
+			Tags:       append([]string(nil), album.Tags...),
+			Count:      album.ImageCount,
+			CoverImage: album.CoverImage,
 		})
 	}
 	collections := make([]LibraryNodeSummary, 0, len(index.nodes))
