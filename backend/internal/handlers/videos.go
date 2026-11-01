@@ -2,11 +2,9 @@ package handlers
 
 import (
 	"errors"
-	"fmt"
 	"log"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 
@@ -22,8 +20,7 @@ import (
 //
 //	GET /api/media/:id
 //
-// 浏览器 `<video>` 元素拖动进度条时会自动发 Range 请求；Fiber 的
-// SendFile 默认支持 Range，依赖源文件大小返回 206 Partial Content。
+// 浏览器 `<video>` 拖动进度条时自动发 Range 请求；响应按打开文件的大小返回 206。
 //
 // 重要：路径必须在任一 mediaRoots 之下（路径安全中间件统一校验），
 // 扩展名必须在 models.VideoExts 白名单内（防止把任意文件当视频流）。
@@ -59,15 +56,13 @@ func VideoHandler(transcode *services.TranscodeService, faststart *services.Vide
 		//   transcode 命中 → 发转码缓存(浏览器能直播)
 		//   否则 faststart → 发 remux 缓存(浏览器能边下边播)
 		//   都不命中      → 发原文件
-		// info 复用入口的 stat,两个 Resolve 内部就不再 stat 一次。
+		// 管线复用入口元数据，最终响应从实际打开的文件读取元数据。
 		servePath := path
-		serveInfo := srcInfo
 		if transcode != nil {
 			if p, st := transcode.Resolve(path, srcInfo); st == services.TranscodeStatusCached {
-				// 缓存可能在 Resolve 后被清理或替换，发送前复核并复用元数据。
+				// 缓存可能在 Resolve 后失效，先确认条目，发送时再打开并读取元数据。
 				if fi, err := os.Lstat(p); err == nil && fi.Mode().IsRegular() && fi.Size() > 0 {
 					servePath = p
-					serveInfo = fi
 				}
 			}
 		}
@@ -75,7 +70,6 @@ func VideoHandler(transcode *services.TranscodeService, faststart *services.Vide
 			if p, _ := faststart.Resolve(path, srcInfo); p != path {
 				if fi, err := os.Lstat(p); err == nil && fi.Mode().IsRegular() && fi.Size() > 0 {
 					servePath = p
-					serveInfo = fi
 				}
 			}
 		}
@@ -85,14 +79,7 @@ func VideoHandler(transcode *services.TranscodeService, faststart *services.Vide
 		// 时返回 304 + 空 body,1GB+ 视频可省下 206 的几 MB。
 		// 304 优先于 Range:浏览器会重新发不带 If-None-Match 的 Range
 		// 拿到实际片段,这是 HTTP 标准行为,主流浏览器都遵守。
-		etag := videoETag(serveInfo)
-		if mediaNotModified(c, etag, serveInfo.ModTime()) {
-			return c.SendStatus(fiber.StatusNotModified)
-		}
-
-		c.Set("Content-Type", videoMime(servePath))
-		c.Set("Accept-Ranges", "bytes")
-		return c.SendFile(servePath, false)
+		return serveMediaFile(c, servePath, videoMime(servePath), "video_not_found")
 	}
 }
 
@@ -293,22 +280,4 @@ func videoMime(path string) string {
 	default:
 		return "application/octet-stream"
 	}
-}
-
-// videoETag 基于「实际发送的文件」的 mtime+size 派生 ETag,带双引号
-// 符合 HTTP 规范(浏览器回传的 If-None-Match 也带双引号,字面相等
-// 才能命中)。
-//
-// 不使用内容的强哈希(没必要也不值得为 1GB+ 视频跑 sha256);
-// mtime+size 在源文件 / 转码 / 重封装结果稳定时也稳定,符合
-// 「弱 ETag」的语义。
-//
-// 与 thumbs.ThumbHandler 的 ETag 行为保持一致(都带双引号,十六进制
-// mtime+size),保证 304 协商在两个端点都能命中。
-//
-// 不能用 fmt.Sprintf("%q...", int64) — %q 会把整数当 Unicode 码点
-// 处理,UnixNano() 这种大数会输出乱码。改用 strconv.Quote 包装。
-func videoETag(info os.FileInfo) string {
-	raw := fmt.Sprintf("%x-%x", info.ModTime().UnixNano(), info.Size())
-	return strconv.Quote(raw)
 }

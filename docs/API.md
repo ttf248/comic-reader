@@ -27,6 +27,8 @@
   - `source_not_found` (404) - 缩略图源文件不存在
   - `video_cover_missing` (404) - 视频封面未生成，前端抽帧后回传
   - `stat_failed` (500) - os.Stat 系统错误
+  - `media_read_failed` (500) - 媒体打开或读取文件信息失败
+  - `invalid_range` (416) - 媒体字节范围无效、不支持多段范围或未命中文件大小
   - `thumbnail_error` (500) - 缩略图生成失败
   - `invalid_resource_id` (400) - 资源 ID 解析失败
   - `album_not_found` (404) - 相册路径不在当前扫描结果中
@@ -159,6 +161,10 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 发送图片或视频。支持 ETag；视频支持 Range，并按需经过转码和 faststart 管线。
 
 前端视频消费使用 `/api/media/:fileId?playback=<不透明播放标识>`。每次播放切换、重试、转码后重新加载和抽帧生成新标识，同次播放的多个 Range 请求沿用同一 URL；标识用于隔离浏览器媒体缓冲。服务端仍只按文件 ID 校验权限并选择当前文件，`playback` 不选择文件版本、不传递路径或凭据，也不替代收藏、历史和活动记录中的资源 ID。直接使用不带标识的资源地址仍须重新验证 HTTP 缓存。
+
+原图与视频的每个响应独立打开最终选择的文件，ETag、Last-Modified、Content-Length 和 Range 总长度来自该次打开的文件信息，不复用旧文件句柄或旧长度。同一路径在响应之间被覆盖、缩小或替换后，无需等待文件服务缓存过期。流在完成或中断后关闭；HEAD、304 和错误响应也释放句柄。
+
+支持单段 `Range: bytes=start-end`、`bytes=start-` 和 `bytes=-count`；范围无效、空后缀或多段范围返回 `416 invalid_range`，携带 `Content-Range: bytes */<当前大小>` 和 `Cache-Control: no-store`，不带 ETag。HEAD 返回当前长度且不传输媒体内容。
 
 响应前确认源路径仍为普通文件；扫描后被目录或其他非普通文件替换时，图片返回 `404 media_not_found`，视频返回 `404 video_not_found`。此检查先于 ETag、Range、转码缓存选择和文件发送，不返回目录重定向或携带本地路径的 `Location`，也不因条件请求返回 304。源文件恢复后，原 ID 可继续使用。
 

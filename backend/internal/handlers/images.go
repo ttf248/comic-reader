@@ -2,10 +2,8 @@ package handlers
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -14,25 +12,12 @@ import (
 	"github.com/tianlongxiang/local-gallery/internal/services"
 )
 
-// imageETag 基于文件 mtime+size 派生 ETag,带双引号(强 ETag 字面相等语义)。
-//
-// 与视频共用同一公式:文件没被改动时 ETag 稳定,源文件改了 ETag 变,
-// 浏览器重新拉;文件 mtime 因复制/解压/同步而刷新是可接受的:
-// 本地画廊不是 CDN,重传一两次反而是「确保用户看到最新版」的行为。
-//
-// 不跑 sha256 等内容哈希:1 张 50MB RAW 拍 sha256 浪费 CPU,用户
-// 感知不到差别,源文件 mtime+size 才是更合适的「弱 ETag」。
-func imageETag(info os.FileInfo) string {
-	return fmt.Sprintf(`"%x-%x"`, info.ModTime().UnixNano(), info.Size())
-}
-
 // ImageHandler 返回资源 ID 指向的原图（支持 Range 请求 + ETag 协商）。
 //
 //	GET /api/media/:id
 //
 // 浏览器原生不识别的格式（HEIC/HEIF）原样返回，由浏览器自身决定
-// 能否解码（Safari 可显示；Chrome/Firefox 不能）。其它格式由
-// Fiber 内置 ServeFile 根据扩展名自动设置 Content-Type + 支持 Range。
+// 能否解码。共用媒体流发送器按扩展名设置 Content-Type，并支持 Range。
 //
 // ETag 协商:
 //   - 第一次响应带 ETag = mtime+size + Cache-Control
@@ -45,28 +30,7 @@ func ImageHandler() fiber.Handler {
 		if path == "" {
 			return writeError(c, fiber.StatusBadRequest, "missing_path", "missing 'path' query parameter")
 		}
-		info, err := os.Stat(path)
-		if err != nil {
-			if os.IsNotExist(err) {
-				return writeError(c, fiber.StatusNotFound, "media_not_found", "media resource was not found")
-			}
-			return writeError(c, fiber.StatusInternalServerError, "media_read_failed", "failed to read media resource")
-		}
-		if !info.Mode().IsRegular() {
-			return writeError(c, fiber.StatusNotFound, "media_not_found", "media resource was not found")
-		}
-		// ETag + 304 协商(命中 If-None-Match 时直接返回,不发 body)
-		etag := imageETag(info)
-		if mediaNotModified(c, etag, info.ModTime()) {
-			return c.SendStatus(fiber.StatusNotModified)
-		}
-		// HEIC/HEIF 等不常见格式显式声明 Content-Type，避免 Fiber
-		// mime 表里没有时落到 application/octet-stream。
-		ext := strings.ToLower(filepath.Ext(path))
-		if ext == ".heic" || ext == ".heif" {
-			c.Set("Content-Type", "image/heic")
-		}
-		return c.SendFile(path, false)
+		return serveMediaFile(c, path, "", "media_not_found")
 	}
 }
 

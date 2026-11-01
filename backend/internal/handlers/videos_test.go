@@ -16,12 +16,10 @@ import (
 	"github.com/tianlongxiang/local-gallery/internal/services"
 )
 
-// TestVideoETagQuoted 验证 videoETag 派生出的 ETag 用双引号包裹。
+// TestMediaETagQuoted 验证 mediaETag 派生出的 ETag 用双引号包裹。
 //
-// 背景：浏览器回传的 If-None-Match 一定带双引号，如果 server 发的 ETag
-// 不带引号，string 永远不匹配，304 协商就废了。这是历史上与
-// ThumbHandler 行为不一致的 bug；本测试守住「带引号」这条契约。
-func TestVideoETagQuoted(t *testing.T) {
+// 文件元数据派生的 ETag 必须带双引号，以匹配客户端的 If-None-Match。
+func TestMediaETagQuoted(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "fake.mp4")
 	if err := os.WriteFile(path, []byte("hello"), 0o644); err != nil {
@@ -31,17 +29,17 @@ func TestVideoETagQuoted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	etag := videoETag(info)
+	etag := mediaETag(info)
 	if !strings.HasPrefix(etag, `"`) || !strings.HasSuffix(etag, `"`) {
-		t.Fatalf("videoETag must be wrapped in double quotes, got %q", etag)
+		t.Fatalf("mediaETag must be wrapped in double quotes, got %q", etag)
 	}
 	if etag == `""` {
-		t.Fatalf("videoETag must not be empty quoted string, got %q", etag)
+		t.Fatalf("mediaETag must not be empty quoted string, got %q", etag)
 	}
 }
 
-// TestVideoETagStable 验证同文件两次调用结果一致（不同时钟漂移）。
-func TestVideoETagStable(t *testing.T) {
+// TestMediaETagStable 验证同文件两次调用结果一致（不同时钟漂移）。
+func TestMediaETagStable(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "fake.mp4")
 	if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
@@ -51,17 +49,17 @@ func TestVideoETagStable(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := videoETag(info)
-	b := videoETag(info)
+	a := mediaETag(info)
+	b := mediaETag(info)
 	if a != b {
-		t.Fatalf("videoETag not stable for same FileInfo: %q vs %q", a, b)
+		t.Fatalf("mediaETag not stable for same FileInfo: %q vs %q", a, b)
 	}
 }
 
-// TestVideoETagChanges 验证 mtime / size 变化时 ETag 也变。
+// TestMediaETagChanges 验证 mtime / size 变化时 ETag 也变。
 //
 // 304 协商的核心就是「内容变了 ETag 必须变」，否则会发回陈旧字节。
-func TestVideoETagChanges(t *testing.T) {
+func TestMediaETagChanges(t *testing.T) {
 	dir := t.TempDir()
 	a := filepath.Join(dir, "a.mp4")
 	b := filepath.Join(dir, "b.mp4")
@@ -78,8 +76,8 @@ func TestVideoETagChanges(t *testing.T) {
 	}
 	ia, _ := os.Stat(a)
 	ib, _ := os.Stat(b)
-	if videoETag(ia) == videoETag(ib) {
-		t.Fatalf("expected different ETag for different mtime, both = %q", videoETag(ia))
+	if mediaETag(ia) == mediaETag(ib) {
+		t.Fatalf("expected different ETag for different mtime, both = %q", mediaETag(ia))
 	}
 
 	// size 不同
@@ -88,8 +86,8 @@ func TestVideoETagChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	ic, _ := os.Stat(c)
-	if videoETag(ia) == videoETag(ic) {
-		t.Fatalf("expected different ETag for different size, both = %q", videoETag(ia))
+	if mediaETag(ia) == mediaETag(ic) {
+		t.Fatalf("expected different ETag for different size, both = %q", mediaETag(ia))
 	}
 }
 

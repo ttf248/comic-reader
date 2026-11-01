@@ -139,7 +139,9 @@ snapshot。stat 全部移到锁外，`flushDebounce=500ms` 异步落盘。
 
 ## 媒体管线
 
-缩略图请求在配置读锁内完成缓存查找及生成，配置热更新和清空缓存使用写锁。尺寸和编码版本参与派生缓存键，HTTP ETag 基于实际 JPEG 字节。图片解码全局最多并发 `min(4, NumCPU)` 个任务，视频封面最多两个任务，同一文件通过 singleflight 去重。原图、视频与缩略图使用 `private, no-cache`，允许缓存但要求重新验证。原图和视频共用 `mediaNotModified`，在条件判断前设置策略、ETag 与 Last-Modified；优先处理 If-None-Match，仅缺省时按秒处理 If-Modified-Since，并移除已消费的时间条件，避免文件服务的二次 304 判断重置响应头。
+缩略图请求在配置读锁内完成缓存查找及生成，配置热更新和清空缓存使用写锁。尺寸和编码版本参与派生缓存键，HTTP ETag 基于实际 JPEG 字节。图片解码全局最多并发 `min(4, NumCPU)` 个任务，视频封面最多两个任务，同一文件通过 singleflight 去重。原图、视频与缩略图使用 `private, no-cache`，允许缓存但要求重新验证。原图和视频共用 `mediaNotModified`，在条件判断前设置策略、ETag 与 Last-Modified；优先处理 If-None-Match，仅缺省时按秒处理 If-Modified-Since。
+
+原图与视频由 `serveMediaFile` 共用流式发送：在路径校验及可选视频管线之后打开最终文件，以同一次 `f.Stat` 的普通文件类型、大小及修改时间生成响应头和 ETag，不使用静态文件服务的句柄缓存。范围解析复用 fasthttp，补充拒绝空后缀等无效结果；完整响应直接复制文件流，局部响应用 SectionReader 限定读取区间，均交由 Fiber 在完成或断连时关闭。HEAD 不发送媒体字节，304 与发送前错误在返回前关闭文件，不产生保留文件句柄的后台任务，也不读取整段媒体到内存。读取、复制和关闭错误去除 PathError 中的本地路径；416 返回统一 JSON 与当前总长度。打开后的外部原地写入仍不构成文件系统事务隔离。
 
 浏览器抽帧回退通过媒体 URL 和浏览器原生 Range 请求按需读取，不先下载整段视频为 Blob。抽取 JPEG 后立即移除视频源并重置媒体元素、释放 canvas；短视频的定位点保持在片尾之前，未知时长等待第 0 帧数据可解码。上传完成后重新探测封面，沿用稳定 URL 交由 HTTP 缓存头验证。
 
