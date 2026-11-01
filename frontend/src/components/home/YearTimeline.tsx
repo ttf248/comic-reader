@@ -94,126 +94,130 @@ function YearCard({
   }
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onCardActivate}
-      onKeyDown={onCardKeyDown}
-      aria-pressed={isActive}
-      className={`group relative aspect-[4/5] rounded-xl overflow-hidden cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 border transition-shadow duration-200 ${
-        isActive
-          ? 'border-accent shadow-lg ring-2 ring-accent/40'
-          : 'border-border hover:shadow-lg'
-      }`}
-    >
-      {/* === 封面区 === */}
-      {validCovers.length === 0 ? (
-        // 0 张：纯色背景 + 中央显示年份
-        <div className="absolute inset-0 bg-bg-subtle flex flex-col items-center justify-center">
-          <div className="text-[10px] uppercase tracking-[0.18em] text-fg-subtle font-medium">
-            {isOther ? '未分类' : '年份'}
-          </div>
-          <div
-            className={`font-display leading-none tracking-[-0.03em] tabular-nums mt-1 ${
-              isOther
-                ? 'text-2xl font-semibold text-fg-muted'
-                : 'text-5xl font-semibold text-fg-muted'
-            }`}
-          >
-            {group.label}
-          </div>
-        </div>
-      ) : validCovers.length === 1 ? (
-        // 1 张：整张封面
-        <img
-          src={thumbUrl(validCovers[0])}
-          alt=""
-          loading="lazy"
-          decoding="async"
-          className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.04] transition-transform duration-500"
-        />
-      ) : (
-        // 2-4+ 张：2x2 拼接（>4 在第 4 格加 "+N" 角标）
-        <div className="absolute inset-0 grid grid-cols-2 grid-rows-2">
-          {validCovers.slice(0, 4).map((p, i) => (
-            <div
-              key={i}
-              className="relative overflow-hidden bg-bg-subtle"
-            >
-              <img
-                src={thumbUrl(p)}
-                alt=""
-                loading="lazy"
-                decoding="async"
-                className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.04] transition-transform duration-500"
-              />
-              {/* 第 4 格：如果总数 > 4，显示 "+N 更多" */}
-              {i === 3 && overflowCount > 0 && (
-                <div className="absolute inset-0 bg-black/55 flex items-center justify-center pointer-events-none">
-                  <div className="text-white font-display font-semibold text-xl tabular-nums leading-none">
-                    +{overflowCount}
-                  </div>
-                </div>
-              )}
+    // 外层只负责定位与裁剪尺寸；真正可点击的是 role=button 的年份卡。
+    // 筛选按钮放在卡片的兄弟位置，而不是嵌套在 role=button 内部：
+    // 嵌套会让按钮上的 Enter/Space 冒泡到卡片并触发主操作（打开相册），
+    // 同时把按钮的 aria-label 拼进卡片的可访问名。
+    <div className="group relative aspect-[4/5]">
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onCardActivate}
+        onKeyDown={onCardKeyDown}
+        aria-pressed={isActive}
+        className={`absolute inset-0 rounded-xl overflow-hidden cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 border transition-shadow duration-200 ${
+          isActive
+            ? 'border-accent shadow-lg ring-2 ring-accent/40'
+            : 'border-border hover:shadow-lg'
+        }`}
+      >
+        {/* === 封面区 === */}
+        {validCovers.length === 0 ? (
+          // 0 张：纯色背景 + 中央显示年份
+          <div className="absolute inset-0 bg-bg-subtle flex flex-col items-center justify-center">
+            <div className="text-[10px] uppercase tracking-[0.18em] text-fg-subtle font-medium">
+              {isOther ? '未分类' : '年份'}
             </div>
-          ))}
-        </div>
-      )}
-
-      {/* === 顶部渐变 + 年份大字（左上）=== */}
-      {validCovers.length > 0 && (
-        <div className="absolute top-0 left-0 right-0 p-3.5 sm:p-4 bg-gradient-to-b from-black/65 via-black/30 to-transparent pointer-events-none">
-          <div className="text-[9px] sm:text-[10px] uppercase tracking-[0.18em] text-white/75 font-medium">
-            {isOther ? '未分类' : '年份'}
+            <div
+              className={`font-display leading-none tracking-[-0.03em] tabular-nums mt-1 ${
+                isOther
+                  ? 'text-2xl font-semibold text-fg-muted'
+                  : 'text-5xl font-semibold text-fg-muted'
+              }`}
+            >
+              {group.label}
+            </div>
           </div>
-          <div
-            className={`font-display leading-none tracking-[-0.03em] tabular-nums text-white mt-1 ${
-              isOther
-                ? 'text-xl sm:text-2xl font-semibold'
-                : 'text-3xl sm:text-4xl font-semibold'
-            }`}
-          >
-            {group.label}
-          </div>
-        </div>
-      )}
-
-      {/* === 底部渐变 + 统计（左下）=== */}
-      <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-3.5 bg-gradient-to-t from-black/65 via-black/25 to-transparent">
-        <div className="flex items-center gap-2.5 text-[11px] text-white/90 tabular-nums">
-          <span className="inline-flex items-center gap-1">
-            <ImageIcon size={10} className="text-white/70" />
-            <span>{formatNum(group.imageTotal)}</span>
-          </span>
-          {group.videoTotal > 0 && (
-            <span className="inline-flex items-center gap-1">
-              <PlayFilledIcon size={8} className="text-white" />
-              <span>{formatNum(group.videoTotal)}</span>
-            </span>
-          )}
-          <span className="ml-auto inline-flex items-center gap-1 text-white/70">
-            <FolderIcon size={10} />
-            <span>{totalCovers}</span>
-          </span>
-        </div>
-        {canOpenDirectly && (
-          <div className="mt-0.5 text-[10px] text-white/55">
-            点击打开
+        ) : validCovers.length === 1 ? (
+          // 1 张：整张封面
+          <img
+            src={thumbUrl(validCovers[0])}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.04] transition-transform duration-500"
+          />
+        ) : (
+          // 2-4+ 张：2x2 拼接（>4 在第 4 格加 "+N" 角标）
+          <div className="absolute inset-0 grid grid-cols-2 grid-rows-2">
+            {validCovers.slice(0, 4).map((p, i) => (
+              <div
+                key={i}
+                className="relative overflow-hidden bg-bg-subtle"
+              >
+                <img
+                  src={thumbUrl(p)}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className="absolute inset-0 w-full h-full object-cover group-hover:scale-[1.04] transition-transform duration-500"
+                />
+                {/* 第 4 格：如果总数 > 4，显示 "+N 更多" */}
+                {i === 3 && overflowCount > 0 && (
+                  <div className="absolute inset-0 bg-black/55 flex items-center justify-center pointer-events-none">
+                    <div className="text-white font-display font-semibold text-xl tabular-nums leading-none">
+                      +{overflowCount}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         )}
+
+        {/* === 顶部渐变 + 年份大字（左上）=== */}
+        {validCovers.length > 0 && (
+          <div className="absolute top-0 left-0 right-0 p-3.5 sm:p-4 bg-gradient-to-b from-black/65 via-black/30 to-transparent pointer-events-none">
+            <div className="text-[9px] sm:text-[10px] uppercase tracking-[0.18em] text-white/75 font-medium">
+              {isOther ? '未分类' : '年份'}
+            </div>
+            <div
+              className={`font-display leading-none tracking-[-0.03em] tabular-nums text-white mt-1 ${
+                isOther
+                  ? 'text-xl sm:text-2xl font-semibold'
+                  : 'text-3xl sm:text-4xl font-semibold'
+              }`}
+            >
+              {group.label}
+            </div>
+          </div>
+        )}
+
+        {/* === 底部渐变 + 统计（左下）=== */}
+        <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-3.5 bg-gradient-to-t from-black/65 via-black/25 to-transparent">
+          <div className="flex items-center gap-2.5 text-[11px] text-white/90 tabular-nums">
+            <span className="inline-flex items-center gap-1">
+              <ImageIcon size={10} className="text-white/70" />
+              <span>{formatNum(group.imageTotal)}</span>
+            </span>
+            {group.videoTotal > 0 && (
+              <span className="inline-flex items-center gap-1">
+                <PlayFilledIcon size={8} className="text-white" />
+                <span>{formatNum(group.videoTotal)}</span>
+              </span>
+            )}
+            <span className="ml-auto inline-flex items-center gap-1 text-white/70">
+              <FolderIcon size={10} />
+              <span>{totalCovers}</span>
+            </span>
+          </div>
+          {canOpenDirectly && (
+            <div className="mt-0.5 text-[10px] text-white/55">
+              点击打开
+            </div>
+          )}
+        </div>
       </div>
 
       {/* === 筛选小按钮：右上角漏斗 ===
-           只切换 yearFilter（不触发主点击，不导航）。给已熟悉筛选语义的用户用。 */}
+           只切换 yearFilter（不触发主点击，不导航）。给已熟悉筛选语义的用户用。
+           它是年份卡的兄弟节点：焦点停在按钮上时 Enter/Space 不会被卡片接管。 */}
       <button
         type="button"
-        onClick={(e) => {
-          e.stopPropagation()
-          triggerFilter()
-        }}
+        onClick={() => triggerFilter()}
         title={isActive ? '取消筛选' : '只筛选该年份'}
         aria-label={isActive ? '取消年份筛选' : '筛选该年份'}
-        className={`absolute top-2 right-2 inline-flex items-center justify-center w-6 h-6 rounded-md backdrop-blur transition-colors ${
+        className={`absolute top-2 right-2 z-10 inline-flex items-center justify-center w-6 h-6 rounded-md backdrop-blur transition-colors ${
           isActive
             ? 'bg-accent text-accent-contrast'
             : 'bg-black/40 text-white/85 hover:bg-black/55 hover:text-white'

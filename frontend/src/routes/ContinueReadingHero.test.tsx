@@ -95,6 +95,20 @@ describe('ContinueReadingHero', () => {
     expect(onContinue).not.toHaveBeenCalled()
   })
 
+  it('焦点在 X 按钮上按 Enter 时不会触发外层跳转', () => {
+    const { onContinue } = renderHero([makeCard('/a', 'A', 5, 20)])
+    const xBtn = screen.getByLabelText('将A标记为已读')
+    // keydown 从按钮冒泡；外层卡片不得把它当成自己的主操作。
+    fireEvent.keyDown(xBtn, { key: 'Enter' })
+    expect(onContinue).not.toHaveBeenCalled()
+  })
+
+  it('卡片的可访问名不包含 X 按钮的文案', () => {
+    const { container } = renderHero([makeCard('/a', 'A', 5, 20)])
+    const card = container.querySelector('[role="button"]') as HTMLElement
+    expect(card).not.toHaveAccessibleName(/标记为已读/)
+  })
+
   it('点 清空 链接触发 onClearAll', () => {
     const { onClearAll } = renderHero([makeCard('/a', 'A', 1, 10)])
     const clearBtn = screen.getByTitle(/把当前所有继续阅读相册标记为已读/)

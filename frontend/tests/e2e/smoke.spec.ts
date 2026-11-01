@@ -4247,3 +4247,32 @@ test("阅读器「原始」适配模式按像素显示图片，超出视口时�
   });
   expect(scrolled.scrollWidth).toBeGreaterThan(scrolled.scrollLeft);
 });
+
+test("时间线年份卡的筛选按钮可访问名不与卡片本身混淆", async ({
+  page,
+  request,
+}) => {
+  const nodes = await scannedNodes(request);
+  expect(nodes.length).toBeGreaterThan(0);
+  await page.goto("/");
+
+  const matches = page.getByRole("button", { name: "筛选该年份" });
+  await expect(matches.first()).toBeVisible();
+  // 只有真正的筛选按钮才应该被匹配到：年份卡的可访问名不能被按钮的 aria-label 污染，
+  // 否则按名称定位（含子串匹配）会命中卡片而不是筛选按钮。
+  const labels = await matches.evaluateAll((elements) =>
+    elements.map((element) => element.getAttribute("aria-label")),
+  );
+  expect(labels.length).toBeGreaterThan(0);
+  expect(labels.every((label) => label === "筛选该年份")).toBe(true);
+
+  // 点击筛选按钮只切换下方网格的年份筛选，不跳转相册。
+  await page
+    .getByRole("button", { name: "筛选该年份", exact: true })
+    .first()
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "该年份的图像" }),
+  ).toBeVisible();
+  await expect(page).toHaveURL(/\/$/);
+});

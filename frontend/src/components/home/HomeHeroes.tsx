@@ -169,64 +169,66 @@ function ContinueCard({
       : null;
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={onClick}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onClick();
-        }
-      }}
-      className="group block text-left rounded-lg border border-border-faint bg-bg-elevated overflow-hidden hover:border-border-strong hover:shadow-md transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-    >
-      <div className="relative aspect-[3/4] bg-bg-subtle overflow-hidden">
-        {card.coverPath ? (
-          <img
-            src={thumbUrl(card.coverPath)}
-            alt={card.title}
-            loading="lazy"
-            decoding="async"
-            className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-fg-subtle">
-            <FolderIcon size={20} />
-          </div>
-        )}
-        <button
-          type="button"
-          onClick={(event) => {
+    // 外层只负责卡片外观；真正可点击的是 role=button 的内容区。
+    // 「标记为已读」按钮放在内容区的兄弟位置，而不是嵌套在 role=button 内部：
+    // 嵌套会让按钮上的 Enter/Space 冒泡到卡片并触发跳转（而不是移除），
+    // 同时把按钮的 aria-label 拼进卡片的可访问名。
+    <div className="group relative rounded-lg border border-border-faint bg-bg-elevated overflow-hidden hover:border-border-strong hover:shadow-md transition-all">
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onClick}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
-            event.stopPropagation();
-            onRemove();
-          }}
-          className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/55 text-white/90 hover:bg-danger hover:text-white flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-all"
-          title={`将「${card.title}」标记为已读`}
-          aria-label={`将${card.title}标记为已读`}
-        >
-          <CloseIcon size={12} />
-        </button>
-        {progressPercent !== null && progress && (
-          <div className="absolute bottom-0 left-0 right-0 px-2 py-1.5 bg-gradient-to-t from-black/65 to-transparent">
-            <div className="text-white/95 text-[10px] font-medium tabular-nums">
-              看到 {progress.index + 1} / {progress.total}
+            onClick();
+          }
+        }}
+        className="block w-full text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      >
+        <div className="relative aspect-[3/4] bg-bg-subtle overflow-hidden">
+          {card.coverPath ? (
+            <img
+              src={thumbUrl(card.coverPath)}
+              alt={card.title}
+              loading="lazy"
+              decoding="async"
+              className="w-full h-full object-cover group-hover:scale-[1.03] transition-transform"
+            />
+          ) : (
+            <div className="w-full h-full flex items-center justify-center text-fg-subtle">
+              <FolderIcon size={20} />
             </div>
-            <div className="mt-1 h-0.5 bg-white/20 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-accent"
-                style={{ width: `${progressPercent}%` }}
-              />
+          )}
+          {progressPercent !== null && progress && (
+            <div className="absolute bottom-0 left-0 right-0 px-2 py-1.5 bg-gradient-to-t from-black/65 to-transparent">
+              <div className="text-white/95 text-[10px] font-medium tabular-nums">
+                看到 {progress.index + 1} / {progress.total}
+              </div>
+              <div className="mt-1 h-0.5 bg-white/20 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-accent"
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
             </div>
+          )}
+        </div>
+        <div className="px-2 py-1.5">
+          <div className="text-[12px] font-medium text-fg line-clamp-1 group-hover:text-accent transition-colors">
+            {card.title}
           </div>
-        )}
-      </div>
-      <div className="px-2 py-1.5">
-        <div className="text-[12px] font-medium text-fg line-clamp-1 group-hover:text-accent transition-colors">
-          {card.title}
         </div>
       </div>
+      <button
+        type="button"
+        onClick={() => onRemove()}
+        className="absolute top-1.5 right-1.5 z-10 w-6 h-6 rounded-full bg-black/55 text-white/90 hover:bg-danger hover:text-white flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-all"
+        title={`将「${card.title}」标记为已读`}
+        aria-label={`将${card.title}标记为已读`}
+      >
+        <CloseIcon size={12} />
+      </button>
     </div>
   );
 }
