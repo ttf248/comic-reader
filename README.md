@@ -59,6 +59,7 @@
 ### 视频
 
 - 原生 `<video>` 播放，Range / ETag 协商
+- 视频左右键定位 ±5 秒、空格播放/暂停；PageUp/PageDown 换片，Home/End 定位首尾，Esc 返回。图片显示模式不影响视频计数和快捷键
 - 优先用 ffprobe 读取时长、分辨率和码率；仅有 ffmpeg 时自动回退，探测超时不会缓存部分结果
 - faststart：自动 remux，moov 跑到 mdat 前面，"0:00 卡死"问题自动消失
 - **自动转码**：AV1 / HEVC / ProRes / 未知编码 → H.264 + AAC 喂给浏览器

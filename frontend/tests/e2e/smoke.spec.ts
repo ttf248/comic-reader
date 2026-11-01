@@ -856,6 +856,84 @@ for (const albumName of ["sample-mixed-cover", "sample-video-cover"]) {
   });
 }
 
+for (const mode of ["double", "continuous"] as const) {
+  test(`视频快捷键不受图片 ${mode} 模式干扰，方向键定位、翻页键换片、Esc 返回`, async ({
+    page,
+  }) => {
+    const nodes = await scannedNodes(page.request);
+    const album = nodes.find((node) => node.name === "sample-video-shortcuts")!;
+    expect(album).toBeDefined();
+    await page.addInitScript((mode) => {
+      localStorage.setItem(
+        "local-gallery",
+        JSON.stringify({
+          state: { mode, fit: "fit", direction: "ltr" },
+          version: 0,
+        }),
+      );
+    }, mode);
+    await page.goto(`/albums/${album.id}`);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText(
+      album.name,
+    );
+    await page.goto(`/gallery?path=${album.id}&type=video&index=1`);
+    const video = page.locator("video");
+    await expect
+      .poll(() =>
+        video.evaluate((element: HTMLVideoElement) => element.readyState),
+      )
+      .toBeGreaterThanOrEqual(1);
+    await video.evaluate((element: HTMLVideoElement) => {
+      element.pause();
+      element.currentTime = 5;
+      if (document.activeElement instanceof HTMLElement)
+        document.activeElement.blur();
+    });
+    await expect(page.locator("header h1")).toContainText("2 / 3");
+    const source = await video.getAttribute("src");
+    await page.keyboard.press("ArrowRight");
+    await expect
+      .poll(() =>
+        video.evaluate((element: HTMLVideoElement) => element.currentTime),
+      )
+      .toBeCloseTo(10, 1);
+    await expect(page).toHaveURL(/type=video&index=1$/);
+    await expect(video).toHaveAttribute("src", source!);
+    await page.keyboard.press("ArrowLeft");
+    await expect
+      .poll(() =>
+        video.evaluate((element: HTMLVideoElement) => element.currentTime),
+      )
+      .toBeCloseTo(5, 1);
+    await page.keyboard.press("Space");
+    await expect
+      .poll(() => video.evaluate((element: HTMLVideoElement) => element.paused))
+      .toBe(false);
+    await page.keyboard.press("Space");
+    await expect
+      .poll(() => video.evaluate((element: HTMLVideoElement) => element.paused))
+      .toBe(true);
+    for (const key of ["1", "2", "3", "f", "l", "r"])
+      await page.keyboard.press(key);
+    expect(
+      await page.evaluate(
+        () => JSON.parse(localStorage.getItem("local-gallery")!).state,
+      ),
+    ).toEqual({ mode, fit: "fit", direction: "ltr" });
+    for (const [key, index] of [
+      ["PageDown", 2],
+      ["PageUp", 1],
+      ["Home", 0],
+      ["End", 2],
+    ] as const) {
+      await page.keyboard.press(key);
+      await expect(page).toHaveURL(new RegExp(`type=video&index=${index}$`));
+    }
+    await page.keyboard.press("Escape");
+    await expect(page).toHaveURL(new RegExp(`/albums/${album.id}$`));
+  });
+}
+
 for (const failure of ["history", "nodes"] as const) {
   test(`最近阅读 ${failure} 读取失败不显示为空且可重试`, async ({ page }) => {
     const nodes = await scannedNodes(page.request);

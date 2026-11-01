@@ -704,7 +704,7 @@ export default function Gallery() {
   }, []);
 
   useEffect(() => {
-    if (!slideshow) return;
+    if (isVideo || !slideshow) return;
     const t = setInterval(() => {
       const cur = useGalleryStore.getState().index;
       const step = mode === "double" ? 2 : 1;
@@ -718,7 +718,7 @@ export default function Gallery() {
     }, slideshowInterval);
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [slideshow, slideshowInterval, images.length, setIndex, mode]);
+  }, [isVideo, slideshow, slideshowInterval, images.length, setIndex, mode]);
 
   // 视频项由 URL 的 index 参数定位（以 initialIndex 为真相源），
   // 切视频必须改 URL 的 index 参数，
@@ -926,46 +926,53 @@ export default function Gallery() {
   }, [pathParam, queryClient, pushToast]);
 
   useKeyboard({
-    arrowleft: prev,
-    arrowright: next,
+    // 视频方向键和空格由 VideoPlayer 处理，不注册图片操作。
+    ...(isVideo
+      ? {}
+      : {
+          arrowleft: prev,
+          arrowright: next,
+          "+": () => useGalleryStore.getState().zoomIn(),
+          "-": () => useGalleryStore.getState().zoomOut(),
+          "=": () => useGalleryStore.getState().zoomIn(),
+          "0": () => useGalleryStore.getState().zoomReset(),
+          r: () => useGalleryStore.getState().rotate(90),
+          space: () => useGalleryStore.getState().toggleSlideshow(),
+          i: () => setShowInfo((v) => !v),
+          "1": () => useGalleryStore.getState().setMode("single"),
+          "2": () => useGalleryStore.getState().setMode("continuous"),
+          "3": () => useGalleryStore.getState().setMode("double"),
+          f: () => useGalleryStore.getState().cycleFit(),
+          l: () => {
+            const cur = useGalleryStore.getState().direction;
+            useGalleryStore
+              .getState()
+              .setDirection(cur === "ltr" ? "rtl" : "ltr");
+          },
+        }),
     pageup: prev,
     pagedown: next,
     home: () => {
-      if (useGalleryStore.getState().mode === "continuous") {
-        scrollContinuousTo(0);
-      } else if (isVideo) {
+      if (isVideo) {
         goToVideo(0);
+      } else if (useGalleryStore.getState().mode === "continuous") {
+        scrollContinuousTo(0);
       } else {
         setIndex(0);
       }
     },
     end: () => {
-      if (useGalleryStore.getState().mode === "continuous") {
-        scrollContinuousTo(images.length - 1);
-      } else if (isVideo) {
+      if (isVideo) {
         if (videos.length > 0) goToVideo(videos.length - 1);
+      } else if (useGalleryStore.getState().mode === "continuous") {
+        scrollContinuousTo(images.length - 1);
       } else {
         setIndex(images.length - 1);
       }
     },
-    "+": () => useGalleryStore.getState().zoomIn(),
-    "-": () => useGalleryStore.getState().zoomOut(),
-    "=": () => useGalleryStore.getState().zoomIn(),
-    "0": () => useGalleryStore.getState().zoomReset(),
-    r: () => useGalleryStore.getState().rotate(90),
     f11: () => toggleFullscreenImpl(),
-    space: () => useGalleryStore.getState().toggleSlideshow(),
-    i: () => setShowInfo((v) => !v),
     "ctrl+/": () => setShowHelp((v) => !v),
     "?": () => setShowHelp((v) => !v),
-    "1": () => useGalleryStore.getState().setMode("single"),
-    "2": () => useGalleryStore.getState().setMode("continuous"),
-    "3": () => useGalleryStore.getState().setMode("double"),
-    f: () => useGalleryStore.getState().cycleFit(),
-    l: () => {
-      const cur = useGalleryStore.getState().direction;
-      useGalleryStore.getState().setDirection(cur === "ltr" ? "rtl" : "ltr");
-    },
     n: () => goAdjacent(1),
     p: () => goAdjacent(-1),
     s: () => onToggleFavorite(),
@@ -974,10 +981,8 @@ export default function Gallery() {
     escape: () => {
       if (showHelp) setShowHelp(false);
       else if (showInfo) setShowInfo(false);
-      // images.length === 0 时表示仍在 loading/empty/error 态：
-      // 按 ESC 不应退到上一页，避免用户误操作导致上下文丢失（特别是切 album
-      // 期间按 ESC 直接退回 Home，体验割裂）。
-      else if (images.length > 0) navigate(-1);
+      // 仅在当前媒体就绪后返回；视频不依赖图片列表。
+      else if (ready) navigate(-1);
     },
   });
 

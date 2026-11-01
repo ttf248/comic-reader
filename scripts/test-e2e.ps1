@@ -81,6 +81,14 @@ try {
   [System.IO.File]::WriteAllBytes((Join-Path $mixedCoverDir "page.png"), $pngBytes)
   [System.IO.File]::WriteAllBytes((Join-Path $mixedCoverDir "page-2.png"), $pngBytes)
 
+  # 20 秒、16×16 VP8：三段可实际解码的视频，避免快进 5 秒直接到片尾。
+  $keyboardVideoDir = Join-Path (Join-Path $testRoot "media") "sample-video-shortcuts"
+  New-Item -ItemType Directory -Path $keyboardVideoDir -Force | Out-Null
+  $keyboardVideoBytes = [Convert]::FromBase64String("GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAAVnEU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHWTbuMU6uEElTDZ1OsggEyTbuMU6uEHFO7a1OsggVR7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsCrXsYMPQkBNgIxMYXZmNjMuMS4xMDFXQYxMYXZmNjMuMS4xMDFEiYhA04gAAAAAABZUrmvXrgEAAAAAAABO14EBc8WIOcx4BAve1WucgQAitZyDdW5kiIEAhoVWX1ZQOIOBASPjg4Q7msoA4JCwgRC6gRCagQJVsIRVuYEBVe6BAOwBAAAAAAAAAgAAElTDZ/pzc59jwIBnyJlFo4dFTkNPREVSRIeMTGF2ZjYzLjEuMTAxc3PVY8CLY8WIOcx4BAve1WtnyKBFo4dFTkNPREVSRIeTTGF2YzYzLjEuMTAxIGxpYnZweGfIoUWjiERVUkFUSU9ORIeTMDA6MDA6MjAuMDAwMDAwMDAwAB9DtnVBGeeBAKO9gQAAgLACAJ0BKhAAEAAARwiFhYiZhIgCAgJ1qgP4Agz9+wD+/00S//xKp/Eqn8Sqf/Eqn/0Yfww/hh/eEKOpgQPoALEBAAUQrAAYADA/9AwA7wD+8mav/XAfnAfnAfzLeB4fh4fhugCjqYEH0ACxAQAFEKwAGAAwP/QMAO8A/vJmr/1wH5wH5wH8y3geH4eH4boAo6mBC7gAsQEABRCsABgAMD/0DADvAP7yZq/9cB+cB+cB/Mt4Hh+Hh+G6AKOpgQ+gALEBAAUQrAAYADA/9AwA7wD+8mav/XAfnAfnAfzLeB4fh4fhugCjqYETiACxAQAFEKwAGAAwP/QMAO8A/vJmr/1wH5wH5wH8y3geH4eH4boAH0O2dUEL54IXcKOpgQAAALEBAAUQrAAYADA/9AwA7wD+8mav/XAfnAfnAfzLeB4fh4fhugCjroED6ACxAQAFEBAUYADA/9AwA7wA/v9NEv/8SqfxKp/Eqn/xKp/9GH8MP4Yf3hCjqYEH0ACxAQAFEKwAGAAwP/QMAO8A/vJmr/1wH5wH5wH8y3geH4eH4boAo6mBC7gAsQEABRCsABgAMD/0DADvAP7yZq/9cB+cB+cB/Mt4Hh+Hh+G6AKOpgQ+gALEBAAUQrAAYADA/9AwA7wD+8mav/XAfnAfnAfzLeB4fh4fhugCjqYETiACxAQAFEKwAGAAwP/QMAO8A/vJmr/1wH5wH5wH8y3geH4eH4boAH0O2dUEL54Iu4KOpgQAAALEBAAUQrAAYADA/9AwA7wD+8mav/XAfnAfnAfzLeB4fh4fhugCjqYED6ACxAQAFEKwAGAAwP/QMAO8A/vJmr/1wH5wH5wH8y3geH4eH4boAo66BB9AAsQEABRAQFGAAwP/QMAO8AP7/TRL//Eqn8SqfxKp/8Sqf/Rh/DD+GH94Qo6mBC7gAsQEABRCsABgAMD/0DADvAP7yZq/9cB+cB+cB/Mt4Hh+Hh+G6AKOpgQ+gALEBAAUQrAAYADA/9AwA7wD+8mav/XAfnAfnAfzLeB4fh4fhugCjqYETiACxAQAFEKwAGAAwP/QMAO8A/vJmr/1wH5wH5wH8y3geH4eH4boAH0O2ddrngkZQo6mBAAAAsQEABRCsABgAMD/0DADvAP7yZq/9cB+cB+cB/Mt4Hh+Hh+G6AKOpgQPoALEBAAUQrAAYADA/9AwA7wD+8mav/XAfnAfnAfzLeB4fh4fhugAcU7trkbuPs4EAt4r3gQHxggGx8IED")
+  foreach ($suffix in @("A", "B", "C")) {
+    [System.IO.File]::WriteAllBytes((Join-Path $keyboardVideoDir "clip-$suffix.webm"), $keyboardVideoBytes)
+  }
+
   $mediaPathYaml = (Join-Path $testRoot "media").Replace("\", "/")
   $cachePathYaml = (Join-Path $testRoot "cache").Replace("\", "/")
   $staticPathYaml = $staticRoot.Replace("\", "/")

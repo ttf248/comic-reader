@@ -90,10 +90,11 @@ export default function GalleryHeader({
 
   // 显示 / 翻页禁用都用 item index；未传时回退到 index（仅图库模式安全）
   const displayIndex = itemIndex !== undefined ? itemIndex : Math.floor(index);
+  const isVideo = itemIndex !== undefined;
 
   // 双页模式显示「L-R / total」；否则「N / total」
   const counterText = (() => {
-    if (mode === "double") {
+    if (!isVideo && mode === "double") {
       const hi = Math.min(displayIndex + 2, total);
       return `${displayIndex + 1}–${hi} / ${total}`;
     }
@@ -141,14 +142,14 @@ export default function GalleryHeader({
         <HeaderIconButton
           onClick={onPrev}
           disabled={displayIndex <= 0}
-          title="上一张 (←)"
+          title={isVideo ? "上一个视频 (PageUp)" : "上一张 (←)"}
         >
           <ChevronLeftIcon size={13} />
         </HeaderIconButton>
         <HeaderIconButton
           onClick={onNext}
           disabled={displayIndex >= total - 1}
-          title="下一张 (→)"
+          title={isVideo ? "下一个视频 (PageDown)" : "下一张 (→)"}
         >
           <ChevronRightIcon size={13} />
         </HeaderIconButton>
