@@ -1,4 +1,5 @@
 import { useEffect, useRef, type ReactNode } from "react";
+import { handleMenuKeyDown } from "../../utils/menuKeyboard";
 
 export interface MenuItem {
   id: string;
@@ -35,7 +36,7 @@ export default function ContextMenu({ x, y, items, onSelect, onClose }: Props) {
     const firstItem = ref.current?.querySelector<HTMLButtonElement>(
       "button:not(:disabled)",
     );
-    firstItem?.focus();
+    (firstItem ?? menu)?.focus();
     return () => {
       const active = document.activeElement;
       if (
@@ -68,17 +69,12 @@ export default function ContextMenu({ x, y, items, onSelect, onClose }: Props) {
     const fn = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) onClose();
     };
-    const esc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
     const timer = window.setTimeout(() => {
       window.addEventListener("mousedown", fn);
-      window.addEventListener("keydown", esc);
     }, 0);
     return () => {
       window.clearTimeout(timer);
       window.removeEventListener("mousedown", fn);
-      window.removeEventListener("keydown", esc);
     };
   }, [onClose]);
 
@@ -88,7 +84,12 @@ export default function ContextMenu({ x, y, items, onSelect, onClose }: Props) {
       style={{ position: "fixed", top: y, left: x, zIndex: 1000 }}
       className="min-w-[180px] bg-bg-elevated border border-border rounded-lg shadow-lg py-1 fade-up text-[13px]"
       role="menu"
+      tabIndex={-1}
       aria-label="上下文菜单"
+      onKeyDown={(event) => handleMenuKeyDown(event, onClose)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) onClose();
+      }}
     >
       {items.map((it, i) =>
         "separator" in it ? (

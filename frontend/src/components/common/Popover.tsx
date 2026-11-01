@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
+import { handleMenuKeyDown } from "../../utils/menuKeyboard";
 
 type TriggerProps = {
   "aria-expanded"?: boolean;
@@ -54,6 +55,7 @@ export default function Popover({
   );
   const triggerRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const focusedMenuRef = useRef<HTMLDivElement | null>(null);
   const wasOpenRef = useRef(false);
   const menuFocusedRef = useRef(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
@@ -92,14 +94,9 @@ export default function Popover({
       if (triggerRef.current?.contains(t)) return;
       setOpen(false);
     };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
     document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
     return () => {
       document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
     };
   }, [open, setOpen]);
 
@@ -110,22 +107,28 @@ export default function Popover({
         const trigger = triggerRef.current?.querySelector<HTMLElement>(
           'button, a, [tabindex]:not([tabindex="-1"])',
         );
-        trigger?.focus();
+        const active = document.activeElement;
+        if (
+          active === document.body ||
+          (active instanceof Node && focusedMenuRef.current?.contains(active))
+        ) {
+          trigger?.focus({ preventScroll: true });
+        }
       }
       wasOpenRef.current = false;
       menuFocusedRef.current = false;
+      focusedMenuRef.current = null;
       return;
     }
 
     wasOpenRef.current = true;
     if (!pos || menuFocusedRef.current) return;
+    focusedMenuRef.current = menuRef.current;
     const firstItem = menuRef.current?.querySelector<HTMLButtonElement>(
       '[role="menuitem"]:not(:disabled)',
     );
-    if (firstItem) {
-      firstItem.focus();
-      menuFocusedRef.current = true;
-    }
+    (firstItem ?? menuRef.current)?.focus();
+    menuFocusedRef.current = true;
   }, [open, pos]);
 
   const handleTriggerClick = (e: React.MouseEvent) => {
@@ -159,6 +162,14 @@ export default function Popover({
             <div
               ref={menuRef}
               role="menu"
+              tabIndex={-1}
+              onKeyDown={(event) =>
+                handleMenuKeyDown(event, () => setOpen(false))
+              }
+              onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget))
+                  setOpen(false);
+              }}
               style={{
                 position: "fixed",
                 top: pos.top,

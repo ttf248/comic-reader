@@ -862,6 +862,81 @@ for (const albumName of ["sample-mixed-cover", "sample-video-cover"]) {
 }
 
 for (const kind of ["image", "video"] as const) {
+  for (const menuType of ["popover", "context"] as const) {
+    test(`${kind} 阅读器 ${menuType} 菜单独立处理方向键和 Esc`, async ({
+      page,
+    }) => {
+      const nodes = await scannedNodes(page.request);
+      const album = nodes.find(
+        (node) =>
+          node.name ===
+          (kind === "image" ? "sample-album" : "sample-video-shortcuts"),
+      )!;
+      expect(album).toBeDefined();
+      await page.goto(`/albums/${album.id}`);
+      await expect(page.getByRole("heading", { level: 1 })).toContainText(
+        album.name,
+      );
+      await page.goto(`/gallery?path=${album.id}&type=${kind}&index=0`);
+      const video = page.locator("video");
+      if (kind === "video") {
+        await expect
+          .poll(() =>
+            video.evaluate((element: HTMLVideoElement) => element.readyState),
+          )
+          .toBeGreaterThanOrEqual(1);
+        await video.evaluate((element: HTMLVideoElement) => {
+          element.pause();
+          element.currentTime = 5;
+          element.volume = 1;
+        });
+      } else await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("1");
+      const initialURL = page.url();
+      const opener = page.getByTitle("更多", { exact: true });
+      if (menuType === "popover") await opener.click();
+      else
+        await page
+          .locator(kind === "video" ? "video" : "[data-image-gallery]")
+          .click({ button: "right" });
+      const menu = page.getByRole("menu");
+      await expect(menu).toBeVisible();
+      const enabled = menu.locator('[role="menuitem"]:not(:disabled)');
+      const count = await enabled.count();
+      expect(count).toBeGreaterThan(0);
+      await expect(enabled.first()).toBeFocused();
+      await page.keyboard.press("ArrowDown");
+      await expect(enabled.nth(count > 1 ? 1 : 0)).toBeFocused();
+      if (kind === "video")
+        expect(
+          await video.evaluate((element: HTMLVideoElement) => element.volume),
+        ).toBe(1);
+      await page.keyboard.press("ArrowUp");
+      await expect(enabled.first()).toBeFocused();
+      await page.keyboard.press("End");
+      await expect(enabled.last()).toBeFocused();
+      await page.keyboard.press("Home");
+      await expect(enabled.first()).toBeFocused();
+      await page.keyboard.press("ArrowRight");
+      await page.keyboard.press("PageDown");
+      await expect(page).toHaveURL(initialURL);
+      if (kind === "video")
+        await expect
+          .poll(() =>
+            video.evaluate((element: HTMLVideoElement) => element.currentTime),
+          )
+          .toBeCloseTo(5, 1);
+      else await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("1");
+      await page.keyboard.press("Escape");
+      await expect(menu).not.toBeVisible();
+      await expect(page).toHaveURL(initialURL);
+      if (menuType === "popover") await expect(opener).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(page).toHaveURL(new RegExp(`/albums/${album.id}$`));
+    });
+  }
+}
+
+for (const kind of ["image", "video"] as const) {
   test(`${kind} 阅读器保留按钮空格激活与系统修饰组合`, async ({ page }) => {
     const nodes = await scannedNodes(page.request);
     const album = nodes.find(
