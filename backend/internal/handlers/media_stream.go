@@ -63,7 +63,7 @@ func serveMediaFile(c *fiber.Ctx, path, contentType, notFoundCode string) error 
 	c.Set("Content-Type", contentType)
 	c.Set("Accept-Ranges", "bytes")
 	start, end := 0, size-1
-	if header := c.Get("Range"); header != "" {
+	if header := c.Get("Range"); header != "" && mediaRangeMatches(c.Get("If-Range"), etag, info.ModTime()) {
 		start, end, err = fasthttp.ParseByteRange([]byte(header), size)
 		if err != nil || start < 0 || end < start || end >= size {
 			c.Response().Header.Del("ETag")

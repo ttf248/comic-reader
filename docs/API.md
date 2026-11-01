@@ -158,13 +158,15 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 ### `GET /api/media/:fileId`
 
-发送图片或视频。支持 ETag；视频支持 Range，并按需经过转码和 faststart 管线。
+发送图片或视频，支持 ETag 和 Range；视频按需经过转码和 faststart 管线。
 
 前端视频消费使用 `/api/media/:fileId?playback=<不透明播放标识>`。每次播放切换、重试、转码后重新加载和抽帧生成新标识，同次播放的多个 Range 请求沿用同一 URL；标识用于隔离浏览器媒体缓冲。服务端仍只按文件 ID 校验权限并选择当前文件，`playback` 不选择文件版本、不传递路径或凭据，也不替代收藏、历史和活动记录中的资源 ID。直接使用不带标识的资源地址仍须重新验证 HTTP 缓存。
 
 原图与视频的每个响应独立打开最终选择的文件，ETag、Last-Modified、Content-Length 和 Range 总长度来自该次打开的文件信息，不复用旧文件句柄或旧长度。同一路径在响应之间被覆盖、缩小或替换后，无需等待文件服务缓存过期。流在完成或中断后关闭；HEAD、304 和错误响应也释放句柄。
 
-支持单段 `Range: bytes=start-end`、`bytes=start-` 和 `bytes=-count`；范围无效、空后缀或多段范围返回 `416 invalid_range`，携带 `Content-Range: bytes */<当前大小>` 和 `Cache-Control: no-store`，不带 ETag。HEAD 返回当前长度且不传输媒体内容。
+支持单段 `Range: bytes=start-end`、`bytes=start-` 和 `bytes=-count`。未带 `If-Range`，或其值为当前强 ETag、与 Last-Modified 精确到秒相同的 HTTP 日期时，按范围返回 `206`。`If-Range` 过期、为弱 ETag、ETag 列表、无效值或不匹配的日期时，忽略 Range 并返回完整当前文件（`200`，不带 Content-Range），即使该 Range 越界也不会返回 416。常规缓存条件先于 If-Range 判断；匹配的 If-None-Match 仍返回 304。
+
+需要处理范围时，无效范围、空后缀或多段范围返回 `416 invalid_range`，携带 `Content-Range: bytes */<当前大小>` 和 `Cache-Control: no-store`，不带 ETag。HEAD 不传输媒体内容；不带 Range 时返回当前完整长度。
 
 响应前确认源路径仍为普通文件；扫描后被目录或其他非普通文件替换时，图片返回 `404 media_not_found`，视频返回 `404 video_not_found`。此检查先于 ETag、Range、转码缓存选择和文件发送，不返回目录重定向或携带本地路径的 `Location`，也不因条件请求返回 304。源文件恢复后，原 ID 可继续使用。
 
