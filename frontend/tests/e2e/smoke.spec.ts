@@ -4151,3 +4151,29 @@ test("阅读器按 G 跳页时预填值被选中，输入页码直接替换而�
 
   await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("100");
 });
+
+test("阅读器放大与旋转真正作用到图片上", async ({ page }) => {
+  const nodes = await scannedNodes(page.request);
+  const album = nodes.find((node) => node.name === "sample-paged-images");
+  expect(album).toBeDefined();
+  await page.goto(`/gallery?path=${encodeURIComponent(album!.id)}&index=0`);
+  await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("1");
+
+  const img = page.locator("[data-image-gallery] img").first();
+  const matrix = async () =>
+    img.evaluate((element) => {
+      const value = getComputedStyle(element).transform;
+      return (value.match(/-?[\d.]+/g) ?? []).map(Number);
+    });
+
+  // 初始为原图
+  expect((await matrix())[0]).toBeCloseTo(1, 1);
+  // 放大：矩阵的缩放分量必须真的变大（而不是只有右侧面板的数字变了）
+  await page.keyboard.press("+");
+  await expect.poll(async () => (await matrix())[0]).toBeGreaterThan(1.1);
+  // 旋转 90°：矩阵出现旋转分量
+  await page.keyboard.press("r");
+  await expect.poll(async () => Math.abs((await matrix())[1])).toBeGreaterThan(
+    0.5,
+  );
+});
