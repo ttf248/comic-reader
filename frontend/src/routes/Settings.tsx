@@ -309,7 +309,7 @@ export default function Settings() {
             <div className="flex flex-wrap items-center justify-end gap-3">
               <span className="text-xs text-fg-muted">
                 {manifest
-                  ? `${manifest.statistics.albumCount} 文件夹 · ${manifest.statistics.tagCount} 标签${
+                  ? `${manifest.statistics.albumCount} 本相册 · ${manifest.statistics.tagCount} 个标签${
                       manifest.scannedAt
                         ? ` · ${new Date(manifest.scannedAt).toLocaleString("zh-CN", { hour12: false })}`
                         : " · 尚未扫描"
@@ -359,78 +359,82 @@ export default function Settings() {
           </div>
         </Row>
         <Row label="缓存占用">
-          <div className="flex items-center gap-3 text-xs text-fg-muted">
-            <span>
-              {cacheStats.isLoading
-                ? "计算中…"
-                : !cacheStats.data
-                  ? "—"
-                  : !cacheStats.data.available
-                    ? "不可用"
-                    : `${formatBytes(cacheStats.data.totalBytes)} · ${
-                        cacheStats.data.fileCount
-                      } 个文件`}
-            </span>
-            {cacheStats.data && (
-              <span
-                className="text-fg-subtle/70 tabular-nums"
-                title={
-                  cacheStats.data.scannedAt
-                    ? `扫描于 ${new Date(cacheStats.data.scannedAt).toLocaleString("zh-CN", { hour12: false })}`
-                    : ""
-                }
-              >
-                {cacheStats.data.cacheTtlSeconds > 0
-                  ? `${cacheStats.data.cacheTtlSeconds}s 内复用`
-                  : "缓存已过期"}
+          {/* 统计行与细分徽章纵向排列：作为 Row 的两个并列子元素时，
+              徽章会被排到统计行右边，把整行挤到换行。 */}
+          <div className="flex min-w-0 flex-1 flex-col items-end gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-3 text-xs text-fg-muted">
+              <span className="whitespace-nowrap">
+                {cacheStats.isLoading
+                  ? "计算中…"
+                  : !cacheStats.data
+                    ? "—"
+                    : !cacheStats.data.available
+                      ? "不可用"
+                      : `${formatBytes(cacheStats.data.totalBytes)} · ${
+                          cacheStats.data.fileCount
+                        } 个文件`}
               </span>
-            )}
-            <button
-              onClick={refreshCacheStats}
-              disabled={cacheStats.isFetching}
-              className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border-faint hover:bg-bg-subtle text-xs transition-colors disabled:opacity-50"
-              title="重新扫描磁盘计算缓存占用"
-            >
-              {cacheStats.isFetching ? (
-                <span className="inline-block w-3 h-3 rounded-full border-2 border-fg-muted border-t-transparent animate-spin" />
-              ) : (
-                <RefreshIcon size={11} />
+              {cacheStats.data && (
+                <span
+                  className="whitespace-nowrap text-fg-subtle/70 tabular-nums"
+                  title={
+                    cacheStats.data.scannedAt
+                      ? `扫描于 ${new Date(cacheStats.data.scannedAt).toLocaleString("zh-CN", { hour12: false })}`
+                      : ""
+                  }
+                >
+                  {cacheStats.data.cacheTtlSeconds > 0
+                    ? `${cacheStats.data.cacheTtlSeconds}s 内复用`
+                    : "缓存已过期"}
+                </span>
               )}
-              <span>刷新</span>
-            </button>
-            <button
-              onClick={() => clearAll.mutate()}
-              disabled={clearAll.isPending}
-              className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-danger/40 text-danger hover:bg-danger/5 text-xs transition-colors disabled:opacity-50"
-              title="清空全部缓存（缩略图 + faststart + 转码）"
-            >
-              <TrashIcon size={11} />
-              <span>{clearAll.isPending ? "清空中…" : "一键全清"}</span>
-            </button>
-          </div>
-          {/* 按类型细分 — 大头一目了然,转码缓存过大时可单独清 */}
-          {cacheStats.data && cacheStats.data.available && (
-            <div className="mt-2 grid grid-cols-3 gap-2 text-[10.5px]">
-              <SubUsageBadge
-                label="缩略图"
-                sub={cacheStats.data.thumbs}
-                onClear={() => clearThumbsScope.mutate()}
-                clearPending={clearThumbsScope.isPending}
-              />
-              <SubUsageBadge
-                label="faststart"
-                sub={cacheStats.data.videoFaststart}
-                onClear={() => clearFaststart.mutate()}
-                clearPending={clearFaststart.isPending}
-              />
-              <SubUsageBadge
-                label="转码"
-                sub={cacheStats.data.videoTranscode}
-                onClear={() => clearTranscode.mutate()}
-                clearPending={clearTranscode.isPending}
-              />
+              <button
+                onClick={refreshCacheStats}
+                disabled={cacheStats.isFetching}
+                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border-faint hover:bg-bg-subtle text-xs transition-colors disabled:opacity-50"
+                title="重新扫描磁盘计算缓存占用"
+              >
+                {cacheStats.isFetching ? (
+                  <span className="inline-block w-3 h-3 rounded-full border-2 border-fg-muted border-t-transparent animate-spin" />
+                ) : (
+                  <RefreshIcon size={11} />
+                )}
+                <span>刷新</span>
+              </button>
+              <button
+                onClick={() => clearAll.mutate()}
+                disabled={clearAll.isPending}
+                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-danger/40 text-danger hover:bg-danger/5 text-xs transition-colors disabled:opacity-50"
+                title="清空全部缓存（缩略图 + faststart + 转码）"
+              >
+                <TrashIcon size={11} />
+                <span>{clearAll.isPending ? "清空中…" : "一键全清"}</span>
+              </button>
             </div>
-          )}
+            {/* 按类型细分 — 大头一目了然,转码缓存过大时可单独清 */}
+            {cacheStats.data && cacheStats.data.available && (
+              <div className="mt-2 grid grid-cols-3 gap-2 text-[10.5px]">
+                <SubUsageBadge
+                  label="缩略图"
+                  sub={cacheStats.data.thumbs}
+                  onClear={() => clearThumbsScope.mutate()}
+                  clearPending={clearThumbsScope.isPending}
+                />
+                <SubUsageBadge
+                  label="faststart"
+                  sub={cacheStats.data.videoFaststart}
+                  onClear={() => clearFaststart.mutate()}
+                  clearPending={clearFaststart.isPending}
+                />
+                <SubUsageBadge
+                  label="转码"
+                  sub={cacheStats.data.videoTranscode}
+                  onClear={() => clearTranscode.mutate()}
+                  clearPending={clearTranscode.isPending}
+                />
+              </div>
+            )}
+          </div>
         </Row>
         <Row label="清理失效收藏">
           <button
@@ -525,8 +529,14 @@ function Row({
   danger?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between px-4 py-3 text-sm">
-      <span className={danger ? "text-danger" : "text-fg"}>{label}</span>
+    // 标签固定不换行：内容多的时候应该让内容换行，而不是把"缓存占用"
+    // 挤成两行、同时把右侧内容裁掉。
+    <div className="flex items-center justify-between gap-4 px-4 py-3 text-sm">
+      <span
+        className={`shrink-0 whitespace-nowrap ${danger ? "text-danger" : "text-fg"}`}
+      >
+        {label}
+      </span>
       {children}
     </div>
   );
