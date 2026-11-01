@@ -39,7 +39,7 @@ func newLibraryPageFixture(t *testing.T) libraryPageFixture {
 	virtual := models.Album{
 		Type: "album", Path: virtualPath, Name: "本目录媒体", DisplayName: "本目录媒体",
 		SourceRoot: root, SourceName: filepath.Base(root), Virtual: true,
-		Location: filepath.Base(root),
+		Location:   filepath.Base(root),
 		ImageFiles: []string{virtualCover}, ImageCount: 1, CoverImage: virtualCover, CoverKind: "image",
 	}
 	album2 := models.Album{
@@ -304,8 +304,12 @@ func TestLibrarySummaryCarriesVirtualAlbumLocation(t *testing.T) {
 		t.Fatalf("virtual location=%q, want %q", virtual.Location, filepath.Base(fixture.root))
 	}
 	// name 保持语义常量，location 才是展示用的归属目录。
-	if virtual.Name != "本目录媒体" {
-		t.Fatalf("virtual name=%q, want 本目录媒体", virtual.Name)
+	if virtual.Name != models.VirtualAlbumName {
+		t.Fatalf("virtual name=%q, want %q", virtual.Name, models.VirtualAlbumName)
+	}
+	// 展示名必须是归属目录：阅读器标题、属性弹窗、搜索结果都读它。
+	if virtual.DisplayName != filepath.Base(fixture.root) {
+		t.Fatalf("virtual displayName=%q, want %q", virtual.DisplayName, filepath.Base(fixture.root))
 	}
 
 	hits := SearchLibrary(snapshot, filepath.Base(fixture.root), 10)

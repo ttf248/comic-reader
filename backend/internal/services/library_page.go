@@ -688,6 +688,20 @@ func nodeDisplayName(displayName, name string) string {
 	return name
 }
 
+// albumDisplayName 决定相册摘要的展示名。
+//
+// 散图（"本目录媒体"）的 Name 只是类型常量，真正的标题是归属目录。
+// 扫描缓存里可能还是旧值（DisplayName 仍是类型常量），这里用
+// Location 兜底，避免升级后阅读器标题、属性弹窗继续显示
+// "本目录媒体"。
+func albumDisplayName(album models.Album) string {
+	name := nodeDisplayName(album.DisplayName, album.Name)
+	if album.Virtual && album.Location != "" && name == models.VirtualAlbumName {
+		return album.Location
+	}
+	return name
+}
+
 // searchHitName 决定搜索结果条目的展示名。
 //
 // 虚拟相册的 Name 恒为“本目录媒体”，对用户毫无检索价值；用 Location
@@ -712,7 +726,7 @@ func albumSummary(state *resourceCatalogState, album models.Album) LibraryNodeSu
 		ID:             id,
 		Kind:           string(ResourceAlbum),
 		Name:           album.Name,
-		DisplayName:    nodeDisplayName(album.DisplayName, album.Name),
+		DisplayName:    albumDisplayName(album),
 		SourceRoot:     sourceRoot,
 		SourceName:     sourceName,
 		CoverImage:     cover,

@@ -71,6 +71,12 @@ func lowerExt(name string) string {
 	return ""
 }
 
+// VirtualAlbumName 是"本目录媒体"视图的类型常量。
+//
+// 所有散图相册的 Name 都是它（用来区分相册类型），展示名另由
+// Location（归属目录相对媒体根的路径）给出。
+const VirtualAlbumName = "本目录媒体"
+
 // Album 含有图片的文件夹。
 //
 // 多根场景（mediaRoots 配置多个目录）下，扫描器会填充 SourceRoot（绝对路径）/

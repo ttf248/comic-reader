@@ -22,6 +22,8 @@ import GalleryControls from "../components/gallery/GalleryControls";
 import ContextMenu, { type AnyMenuItem } from "../components/album/ContextMenu";
 import { ImageIcon, RefreshIcon } from "../components/common/Icon";
 import { displayedPageIndex } from "../utils/progress";
+import { albumRoute } from "../utils/path";
+import { useSafeBack } from "../utils/navigation";
 import {
   getGalleryContext,
   type GalleryContextEntry,
@@ -176,6 +178,11 @@ export default function Gallery() {
     albumSummary?.name ||
     params.get("name") ||
     "画廊";
+
+  // 返回：优先回到应用内的上一页；没有可回退历史时回到当前相册页。
+  // 直接打开阅读器链接（刷新、复制链接到新标签页）时，navigate(-1) 会
+  // 一路退出应用停在空白页，必须有兜底。
+  const goBack = useSafeBack(pathParam ? albumRoute(pathParam) : "/");
   // 当前展示的文件路径。Gallery 中段才计算 isVideo/images/videos/index → current，
   // 但 onSetCover 要读这个值。放进 ref 让 callback 拿到最新值而不需要把 current
   // 提前到 useCallback 之前（避免引入 forward reference）。
@@ -982,7 +989,7 @@ export default function Gallery() {
       if (showHelp) setShowHelp(false);
       else if (showInfo) setShowInfo(false);
       // 仅在当前媒体就绪后返回；视频不依赖图片列表。
-      else if (ready) navigate(-1);
+      else if (ready) goBack();
     },
   });
 
@@ -993,7 +1000,7 @@ export default function Gallery() {
         <div className="px-4 h-9 text-xs text-fg-muted border-b border-border-faint bg-bg-elevated/60 flex items-center gap-3">
           <button
             type="button"
-            onClick={() => navigate(-1)}
+            onClick={goBack}
             className="px-1.5 py-0.5 rounded hover:bg-bg-hover text-fg-muted hover:text-fg"
             aria-label="返回"
           >
@@ -1020,7 +1027,7 @@ export default function Gallery() {
               <div className="flex items-center justify-center gap-2">
                 <button
                   type="button"
-                  onClick={() => navigate(-1)}
+                  onClick={goBack}
                   className="px-4 h-8 text-sm rounded border border-border bg-bg-elevated hover:bg-bg-hover text-fg"
                 >
                   返回
@@ -1167,7 +1174,7 @@ export default function Gallery() {
         itemIndex={isVideo ? itemIndex : undefined}
         total={total}
         isFavorite={isFav}
-        onBack={() => navigate(-1)}
+        onBack={goBack}
         onToggleFavorite={onToggleFavorite}
         onToggleInfo={() => setShowInfo((v) => !v)}
         onToggleHelp={() => setShowHelp((v) => !v)}

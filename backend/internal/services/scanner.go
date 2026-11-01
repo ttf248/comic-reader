@@ -250,6 +250,12 @@ func stampAlbumSource(albums *[]models.Album, srcRoot, srcName string) {
 		}
 		if (*albums)[i].Virtual {
 			(*albums)[i].Location = albumLocation(srcRoot, (*albums)[i].Path)
+			// 展示名跟着归属目录走：Name 只是"本目录媒体"这个类型常量，
+			// DisplayName 才是各端真正显示的标题（阅读器标题、属性弹窗、
+			// 搜索结果都读它）。
+			if (*albums)[i].Location != "" {
+				(*albums)[i].DisplayName = (*albums)[i].Location
+			}
 		}
 	}
 }
@@ -292,24 +298,28 @@ func stampCollectionSource(collections *[]models.Collection, srcRoot, srcName st
 // 只在顶层 + collection 内部 album 中各检测一次；不同根的同名 album 会
 // 被识别为冲突。
 func applyNamePrefixIfConflict(albums *[]models.Album) {
-	// 第一遍：统计 name 出现次数
+	// 第一遍：统计展示名基础出现次数
 	counts := make(map[string]int)
 	for _, a := range *albums {
-		// 虚拟相册的 Name 恒为“本目录媒体”，跨根同名不是真冲突：
-		// 它们靠 Location 区分，统计进来只会误加来源前缀。
-		if a.Virtual {
-			continue
-		}
-		counts[a.Name]++
+		counts[albumDisplayBase(a)]++
 	}
 	for i := range *albums {
-		if (*albums)[i].Virtual {
-			continue
-		}
-		if counts[(*albums)[i].Name] > 1 && (*albums)[i].SourceName != "" {
-			(*albums)[i].DisplayName = "[" + (*albums)[i].SourceName + "] " + (*albums)[i].Name
+		base := albumDisplayBase((*albums)[i])
+		if counts[base] > 1 && (*albums)[i].SourceName != "" {
+			(*albums)[i].DisplayName = "[" + (*albums)[i].SourceName + "] " + base
 		}
 	}
+}
+
+// albumDisplayBase 是相册展示名的基础：虚拟相册用归属目录，普通相册用目录名。
+//
+// 虚拟相册的 Name 恒为“本目录媒体”，拿它做冲突统计会把所有散图算成同名；
+// 用归属目录统计才能发现"两个根下都有 2020年"这种真冲突。
+func albumDisplayBase(a models.Album) string {
+	if a.Virtual && a.Location != "" {
+		return a.Location
+	}
+	return a.Name
 }
 
 // applyCollectionNamePrefixIfConflict 对所有 collection（含嵌套的子 albums）
@@ -549,7 +559,7 @@ func buildRootResult(root string, records map[string]directoryRecord) ([]models.
 	if len(record.images)+len(record.videos) > 0 {
 		album := buildAlbum(root, record.images, record.videos)
 		if len(albums)+len(collections) > 0 {
-			album.Name = "本目录媒体"
+			album.Name = models.VirtualAlbumName
 			album.DisplayName = album.Name
 			album.Virtual = true
 		}
@@ -585,7 +595,7 @@ func buildDirectoryResult(path string, records map[string]directoryRecord) (*mod
 	}
 	if hasFiles {
 		loose := buildAlbum(path, record.images, record.videos)
-		loose.Name = "本目录媒体"
+		loose.Name = models.VirtualAlbumName
 		loose.DisplayName = loose.Name
 		loose.Virtual = true
 		childAlbums = append([]models.Album{*loose}, childAlbums...)

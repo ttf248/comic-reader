@@ -18,6 +18,7 @@ import YearTimeline from "../components/home/YearTimeline";
 import { groupAlbumsAndCollectionsByYear } from "../utils/albumGrouping";
 import EmptyState from "../components/common/EmptyState";
 import { decodeFavPath } from "../utils/path";
+import { useSafeBack } from "../utils/navigation";
 import { compareDatesDesc, formatRelative } from "../utils/date";
 import { formatSize } from "../utils/format";
 import {
@@ -159,6 +160,9 @@ function collectionDetailFromSummary(
 export default function Album() {
   const params = useParams();
   const navigate = useNavigate();
+  // 返回：应用内还有历史就回退，否则回主页（直接打开相册链接时
+  // navigate(-1) 会一路退出应用，停在空白页）。
+  const goBack = useSafeBack("/");
   const queryClient = useQueryClient();
   const resourceID = decodeFavPath("/albums/" + (params["*"] ?? ""));
 
@@ -273,7 +277,7 @@ export default function Album() {
         query={query}
         sortBy={sortBy}
         viewMode={viewMode}
-        onBack={() => navigate(-1)}
+        onBack={goBack}
         isFavorite={isFav}
         onToggleFav={async () => {
           try {
@@ -314,7 +318,7 @@ export default function Album() {
         {detail.imageCount === 0 && (detail.videoCount ?? 0) > 0 ? (
           <VideoAlbumView
             detail={detail}
-            onBack={() => navigate(-1)}
+            onBack={goBack}
             hasNextPage={canLoadMore}
             isLoadingMore={mediaQuery.isFetchingNextPage}
             onLoadMore={loadMoreMedia}
@@ -322,7 +326,7 @@ export default function Album() {
         ) : (
           <AlbumView
             detail={detail}
-            onBack={() => navigate(-1)}
+            onBack={goBack}
             hasNextPage={canLoadMore}
             isLoadingMore={mediaQuery.isFetchingNextPage}
             onLoadMore={loadMoreMedia}
