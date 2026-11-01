@@ -6,6 +6,7 @@ import {
   type TranscodeStatus,
 } from "../../api/videos";
 import TranscodeProgress from "./TranscodeProgress";
+import { shouldIgnoreShortcut } from "../../utils/shortcuts";
 
 interface Props {
   /** 当前播放的不透明视频文件 ID */
@@ -116,15 +117,7 @@ export default function VideoPlayer({
   // 键盘控制
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      // 输入框不抢
-      const t = e.target as HTMLElement | null;
-      if (
-        t &&
-        (t.tagName === "INPUT" ||
-          t.tagName === "TEXTAREA" ||
-          t.isContentEditable)
-      )
-        return;
+      if (e.ctrlKey || e.altKey || e.metaKey || shouldIgnoreShortcut(e)) return;
       const v = videoRef.current;
       if (!v) return;
       switch (e.key) {

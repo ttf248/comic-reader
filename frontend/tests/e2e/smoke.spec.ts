@@ -856,6 +856,85 @@ for (const albumName of ["sample-mixed-cover", "sample-video-cover"]) {
   });
 }
 
+for (const kind of ["image", "video"] as const) {
+  test(`${kind} 阅读器保留按钮空格激活与系统修饰组合`, async ({ page }) => {
+    const nodes = await scannedNodes(page.request);
+    const album = nodes.find(
+      (node) =>
+        node.name ===
+        (kind === "image" ? "sample-album" : "sample-video-shortcuts"),
+    )!;
+    expect(album).toBeDefined();
+    await page.goto(`/albums/${album.id}`);
+    await expect(page.getByRole("heading", { level: 1 })).toContainText(
+      album.name,
+    );
+    await page.goto(`/gallery?path=${album.id}&type=${kind}&index=0`);
+    const back = page.getByTitle("返回 (Esc)", { exact: true });
+    await expect(back).toBeVisible();
+    if (kind === "video") {
+      const video = page.locator("video");
+      await expect
+        .poll(() =>
+          video.evaluate((element: HTMLVideoElement) => element.readyState),
+        )
+        .toBeGreaterThanOrEqual(1);
+      await video.evaluate((element: HTMLVideoElement) => {
+        element.pause();
+        element.currentTime = 5;
+        if (document.activeElement instanceof HTMLElement)
+          document.activeElement.blur();
+      });
+      await page.keyboard.press("Control+ArrowLeft");
+      await expect
+        .poll(() =>
+          video.evaluate((element: HTMLVideoElement) => element.currentTime),
+        )
+        .toBeCloseTo(5, 1);
+    } else {
+      await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("1");
+      await page.keyboard.press("Control+g");
+      await expect(page.locator('input[inputmode="numeric"]')).toHaveCount(0);
+      await page.keyboard.press("g");
+      const input = page.locator('input[inputmode="numeric"]');
+      await expect(input).toBeFocused();
+      await input.fill("2");
+      await input.press("Enter");
+      await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("2");
+    }
+    await back.focus();
+    await page.keyboard.press("Space");
+    await expect(page).toHaveURL(new RegExp(`/albums/${album.id}$`));
+  });
+}
+
+test("视频失败后的重试按钮可用空格激活，重新读取媒体", async ({ page }) => {
+  const nodes = await scannedNodes(page.request);
+  const album = nodes.find((node) => node.name === "sample-video-shortcuts")!;
+  expect(album).toBeDefined();
+  const media = (await (
+    await page.request.get(`/api/albums/${album.id}/media`)
+  ).json()) as { page: { items: Array<{ id: string }> } };
+  const fileId = media.page.items[0].id;
+  await page.route(
+    (url) => url.pathname === `/api/media/${fileId}`,
+    (route) =>
+      route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: '{"code":"test_media_unavailable"}',
+      }),
+  );
+  await page.goto(`/gallery?path=${album.id}&type=video&index=0`);
+  const retry = page.getByRole("button", { name: "重试", exact: true });
+  await expect(retry).toBeVisible();
+  const video = page.locator("video");
+  const source = await video.getAttribute("src");
+  await retry.focus();
+  await page.keyboard.press("Space");
+  await expect.poll(() => video.getAttribute("src")).not.toBe(source);
+});
+
 for (const mode of ["double", "continuous"] as const) {
   test(`视频快捷键不受图片 ${mode} 模式干扰，方向键定位、翻页键换片、Esc 返回`, async ({
     page,

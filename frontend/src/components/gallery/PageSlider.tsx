@@ -1,12 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
-import { imageUrl } from '../../api/images'
+import { useEffect, useRef, useState } from "react";
+import { imageUrl } from "../../api/images";
+import { shouldIgnoreShortcut } from "../../utils/shortcuts";
 
 interface Props {
-  total: number
-  index: number
-  onJump: (i: number) => void
+  total: number;
+  index: number;
+  onJump: (i: number) => void;
   /** 可选：连续模式时用，标记「当前可视」图片列表（用于缩略图条）。 */
-  images?: string[]
+  images?: string[];
 }
 
 // 页码跳转条：
@@ -16,106 +17,103 @@ interface Props {
 // - 拖拽时浮出 5-6 张缩略图条，让翻页所见即所得
 // 设计目标：让 100+ 页的合集不再「翻到手酸」。
 export default function PageSlider({ total, index, onJump, images }: Props) {
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState('')
-  const [scrubIndex, setScrubIndex] = useState<number | null>(null)
-  const trackRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [scrubIndex, setScrubIndex] = useState<number | null>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const safeIndex = Math.max(0, Math.min(total - 1, index))
-  const effective = scrubIndex ?? safeIndex
-  const pct = total > 1 ? (effective / (total - 1)) * 100 : 0
+  const safeIndex = Math.max(0, Math.min(total - 1, index));
+  const effective = scrubIndex ?? safeIndex;
+  const pct = total > 1 ? (effective / (total - 1)) * 100 : 0;
 
   // 进入编辑态时聚焦输入框并预填当前页
   useEffect(() => {
     if (editing) {
-      setDraft(String(safeIndex + 1))
-      requestAnimationFrame(() => inputRef.current?.select())
+      setDraft(String(safeIndex + 1));
+      requestAnimationFrame(() => inputRef.current?.select());
     }
-  }, [editing, safeIndex])
+  }, [editing, safeIndex]);
 
   // 全局快捷键：G 进入输入态（与 vim/git 习惯一致）
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const target = e.target as HTMLElement | null
-      if (target) {
-        const tag = target.tagName
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) return
+      if (e.ctrlKey || e.altKey || e.metaKey || shouldIgnoreShortcut(e)) return;
+      if (e.key === "g" && !editing) {
+        e.preventDefault();
+        setEditing(true);
+      } else if (e.key === "Escape" && editing) {
+        e.preventDefault();
+        setEditing(false);
       }
-      if (e.key === 'g' && !editing) {
-        e.preventDefault()
-        setEditing(true)
-      } else if (e.key === 'Escape' && editing) {
-        e.preventDefault()
-        setEditing(false)
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [editing])
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [editing]);
 
   function commit() {
-    const n = parseInt(draft, 10)
+    const n = parseInt(draft, 10);
     if (!Number.isFinite(n)) {
-      setEditing(false)
-      return
+      setEditing(false);
+      return;
     }
-    const clamped = Math.max(1, Math.min(total, n))
-    onJump(clamped - 1)
-    setEditing(false)
+    const clamped = Math.max(1, Math.min(total, n));
+    onJump(clamped - 1);
+    setEditing(false);
   }
 
   // 拖拽时把「最新 scrubIndex」同步写进 ref：onUp 闭包里读 ref，
   // 而不是闭包创建时的 scrubIndex（那个永远是 null —— React setState
   // 是异步的，el.addEventListener('pointerup', onUp) 在 pointerup 触发时
   // 看到的还是创建时的旧值，导致「拖到中段松手不跳转」）。
-  const scrubIndexRef = useRef<number | null>(null)
+  const scrubIndexRef = useRef<number | null>(null);
 
   function onTrackPointerDown(e: React.PointerEvent<HTMLDivElement>) {
-    if (total <= 1) return
-    const el = trackRef.current
-    if (!el) return
-    el.setPointerCapture(e.pointerId)
-    const rect = el.getBoundingClientRect()
+    if (total <= 1) return;
+    const el = trackRef.current;
+    if (!el) return;
+    el.setPointerCapture(e.pointerId);
+    const rect = el.getBoundingClientRect();
     const update = (clientX: number) => {
-      const x = Math.max(0, Math.min(rect.width, clientX - rect.left))
-      const ratio = rect.width === 0 ? 0 : x / rect.width
-      const i = Math.round(ratio * (total - 1))
-      scrubIndexRef.current = i
-      setScrubIndex(i)
-    }
-    update(e.clientX)
-    const onMove = (ev: PointerEvent) => update(ev.clientX)
+      const x = Math.max(0, Math.min(rect.width, clientX - rect.left));
+      const ratio = rect.width === 0 ? 0 : x / rect.width;
+      const i = Math.round(ratio * (total - 1));
+      scrubIndexRef.current = i;
+      setScrubIndex(i);
+    };
+    update(e.clientX);
+    const onMove = (ev: PointerEvent) => update(ev.clientX);
     const onUp = (ev: PointerEvent) => {
       // 拖拽结束时真正跳转：从 ref 读最新值，避开闭包陷阱
-      const finalIdx = scrubIndexRef.current
-      if (finalIdx !== null) onJump(finalIdx)
-      scrubIndexRef.current = null
-      setScrubIndex(null)
-      el.releasePointerCapture(ev.pointerId)
-      el.removeEventListener('pointermove', onMove)
-      el.removeEventListener('pointerup', onUp)
-      el.removeEventListener('pointercancel', onUp)
-    }
-    el.addEventListener('pointermove', onMove)
-    el.addEventListener('pointerup', onUp)
-    el.addEventListener('pointercancel', onUp)
+      const finalIdx = scrubIndexRef.current;
+      if (finalIdx !== null) onJump(finalIdx);
+      scrubIndexRef.current = null;
+      setScrubIndex(null);
+      el.releasePointerCapture(ev.pointerId);
+      el.removeEventListener("pointermove", onMove);
+      el.removeEventListener("pointerup", onUp);
+      el.removeEventListener("pointercancel", onUp);
+    };
+    el.addEventListener("pointermove", onMove);
+    el.addEventListener("pointerup", onUp);
+    el.addEventListener("pointercancel", onUp);
   }
 
   // 缩略图条：拖拽时显示 5 张（当前 ± 2）；非拖拽时用当前页 + 1/2 截图概览
-  const showStrip = scrubIndex !== null && images && images.length > 0
+  const showStrip = scrubIndex !== null && images && images.length > 0;
   const strip = showStrip
     ? [-2, -1, 0, 1, 2]
         .map((d) => scrubIndex + d)
         .filter((i) => i >= 0 && i < images.length)
-    : [safeIndex, Math.min(safeIndex + 1, total - 1)].filter((i, idx, arr) => arr.indexOf(i) === idx)
+    : [safeIndex, Math.min(safeIndex + 1, total - 1)].filter(
+        (i, idx, arr) => arr.indexOf(i) === idx,
+      );
 
   return (
     <div
       className="relative h-11 flex items-center gap-3 px-3 sm:px-5 text-white/85 select-none"
       style={{
-        background:
-          'linear-gradient(to top, rgba(0,0,0,0.55), rgba(0,0,0,0))',
+        background: "linear-gradient(to top, rgba(0,0,0,0.55), rgba(0,0,0,0))",
       }}
     >
       {/* 缩略图条：拖拽时浮现 */}
@@ -125,12 +123,14 @@ export default function PageSlider({ total, index, onJump, images }: Props) {
           aria-hidden
         >
           {strip.map((i) => {
-            const isCenter = i === scrubIndex
+            const isCenter = i === scrubIndex;
             return (
               <div
                 key={i}
                 className={`bg-neutral-900 border-2 rounded overflow-hidden shadow-lg transition-all ${
-                  isCenter ? 'border-white scale-105' : 'border-white/30 opacity-80'
+                  isCenter
+                    ? "border-white scale-105"
+                    : "border-white/30 opacity-80"
                 }`}
                 style={{ width: 56, height: 80 }}
               >
@@ -145,7 +145,7 @@ export default function PageSlider({ total, index, onJump, images }: Props) {
                   <div className="w-full h-full bg-neutral-800" />
                 )}
               </div>
-            )
+            );
           })}
           <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[11px] text-white/70 tabular-nums">
             第 {scrubIndex + 1} / {total} 页
@@ -158,14 +158,14 @@ export default function PageSlider({ total, index, onJump, images }: Props) {
         <input
           ref={inputRef}
           value={draft}
-          onChange={(e) => setDraft(e.target.value.replace(/[^\d]/g, ''))}
+          onChange={(e) => setDraft(e.target.value.replace(/[^\d]/g, ""))}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              e.preventDefault()
-              commit()
-            } else if (e.key === 'Escape') {
-              e.preventDefault()
-              setEditing(false)
+            if (e.key === "Enter") {
+              e.preventDefault();
+              commit();
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              setEditing(false);
             }
           }}
           onBlur={commit}
@@ -200,7 +200,10 @@ export default function PageSlider({ total, index, onJump, images }: Props) {
             className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-white rounded-full shadow-md transition-transform"
             style={{
               left: `calc(${pct}% - 6px)`,
-              transform: scrubIndex !== null ? 'translateY(-50%) scale(1.3)' : 'translateY(-50%)',
+              transform:
+                scrubIndex !== null
+                  ? "translateY(-50%) scale(1.3)"
+                  : "translateY(-50%)",
             }}
           />
         </div>
@@ -211,5 +214,5 @@ export default function PageSlider({ total, index, onJump, images }: Props) {
         <kbd className="kbd-light">G</kbd> 跳页
       </span>
     </div>
-  )
+  );
 }

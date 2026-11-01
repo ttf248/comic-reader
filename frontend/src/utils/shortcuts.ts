@@ -333,6 +333,26 @@ export const SHORTCUTS: Shortcut[] = [
   },
 ];
 
+// 保留控件激活、文本编辑和输入法行为，避免页面快捷键重复处理事件。
+export function shouldIgnoreShortcut(event: KeyboardEvent): boolean {
+  if (event.defaultPrevented || event.isComposing) return true;
+  const target = event.target;
+  if (!(target instanceof Element)) return false;
+  if (
+    target.closest(
+      'input, textarea, select, [contenteditable]:not([contenteditable="false"])',
+    )
+  ) {
+    return true;
+  }
+  return (
+    (event.key === " " || event.key === "Enter") &&
+    target.closest(
+      'button, a[href], summary, [role="button"], [role="link"]',
+    ) !== null
+  );
+}
+
 // 规范化按键名为可比较字符串：ctrl+a / shift+arrowleft / F5 / space
 export function normalizeKey(e: KeyboardEvent): string {
   const parts: string[] = [];

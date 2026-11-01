@@ -102,4 +102,59 @@ describe("VideoPlayer 活动恢复", () => {
       ),
     );
   });
+
+  it("按钮的空格保留给原生激活，不同时控制视频播放", () => {
+    const view = render(
+      <>
+        <button>控件</button>
+        <VideoPlayer src="f_video" />
+      </>,
+    );
+    const video = document.querySelector("video") as HTMLVideoElement;
+    const play = vi.spyOn(video, "play").mockResolvedValue();
+    expect(
+      fireEvent.keyDown(view.getByRole("button", { name: "控件" }), {
+        key: " ",
+      }),
+    ).toBe(true);
+    expect(play).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { key: "ArrowRight", ctrlKey: true },
+    { key: "ArrowRight", altKey: true },
+    { key: "ArrowRight", metaKey: true },
+    { key: "ArrowRight", isComposing: true },
+  ])("不处理系统组合或输入法事件 %j", (init) => {
+    render(<VideoPlayer src="f_video" />);
+    const video = document.querySelector("video") as HTMLVideoElement;
+    Object.defineProperty(video, "duration", {
+      configurable: true,
+      value: 100,
+    });
+    video.currentTime = 20;
+    fireEvent.keyDown(window, init);
+    expect(video.currentTime).toBe(20);
+  });
+
+  it("不处理已经由控件取消的事件，下拉框按键也保持原生行为", () => {
+    const view = render(
+      <>
+        <select aria-label="选项">
+          <option>A</option>
+        </select>
+        <VideoPlayer src="f_video" />
+      </>,
+    );
+    const video = document.querySelector("video") as HTMLVideoElement;
+    const play = vi.spyOn(video, "play").mockResolvedValue();
+    const handled = new KeyboardEvent("keydown", {
+      key: " ",
+      cancelable: true,
+    });
+    handled.preventDefault();
+    fireEvent(window, handled);
+    fireEvent.keyDown(view.getByRole("combobox"), { key: " " });
+    expect(play).not.toHaveBeenCalled();
+  });
 });
