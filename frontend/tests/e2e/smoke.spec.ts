@@ -643,12 +643,13 @@ test("离开相册会取消浏览器抽帧且不继续上传封面", async ({ pa
     await expect.poll(() => probes).toBeGreaterThan(0);
     await page.clock.fastForward(21_000);
     await expect.poll(() => started).toBeGreaterThan(0);
+    // 设置页没有视频卡片，避免新页面的抽帧上传混入旧任务的取消断言。
     // 使用 SPA 导航，确保中止来自组件清理，而非整页卸载。
-    await page.getByRole("link", { name: "主页", exact: true }).click();
-    await expect(page).toHaveURL(/\/$/);
+    await page.getByRole("link", { name: "设置", exact: true }).click();
+    await expect(page).toHaveURL(/\/settings$/);
     // URL 更新后懒加载页面可能尚未提交，等旧相册卸载后再放行媒体响应。
     await expect(
-      page.getByRole("heading", { name: "图像库", level: 1 }),
+      page.getByRole("heading", { name: "设置", level: 1, exact: true }),
     ).toBeVisible();
     release();
     await expect.poll(() => cancelled).toBeGreaterThan(0);
