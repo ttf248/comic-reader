@@ -111,16 +111,20 @@ export const activityApi = {
     positionMs: number,
     durationMs: number,
   ) =>
-    api<VideoActivity>("/api/activity", {
-      method: "PUT",
-      body: {
-        albumId,
-        mediaKind: "video",
-        itemId,
-        positionMs,
-        durationMs,
-      },
-    }),
+    // 视频活动同样影响未读统计：纯视频相册没有图片活动，播放记录就是
+    // "已经翻开过"的唯一依据，写入后要通知常驻入口刷新。
+    withActivityChanged(
+      api<VideoActivity>("/api/activity", {
+        method: "PUT",
+        body: {
+          albumId,
+          mediaKind: "video",
+          itemId,
+          positionMs,
+          durationMs,
+        },
+      }),
+    ),
 
   query: (items: ActivityIdentity[]) =>
     api<{ activities: Activity[]; count: number }>("/api/activity/query", {
@@ -193,7 +197,7 @@ export const activityApi = {
       keepalive: true,
       body: JSON.stringify(activity),
     }).then((response) => {
-      if (response.ok && activity.mediaKind === "image") {
+      if (response.ok) {
         notifyActivityChanged();
       }
     }).catch(() => {});

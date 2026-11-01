@@ -118,7 +118,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 - `GET /api/library/manifest`：返回根列表、扫描时间和相册/集合/标签/告警统计，不包含目录树或媒体数组；`warnings` 最多返回前 100 条脱敏告警详情，完整数量见 `statistics.warningCount`。
 - `GET /api/library/activity-summary`：返回当前 revision 的 `albumCount` 与 `unreadCount`，供常驻导航显示未读 badge；不返回相册清单或活动详情。
 - `GET /api/library/dashboard`：返回首页所需的 `albumCount`、`unreadCount`、最多 6 本 `unread` 相册摘要与全部 `inProgress` 阅读摘要；不返回全量相册列表。每条在读摘要的 `pageCount` 始终以当前扫描结果为准。
-- `GET /api/library/unread?limit=60&cursor=...`：分页返回尚未保存图片阅读活动的相册摘要；已读和在读相册不会传输。当前没有图片页的相册始终视为未读。
+- `GET /api/library/unread?limit=60&cursor=...`：分页返回尚未翻开过的相册摘要；已读和在读相册不会传输。有图片的相册以图片阅读活动判定，纯视频相册以视频播放活动判定（没有图片活动可依）。
 - `GET /api/library/:rootOrCollectionId/children?limit=60&cursor=...`：分页返回直属相册与子集合摘要。
 - `GET /api/albums/random?scope=unread`：随机返回一个相册摘要；不传 `scope` 时从全库抽取，`scope=unread` 时只从尚未保存图片阅读活动的相册中抽取。没有匹配相册返回 `404 no_matching_album`。
 - `GET /api/albums/:albumId/media?limit=60&cursor=...`：按统一自然顺序返回媒体；`index` 是相册内总序号，`kindIndex` 是图片或视频各自序号。
@@ -265,7 +265,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 - `PUT /api/activity/batch`：body 为 `{ "activities": [...] }`，整批校验后一次原子落盘；单批最多 10000 条。
 - `DELETE /api/activity?...`：幂等删除单条；`DELETE /api/activity/all` 清空全部图片和视频活动。
 
-`/api/library/activity-summary`、`/api/library/dashboard` 与 `/api/library/unread` 均以是否存在图片阅读活动判定未读；当前没有图片页的相册始终视为未读，视频播放记录不会改变该语义。前者用于常驻导航，仪表盘用于首页，专用分页端点用于完整未读列表。
+`/api/library/activity-summary`、`/api/library/dashboard` 与 `/api/library/unread` 均按相册的实际媒体判定未读：有图片的相册以是否存在图片阅读活动为准，纯视频相册没有图片活动，改以是否存在视频播放活动为准——播放过就不再计入未读，避免视频相册永久停留在未读列表。前者用于常驻导航，仪表盘用于首页，专用分页端点用于完整未读列表。
 
 响应中 `status` 为 `in_progress` / `completed`，由服务端按实际位置派生。图片到达
 `pageCount - 1` 完成；视频到达 98% 完成。`/api/progress` 不提供。

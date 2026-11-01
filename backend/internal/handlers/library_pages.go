@@ -77,7 +77,7 @@ func LibraryUnreadAlbumsPageHandler(catalog *services.ResourceCatalog, activitie
 		if !ok {
 			return nil
 		}
-		started, activityRevision, err := activities.StartedImageAlbumIDsSnapshot()
+		started, activityRevision, err := startedAlbums(activities)
 		if err != nil {
 			return httputil.Internal(c, "activity_unavailable", "activity storage is unavailable")
 		}
@@ -100,7 +100,7 @@ func LibraryRandomAlbumHandler(catalog *services.ResourceCatalog, activities *st
 		}
 		snapshot := catalog.Acquire()
 		if scope == "unread" {
-			started, activityRevision, err := activities.StartedImageAlbumIDsSnapshot()
+			started, activityRevision, err := startedAlbums(activities)
 			if err != nil {
 				return httputil.Internal(c, "activity_unavailable", "activity storage is unavailable")
 			}
@@ -123,7 +123,7 @@ func LibraryRandomAlbumHandler(catalog *services.ResourceCatalog, activities *st
 // LibraryActivitySummaryHandler 为常驻侧边栏返回未读计数，避免下载全量相册摘要。
 func LibraryActivitySummaryHandler(catalog *services.ResourceCatalog, activities *store.ActivityStore, unreadIndex *services.UnreadLibraryIndex) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		started, activityRevision, err := activities.StartedImageAlbumIDsSnapshot()
+		started, activityRevision, err := startedAlbums(activities)
 		if err != nil {
 			return httputil.Internal(c, "activity_unavailable", "activity storage is unavailable")
 		}
@@ -140,10 +140,15 @@ func LibraryActivitySummaryHandler(catalog *services.ResourceCatalog, activities
 // 它避免首页为了几个入口下载跨根的完整相册列表和活动映射。
 func LibraryHomeDashboardHandler(catalog *services.ResourceCatalog, activities *store.ActivityStore, unreadIndex *services.UnreadLibraryIndex) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		imageActivities, started, activityRevision, err := activities.ImageActivitySnapshot()
+		imageActivities, _, _, err := activities.ImageActivitySnapshot()
 		if err != nil {
 			return httputil.Internal(c, "activity_unavailable", "activity storage is unavailable")
 		}
+		startedImage, startedVideo, activityRevision, err := activities.StartedAlbumIDsSnapshot()
+		if err != nil {
+			return httputil.Internal(c, "activity_unavailable", "activity storage is unavailable")
+		}
+		started := services.StartedAlbums{Image: startedImage, Video: startedVideo}
 		snapshot := catalog.Acquire()
 		dashboard, err := unreadIndex.Dashboard(snapshot, imageActivities, started, activityRevision)
 		if err != nil {
@@ -266,4 +271,13 @@ func writeLibraryPageError(c *fiber.Ctx, err error, revision uint64) error {
 
 func setLibraryRevisionETag(c *fiber.Ctx, revision uint64) {
 	c.Set(fiber.HeaderETag, `W/"library-`+strconv.FormatUint(revision, 10)+`"`)
+}
+
+// startedAlbums 汇总图片与视频活动派生的相册 ID 集合，供未读统计使用。
+func startedAlbums(activities *store.ActivityStore) (services.StartedAlbums, uint64, error) {
+	image, video, revision, err := activities.StartedAlbumIDsSnapshot()
+	if err != nil {
+		return services.StartedAlbums{}, 0, err
+	}
+	return services.StartedAlbums{Image: image, Video: video}, revision, nil
 }

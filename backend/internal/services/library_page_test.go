@@ -216,7 +216,7 @@ func TestUnreadLibraryAlbumsUsesActivityIndexAndRevisionCursor(t *testing.T) {
 	fixture := newLibraryPageFixture(t)
 	snapshot := fixture.catalog.Acquire()
 	index := NewUnreadLibraryIndex()
-	started := map[string]struct{}{fixture.albumID: {}}
+	started := StartedAlbums{Image: map[string]struct{}{fixture.albumID: {}}}
 	first, err := index.Page(snapshot, started, 1, "", 2)
 	if err != nil {
 		t.Fatal(err)
@@ -240,7 +240,7 @@ func TestUnreadLibraryIndexCachesByCatalogAndActivityRevision(t *testing.T) {
 	fixture := newLibraryPageFixture(t)
 	snapshot := fixture.catalog.Acquire()
 	index := NewUnreadLibraryIndex()
-	started := map[string]struct{}{fixture.albumID: {}}
+	started := StartedAlbums{Image: map[string]struct{}{fixture.albumID: {}}}
 
 	first, err := index.Page(snapshot, started, 1, "", 2)
 	if err != nil || first.Total != 3 || len(first.Items) != 2 || first.NextCursor == "" {
@@ -248,12 +248,12 @@ func TestUnreadLibraryIndexCachesByCatalogAndActivityRevision(t *testing.T) {
 	}
 	// 同一活动版本意味着调用方提供的是同一不可变活动快照；即使后续调用
 	// 传入了不同 map，缓存也必须保持第一次构建的索引，不能重复筛全库。
-	second, err := index.Page(snapshot, map[string]struct{}{}, 1, first.NextCursor, 2)
+	second, err := index.Page(snapshot, StartedAlbums{}, 1, first.NextCursor, 2)
 	if err != nil || second.Total != 3 || len(second.Items) != 1 || second.NextCursor != "" {
 		t.Fatalf("cached unread page=(%+v, %v)", second, err)
 	}
 
-	refreshed, err := index.Page(snapshot, map[string]struct{}{}, 2, "", 2)
+	refreshed, err := index.Page(snapshot, StartedAlbums{}, 2, "", 2)
 	if err != nil || refreshed.Total != 4 || len(refreshed.Items) != 2 || refreshed.NextCursor == "" {
 		t.Fatalf("refreshed unread page=(%+v, %v)", refreshed, err)
 	}
@@ -323,6 +323,70 @@ func TestLibrarySummaryCarriesVirtualAlbumLocation(t *testing.T) {
 	}
 }
 
+// 纯视频相册没有图片活动，未读判定只能依据视频活动：播放过一次后不应
+// 继续留在未读列表里，否则纯视频相册会永远显示为未读。
+func TestUnreadIndexExcludesVideoOnlyAlbumAfterVideoActivity(t *testing.T) {
+	root := t.TempDir()
+	videoPath := filepath.Join(root, "movie.mp4")
+	if err := os.WriteFile(videoPath, []byte("video"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	imagePath := filepath.Join(root, "photo.jpg")
+	if err := os.WriteFile(imagePath, []byte("image"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	videoAlbumPath := filepath.Join(root, "videos")
+	imageAlbumPath := filepath.Join(root, "photos")
+	videoAlbum := models.Album{
+		Type: "album", Path: videoAlbumPath, Name: "videos", DisplayName: "videos",
+		SourceRoot: root, SourceName: filepath.Base(root),
+		VideoFiles: []string{videoPath}, VideoCount: 1,
+		CoverImage: videoPath, CoverKind: "video",
+	}
+	imageAlbum := models.Album{
+		Type: "album", Path: imageAlbumPath, Name: "photos", DisplayName: "photos",
+		SourceRoot: root, SourceName: filepath.Base(root),
+		ImageFiles: []string{imagePath}, ImageCount: 1,
+		CoverImage: imagePath, CoverKind: "image",
+	}
+	result := &models.ScanResult{
+		Roots: []string{root}, Albums: []models.Album{videoAlbum, imageAlbum},
+		AlbumCount: 2, ScannedAt: time.Date(2025, 2, 2, 0, 0, 0, 0, time.UTC), Duration: 1,
+	}
+	catalog := NewResourceCatalog()
+	catalog.Publish(result, []string{root})
+	snapshot := catalog.Acquire()
+	unreadIndex := NewUnreadLibraryIndex()
+	videoAlbumID := catalog.ExternalID(videoAlbumPath, ResourceAlbum)
+
+	summary, err := unreadIndex.Summary(snapshot, StartedAlbums{}, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.UnreadCount != 2 {
+		t.Fatalf("unread count before any activity=%+v, want 2", summary)
+	}
+
+	// 只有视频活动时，纯视频相册已翻开，不再计入未读。
+	started := StartedAlbums{Video: map[string]struct{}{videoAlbumID: {}}}
+	summary, err = unreadIndex.Summary(snapshot, started, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if summary.UnreadCount != 1 {
+		t.Fatalf("unread count after video activity=%+v, want 1", summary)
+	}
+
+	// 图片相册仍然只认图片活动：视频活动不算它已翻开。
+	page, err := unreadIndex.Page(snapshot, started, 3, "", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 1 || page.Items[0].ID != catalog.ExternalID(imageAlbumPath, ResourceAlbum) {
+		t.Fatalf("unread page after video activity=%+v", page.Items)
+	}
+}
+
 func TestRandomLibraryAlbumAndActivitySummaryUsePublishedIndex(t *testing.T) {
 	fixture := newLibraryPageFixture(t)
 	snapshot := fixture.catalog.Acquire()
@@ -336,7 +400,7 @@ func TestRandomLibraryAlbumAndActivitySummaryUsePublishedIndex(t *testing.T) {
 		t.Fatalf("random album=%+v", random)
 	}
 
-	started := map[string]struct{}{fixture.albumID: {}}
+	started := StartedAlbums{Image: map[string]struct{}{fixture.albumID: {}}}
 	summary, err := unreadIndex.Summary(snapshot, started, 1)
 	if err != nil {
 		t.Fatal(err)
@@ -349,7 +413,7 @@ func TestRandomLibraryAlbumAndActivitySummaryUsePublishedIndex(t *testing.T) {
 	for _, album := range snapshot.state.library.albums {
 		excludeAll[album.ID] = struct{}{}
 	}
-	if _, err := unreadIndex.Random(snapshot, excludeAll, 2); !errors.Is(err, ErrLibraryNoMatchingAlbum) {
+	if _, err := unreadIndex.Random(snapshot, StartedAlbums{Image: excludeAll}, 2); !errors.Is(err, ErrLibraryNoMatchingAlbum) {
 		t.Fatalf("all albums excluded error=%v, want ErrLibraryNoMatchingAlbum", err)
 	}
 	assertNoAbsolutePathInJSON(t, summary)
@@ -359,7 +423,7 @@ func TestLibraryHomeDashboardUsesCurrentImageCountAndLimitedUnreadPreview(t *tes
 	fixture := newLibraryPageFixture(t)
 	snapshot := fixture.catalog.Acquire()
 	unreadIndex := NewUnreadLibraryIndex()
-	started := map[string]struct{}{fixture.albumID: {}}
+	started := StartedAlbums{Image: map[string]struct{}{fixture.albumID: {}}}
 
 	dashboard, err := unreadIndex.Dashboard(snapshot, []models.Activity{{
 		AlbumID: fixture.albumID, MediaKind: models.MediaKindImage,
@@ -396,7 +460,7 @@ func TestLibraryActivitySummaryKeepsCurrentEmptyAlbumUnreadAfterRescan(t *testin
 	albumID := catalog.ExternalID(albumPath, ResourceAlbum)
 
 	snapshot := catalog.Acquire()
-	started := map[string]struct{}{albumID: {}}
+	started := StartedAlbums{Image: map[string]struct{}{albumID: {}}}
 	unreadIndex := NewUnreadLibraryIndex()
 	summary, err := unreadIndex.Summary(snapshot, started, 1)
 	if err != nil || summary.UnreadCount != 1 {

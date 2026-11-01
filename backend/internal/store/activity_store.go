@@ -115,6 +115,45 @@ func (s *ActivityStore) StartedImageAlbumIDsSnapshot() (map[string]struct{}, uin
 	return ids, s.revision, nil
 }
 
+// StartedVideoAlbumIDsSnapshot 返回视频活动派生的相册 ID 集合及当前进程内
+// 活动版本。纯视频相册没有图片活动，未读统计只能依据视频活动判定
+// "已经翻开过"；与图片集合分开返回，避免两种媒体互相污染。
+func (s *ActivityStore) StartedVideoAlbumIDsSnapshot() (map[string]struct{}, uint64, error) {
+	if err := s.ensureLoaded(); err != nil {
+		return nil, 0, err
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	ids := make(map[string]struct{})
+	for _, activity := range s.items {
+		if activity.MediaKind == models.MediaKindVideo {
+			ids[activity.AlbumID] = struct{}{}
+		}
+	}
+	return ids, s.revision, nil
+}
+
+// StartedAlbumIDsSnapshot 在一次加锁内返回图片与视频活动各自派生的相册 ID
+// 集合以及当前活动版本。未读统计同时需要两种集合，用同一版本号缓存派生索引。
+func (s *ActivityStore) StartedAlbumIDsSnapshot() (image, video map[string]struct{}, revision uint64, err error) {
+	if err = s.ensureLoaded(); err != nil {
+		return nil, nil, 0, err
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	image = make(map[string]struct{})
+	video = make(map[string]struct{})
+	for _, activity := range s.items {
+		switch activity.MediaKind {
+		case models.MediaKindImage:
+			image[activity.AlbumID] = struct{}{}
+		case models.MediaKindVideo:
+			video[activity.AlbumID] = struct{}{}
+		}
+	}
+	return image, video, s.revision, nil
+}
+
 // ImageActivitySnapshot 返回全部图片阅读活动、对应相册 ID 集合和当前活动版本。
 // 首页仪表盘使用这一致性快照构建在读与未读摘要；它不会返回视频播放记录，
 // 也不读取媒体库或文件系统路径。
