@@ -21,8 +21,10 @@ const VirtualList = forwardRef<HTMLDivElement, ListProps>(function VirtualList(
   { children, style },
   ref,
 ) {
+  // 列表视图铺满内容宽度：信息列右对齐后逐行对齐，便于扫读；
+  // 之前限制 max-w-4xl 会让右半屏空着，一屏能看的条目比网格视图还少。
   return (
-    <div ref={ref} style={style} className="px-6 lg:px-10 py-2 max-w-4xl">
+    <div ref={ref} style={style} className="px-6 lg:px-10 py-2">
       {children}
     </div>
   );

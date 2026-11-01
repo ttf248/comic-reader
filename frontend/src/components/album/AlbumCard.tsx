@@ -415,10 +415,10 @@ function ListCard({
     <Link
       to={data.to}
       aria-label={`打开${data.variant === "album" ? "相册" : data.variant === "collection" ? "集合" : "智能视图"}“${data.displayTitle ?? data.title}”`}
-      className="group flex items-center gap-4 py-2.5 px-2.5 -mx-2.5 rounded-lg hover:bg-bg-subtle transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      className="group flex items-center gap-4 py-2 px-2.5 -mx-2.5 rounded-lg hover:bg-bg-subtle transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
     >
       <div
-        className="relative w-24 aspect-[4/5] rounded-md bg-bg-subtle overflow-hidden shrink-0 border border-border shadow-xs"
+        className="relative w-20 aspect-[4/5] rounded-md bg-bg-subtle overflow-hidden shrink-0 border border-border shadow-xs"
         data-testid="card-cover"
       >
         <CardCover data={data} loading="eager" />
@@ -460,26 +460,6 @@ function ListCard({
         </div>
         <div className="text-[12px] text-fg-subtle mt-1 flex items-center gap-2">
           {data.subtitle && <span className="truncate">{data.subtitle}</span>}
-          {(() => {
-            const media = formatMediaCount(data);
-            if (media) {
-              return (
-                <span className="tabular-nums shrink-0" title={media.title}>
-                  {media.label}
-                </span>
-              );
-            }
-            return (
-              <span className="tabular-nums shrink-0">
-                {data.count}{" "}
-                {data.variant === "collection"
-                  ? "卷"
-                  : data.variant === "smart"
-                    ? "卷"
-                    : "张"}
-              </span>
-            );
-          })()}
           {data.sourceName && multiRoot && (
             <span className="text-fg-subtle/80 inline-flex items-center gap-0.5 shrink-0">
               <FolderIcon size={11} className="shrink-0" />
@@ -488,7 +468,7 @@ function ListCard({
           )}
         </div>
         {progressPct !== null && progressPct > 0 && (
-          <div className="mt-2 flex items-center gap-2">
+          <div className="mt-2 flex items-center gap-2 max-w-md">
             <div className="flex-1 h-1 bg-bg-strong rounded-full overflow-hidden">
               <div
                 className="h-full bg-accent"
@@ -500,11 +480,35 @@ function ListCard({
             </span>
           </div>
         )}
+      </div>
+
+      {/* 右侧信息列：张数 / 最近查看固定右对齐，逐行对齐便于扫读。 */}
+      <div className="shrink-0 w-24 sm:w-32 text-right flex flex-col items-end gap-1">
+        <span className="text-[12px] text-fg-muted tabular-nums">
+          {(() => {
+            const media = formatMediaCount(data);
+            if (media) {
+              return (
+                <span title={media.title}>{media.label}</span>
+              );
+            }
+            return (
+              <>
+                {data.count}{" "}
+                {data.variant === "collection"
+                  ? "卷"
+                  : data.variant === "smart"
+                    ? "卷"
+                    : "张"}
+              </>
+            );
+          })()}
+        </span>
         {showLastSeen && data.lastSeenAt && (
-          <div className="text-[11px] text-fg-subtle mt-1.5 inline-flex items-center gap-1">
+          <span className="text-[11px] text-fg-subtle inline-flex items-center gap-1">
             <ClockIcon size={11} className="shrink-0 text-fg-subtle/70" />
             <span>上次 {timeAgo(data.lastSeenAt)}</span>
-          </div>
+          </span>
         )}
       </div>
 

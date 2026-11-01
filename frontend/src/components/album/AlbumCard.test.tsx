@@ -152,4 +152,28 @@ describe("AlbumCard 封面语义", () => {
       expect(screen.getByText(/来自 存照/)).toBeInTheDocument();
     },
   );
+
+  it("列表模式把张数与最近查看放进右侧信息列", () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <AlbumCard
+            data={card({
+              imageCount: 9,
+              videoCount: 2,
+              lastSeenAt: "2024-05-01T00:00:00Z",
+            })}
+            variant="list"
+            showLastSeen
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByText("9 张 · 2 个视频")).toBeInTheDocument();
+    expect(screen.getByText(/上次/)).toBeInTheDocument();
+  });
 });
