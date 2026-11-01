@@ -6,8 +6,37 @@ import {
   type Page,
   type Route,
 } from "@playwright/test";
+import { crc32, deflateSync } from "node:zlib";
+import { mkdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import type { VideoInfo, VideoInfoBatchItem } from "../../src/api/videos";
 import type { DirectoryPage } from "../../src/api/fs";
+
+// 生成一张纯色 PNG：用于验证阅读器按像素显示（原始尺寸）时，
+// 图片不会被视口宽度夹住。测试素材目录是脚本建的临时目录。
+function solidPng(width: number, height: number) {
+  const chunk = (type: string, data: Buffer) => {
+    const length = Buffer.alloc(4);
+    length.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type, "ascii"), data]);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(body));
+    return Buffer.concat([length, body, crc]);
+  };
+  const row = Buffer.concat([Buffer.from([0]), Buffer.alloc(width * 3, 0x66)]);
+  const raw = Buffer.concat(Array.from({ length: height }, () => row));
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 2;
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", ihdr),
+    chunk("IDAT", deflateSync(raw)),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
+}
 
 async function renderedColors(locator: Locator, properties: string[]) {
   return locator.evaluate((element, properties) => {
@@ -4176,4 +4205,45 @@ test("阅读器放大与旋转真正作用到图片上", async ({ page }) => {
   await expect.poll(async () => Math.abs((await matrix())[1])).toBeGreaterThan(
     0.5,
   );
+});
+
+test("阅读器「原始」适配模式按像素显示图片，超出视口时可滚动查看", async ({
+  page,
+  request,
+}) => {
+  const config = (await (await request.get("/api/config")).json()) as {
+    mediaRoots: string[];
+  };
+  const root = config.mediaRoots[0];
+  expect(root).toBeTruthy();
+  const dir = path.join(root, "sample-original-size");
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(path.join(dir, "big.png"), solidPng(1400, 1000));
+
+  const nodes = await scannedNodes(request);
+  const album = nodes.find((node) => node.name === "sample-original-size");
+  expect(album).toBeDefined();
+  await page.goto(`/gallery?path=${encodeURIComponent(album!.id)}&index=0`);
+  await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("1");
+
+  const img = page.locator("[data-image-gallery] img").first();
+  // 切到「原始」适配模式：适应 → 按宽 → 按高 → 原始
+  for (let i = 0; i < 3; i++) {
+    await page.keyboard.press("f");
+    await page.waitForTimeout(150);
+  }
+  const size = await img.evaluate((element) => ({
+    natural: element.naturalWidth,
+    rendered: Math.round(element.getBoundingClientRect().width),
+  }));
+  // 视口宽 1280，图片宽 1400：按像素显示时不能被夹到视口宽度
+  expect(size.natural).toBe(1400);
+  expect(size.rendered).toBe(1400);
+  // 超出视口的部分可以滚动到
+  const scrolled = await page.evaluate(() => {
+    const container = document.querySelector("[data-image-gallery]")!;
+    container.scrollLeft = 9999;
+    return { scrollLeft: container.scrollLeft, scrollWidth: container.scrollWidth };
+  });
+  expect(scrolled.scrollWidth).toBeGreaterThan(scrolled.scrollLeft);
 });

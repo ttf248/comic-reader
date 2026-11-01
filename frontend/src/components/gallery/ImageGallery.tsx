@@ -205,8 +205,15 @@ export default function ImageGallery({
   // 单页模式：容器自己滚动 + flex 居中
   // 连续 / 双页模式：容器滚动（避免上层 / 下层元素双层滚动）
   // 背景用透明，让外层（Gallery 的深色画布）决定整体氛围
+  //
+  // 原始尺寸模式例外：图片比视口大，居中对齐会让溢出的一侧滚不到
+  // （flex 居中 + overflow 的已知问题），此时从左上角开始并允许滚动。
   const containerCls = isSingle
-    ? "relative flex-1 overflow-auto flex items-center justify-center min-h-0"
+    ? `relative flex-1 overflow-auto flex ${
+        aspect.mode === "original"
+          ? "items-start justify-start"
+          : "items-center justify-center"
+      } min-h-0`
     : "relative flex-1 overflow-auto min-h-0";
   const containerStyle: React.CSSProperties | undefined = isSingle
     ? { touchAction: zoom > 1 ? "none" : "pan-y" }
@@ -240,7 +247,16 @@ export default function ImageGallery({
     if (aspect.mode === "height") {
       return { ...base, height: "100vh", width: "auto", maxWidth: "100%" };
     }
-    return { ...base, width: "auto", height: "auto" };
+    // 原始尺寸：按像素原样显示，由容器滚动查看。
+    // flex 子项默认会被压缩到容器宽度；Tailwind preflight 还给 img 设了
+    // max-width: 100%，两者都要显式解除，否则原始尺寸会被夹回视口宽度。
+    return {
+      ...base,
+      width: "auto",
+      height: "auto",
+      maxWidth: "none",
+      flexShrink: 0,
+    };
   }
 
   function imgClassFor(): string {
