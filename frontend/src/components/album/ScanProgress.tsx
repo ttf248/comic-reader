@@ -159,7 +159,7 @@ export default function ScanProgress({
     progress.phase === "smart-grouping"
       ? "聚合标签中"
       : progress.phase === "done"
-        ? "收尾中"
+        ? "已完成"
         : "扫描目录";
 
   return (

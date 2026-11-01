@@ -59,6 +59,23 @@ describe("ScanProgress", () => {
     expect(screen.getByText(/7/)).toBeInTheDocument(); // albumsFound=7
   });
 
+  it("扫描完成后的阶段说明是「已完成」，不再显示收尾中", () => {
+    render(
+      <ScanProgress
+        progress={makeProgress({
+          status: "complete",
+          phase: "done",
+          progress: 100,
+          currentPath: "",
+        })}
+      />,
+    );
+
+    expect(screen.getByText("扫描完成")).toBeInTheDocument();
+    expect(screen.getByText("已完成")).toBeInTheDocument();
+    expect(screen.queryByText("收尾中")).not.toBeInTheDocument();
+  });
+
   it("shows full-width 取消扫描 button in expanded running view", () => {
     const onCancel = vi.fn();
     render(<ScanProgress progress={makeProgress()} onCancel={onCancel} />);
