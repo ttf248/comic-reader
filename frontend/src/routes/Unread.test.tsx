@@ -34,8 +34,14 @@ import {
   useLibraryManifest,
   useLibraryUnreadAlbums,
 } from "../hooks/useLibrary";
+import type { LibraryNodeSummary } from "../api/library";
 
-const baseAlbum = (id: string, name: string, imageCount = 10) => ({
+const baseAlbum = (
+  id: string,
+  name: string,
+  imageCount = 10,
+  extra: Partial<LibraryNodeSummary> = {},
+) => ({
   id,
   kind: "album" as const,
   name,
@@ -48,6 +54,7 @@ const baseAlbum = (id: string, name: string, imageCount = 10) => ({
   folderSize: 0,
   tags: [] as string[],
   modTime: "",
+  ...extra,
 });
 
 function seedUnread(
@@ -142,5 +149,26 @@ describe("Unread", () => {
       expect(screen.queryByText("A")).not.toBeInTheDocument(),
     );
     expect(screen.getByText("B")).toBeInTheDocument();
+  });
+
+  it("散图相册按归属目录展示并能被目录名搜到", async () => {
+    seedUnread([
+      baseAlbum("/loose", "本目录媒体", 10, {
+        virtual: true,
+        location: "2020年",
+      }),
+      baseAlbum("/b", "B"),
+    ]);
+    renderUnread();
+
+    // 卡片展示归属目录，而不是通用的类型名
+    expect(await screen.findByText("2020年")).toBeInTheDocument();
+
+    act(() => useSearchStore.getState().setQuery("2020年"));
+
+    await waitFor(() =>
+      expect(screen.queryByText("B")).not.toBeInTheDocument(),
+    );
+    expect(screen.getByText("2020年")).toBeInTheDocument();
   });
 });

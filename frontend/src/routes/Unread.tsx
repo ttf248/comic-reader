@@ -12,6 +12,7 @@ import type { GalleryContextEntry } from "../utils/galleryContext";
 import { albumRoute, decodeFavPath } from "../utils/path";
 import { compareDatesDesc } from "../utils/date";
 import { useViewedSort } from "../hooks/useHistory";
+import { cardMatchesQuery } from "../utils/libraryCard";
 import ViewedSortNotice from "../components/common/ViewedSortNotice";
 
 // 未读列表:跟 Recents / Favorites 同形,但源数据是「还没翻开过的相册」。
@@ -34,11 +35,7 @@ export default function Unread() {
 
   const filtered = useMemo(() => {
     const list = cards
-      .filter((it) => {
-        if (!query) return true;
-        const q = query.toLowerCase();
-        return `${it.title} ${it.subtitle ?? ""}`.toLowerCase().includes(q);
-      })
+      .filter((it) => cardMatchesQuery(it, query))
       // 最小图数过滤(全局 filter)
       .filter((it) => {
         if (minImageCount <= 0) return true;

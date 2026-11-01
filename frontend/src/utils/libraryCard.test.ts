@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LibraryNodeSummary, LibraryTagSummary } from "../api/library";
-import { libraryOverviewCards, nodeSummaryToCard } from "./libraryCard";
+import { libraryOverviewCards, nodeSummaryToCard, cardMatchesQuery } from "./libraryCard";
 
 function node(
   id: string,
@@ -72,8 +72,8 @@ describe("libraryCard", () => {
 
     expect(card.displayTitle).toBe("2020年");
     expect(card.subtitle).toBe("本目录媒体");
-    // 原始名保留，供排序与搜索沿用原有语义。
-    expect(card.title).toBe("本目录媒体");
+    // 标题与搜索、排序共用：都用归属目录，否则列表里只能搜到类型词。
+    expect(card.title).toBe("2020年");
   });
 
   it("散图缺少归属目录时回退到原展示名", () => {
@@ -86,5 +86,22 @@ describe("libraryCard", () => {
     );
 
     expect(card.displayTitle).toBe("本目录媒体");
+  });
+
+  it("列表搜索能按散图的归属目录命中", () => {
+    const card = nodeSummaryToCard(
+      node("a_loose", "album", {
+        name: "本目录媒体",
+        displayName: "本目录媒体",
+        virtual: true,
+        location: "2020年",
+      }),
+    );
+
+    expect(cardMatchesQuery(card, "2020年")).toBe(true);
+    expect(cardMatchesQuery(card, "2020")).toBe(true);
+    expect(cardMatchesQuery(card, "本目录媒体")).toBe(true);
+    expect(cardMatchesQuery(card, "1999")).toBe(false);
+    expect(cardMatchesQuery(card, "  ")).toBe(true);
   });
 });

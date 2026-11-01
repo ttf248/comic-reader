@@ -24,7 +24,11 @@ import {
   type YearGroup,
 } from "../utils/albumGrouping";
 import { useLibraryDashboard, useLibraryOverview } from "../hooks/useLibrary";
-import { libraryOverviewCards, nodeSummaryToCard } from "../utils/libraryCard";
+import {
+  libraryOverviewCards,
+  nodeSummaryToCard,
+  cardMatchesQuery,
+} from "../utils/libraryCard";
 import {
   PlayFilledIcon,
   StarIcon,
@@ -235,9 +239,7 @@ export default function Home() {
         }
       }
       if (query) {
-        const q = query.toLowerCase();
-        const hay = `${it.title} ${it.subtitle ?? ""}`.toLowerCase();
-        if (!hay.includes(q)) return false;
+        if (!cardMatchesQuery(it, query)) return false;
       }
       return true;
     });

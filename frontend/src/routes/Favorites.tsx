@@ -14,7 +14,11 @@ import { compareDatesDesc } from "../utils/date";
 import type { GalleryContextEntry } from "../utils/galleryContext";
 import { useViewedSort } from "../hooks/useHistory";
 import { useLibraryNodes, useLibraryTags } from "../hooks/useLibrary";
-import { nodeSummaryToCard, tagSummaryToCard } from "../utils/libraryCard";
+import {
+  nodeSummaryToCard,
+  tagSummaryToCard,
+  cardMatchesQuery,
+} from "../utils/libraryCard";
 
 // 收藏页：合并 albums + smart collections 中的收藏。
 // 支持搜索 + 排序 + 阅读进度展示。
@@ -84,7 +88,7 @@ export default function Favorites() {
       .filter((it) => {
         if (!query) return true;
         const q = query.toLowerCase();
-        return `${it.title} ${it.subtitle ?? ""}`.toLowerCase().includes(q);
+        return cardMatchesQuery(it, q);
       })
       // 最小图数过滤(全局 filter)
       .filter((it) => {

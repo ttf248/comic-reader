@@ -14,7 +14,7 @@ import { decodeFavPath } from "../utils/path";
 import { compareDatesDesc, formatRelative } from "../utils/date";
 import type { GalleryContextEntry } from "../utils/galleryContext";
 import { useLibraryNodes } from "../hooks/useLibrary";
-import { nodeSummaryToCard } from "../utils/libraryCard";
+import { nodeSummaryToCard, cardMatchesQuery } from "../utils/libraryCard";
 
 const EMPTY_HISTORY: Prefs["history"] = [];
 
@@ -62,7 +62,7 @@ export default function Recents() {
       .filter((it) => {
         if (!query) return true;
         const q = query.toLowerCase();
-        return `${it.title} ${it.subtitle ?? ""}`.toLowerCase().includes(q);
+        return cardMatchesQuery(it, q);
       })
       // 最小图数过滤(全局 filter)
       .filter((it) => {
