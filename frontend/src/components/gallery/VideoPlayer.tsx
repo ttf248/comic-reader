@@ -52,6 +52,9 @@ export default function VideoPlayer({
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const restoredSourceRef = useRef<string | null>(null);
+  // 空格键按下后应用期望的暂停状态（null = 本次空格不由应用处理）。
+  // 用于抵消浏览器在 keyup 阶段的原生播放/暂停切换。
+  const spacePausedRef = useRef<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [retryKey, setRetryKey] = useState(0);
   const mediaURL = useMemo(
@@ -125,8 +128,12 @@ export default function VideoPlayer({
         case "k":
         case "K":
           e.preventDefault();
-          if (v.paused) v.play().catch(() => {});
-          else v.pause();
+          {
+            const nextPaused = !v.paused;
+            if (e.key === " ") spacePausedRef.current = nextPaused;
+            if (nextPaused) v.pause();
+            else v.play().catch(() => {});
+          }
           break;
         case "ArrowLeft":
           e.preventDefault();
@@ -155,8 +162,27 @@ export default function VideoPlayer({
         // 'F11' / 'f' / 全屏由 GalleryHeader 顶层处理；此处不重复
       }
     };
+    // 焦点落在 <video> 上时，浏览器还有一套原生键盘行为：空格在 keyup
+    // 阶段会再切换一次播放/暂停（激活行为，无法用 preventDefault 取消）。
+    // 应用在 keydown 已经切换过，两次叠加等于没切换 —— 表现为"点过视频
+    // 之后按空格没反应"。所以这里记下应用期望的状态，等 keyup 之后把
+    // 原生那次切换抵消掉。
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key !== " ") return;
+      const expected = spacePausedRef.current;
+      if (expected === null) return;
+      spacePausedRef.current = null;
+      const v = videoRef.current;
+      if (!v || v.paused === expected) return;
+      if (expected) v.pause();
+      else v.play().catch(() => {});
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener("keyup", onKeyUp);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("keyup", onKeyUp);
+    };
   }, []);
 
   // 把 HTMLMediaElement 的 MediaError 翻译成对人友好的中文消息。

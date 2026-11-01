@@ -120,6 +120,57 @@ describe("VideoPlayer 活动恢复", () => {
     expect(play).not.toHaveBeenCalled();
   });
 
+  it("视频获得焦点后按空格只切换一次，不被浏览器的原生切换抵消", () => {
+    render(<VideoPlayer src="f_video" />);
+    const video = document.querySelector("video") as HTMLVideoElement;
+    let paused = true;
+    Object.defineProperty(video, "paused", {
+      configurable: true,
+      get: () => paused,
+    });
+    vi.spyOn(video, "play").mockImplementation(() => {
+      paused = false;
+      return Promise.resolve();
+    });
+    vi.spyOn(video, "pause").mockImplementation(() => {
+      paused = true;
+    });
+
+    // keydown：应用切换一次 → 播放
+    fireEvent.keyDown(video, { key: " " });
+    expect(paused).toBe(false);
+
+    // 浏览器原生激活：焦点在 <video> 上时，空格在 keyup 阶段会再切换一次。
+    // jsdom 不实现，这里手动模拟（监听器挂在 video 上，先于 window 冒泡执行）。
+    video.addEventListener("keyup", () => {
+      paused = !paused;
+    });
+    fireEvent.keyUp(video, { key: " " });
+
+    // 应用把原生那次切换抵消掉，最终状态仍由应用决定
+    expect(paused).toBe(false);
+  });
+
+  it("浏览器没有原生切换时空格键的校正不产生额外动作", () => {
+    render(<VideoPlayer src="f_video" />);
+    const video = document.querySelector("video") as HTMLVideoElement;
+    let paused = true;
+    Object.defineProperty(video, "paused", {
+      configurable: true,
+      get: () => paused,
+    });
+    const play = vi.spyOn(video, "play").mockImplementation(() => {
+      paused = false;
+      return Promise.resolve();
+    });
+
+    fireEvent.keyDown(video, { key: " " });
+    expect(play).toHaveBeenCalledTimes(1);
+    fireEvent.keyUp(video, { key: " " });
+    expect(paused).toBe(false);
+    expect(play).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     { key: "ArrowRight", ctrlKey: true },
     { key: "ArrowRight", altKey: true },
