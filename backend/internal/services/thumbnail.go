@@ -25,8 +25,8 @@ import (
 // ErrUnsupportedFormat 图片格式不受支持。
 var ErrUnsupportedFormat = errors.New("unsupported image format")
 
-// ErrSourceMissing 源图片不存在。
-var ErrSourceMissing = errors.New("source image not found")
+// ErrSourceMissing 源媒体不存在或不再是普通文件。
+var ErrSourceMissing = errors.New("media source not found")
 
 // ErrVideoCoverMissing 视频封面尚未生成。
 //
@@ -185,6 +185,9 @@ func (s *ThumbnailService) getOrCreateImage(absPath string) ([]byte, error) {
 		}
 		return nil, err
 	}
+	if !fi.Mode().IsRegular() {
+		return nil, ErrSourceMissing
+	}
 
 	key := s.renditionKey(CacheKeyFromStat(absPath, fi))
 
@@ -255,6 +258,9 @@ func (s *ThumbnailService) getVideoCover(absPath string) ([]byte, error) {
 			return nil, ErrSourceMissing
 		}
 		return nil, err
+	}
+	if !fi.Mode().IsRegular() {
+		return nil, ErrSourceMissing
 	}
 	key := s.renditionKey(videoCoverKey(absPath, fi.ModTime(), fi.Size()))
 
@@ -336,6 +342,9 @@ func (s *ThumbnailService) SaveVideoCover(absPath string, data []byte) error {
 			return ErrSourceMissing
 		}
 		return err
+	}
+	if !fi.Mode().IsRegular() {
+		return ErrSourceMissing
 	}
 
 	// 解码前端上传的字节

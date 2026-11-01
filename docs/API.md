@@ -156,37 +156,43 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 发送图片或视频。支持 ETag；视频支持 Range，并按需经过转码和 faststart 管线。
 
+响应前确认源路径仍为普通文件；扫描后被目录或其他非普通文件替换时，图片返回 `404 media_not_found`，视频返回 `404 video_not_found`。此检查先于 ETag、Range、转码缓存选择和文件发送，不返回目录重定向或携带本地路径的 `Location`，也不因条件请求返回 304。源文件恢复后，原 ID 可继续使用。
+
 ### `GET /api/thumbs/:fileId`
 
 返回 JPEG 缩略图。视频尚无封面时返回 `404` 和 `code: video_cover_missing`。
+
+源路径不存在或不再是普通文件时返回 `404 source_not_found`；先校验源类型，再查询内存/磁盘缓存或尝试抽帧，不将目录误报为 `video_cover_missing`。
 
 ### `POST /api/thumbs/:fileId/cover`
 
 上传浏览器抽取的视频封面，body 为 JPEG/PNG 原始字节，最大 5 MiB。
 
+源视频路径不存在或不再是普通文件时返回 `404 source_not_found`，不解码上传内容、不写入封面缓存。
+
 ### `GET /api/images/:fileId/info`
 
 仅接受图片文件资源 ID，返回图片尺寸、格式、大小、修改时间和 checksum。`path` 为文件 ID，`name` 为文件名，`dir` 为所在目录的“根别名/相对父目录”，不包含文件名；根目录直属图片的 `dir` 只有根别名。例如 `name: "page.png"`、`dir: "素材/相册"`。
 
-| 状态 | code | 含义 |
-|------|------|------|
-| 400 | `invalid_resource_kind` | 传入根、相册或集合 ID |
-| 404 | `resource_not_found` | ID 无效、已过期或不在当前媒体根中 |
-| 404 | `media_not_found` | 已收录的文件不存在 |
-| 415 | `unsupported_image_format` | 文件不是受支持图片，例如视频文件 |
-| 500 | `image_info_failed` | 无法读取或解码图片 |
+| 状态 | code                       | 含义                                 |
+| ---- | -------------------------- | ------------------------------------ |
+| 400  | `invalid_resource_kind`    | 传入根、相册或集合 ID                |
+| 404  | `resource_not_found`       | ID 无效、已过期或不在当前媒体根中    |
+| 404  | `media_not_found`          | 已收录的源路径不存在或不再是普通文件 |
+| 415  | `unsupported_image_format` | 文件不是受支持图片，例如视频文件     |
+| 500  | `image_info_failed`        | 无法读取或解码图片                   |
 
 ### `GET /api/videos/:fileId/info`
 
 仅接受视频文件资源 ID，返回视频基础信息、可用时的元数据和转码状态。元数据优先通过 ffprobe 读取，缺失或失败时回退到 ffmpeg；两种工具都不可用时仍返回基础字段。回退结果的时长和码率遵循工具文本输出精度，未知数值以 0 表示，不返回 NaN 或无穷值。`path` 始终为文件 ID，`name` 为文件名，`dir` 与图片信息接口一致，只包含根别名和相对父目录。
 
-| 状态 | code | 含义 |
-|------|------|------|
-| 400 | `invalid_resource_kind` | 传入根、相册或集合 ID |
-| 404 | `resource_not_found` | ID 无效、已过期或不在当前媒体根中 |
-| 404 | `video_not_found` | 视频文件已删除或被目录替换 |
-| 415 | `unsupported_video_format` | 文件不是受支持视频 |
-| 500 | `video_info_failed` | 无法读取文件信息 |
+| 状态 | code                       | 含义                              |
+| ---- | -------------------------- | --------------------------------- |
+| 400  | `invalid_resource_kind`    | 传入根、相册或集合 ID             |
+| 404  | `resource_not_found`       | ID 无效、已过期或不在当前媒体根中 |
+| 404  | `video_not_found`          | 视频源路径不存在或不再是普通文件  |
+| 415  | `unsupported_video_format` | 文件不是受支持视频                |
+| 500  | `video_info_failed`        | 无法读取文件信息                  |
 
 ### `POST /api/videos/info/batch`
 
@@ -195,7 +201,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 文件 ID。响应为 `{ "ok": true, "items": [{ "id": "f_...", "info": {...} }] }`；
 结果保留输入顺序及重复项。单项失败不返回 `info`，其 `code` 为
 `resource_not_found`（ID 失效、路径含链接或不在当前媒体根中）、`invalid_resource_kind`（目录资源）、
-`unsupported_video_format`（非视频）、`video_not_found`（文件不存在或被目录替换）
+`unsupported_video_format`（非视频）、`video_not_found`（源路径不存在或不再是普通文件）
 或 `video_info_failed`（文件信息读取失败），不会使整批失败。
 成功项的 `info.path`、`info.dir` 与单条接口采用相同的文件 ID 和父目录语义。
 

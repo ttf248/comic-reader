@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -50,6 +51,9 @@ func ImageHandler() fiber.Handler {
 				return writeError(c, fiber.StatusNotFound, "media_not_found", "media resource was not found")
 			}
 			return writeError(c, fiber.StatusInternalServerError, "media_read_failed", "failed to read media resource")
+		}
+		if !info.Mode().IsRegular() {
+			return writeError(c, fiber.StatusNotFound, "media_not_found", "media resource was not found")
 		}
 		// ETag + 304 协商(命中 If-None-Match 时直接返回,不发 body)
 		etag := imageETag(info)
@@ -107,7 +111,7 @@ func ImageInfoHandler(catalog *services.ResourceCatalog) fiber.Handler {
 		}
 		info, err := services.GetImageInfo(path)
 		if err != nil {
-			if os.IsNotExist(err) {
+			if os.IsNotExist(err) || errors.Is(err, services.ErrSourceMissing) {
 				return writeError(c, fiber.StatusNotFound, "media_not_found", "media resource was not found")
 			}
 			return writeError(c, fiber.StatusInternalServerError, "image_info_failed", "failed to read image metadata")

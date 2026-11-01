@@ -52,6 +52,9 @@ func VideoHandler(transcode *services.TranscodeService, faststart *services.Vide
 			}
 			return httputil.Internal(c, "stat_failed", "failed to read media resource")
 		}
+		if !srcInfo.Mode().IsRegular() {
+			return httputil.NotFound(c, "video_not_found", "video file not found")
+		}
 		// 决定实际发送哪个文件:
 		//   transcode 命中 → 发转码缓存(浏览器能直播)
 		//   否则 faststart → 发 remux 缓存(浏览器能边下边播)
@@ -139,7 +142,7 @@ func VideoInfoHandler(infoSvc *services.VideoInfoService, transcode *services.Tr
 			}
 			return writeError(c, fiber.StatusInternalServerError, "video_info_failed", "failed to read video metadata")
 		}
-		if info.IsDir() {
+		if !info.Mode().IsRegular() {
 			return writeError(c, fiber.StatusNotFound, "video_not_found", "video file not found")
 		}
 		resp := videoInfoResponse(infoSvc, transcode, snapshot, resourceID, path, info)
@@ -218,7 +221,7 @@ func VideoInfoBatchHandler(infoSvc *services.VideoInfoService, transcode *servic
 					}
 					return
 				}
-				if info.IsDir() {
+				if !info.Mode().IsRegular() {
 					items[index].Code = "video_not_found"
 					return
 				}

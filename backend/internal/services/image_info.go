@@ -25,7 +25,7 @@ type ImageInfo struct {
 	Name     string `json:"name"`
 	Dir      string `json:"dir"`
 	Size     int64  `json:"size"`
-	MTime    string `json:"mtime"`    // RFC3339
+	MTime    string `json:"mtime"` // RFC3339
 	Width    int    `json:"width"`
 	Height   int    `json:"height"`
 	Format   string `json:"format"`   // jpeg/png/...
@@ -42,8 +42,8 @@ func GetImageInfo(absPath string) (*ImageInfo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("stat: %w", err)
 	}
-	if st.IsDir() {
-		return nil, fmt.Errorf("path is a directory")
+	if !st.Mode().IsRegular() {
+		return nil, ErrSourceMissing
 	}
 
 	// HEIC/HEIF：尺寸未知（返回 0），其它字段照常读取
