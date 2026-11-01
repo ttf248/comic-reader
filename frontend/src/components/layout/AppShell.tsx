@@ -192,7 +192,11 @@ export default function AppShell() {
         onReconnect={scanSse.reconnect}
         onStopTracking={scanSse.reset}
       />
-      <HelpOverlay open={helpOpen} onClose={() => setHelpOpen(false)} />
+      <HelpOverlay
+        context="library"
+        open={helpOpen}
+        onClose={() => setHelpOpen(false)}
+      />
     </div>
   );
 }

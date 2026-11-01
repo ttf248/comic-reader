@@ -20,7 +20,7 @@ function HelpHarness() {
   return (
     <>
       <button onClick={() => setOpen(true)}>打开帮助</button>
-      <HelpOverlay open={open} onClose={() => setOpen(false)} />
+      <HelpOverlay context="image" open={open} onClose={() => setOpen(false)} />
     </>
   );
 }
@@ -108,12 +108,62 @@ it("关闭后重新打开清空过滤条件", () => {
 });
 
 it("父组件重绘并更换回调时，保留当前焦点和搜索状态", () => {
-  const view = render(<HelpOverlay open onClose={vi.fn()} />);
+  const view = render(<HelpOverlay context="image" open onClose={vi.fn()} />);
   const search = screen.getByPlaceholderText("搜索快捷键…");
   fireEvent.change(search, { target: { value: "放大" } });
   const close = screen.getByRole("button", { name: "关闭" });
   close.focus();
-  view.rerender(<HelpOverlay open onClose={vi.fn()} />);
+  view.rerender(<HelpOverlay context="image" open onClose={vi.fn()} />);
   expect(close).toHaveFocus();
   expect(search).toHaveValue("放大");
+});
+
+it.each(["library", "image", "video"] as const)(
+  "%s 场景只展示对应页面的快捷键",
+  (context) => {
+    render(<HelpOverlay context={context} open onClose={vi.fn()} />);
+    if (context === "library") {
+      expect(screen.getByText("回到主页")).toBeInTheDocument();
+      expect(screen.queryByText(/旋转 90°/)).not.toBeInTheDocument();
+      expect(screen.queryByText("下一张")).not.toBeInTheDocument();
+    } else {
+      expect(screen.queryByText("回到主页")).not.toBeInTheDocument();
+      expect(screen.getByText("当前内容设为封面")).toBeInTheDocument();
+      expect(screen.getByText("清除自定义封面")).toBeInTheDocument();
+      if (context === "image") {
+        expect(screen.getByText("下一张")).toBeInTheDocument();
+        expect(screen.getByText(/旋转 90°/)).toBeInTheDocument();
+        expect(screen.queryByText("播放 / 暂停")).not.toBeInTheDocument();
+      } else {
+        expect(screen.getByText("播放 / 暂停")).toBeInTheDocument();
+        expect(screen.getByText("快进 5 秒")).toBeInTheDocument();
+        expect(screen.getByText("下一个视频")).toBeInTheDocument();
+        expect(screen.getByText("静音 / 取消静音")).toBeInTheDocument();
+        expect(screen.queryByText("下一张")).not.toBeInTheDocument();
+        expect(screen.queryByText(/幻灯片/)).not.toBeInTheDocument();
+      }
+    }
+  },
+);
+
+it("视频帮助搜索不显示图片操作，并可按视频别名查找播放操作", () => {
+  render(<HelpOverlay context="video" open onClose={vi.fn()} />);
+  const search = screen.getByRole("textbox", { name: "搜索快捷键" });
+  fireEvent.change(search, { target: { value: "旋转" } });
+  expect(screen.getByText("没有匹配「旋转」的快捷键")).toBeInTheDocument();
+  fireEvent.change(search, { target: { value: "Space" } });
+  expect(screen.getByText("播放 / 暂停")).toBeInTheDocument();
+  expect(screen.getByText("Space / K")).toBeInTheDocument();
+});
+
+it("切换媒体场景时保留搜索词，展示该按键在新场景的含义", () => {
+  const view = render(<HelpOverlay context="image" open onClose={vi.fn()} />);
+  const search = screen.getByRole("textbox", { name: "搜索快捷键" });
+  fireEvent.change(search, { target: { value: "Space" } });
+  expect(screen.getByText("幻灯片播放/暂停")).toBeInTheDocument();
+  view.rerender(<HelpOverlay context="video" open onClose={vi.fn()} />);
+  expect(search).toHaveValue("Space");
+  expect(search).toHaveFocus();
+  expect(screen.getByText("播放 / 暂停")).toBeInTheDocument();
+  expect(screen.queryByText(/幻灯片/)).not.toBeInTheDocument();
 });

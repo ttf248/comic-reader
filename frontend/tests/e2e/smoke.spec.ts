@@ -944,6 +944,12 @@ test("快捷键帮助限制焦点与背景操作，关闭后恢复入口并清�
   const search = dialog.getByRole("textbox", { name: "搜索快捷键" });
   const close = dialog.getByRole("button", { name: "关闭", exact: true });
   await expect(search).toBeFocused();
+  await expect(dialog.getByText("回到主页", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("下一张", { exact: true })).toHaveCount(0);
+  await expect(dialog.getByText(/旋转 90°/)).toHaveCount(0);
+  await search.fill("Space");
+  await expect(dialog.getByText("没有匹配「Space」的快捷键")).toBeVisible();
+  await search.fill("");
   await page.keyboard.press("Tab");
   await expect(close).toBeFocused();
   await page.keyboard.press("Shift+Tab");
@@ -1021,6 +1027,33 @@ for (const kind of ["image", "video"] as const) {
     await expect(
       dialog.getByRole("textbox", { name: "搜索快捷键" }),
     ).toBeFocused();
+    await expect(dialog.getByText("回到主页", { exact: true })).toHaveCount(0);
+    await expect(
+      dialog.getByText("当前内容设为封面", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      dialog.getByText("清除自定义封面", { exact: true }),
+    ).toBeVisible();
+    const search = dialog.getByRole("textbox", { name: "搜索快捷键" });
+    if (kind === "video") {
+      await expect(
+        dialog.getByText("下一个视频", { exact: true }),
+      ).toBeVisible();
+      await expect(
+        dialog.getByText("静音 / 取消静音", { exact: true }),
+      ).toBeVisible();
+      await expect(dialog.getByText("下一张", { exact: true })).toHaveCount(0);
+      await expect(dialog.getByText(/旋转 90°/)).toHaveCount(0);
+      await expect(dialog.getByText(/幻灯片/)).toHaveCount(0);
+    } else
+      await expect(dialog.getByText("下一张", { exact: true })).toBeVisible();
+    await search.fill("Space");
+    await expect(
+      dialog.getByText(kind === "video" ? "播放 / 暂停" : "幻灯片播放/暂停", {
+        exact: true,
+      }),
+    ).toBeVisible();
+    await search.fill("");
     await dialog.getByRole("button", { name: "关闭", exact: true }).focus();
     await page.keyboard.press("ArrowRight");
     if (kind === "video") {

@@ -1,19 +1,26 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { SHORTCUTS, type Shortcut } from "../../utils/shortcuts";
+import {
+  SHORTCUTS,
+  type Shortcut,
+  type ShortcutContext,
+} from "../../utils/shortcuts";
 import { CloseIcon, SearchIcon, KeyboardIcon } from "./Icon";
 
 interface Props {
   open: boolean;
   onClose: () => void;
+  context: ShortcutContext;
 }
 
-// 渲染顺序：先全局，再画廊。Title 单一来源。
+// 按当前页面显示全局操作，或阅读器共用操作及对应媒体操作。
 const GROUP_ORDER: Array<{
-  key: NonNullable<Shortcut["group"]>;
+  key: Shortcut["group"];
   title: string;
 }> = [
   { key: "global", title: "全局" },
-  { key: "gallery", title: "画廊" },
+  { key: "reader", title: "阅读器" },
+  { key: "image", title: "图片" },
+  { key: "video", title: "视频" },
 ];
 
 // 帮助浮层：可搜索的快捷键列表 + 分类。
@@ -21,7 +28,7 @@ const GROUP_ORDER: Array<{
 //
 // 数据源：直接消费 SHORTCUTS（按 group 字段分组）。新增/删除快捷键时，
 // 只需修改 shortcuts.ts，HelpOverlay 自动同步。
-export default function HelpOverlay({ open, onClose }: Props) {
+export default function HelpOverlay({ open, onClose, context }: Props) {
   const [q, setQ] = useState("");
   const dialogRef = useRef<HTMLDialogElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -63,10 +70,14 @@ export default function HelpOverlay({ open, onClose }: Props) {
   };
 
   // 按 group 字段分组，渲染顺序由 GROUP_ORDER 决定
-  const filteredGroups = GROUP_ORDER.map((g) => ({
-    title: g.title,
-    items: SHORTCUTS.filter((s) => s.group === g.key && matches(s)),
-  })).filter((g) => g.items.length > 0);
+  const activeGroups: Shortcut["group"][] =
+    context === "library" ? ["global"] : ["reader", context];
+  const filteredGroups = GROUP_ORDER.filter((g) => activeGroups.includes(g.key))
+    .map((g) => ({
+      title: g.title,
+      items: SHORTCUTS.filter((s) => s.group === g.key && matches(s)),
+    }))
+    .filter((g) => g.items.length > 0);
 
   const total = filteredGroups.reduce((s, g) => s + g.items.length, 0);
 
@@ -152,9 +163,11 @@ export default function HelpOverlay({ open, onClose }: Props) {
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto p-6 grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-6 scroll-thin">
+        <div
+          className={`flex-1 overflow-auto p-6 grid grid-cols-1 ${filteredGroups.length > 1 ? "md:grid-cols-2" : ""} gap-x-10 gap-y-6 scroll-thin`}
+        >
           {total === 0 && (
-            <div className="col-span-2 text-center text-fg-muted text-sm py-12">
+            <div className="col-span-full text-center text-fg-muted text-sm py-12">
               没有匹配「{q}」的快捷键
             </div>
           )}
