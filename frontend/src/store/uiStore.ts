@@ -33,6 +33,13 @@ interface UIState {
   breadcrumbs: { label: string; to?: string }[]
   setBreadcrumbs: (bc: { label: string; to?: string }[]) => void
 
+  /**
+   * 是否配置了多个媒体根。只有多根时卡片才显示「来自 X」来源标记——
+   * 单一根下每张卡片都挂同一句来源纯属噪音。
+   */
+  multiRoot: boolean
+  setMultiRoot: (v: boolean) => void
+
   toasts: Toast[]
   pushToast: (t: Omit<Toast, 'id' | 'ttl'> & { ttl?: number }) => string
   dismissToast: (id: string) => void
@@ -56,6 +63,9 @@ export const useUIStore = create<UIState>()(
 
       breadcrumbs: [],
       setBreadcrumbs: (bc) => set({ breadcrumbs: bc }),
+
+      multiRoot: false,
+      setMultiRoot: (v) => set({ multiRoot: v }),
 
       toasts: [],
       pushToast: (t) => {

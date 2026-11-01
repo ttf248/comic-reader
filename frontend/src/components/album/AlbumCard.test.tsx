@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import AlbumCard, { type CardData } from "./AlbumCard";
+import { useUIStore } from "../../store/uiStore";
 
 vi.mock("../../hooks/useVideoCover", () => ({
   useVideoCover: () => ({
@@ -134,6 +135,21 @@ describe("AlbumCard 封面语义", () => {
       expect(link).toHaveAttribute("href", "/albums/album-1");
       expect(link.querySelector("button")).toBeNull();
       expect(screen.getByTestId("card-cover")).toHaveClass("aspect-[4/5]");
+    },
+  );
+  it.each(["grid", "list"] as const)(
+    "%s 模式只在多根媒体下显示来源标记",
+    (variant) => {
+      const withSource = card({ sourceName: "存照", sourceRoot: "r_1" });
+
+      useUIStore.getState().setMultiRoot(false);
+      const { unmount } = renderCard(withSource, variant);
+      expect(screen.queryByText(/来自 存照/)).not.toBeInTheDocument();
+      unmount();
+
+      useUIStore.getState().setMultiRoot(true);
+      renderCard(withSource, variant);
+      expect(screen.getByText(/来自 存照/)).toBeInTheDocument();
     },
   );
 });

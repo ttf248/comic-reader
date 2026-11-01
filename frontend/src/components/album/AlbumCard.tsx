@@ -14,7 +14,7 @@ import {
 } from "../common/Icon";
 import HoverPreview from "../common/HoverPreview";
 import TranscodeStatusBadge from "../common/TranscodeStatusBadge";
-import type { ViewMode } from "../../store/uiStore";
+import { useUIStore, type ViewMode } from "../../store/uiStore";
 import { timeAgo } from "../../utils/date";
 import { formatDuration } from "../../utils/format";
 import { isCompleted, isUnread, progressPercent } from "../../utils/progress";
@@ -169,6 +169,8 @@ function GridCard({
   // 全新：没有有效进度记录。保存过 index=0 说明已经打开第一张，属于在读。
   // 重要：仅 album 变体显示；智能集合 / 集合不适用。
   const isFresh = data.variant === "album" && isUnread(data.progress);
+  // 只有配置了多个媒体根才需要标来源。
+  const multiRoot = useUIStore((s) => s.multiRoot);
 
   // 悬停预览：350ms 后弹出，移出卡片或预览延迟 150ms 关闭。
   // （延迟是为了让用户能从卡片顺利移到预览上，预览是 portal 元素，
@@ -347,8 +349,9 @@ function GridCard({
               </>
             )}
           </div>
-          {/* 多根来源 badge：与标签副标题独立，作为视觉小标签放在元数据行 */}
-          {data.sourceName && (
+          {/* 多根来源 badge：与标签副标题独立，作为视觉小标签放在元数据行。
+              单一媒体根下每张卡片都挂同一句来源是噪音，multiRoot 为 false 时隐藏。 */}
+          {data.sourceName && multiRoot && (
             <div className="text-[10px] text-fg-subtle/80 mt-0.5 inline-flex items-center gap-1">
               <FolderIcon size={10} className="shrink-0" />
               <span className="truncate">来自 {data.sourceName}</span>
@@ -405,6 +408,8 @@ function ListCard({
   // 与 GridCard 一致：直接依赖 <img loading="lazy">，不重复自写 IO。
   const progressPct = progressPercent(data.progress);
   const isFinished = isCompleted(data.progress);
+  // 只有配置了多个媒体根才需要标来源。
+  const multiRoot = useUIStore((s) => s.multiRoot);
 
   return (
     <Link
@@ -475,7 +480,7 @@ function ListCard({
               </span>
             );
           })()}
-          {data.sourceName && (
+          {data.sourceName && multiRoot && (
             <span className="text-fg-subtle/80 inline-flex items-center gap-0.5 shrink-0">
               <FolderIcon size={11} className="shrink-0" />
               <span className="truncate">来自 {data.sourceName}</span>

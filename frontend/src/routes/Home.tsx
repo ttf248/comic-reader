@@ -357,8 +357,22 @@ export default function Home() {
             <p className="text-sm text-fg-muted mt-3.5">
               {manifest ? (
                 <>
-                  <span className="tabular-nums text-fg">{counts.all}</span>{" "}
-                  个文件夹
+                  {/* 标题描述整个库，而不是当前根目录下的条目数：
+                      下面的标签页已经区分「文件夹 / 集合」，这里再叫
+                      「N 个文件夹」既不准确也容易和标签页打架。 */}
+                  <span className="tabular-nums text-fg">
+                    {manifest.statistics.albumCount}
+                  </span>{" "}
+                  本相册
+                  {manifest.statistics.collectionCount > 0 && (
+                    <>
+                      {" · "}
+                      <span className="tabular-nums text-fg">
+                        {manifest.statistics.collectionCount}
+                      </span>{" "}
+                      个集合
+                    </>
+                  )}
                   {manifest.scannedAt && (
                     <span className="text-fg-subtle ml-1.5">
                       · 上次更新 {formatTime(manifest.scannedAt)}

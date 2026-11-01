@@ -303,7 +303,7 @@ export default function ScanProgress({
                 <span className="text-fg tabular-nums">
                   {progress.albumsFound}
                 </span>{" "}
-                个文件夹
+                本相册
               </span>
               {isError && progress.error && (
                 <span className="text-danger truncate max-w-[40ch]">

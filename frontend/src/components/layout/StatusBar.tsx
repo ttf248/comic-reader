@@ -26,11 +26,12 @@ export default function StatusBar() {
         ? "扫描进度连接中断 · 结果待确认"
         : sse.connectionState === "connecting"
           ? "正在连接扫描进度"
-          : `扫描中 · 已发现 ${sse.progress?.albumsFound ?? 0} 个文件夹`;
+          : `扫描中 · 已发现 ${sse.progress?.albumsFound ?? 0} 本相册`;
   } else if (sse.isError) {
     leftLabel = "扫描失败";
   } else if (manifest) {
-    leftLabel = `${manifest.statistics.albumCount} 个文件夹 · ${manifest.statistics.tagCount} 个标签`;
+    // 与首页标题用同一个词（"本相册"）：albumCount 是相册数，不是根目录条目数。
+    leftLabel = `${manifest.statistics.albumCount} 本相册 · ${manifest.statistics.tagCount} 个标签`;
   }
 
   const sortLabel =

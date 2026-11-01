@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-query";
 import { LibraryRevisionChangedError, libraryApi } from "../api/library";
 import { ACTIVITY_CHANGED_EVENT } from "../api/activity";
+import { useUIStore } from "../store/uiStore";
 
 export const libraryQueryKeys = {
   root: ["library"] as const,
@@ -27,10 +28,17 @@ export const libraryQueryKeys = {
 };
 
 export function useLibraryManifest() {
-  return useQuery({
+  const query = useQuery({
     queryKey: libraryQueryKeys.manifest(),
     queryFn: () => libraryApi.manifest(),
   });
+  // 多根时才需要在卡片上标来源：单一根下每张卡片都挂「来自 X」是噪音。
+  const rootCount = query.data?.manifest.roots?.length ?? 0;
+  const setMultiRoot = useUIStore((s) => s.setMultiRoot);
+  useEffect(() => {
+    setMultiRoot(rootCount > 1);
+  }, [rootCount, setMultiRoot]);
+  return query;
 }
 
 // 应用常驻层统一同步阅读派生缓存；画廊和其他页面也会修改未打开列表的状态。
