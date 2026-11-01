@@ -432,17 +432,17 @@ func (s *Scanner) inspectDirectory(
 		if s.contextErr() != nil {
 			break
 		}
-		if entry.Type()&os.ModeSymlink != 0 {
+		entryPath := filepath.Join(task.path, entry.Name())
+		if _, delegated := s.rootKeys[pathutil.RootKey(entryPath)]; delegated {
+			continue
+		}
+		if entry.Type()&(os.ModeSymlink|os.ModeIrregular) != 0 {
 			result.warnings = append(result.warnings, models.ScanWarning{
-				Code: "symlink_skipped", Path: scanWarningPath(root.path, filepath.Join(task.path, entry.Name())), Message: "符号链接默认不跟随",
+				Code: "symlink_skipped", Path: scanWarningPath(root.path, entryPath), Message: "链接默认不跟随",
 			})
 			continue
 		}
 		if entry.IsDir() {
-			childPath := filepath.Join(task.path, entry.Name())
-			if _, delegated := s.rootKeys[pathutil.RootKey(childPath)]; delegated {
-				continue
-			}
 			if exclude.ShouldSkipDir(entry.Name()) {
 				continue
 			}
@@ -452,8 +452,8 @@ func (s *Scanner) inspectDirectory(
 				})
 				continue
 			}
-			result.record.children = append(result.record.children, childPath)
-			result.children = append(result.children, directoryTask{path: childPath, depth: task.depth + 1})
+			result.record.children = append(result.record.children, entryPath)
+			result.children = append(result.children, directoryTask{path: entryPath, depth: task.depth + 1})
 			continue
 		}
 		if exclude.ShouldSkipFile(entry.Name()) {
@@ -468,7 +468,7 @@ func (s *Scanner) inspectDirectory(
 		default:
 			continue
 		}
-		fullPath := filepath.Join(task.path, entry.Name())
+		fullPath := entryPath
 		size := int64(0)
 		modTime := time.Time{}
 		if info, infoErr := entry.Info(); infoErr == nil {

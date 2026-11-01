@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/tianlongxiang/local-gallery/internal/models"
+	"github.com/tianlongxiang/local-gallery/internal/pathutil"
 )
 
 type ScanStatus string
@@ -395,17 +396,8 @@ func isActiveScan(status ScanStatus) bool {
 }
 
 func relativeScanPath(path string, roots []string) string {
-	if path == "" {
-		return ""
-	}
-	var owner, relative string
-	for _, root := range roots {
-		rel, err := filepath.Rel(root, path)
-		if err == nil && !relEscapesRoot(rel) && len(root) > len(owner) {
-			owner, relative = root, rel
-		}
-	}
-	if owner == "" {
+	owner, relative, matched := pathutil.MostSpecificRoot(path, roots)
+	if !matched {
 		return ""
 	}
 	name := filepath.Base(filepath.Clean(owner))

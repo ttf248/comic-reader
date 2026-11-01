@@ -12,6 +12,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/tianlongxiang/local-gallery/internal/httputil"
+	"github.com/tianlongxiang/local-gallery/internal/pathutil"
 )
 
 // OpenInOS 在系统文件管理器中打开给定路径。
@@ -45,24 +46,15 @@ func OpenInOS(path string) error {
 	}
 }
 
-// pathState 当前生效的根路径集合。
-// 用规范化绝对路径 + 带分隔符的 "root/" 前缀做白名单校验，O(1) 查询。
-// 多个根按出现顺序存储；任一命中即放行。
+// pathState 当前生效的规范化根集合；校验时选择最具体的根。
 type pathState struct {
-	roots    []string // 规范化绝对路径
-	prefixes []string // 与 roots 一一对应，root + PathSeparator
+	roots []string
 }
 
 // safetyState 用 atomic.Pointer 持有 pathState，handler 读无锁。
 type safetyState struct {
 	v atomic.Pointer[pathState]
 }
-
-// PathSafetyMiddleware 返回中间件：把 ?path=<abs> 解析后校验是否在任一
-// mediaRoots 之下（多根支持）。
-// 根路径由 RootsProvider 在每次请求时提供（支持运行中热更新）。
-// RootsProvider 返回空切片时按"无根"处理（拒绝所有非 smart: 路径）。
-type RootsProvider func() []string
 
 // ResourceResolver 把业务资源 ID 解析为内部绝对路径。
 type ResourceResolver interface {
@@ -80,6 +72,8 @@ type PathValidator interface {
 	Validate(path string) (string, error)
 }
 
+// PathSafetyMiddleware 返回中间件：把 ?path=<abs> 解析后按最具体媒体根校验。
+// Manager 变更回调通过 SetRoots 原子替换根集合；空列表拒绝所有媒体路径。
 func PathSafetyMiddleware(initialRoots []string, resolvers ...ResourceResolver) (fiber.Handler, *safetyState) {
 	state := &safetyState{}
 	state.setRoots(initialRoots)
@@ -113,7 +107,7 @@ func PathSafetyMiddleware(initialRoots []string, resolvers ...ResourceResolver) 
 		if ps == nil || len(ps.roots) == 0 {
 			return httputil.BadRequest(c, "media_roots_unconfigured", "mediaRoots not configured")
 		}
-		clean, err := validatePathMulti(ps.roots, ps.prefixes, path)
+		clean, err := validatePathMulti(ps.roots, path)
 		if err != nil {
 			return httputil.BadRequest(c, "invalid_media_path", "media path is invalid")
 		}
@@ -124,22 +118,9 @@ func PathSafetyMiddleware(initialRoots []string, resolvers ...ResourceResolver) 
 	return handler, state
 }
 
-// setRoots 替换根集合；不合法时回退到空（拒绝所有非 smart 路径）。
+// setRoots 规范化并替换根集合，空白项不能变成进程工作目录。
 func (s *safetyState) setRoots(roots []string) {
-	absRoots := make([]string, 0, len(roots))
-	prefixes := make([]string, 0, len(roots))
-	for _, r := range roots {
-		abs, err := filepath.Abs(r)
-		if err != nil {
-			abs = r
-		}
-		absRoots = append(absRoots, abs)
-		prefixes = append(prefixes, abs+string(os.PathSeparator))
-	}
-	s.v.Store(&pathState{
-		roots:    absRoots,
-		prefixes: prefixes,
-	})
+	s.v.Store(&pathState{roots: pathutil.NormalizeRoots(roots)})
 }
 
 // SetRoots 公开方法，供 Manager 回调调用以热更新根集合。
@@ -153,7 +134,7 @@ func (s *safetyState) Validate(path string) (string, error) {
 	if ps == nil || len(ps.roots) == 0 {
 		return "", fmt.Errorf("mediaRoots not configured")
 	}
-	return validatePathMulti(ps.roots, ps.prefixes, path)
+	return validatePathMulti(ps.roots, path)
 }
 
 // SafePath 从 c.Locals 取出已校验的绝对路径。
@@ -171,10 +152,8 @@ func IsSafetyBypassed(c *fiber.Ctx) bool {
 	return ok && v
 }
 
-// validatePathMulti 检查 p 是否在任一根之下。
-//   - 必须绝对路径
-//   - filepath.Rel 不报错且不以 ".." 开头即为子路径
-func validatePathMulti(roots, prefixes []string, p string) (string, error) {
+// validatePathMulti 按最具体的配置根校验绝对路径，再逐级拒绝该根内部的链接。
+func validatePathMulti(roots []string, p string) (string, error) {
 	if !filepath.IsAbs(p) {
 		return "", fmt.Errorf("path must be absolute")
 	}
@@ -182,34 +161,25 @@ func validatePathMulti(roots, prefixes []string, p string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	for i, root := range roots {
-		rel, err := filepath.Rel(root, abs)
-		if err != nil {
-			continue
-		}
-		if rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
-			continue
-		}
-		// 命中第 i 个根；额外断言 abs 以 prefix 开头，避免边缘大小写问题
-		_ = prefixes[i] // 保留 prefixes 字段供未来 audit / debug
-		// 扫描快照不能证明路径现在仍安全：目录可能在扫描后被替换为
-		// 符号链接或 Windows junction。与扫描器保持一致，根内不跟随链接。
-		for current := abs; ; current = filepath.Dir(current) {
-			if relative, _ := filepath.Rel(root, current); relative == "." {
-				break
-			}
-			info, err := os.Lstat(current)
-			if os.IsNotExist(err) {
-				continue // 已删除的资源由 handler 返回 404，仍检查其父目录。
-			}
-			if err != nil {
-				return "", fmt.Errorf("cannot validate media path")
-			}
-			if info.Mode()&(os.ModeSymlink|os.ModeIrregular) != 0 {
-				return "", fmt.Errorf("media path contains a link")
-			}
-		}
-		return abs, nil
+	root, _, matched := pathutil.MostSpecificRoot(abs, roots)
+	if !matched {
+		return "", fmt.Errorf("path outside any configured media root")
 	}
-	return "", fmt.Errorf("path outside any configured media root")
+	// 配置根本身是用户显式授权的边界；其内部不跟随链接，也不回退到更宽泛的父根。
+	for current := abs; ; current = filepath.Dir(current) {
+		if relative, _ := filepath.Rel(root, current); relative == "." {
+			break
+		}
+		info, err := os.Lstat(current)
+		if os.IsNotExist(err) {
+			continue // 已删除的资源由 handler 返回 404，仍检查其父目录。
+		}
+		if err != nil {
+			return "", fmt.Errorf("cannot validate media path")
+		}
+		if info.Mode()&(os.ModeSymlink|os.ModeIrregular) != 0 {
+			return "", fmt.Errorf("media path contains a link")
+		}
+	}
+	return abs, nil
 }

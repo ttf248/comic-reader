@@ -12,7 +12,6 @@ import (
 
 func TestValidatePathMulti(t *testing.T) {
 	root, _ := filepath.Abs("/safe/root")
-	rootWithSep := root + string(os.PathSeparator)
 
 	cases := []struct {
 		name    string
@@ -29,7 +28,7 @@ func TestValidatePathMulti(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			_, err := validatePathMulti([]string{root}, []string{rootWithSep}, c.path)
+			_, err := validatePathMulti([]string{root}, c.path)
 			if (err != nil) != c.wantErr {
 				t.Fatalf("path=%q err=%v wantErr=%v", c.path, err, c.wantErr)
 			}
@@ -45,24 +44,38 @@ func TestValidatePathMulti_MultipleRoots(t *testing.T) {
 	abs2, _ := filepath.Abs(dir2)
 
 	roots := []string{abs1, abs2}
-	prefixes := make([]string, len(roots))
-	for i, r := range roots {
-		prefixes[i] = r + string(os.PathSeparator)
-	}
 
 	// dir1 子路径
-	if _, err := validatePathMulti(roots, prefixes, filepath.Join(abs1, "a.png")); err != nil {
+	if _, err := validatePathMulti(roots, filepath.Join(abs1, "a.png")); err != nil {
 		t.Errorf("dir1 path should pass: %v", err)
 	}
 	// dir2 子路径
-	if _, err := validatePathMulti(roots, prefixes, filepath.Join(abs2, "b.jpg")); err != nil {
+	if _, err := validatePathMulti(roots, filepath.Join(abs2, "b.jpg")); err != nil {
 		t.Errorf("dir2 path should pass: %v", err)
 	}
 	// 其他目录应被拒绝
 	other := t.TempDir()
 	absOther, _ := filepath.Abs(other)
-	if _, err := validatePathMulti(roots, prefixes, filepath.Join(absOther, "x.png")); err == nil {
+	if _, err := validatePathMulti(roots, filepath.Join(absOther, "x.png")); err == nil {
 		t.Error("path outside all roots should be rejected")
+	}
+}
+
+func TestBlankRootUpdatesNeverAuthorizeWorkingDirectory(t *testing.T) {
+	root := t.TempDir()
+	_, validator := PathSafetyMiddleware([]string{root})
+	if _, err := validator.Validate(filepath.Join(root, "page.png")); err != nil {
+		t.Fatal(err)
+	}
+	validator.SetRoots([]string{"", " ", "\t"})
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{filepath.Join(cwd, "page.png"), filepath.Join(root, "page.png")} {
+		if _, err := validator.Validate(path); err == nil {
+			t.Fatal("blank roots retained or implicitly created filesystem authorization")
+		}
 	}
 }
 

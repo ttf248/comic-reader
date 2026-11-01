@@ -58,3 +58,25 @@ func EqualRoots(first, second []string) bool {
 	}
 	return true
 }
+
+// MostSpecificRoot 在绝对路径中选择最具体的配置根，与资源 ID 的归属规则一致。
+// 只比较路径边界，不解析链接；返回相对路径供调用方校验根内组件或生成脱敏标签。
+func MostSpecificRoot(path string, roots []string) (root, relative string, matched bool) {
+	if !filepath.IsAbs(path) {
+		return "", "", false
+	}
+	for _, candidate := range roots {
+		if !filepath.IsAbs(candidate) {
+			continue
+		}
+		candidate = filepath.Clean(candidate)
+		rel, err := filepath.Rel(candidate, path)
+		if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			continue
+		}
+		if len(candidate) > len(root) {
+			root, relative = candidate, rel
+		}
+	}
+	return root, relative, root != ""
+}
