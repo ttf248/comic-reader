@@ -88,6 +88,9 @@ export default function Gallery() {
   // 视频文件列表（type=video 时使用）
   const [videos, setVideos] = useState<string[]>([]);
   const [loadedVideoPath, setLoadedVideoPath] = useState("");
+  // 相册里"另一种媒体"的数量：图片模式 = 视频数，视频模式 = 图片数。
+  // 序列播完时用它提示相册里还有别的媒体，避免用户误以为已经看完。
+  const [siblingCount, setSiblingCount] = useState(0);
   const [imageActivityReadyPath, setImageActivityReadyPath] = useState("");
   const [continuousRange, setContinuousRange] = useState({
     path: "",
@@ -273,27 +276,29 @@ export default function Gallery() {
     finishedRef.current = false;
     setImages([]);
     setVideos([]);
+    setSiblingCount(0);
     libraryApi
       .allMedia(pathParam)
       .then((page) => {
         if (cancelled) return;
+        const imageList = page.items
+          .filter((item) => item.kind === "image")
+          .map((item) => item.id);
+        const videoList = page.items
+          .filter((item) => item.kind === "video")
+          .map((item) => item.id);
+        setSiblingCount(isVideo ? imageList.length : videoList.length);
         if (isVideo) {
-          const list = page.items
-            .filter((item) => item.kind === "video")
-            .map((item) => item.id);
-          if (list.length > 0) {
+          if (videoList.length > 0) {
             setLoadedVideoPath(pathParam);
-            setVideos(list);
+            setVideos(videoList);
           } else {
             setLoadError("EMPTY");
           }
         } else {
-          const list = page.items
-            .filter((item) => item.kind === "image")
-            .map((item) => item.id);
-          if (list.length > 0) {
+          if (imageList.length > 0) {
             setLoadedImagePath(pathParam);
-            setImages(list);
+            setImages(imageList);
           } else {
             setLoadError("EMPTY");
           }
@@ -766,7 +771,17 @@ export default function Gallery() {
   // 因 user 操作 stale,但回调需要读最新 store + push 最新 toast)。
   const onReachEndRef = useRef<() => void>(() => {});
   onReachEndRef.current = () => {
-    pushToast({ kind: "info", message: "已是最后一张", ttl: 1500 });
+    pushToast({
+      kind: "info",
+      message: isVideo
+        ? siblingCount > 0
+          ? `已是最后一个视频 · 相册里另有 ${siblingCount} 张图片`
+          : "已是最后一个视频"
+        : siblingCount > 0
+          ? `图片已看完 · 还有 ${siblingCount} 个视频`
+          : "已是最后一张",
+      ttl: 1500,
+    });
     if (useGalleryStore.getState().slideshow) {
       toggleSlideshow();
       pushToast({ kind: "info", message: "幻灯片已自动停止" });

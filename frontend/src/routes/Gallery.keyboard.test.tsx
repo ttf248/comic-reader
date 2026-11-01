@@ -9,6 +9,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useGalleryStore } from "../store/galleryStore";
+import { useUIStore } from "../store/uiStore";
 import Gallery from "./Gallery";
 
 const mocks = vi.hoisted(() => ({
@@ -206,5 +207,28 @@ describe("Gallery 按媒体类型隔离快捷键", () => {
     await pressKey(" ");
     expect(useGalleryStore.getState().slideshow).toBe(true);
     act(() => useGalleryStore.setState({ slideshow: false }));
+  });
+
+  it("视频播到末尾的提示用视频的说法，并说明相册里还有图片", async () => {
+    useUIStore.setState({ toasts: [] });
+    renderGallery("video");
+    await currentVideo();
+    await pressKey("End");
+    await pressKey("PageDown");
+    expect(useUIStore.getState().toasts.at(-1)?.message).toBe(
+      "已是最后一个视频 · 相册里另有 3 张图片",
+    );
+  });
+
+  it("图片播到末尾的提示说明相册里还有视频", async () => {
+    useUIStore.setState({ toasts: [] });
+    renderGallery("image");
+    await screen.findByTestId("image-gallery");
+    await waitFor(() => expect(useGalleryStore.getState().index).toBe(1));
+    await pressKey("End");
+    await pressKey("ArrowRight");
+    expect(useUIStore.getState().toasts.at(-1)?.message).toBe(
+      "图片已看完 · 还有 3 个视频",
+    );
   });
 });
