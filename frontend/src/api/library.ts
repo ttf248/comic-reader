@@ -54,6 +54,12 @@ export interface LibraryNodeSummary {
   dateSource?: "captured" | "folder" | "modified";
   virtual?: boolean;
   hasCustomCover?: boolean;
+  /**
+   * 虚拟相册（"本目录媒体"）归属目录相对媒体根的路径，如 "2020年"、
+   * "2011年/10.1一号公馆"。用于替代同名卡片标题，让用户能分辨归属目录。
+   * 普通相册为空。
+   */
+  location?: string;
 }
 
 export interface LibraryMediaItem {

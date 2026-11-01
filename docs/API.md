@@ -109,6 +109,8 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 扫描结果可包含 `warnings`：每项只有稳定 `code`、根别名/相对 `path` 和用户可读 `message`，不会暴露绝对路径。混合目录中的“本目录媒体”相册带 `virtual: true`，其相册 ID 与集合 ID 不同，但二者解析到同一真实目录。`collection.albumCount` 统计全部后代相册。
 
+虚拟相册的 `name` 恒为“本目录媒体”（区分相册类型的语义常量），另带 `location`：归属目录相对所属媒体根的路径，用斜杠分隔，例如 `2020年`、`2011年/10.1一号公馆`；根目录自身的散图用根目录名。`location` 是这些相册在未读/最近等扁平列表里的唯一可辨识标识，前端用它做卡片标题，搜索也按它命中；普通相册没有该字段。
+
 相册同时返回 `date` 与 `dateSource`。`dateSource` 取值为 `captured` / `folder` / `modified`，服务端按该顺序降级；目录日期只接受 `YYYY`、`YYYY-MM`、`YYYY-MM-DD`、`YYYYMMDD` 或严格的 `YYYY/MM/DD` 路径分段，不会从任意名称子串中猜测。
 
 媒体库浏览只使用下列 revision 分页接口：

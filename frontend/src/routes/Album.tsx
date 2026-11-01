@@ -71,6 +71,10 @@ interface AlbumDetail {
   tags: string[];
   folderSize: number;
   modTime: string;
+  /** 散图（"本目录媒体"）视图：标题用归属目录，name 之外另标类型。 */
+  virtual?: boolean;
+  /** 散图归属目录相对媒体根的路径。 */
+  location?: string;
 }
 
 interface CollectionDetail {
@@ -99,10 +103,14 @@ function albumDetailFromSummary(
   summary: LibraryNodeSummary,
   media: LibraryMediaItem[] = [],
 ): AlbumDetail {
+  // 散图（"本目录媒体"）的 name 没有区分度，用归属目录当标题。
+  const virtual = summary.virtual === true;
+  const location = summary.location?.trim();
   return {
     type: "album",
     path: summary.id,
-    name: summary.displayName || summary.name,
+    name:
+      virtual && location ? location : summary.displayName || summary.name,
     imageFiles: media
       .filter((item) => item.kind === "image")
       .map((item) => item.id),
@@ -117,6 +125,8 @@ function albumDetailFromSummary(
     tags: summary.tags ?? [],
     folderSize: summary.folderSize ?? 0,
     modTime: summary.modTime ?? "",
+    virtual,
+    location,
   };
 }
 
@@ -559,9 +569,18 @@ function AlbumView({
 
             {/* 标题 + 元信息 + CTA */}
             <div className="min-w-0 flex-1">
-              <h1 className="font-display text-2xl sm:text-[28px] font-semibold tracking-[-0.01em] leading-tight">
-                {detail.name}
-              </h1>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h1 className="font-display text-2xl sm:text-[28px] font-semibold tracking-[-0.01em] leading-tight">
+                  {detail.name}
+                </h1>
+                {/* 散图视图：标题已是归属目录，这里标明它是「目录内散图」 */}
+                {detail.virtual && (
+                  <span className="inline-flex items-center gap-1 h-6 px-2 rounded-md bg-bg-subtle text-fg-muted text-[11px] shrink-0">
+                    <FolderIcon size={11} />
+                    本目录媒体
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-2 text-sm text-fg-muted mt-2 flex-wrap">
                 {detail.tags.length > 0 && (
                   <>
@@ -879,7 +898,7 @@ function CollectionView({
       id: "a:" + a.path,
       variant: "album",
       title: a.name,
-      subtitle: a.tags.join(" · "),
+      subtitle: a.virtual ? "本目录媒体" : a.tags.join(" · "),
       count: a.imageCount,
       imageCount: a.imageCount,
       videoCount: a.videoCount ?? 0,

@@ -39,6 +39,7 @@ func newLibraryPageFixture(t *testing.T) libraryPageFixture {
 	virtual := models.Album{
 		Type: "album", Path: virtualPath, Name: "本目录媒体", DisplayName: "本目录媒体",
 		SourceRoot: root, SourceName: filepath.Base(root), Virtual: true,
+		Location: filepath.Base(root),
 		ImageFiles: []string{virtualCover}, ImageCount: 1, CoverImage: virtualCover, CoverKind: "image",
 	}
 	album2 := models.Album{
@@ -275,6 +276,42 @@ func TestLibrarySearchUsesPrecomputedPathSafeIndex(t *testing.T) {
 	empty := NewResourceCatalog()
 	if hits := SearchLibrary(empty.Acquire(), "旅行", 10); len(hits) != 0 {
 		t.Fatalf("unready library search hits=%+v", hits)
+	}
+}
+
+// TestLibrarySummaryCarriesVirtualAlbumLocation 验证散图（"本目录媒体"）
+// 的摘要带 location，搜索命中也用 location 而不是同名常量名。
+//
+// 背景：所有散图的 name 恒为"本目录媒体"，扁平列表里用户无法分辨归属目录。
+func TestLibrarySummaryCarriesVirtualAlbumLocation(t *testing.T) {
+	fixture := newLibraryPageFixture(t)
+	snapshot := fixture.catalog.Acquire()
+
+	children, err := PageLibraryChildren(snapshot, fixture.rootID, "", 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var virtual *LibraryNodeSummary
+	for i := range children.Items {
+		if children.Items[i].Virtual {
+			virtual = &children.Items[i]
+		}
+	}
+	if virtual == nil {
+		t.Fatalf("children page missing virtual album: %+v", children.Items)
+	}
+	if virtual.Location != filepath.Base(fixture.root) {
+		t.Fatalf("virtual location=%q, want %q", virtual.Location, filepath.Base(fixture.root))
+	}
+	// name 保持语义常量，location 才是展示用的归属目录。
+	if virtual.Name != "本目录媒体" {
+		t.Fatalf("virtual name=%q, want 本目录媒体", virtual.Name)
+	}
+
+	hits := SearchLibrary(snapshot, filepath.Base(fixture.root), 10)
+	if len(hits) != 1 || hits[0].Kind != "album" ||
+		hits[0].Name != filepath.Base(fixture.root) {
+		t.Fatalf("search by location hits=%+v", hits)
 	}
 }
 

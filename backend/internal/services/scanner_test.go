@@ -476,6 +476,10 @@ func TestScan_KeepsSubAlbumNavigation(t *testing.T) {
 	if y2024.Albums[0].Path != y2024.Path || !y2024.Albums[0].Virtual {
 		t.Errorf("本目录媒体 should share the collection path and be virtual, got %+v", y2024.Albums[0])
 	}
+	// 散图必须带上归属目录（相对媒体根），否则扁平列表里几十张散图同名。
+	if got := y2024.Albums[0].Location; got != "2024年" {
+		t.Errorf("散图 location: got %q, want %q", got, "2024年")
+	}
 	// 10.1国庆: 2 张
 	sub10 := y2024.Albums[1]
 	if sub10.Name != "10.1国庆" || sub10.ImageCount != 2 {
@@ -905,6 +909,44 @@ func TestScan_RootMixedContentKeepsLooseMedia(t *testing.T) {
 	}
 	if result.Albums[0].Path != root {
 		t.Fatalf("virtual album must resolve to physical root: %q", result.Albums[0].Path)
+	}
+	// 根目录自身的散图用根目录名做归属标识（相对路径是 "."，没有意义）。
+	if got := result.Albums[0].Location; got != filepath.Base(root) {
+		t.Fatalf("root loose album location=%q, want %q", got, filepath.Base(root))
+	}
+}
+
+// TestScan_VirtualAlbumLocationIsRelativePath 验证多层嵌套下散图的
+// Location 是「相对媒体根的目录路径」，而不是只有 basename：
+// 不同父目录下可能存在同名目录，只有完整相对路径能唯一标识。
+func TestScan_VirtualAlbumLocationIsRelativePath(t *testing.T) {
+	root := t.TempDir()
+	// <root>/2020年/子目录 同时有散图和子目录 → 集合 + 散图
+	nested := filepath.Join(root, "2020年", "子目录")
+	mkdirAll(t, nested)
+	touchAll(t, filepath.Join(nested, "a.jpg"))
+	mkdirAll(t, filepath.Join(nested, "更深"))
+	touchAll(t, filepath.Join(nested, "更深", "b.jpg"))
+
+	result, err := NewScanner().Scan(ScanOptions{Roots: []string{root}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found string
+	var walk func(cols []models.Collection)
+	walk = func(cols []models.Collection) {
+		for _, c := range cols {
+			for _, a := range c.Albums {
+				if a.Virtual {
+					found = a.Location
+				}
+			}
+			walk(c.Collections)
+		}
+	}
+	walk(result.Collections)
+	if found != "2020年/子目录" {
+		t.Fatalf("散图 location=%q, want %q", found, "2020年/子目录")
 	}
 }
 

@@ -77,6 +77,10 @@ type LibraryNodeSummary struct {
 	DateSource     string    `json:"dateSource,omitempty"`
 	Virtual        bool      `json:"virtual,omitempty"`
 	HasCustomCover bool      `json:"hasCustomCover,omitempty"`
+	// Location 是虚拟相册归属目录相对媒体根的路径（斜杠分隔），
+	// 例如 "2020年" / "2011年/10.1一号公馆"。前端用它替代
+	// “本目录媒体”作为卡片标题。普通相册为空。
+	Location string `json:"location,omitempty"`
 }
 
 type LibraryMediaItem struct {
@@ -264,7 +268,7 @@ func buildLibrarySearchIndex(index *libraryPageIndex) []LibrarySearchHit {
 	hits := make([]LibrarySearchHit, 0, len(index.albums)+len(index.nodes)+len(index.tags))
 	for _, album := range index.albums {
 		hits = append(hits, LibrarySearchHit{
-			Kind: "album", Path: album.ID, Name: album.DisplayName,
+			Kind: "album", Path: album.ID, Name: searchHitName(album),
 			Tags: append([]string(nil), album.Tags...), Count: album.ImageCount, CoverImage: album.CoverImage,
 		})
 	}
@@ -678,6 +682,17 @@ func nodeDisplayName(displayName, name string) string {
 	return name
 }
 
+// searchHitName 决定搜索结果条目的展示名。
+//
+// 虚拟相册的 Name 恒为“本目录媒体”，对用户毫无检索价值；用 Location
+// （归属目录相对路径）代替，搜“2020年”才能命中对应目录的散图。
+func searchHitName(album LibraryNodeSummary) string {
+	if album.Virtual && album.Location != "" {
+		return album.Location
+	}
+	return nodeDisplayName(album.DisplayName, album.Name)
+}
+
 func albumSummary(state *resourceCatalogState, album models.Album) LibraryNodeSummary {
 	id := externalID(state, album.Path, ResourceAlbum)
 	sourceRoot, sourceName := nodeSource(state, id, album.SourceRoot, album.SourceName)
@@ -707,6 +722,7 @@ func albumSummary(state *resourceCatalogState, album models.Album) LibraryNodeSu
 		DateSource:     album.DateSource,
 		Virtual:        album.Virtual,
 		HasCustomCover: state.customCovers[filepath.Clean(album.Path)],
+		Location:       album.Location,
 	}
 }
 

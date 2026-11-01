@@ -238,6 +238,9 @@ func (s *Scanner) scanRoots(opts ScanOptions, roots []scanRoot, hook ScanHook) (
 
 // stampAlbumSource 给 album 列表（含嵌套 collection 内）打 SourceRoot / SourceName
 // 并把空 DisplayName 填上 Name（基础值，后续冲突检测可能再覆盖）。
+//
+// 虚拟相册（“本目录媒体”）额外填 Location：相对所属媒体根的目录路径。
+// 所有虚拟相册的 Name 恒为“本目录媒体”，扁平列表里必须靠 Location 区分归属。
 func stampAlbumSource(albums *[]models.Album, srcRoot, srcName string) {
 	for i := range *albums {
 		(*albums)[i].SourceRoot = srcRoot
@@ -245,7 +248,31 @@ func stampAlbumSource(albums *[]models.Album, srcRoot, srcName string) {
 		if (*albums)[i].DisplayName == "" {
 			(*albums)[i].DisplayName = (*albums)[i].Name
 		}
+		if (*albums)[i].Virtual {
+			(*albums)[i].Location = albumLocation(srcRoot, (*albums)[i].Path)
+		}
 	}
+}
+
+// albumLocation 计算相册归属目录相对媒体根的展示路径（斜杠分隔）。
+//
+// - 位于媒体根自身（根目录里的散图）→ 用根目录名，如 "存照"；
+// - 位于子目录 → 相对路径，如 "2011年/10.1一号公馆"；
+// - 路径越界或无法计算 → 退化为目录 basename。
+//
+// 相对路径而不是 basename：不同父目录下可能有同名目录（两个 "2020年"），
+// 只有完整相对路径能唯一标识。
+func albumLocation(srcRoot, albumPath string) string {
+	if albumPath == "" {
+		return ""
+	}
+	cleanRoot := filepath.Clean(srcRoot)
+	cleanAlbum := filepath.Clean(albumPath)
+	rel, err := filepath.Rel(cleanRoot, cleanAlbum)
+	if err != nil || rel == "." || relEscapesRoot(rel) {
+		return filepath.Base(cleanAlbum)
+	}
+	return filepath.ToSlash(rel)
 }
 
 func stampCollectionSource(collections *[]models.Collection, srcRoot, srcName string) {
@@ -268,9 +295,17 @@ func applyNamePrefixIfConflict(albums *[]models.Album) {
 	// 第一遍：统计 name 出现次数
 	counts := make(map[string]int)
 	for _, a := range *albums {
+		// 虚拟相册的 Name 恒为“本目录媒体”，跨根同名不是真冲突：
+		// 它们靠 Location 区分，统计进来只会误加来源前缀。
+		if a.Virtual {
+			continue
+		}
 		counts[a.Name]++
 	}
 	for i := range *albums {
+		if (*albums)[i].Virtual {
+			continue
+		}
 		if counts[(*albums)[i].Name] > 1 && (*albums)[i].SourceName != "" {
 			(*albums)[i].DisplayName = "[" + (*albums)[i].SourceName + "] " + (*albums)[i].Name
 		}

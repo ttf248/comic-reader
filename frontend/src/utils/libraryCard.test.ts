@@ -59,4 +59,32 @@ describe("libraryCard", () => {
 
     expect(cards.map((card) => card.id)).toEqual(["c:c_root", "s:旅行"]);
   });
+
+  it("散图卡片用归属目录做标题并把类型降级为副标题", () => {
+    const card = nodeSummaryToCard(
+      node("a_loose", "album", {
+        name: "本目录媒体",
+        displayName: "本目录媒体",
+        virtual: true,
+        location: "2020年",
+      }),
+    );
+
+    expect(card.displayTitle).toBe("2020年");
+    expect(card.subtitle).toBe("本目录媒体");
+    // 原始名保留，供排序与搜索沿用原有语义。
+    expect(card.title).toBe("本目录媒体");
+  });
+
+  it("散图缺少归属目录时回退到原展示名", () => {
+    const card = nodeSummaryToCard(
+      node("a_loose", "album", {
+        name: "本目录媒体",
+        displayName: "本目录媒体",
+        virtual: true,
+      }),
+    );
+
+    expect(card.displayTitle).toBe("本目录媒体");
+  });
 });

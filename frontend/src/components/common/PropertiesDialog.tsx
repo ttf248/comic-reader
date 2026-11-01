@@ -116,7 +116,13 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
       {node && (
         <>
           <dl className="space-y-3">
-            <Field label="名称" value={node.name} copyable />
+            <Field
+              label="名称"
+              value={
+                node.virtual && node.location ? node.location : node.name
+              }
+              copyable
+            />
             <Field
               label="类型"
               value={

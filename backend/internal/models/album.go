@@ -102,6 +102,14 @@ type Album struct {
 	// Virtual 表示“本目录媒体”视图。它与所属 Collection 共享物理目录，
 	// 但使用不同资源类型 ID，不再伪造磁盘上不存在的 .loose 路径。
 	Virtual bool `json:"virtual,omitempty"`
+	// Location 是虚拟相册归属目录相对所属媒体根的路径（斜杠分隔），
+	// 例如 "2020年" 或 "2011年/10.1一号公馆"。根目录自身的散图用根名。
+	// 非虚拟相册为空。
+	//
+	// 存在的理由：虚拟相册的 Name 恒为“本目录媒体”，在未读/最近等扁平
+	// 列表里几十张卡片同名，用户无法分辨归属目录；Location 提供唯一且
+	// 稳定的展示标识。
+	Location string `json:"location,omitempty"`
 }
 
 // MarshalJSON 保证当前 API 的媒体列表始终是数组，避免调用方区分 null 与 []。
