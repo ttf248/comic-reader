@@ -1,7 +1,7 @@
 import { useMemo, type MouseEvent } from "react";
 import { VirtuosoGrid } from "react-virtuoso";
-import { thumbUrl } from "../../api/thumbs";
 import { useMediaGridPagination } from "../../hooks/useMediaGridPagination";
+import ThumbImage from "../common/ThumbImage";
 
 interface Props {
   /** 已加载的图片资源 ID，顺序与相册媒体索引一致。 */
@@ -75,11 +75,9 @@ export default function MediaThumbnailGrid({
             title={`第 ${index + 1} 张`}
             aria-label={`打开第 ${index + 1} 张`}
           >
-            <img
-              src={thumbUrl(file)}
+            <ThumbImage
+              fileId={file}
               alt={`第 ${index + 1} 张`}
-              loading="lazy"
-              decoding="async"
               className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
             />
             {isCurrent && (

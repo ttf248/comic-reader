@@ -90,6 +90,11 @@ type ThumbnailService struct {
 	// FFmpeg 抽帧失败时同样回退到 ErrVideoCoverMissing,
 	// 让前端继续走原有 fallback。
 	videoCover *VideoCoverExtractor
+
+	// imageConverter 用于服务端 FFmpeg 转换纯 Go 解不了的图片
+	// （目前是 iPhone 的 HEIC/HEIF）。为 nil 或 ffmpeg 不可用时，
+	// 这类文件按"不支持的格式"处理（415），前端显示占位图。
+	imageConverter *ImageConverter
 }
 
 // ThumbnailOptions 构造选项。
@@ -103,6 +108,10 @@ type ThumbnailOptions struct {
 	// VideoCover 可选:传入后,视频封面在服务端用 ffmpeg 抽帧;
 	// 不传则维持原"客户端抽帧 + 上传"流程。
 	VideoCover *VideoCoverExtractor
+
+	// ImageConverter 可选:传入后,HEIC/HEIF 等纯 Go 解不了的图片
+	// 由 ffmpeg 转成缩略图;不传则按"不支持的格式"处理。
+	ImageConverter *ImageConverter
 }
 
 // NewThumbnailService 创建缩略图服务。
@@ -144,6 +153,7 @@ func NewThumbnailService(opts ThumbnailOptions) (*ThumbnailService, error) {
 		lruSize:         lruSize,
 		memCache:        cache,
 		videoCover:      opts.VideoCover,
+		imageConverter:  opts.ImageConverter,
 		videoCoverSlots: make(chan struct{}, 2),
 		imageSlots:      make(chan struct{}, min(thumbnailMaxWorkers, runtime.NumCPU())),
 		decodePixels:    semaphore.NewWeighted(thumbnailDecodePixelBudget),
@@ -418,13 +428,19 @@ func (s *ThumbnailService) generate(absPath string) ([]byte, error) {
 
 	img, err := decodeImage(absPath)
 	if err != nil {
-		if errors.Is(err, imaging.ErrUnsupportedFormat) {
-			return nil, ErrUnsupportedFormat
+		if errors.Is(err, ErrUnsupportedFormat) {
+			// 纯 Go 解不了的格式（目前是 HEIC/HEIF）：交给 ffmpeg 转换。
+			converted, cerr := s.convertUnsupported(absPath)
+			if cerr != nil {
+				return nil, ErrUnsupportedFormat
+			}
+			img = converted
+		} else {
+			return nil, fmt.Errorf("decode: %w", err)
 		}
-		return nil, fmt.Errorf("decode: %w", err)
 	}
 
-	// 缩放到目标尺寸，保持比例，填充（letterbox）
+	// 缩放到目标尺寸，保持比例（不裁剪、不填充）
 	thumb := fitToThumbnail(img, s.width, s.height)
 
 	buf, err := encodeJPEG(thumb, jpegQuality)
@@ -480,14 +496,38 @@ func fitToThumbnail(img image.Image, width, height int) *image.NRGBA {
 }
 
 // decodeImage 按扩展名选择解码器：
-//   - HEIC/HEIF：当前未实现（需要 libde265 CGO 依赖），返回 ErrUnsupportedFormat
+//   - HEIC/HEIF：纯 Go 解不了（需要 libde265 CGO 依赖），返回 ErrUnsupportedFormat
 //   - 其他：imaging（覆盖 jpg/png/gif/bmp/webp/tiff）
+//
+// 解不出来的格式统一返回 ErrUnsupportedFormat，调用方据此决定是否
+// 回退到 ffmpeg 转换。
 func decodeImage(absPath string) (image.Image, error) {
 	ext := strings.ToLower(filepath.Ext(absPath))
 	if ext == ".heic" || ext == ".heif" {
 		return nil, ErrUnsupportedFormat
 	}
-	return imaging.Open(absPath, imaging.AutoOrientation(true))
+	img, err := imaging.Open(absPath, imaging.AutoOrientation(true))
+	if err != nil {
+		// 认不出格式（image.ErrFormat）与解码器不支持，统一按"不支持的
+		// 格式"处理：调用方据此走 ffmpeg 兜底或返回 415。
+		// I/O 错误（文件被删、读失败）保持原样，让上层区分"暂时失败"。
+		if errors.Is(err, imaging.ErrUnsupportedFormat) || errors.Is(err, image.ErrFormat) {
+			return nil, ErrUnsupportedFormat
+		}
+		return nil, err
+	}
+	return img, nil
+}
+
+// convertUnsupported 用 ffmpeg 把纯 Go 解不了的图片转成位图。
+//
+// ffmpeg 不可用或转换失败时返回错误，调用方按"不支持的格式"处理
+// （前端显示占位图，不显示破图）。
+func (s *ThumbnailService) convertUnsupported(absPath string) (image.Image, error) {
+	if s.imageConverter == nil {
+		return nil, ErrImageConvertUnavailable
+	}
+	return s.imageConverter.Convert(absPath)
 }
 
 // isThumbnailCacheFile 只识别当前 ThumbnailService 按源路径 MD5 生成的 JPEG。
@@ -636,6 +676,9 @@ func (s *ThumbnailService) UpdateOptions(opts ThumbnailOptions) error {
 	defer s.mu.Unlock()
 	if opts.VideoCover != nil {
 		s.videoCover = opts.VideoCover
+	}
+	if opts.ImageConverter != nil {
+		s.imageConverter = opts.ImageConverter
 	}
 	if opts.Width > 0 {
 		s.width = opts.Width

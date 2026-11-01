@@ -2,11 +2,11 @@ import { useMemo, type MouseEvent } from "react";
 import { VirtuosoGrid } from "react-virtuoso";
 import type { LibraryMediaItem } from "../../api/library";
 import type { VideoInfo } from "../../api/videos";
-import { thumbUrl } from "../../api/thumbs";
 import { formatDuration } from "../../utils/format";
 import { PlayFilledIcon } from "../common/Icon";
 import VideoCoverImage from "../common/VideoCoverImage";
 import { useMediaGridPagination } from "../../hooks/useMediaGridPagination";
+import ThumbImage from "../common/ThumbImage";
 
 interface Props {
   /** 已加载的混合媒体项，顺序与服务端媒体索引一致。 */
@@ -91,11 +91,9 @@ export default function MixedMediaThumbnailGrid({
             }`}
           >
             {isImage ? (
-              <img
-                src={thumbUrl(item.id)}
+              <ThumbImage
+                fileId={item.id}
                 alt={name}
-                loading="lazy"
-                decoding="async"
                 className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
               />
             ) : (

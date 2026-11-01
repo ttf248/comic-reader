@@ -119,6 +119,21 @@ func main() {
 		log.Printf("  FFmpeg:    <不可用 / 未配置> → 视频封面回退到客户端浏览器抽帧")
 	}
 
+	// 图片转换器(可选):把 HEIC/HEIF 这类纯 Go 解不了的图片转成缩略图。
+	// ffmpeg 不可用时这类文件按"不支持的格式"处理(前端显示占位图)。
+	imageConverter := services.NewImageConverter(services.ImageConverterOptions{
+		FFmpegPath: cfg.FFmpegPath,
+		Width:      cfg.ThumbSizeW,
+		Height:     cfg.ThumbSizeH,
+		Quality:    85,
+		Timeout:    10 * time.Second,
+	})
+	if imageConverter.Available() {
+		log.Printf("  HEIC:      <可用> (服务端 HEIC/HEIF 缩略图已启用)")
+	} else {
+		log.Printf("  HEIC:      <不可用 / 未配置> → HEIC/HEIF 显示占位图")
+	}
+
 	// ffprobe 元数据服务(可选)
 	videoInfo := services.NewVideoInfoService(services.VideoInfoOptions{
 		FFmpegPath: cfg.FFmpegPath,
@@ -166,12 +181,13 @@ func main() {
 	}
 
 	thumbs, err := services.NewThumbnailService(services.ThumbnailOptions{
-		CacheDir:   cacheLayout.ThumbnailDir,
-		Width:      cfg.ThumbSizeW,
-		Height:     cfg.ThumbSizeH,
-		MaxAgeDays: cfg.CacheMaxAgeDays,
-		LRUSize:    cfg.ThumbCacheSize,
-		VideoCover: videoCover,
+		CacheDir:       cacheLayout.ThumbnailDir,
+		Width:          cfg.ThumbSizeW,
+		Height:         cfg.ThumbSizeH,
+		MaxAgeDays:     cfg.CacheMaxAgeDays,
+		LRUSize:        cfg.ThumbCacheSize,
+		VideoCover:     videoCover,
+		ImageConverter: imageConverter,
 	})
 	if err != nil {
 		log.Fatalf("初始化缩略图服务失败: %v", err)
@@ -244,6 +260,11 @@ func main() {
 			MaxAgeDays: snapshot.CacheMaxAgeDays,
 			LRUSize:    snapshot.ThumbCacheSize,
 			VideoCover: services.NewVideoCoverExtractor(services.VideoCoverOptions{
+				FFmpegPath: cfg.FFmpegPath,
+				Width:      snapshot.ThumbSizeW, Height: snapshot.ThumbSizeH,
+				Quality: 85, Timeout: 10 * time.Second,
+			}),
+			ImageConverter: services.NewImageConverter(services.ImageConverterOptions{
 				FFmpegPath: cfg.FFmpegPath,
 				Width:      snapshot.ThumbSizeW, Height: snapshot.ThumbSizeH,
 				Quality: 85, Timeout: 10 * time.Second,

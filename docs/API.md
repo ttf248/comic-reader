@@ -184,6 +184,8 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 源路径不存在或不再是普通文件时返回 `404 source_not_found`；先校验源类型，再查询内存/磁盘缓存或尝试抽帧，不将目录误报为 `video_cover_missing`。
 
+纯 Go 解码器不支持的图片格式（HEIC/HEIF 等 iPhone 照片）优先用 ffmpeg 转换后生成缩略图；ffmpeg 不可用或转换失败时返回 `415 unsupported_format`，前端显示占位图而不是破图。
+
 ### `POST /api/thumbs/:fileId/cover`
 
 上传浏览器抽取的视频封面，body 为 JPEG/PNG 原始字节，最大 5 MiB。
