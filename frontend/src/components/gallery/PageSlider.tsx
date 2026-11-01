@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { imageUrl } from "../../api/images";
 import { shouldIgnoreShortcut } from "../../utils/shortcuts";
 
@@ -27,13 +27,28 @@ export default function PageSlider({ total, index, onJump, images }: Props) {
   const effective = scrubIndex ?? safeIndex;
   const pct = total > 1 ? (effective / (total - 1)) * 100 : 0;
 
-  // 进入编辑态时聚焦输入框并预填当前页
+  // 进入编辑态时预填当前页。
+  //
+  // 预填与进入编辑必须在同一次状态更新里完成：若等输入框挂载后再 setDraft，
+  // 受控值会在下一次渲染写回 input.value，把光标顶到末尾，随后的 select()
+  // 选中的其实还是旧值，用户的输入会被追加到预填值后面（"1" + "100" =
+  // "1100"，跳到最后一页）。
+  const startEditing = useCallback(() => {
+    setDraft(String(safeIndex + 1));
+    setEditing(true);
+  }, [safeIndex]);
+
+  // 输入框挂载后聚焦并全选：直接敲数字即覆盖预填值。
   useEffect(() => {
-    if (editing) {
-      setDraft(String(safeIndex + 1));
-      requestAnimationFrame(() => inputRef.current?.select());
-    }
-  }, [editing, safeIndex]);
+    if (!editing) return;
+    const id = requestAnimationFrame(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      el.focus();
+      el.select();
+    });
+    return () => cancelAnimationFrame(id);
+  }, [editing]);
 
   // 全局快捷键：G 进入输入态（与 vim/git 习惯一致）
   useEffect(() => {
@@ -41,7 +56,7 @@ export default function PageSlider({ total, index, onJump, images }: Props) {
       if (e.ctrlKey || e.altKey || e.metaKey || shouldIgnoreShortcut(e)) return;
       if (e.key === "g" && !editing) {
         e.preventDefault();
-        setEditing(true);
+        startEditing();
       } else if (e.key === "Escape" && editing) {
         e.preventDefault();
         setEditing(false);
@@ -49,7 +64,7 @@ export default function PageSlider({ total, index, onJump, images }: Props) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [editing]);
+  }, [editing, startEditing]);
 
   function commit() {
     const n = parseInt(draft, 10);
@@ -175,7 +190,7 @@ export default function PageSlider({ total, index, onJump, images }: Props) {
         />
       ) : (
         <button
-          onClick={() => setEditing(true)}
+          onClick={startEditing}
           className="min-w-[44px] h-7 px-1.5 rounded text-[12px] tabular-nums text-white/85 hover:bg-white/10 transition-colors"
           title="跳转到指定页 (G)"
         >

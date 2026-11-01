@@ -4128,3 +4128,26 @@ test("配置保存等待 LAN 会话建立后再发送后续写入", async ({ pag
     await page.close();
   }
 });
+
+test("阅读器按 G 跳页时预填值被选中，输入页码直接替换而不是追加", async ({
+  page,
+}) => {
+  const nodes = await scannedNodes(page.request);
+  const album = nodes.find((node) => node.name === "sample-paged-images");
+  expect(album).toBeDefined();
+  await page.goto(`/gallery?path=${encodeURIComponent(album!.id)}&index=0`);
+  // 等阅读器挂载（路由是懒加载的），否则按键会落在挂载之前
+  await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("1");
+
+  // 进入跳页编辑态：预填当前页并全选
+  await page.keyboard.press("g");
+  const input = page.getByRole("textbox");
+  await expect(input).toHaveValue("1");
+  // 直接敲数字应替换预填值；若光标停在末尾，"100" 会变成 "1100"
+  // 并被夹到最后一页。
+  await page.keyboard.type("100");
+  await expect(input).toHaveValue("100");
+  await page.keyboard.press("Enter");
+
+  await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("100");
+});

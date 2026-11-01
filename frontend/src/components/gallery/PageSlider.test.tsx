@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import PageSlider from "./PageSlider";
 
@@ -25,4 +25,21 @@ it("已处理的 G 不打开编辑框，普通 G 仍可定位页码", () => {
   fireEvent.change(input, { target: { value: "2" } });
   fireEvent.keyDown(input, { key: "Enter" });
   expect(jump).toHaveBeenCalledWith(1);
+});
+
+it("进入跳页编辑态后预填当前页并全选，输入直接覆盖而不是追加", async () => {
+  const jump = vi.fn();
+  render(<PageSlider total={403} index={0} onJump={jump} />);
+  fireEvent.keyDown(window, { key: "g" });
+  const input = screen.getByRole("textbox") as HTMLInputElement;
+  expect(input.value).toBe("1");
+  // 预填值必须处于选中态：否则用户输入的页码会接在预填值后面
+  // （"1" + "100" = "1100"，被夹到最后一页）。
+  await waitFor(() => {
+    expect(input.selectionStart).toBe(0);
+    expect(input.selectionEnd).toBe(1);
+  });
+  fireEvent.change(input, { target: { value: "100" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  expect(jump).toHaveBeenCalledWith(99);
 });
