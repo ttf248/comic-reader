@@ -389,8 +389,10 @@ func TestTranscodeService_InvalidCacheIsNotCached(t *testing.T) {
 				t.Errorf("completed job accepted %s cache: %+v", kind, info)
 			}
 			// 重建服务覆盖进程重启后的磁盘缓存判定。
+			// 新服务没有内存任务，坏缓存等同于"还没转过"（待转码），
+			// 但绝不能被当成已缓存。
 			fresh := NewTranscodeService(opts)
-			if info := fresh.GetStatus(src); info.Status != TranscodeStatusFailed {
+			if info := fresh.GetStatus(src); info.Status != TranscodeStatusPending {
 				t.Errorf("fresh service accepted %s cache: %+v", kind, info)
 			}
 			got, status := s.Resolve(src, nil)

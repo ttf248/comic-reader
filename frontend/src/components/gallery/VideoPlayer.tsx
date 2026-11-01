@@ -184,10 +184,15 @@ export default function VideoPlayer({
   }
 
   // 是否在转码中？展示 TranscodeProgress 覆盖层
+  //
+  // pending 也算：视频需要转码但任务还没起来（转码由媒体请求触发）。
+  // 这时直接放行会让 <video> 报解码失败，用户只看到一句"加载失败"，
+  // 看不到真正的原因——正在转码。
   const isTranscoding =
     transcodeStatus !== null &&
     (transcodeStatus.status === "running" ||
       transcodeStatus.status === "queued" ||
+      transcodeStatus.status === "pending" ||
       transcodeStatus.status === "failed");
 
   return (

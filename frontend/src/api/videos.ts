@@ -89,6 +89,7 @@ export type TranscodeStatusValue =
   | "queued"
   | "running"
   | "failed"
+  | "pending"
   | "unknown";
 
 export interface TranscodeStatus {

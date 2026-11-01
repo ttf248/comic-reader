@@ -35,6 +35,9 @@ const STATUS_STYLE: Record<
   queued: { text: "排队", cls: "bg-blue-500/85 text-white" },
   running: { text: "转码中", cls: "bg-blue-500/85 text-white" },
   failed: { text: "转码失败", cls: "bg-red-500/85 text-white" },
+  // pending：需要转码但还没开始（按需触发，播放时才启动）。
+  // 这不是故障，不显示角标。
+  pending: null,
 };
 
 /**

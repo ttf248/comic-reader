@@ -50,6 +50,13 @@ const (
 	TranscodeStatusQueued
 	TranscodeStatusRunning
 	TranscodeStatusFailed
+	// TranscodeStatusPending 表示「这个视频需要转码，但任务还没开始」。
+	//
+	// 转码是按需触发的：用户真正播放时才启动。因此在播放之前，
+	// 视频既没有缓存也没有在跑的任务——这不是失败，只是还没开始。
+	// 早先这里报 failed + "transcode not started"，前端据此给每张
+	// 需要转码的视频卡片挂上红色「转码失败」角标，等于虚报故障。
+	TranscodeStatusPending
 )
 
 func (s TranscodeStatus) String() string {
@@ -62,6 +69,8 @@ func (s TranscodeStatus) String() string {
 		return "not_needed"
 	case TranscodeStatusCached:
 		return "cached"
+	case TranscodeStatusPending:
+		return "pending"
 	case TranscodeStatusQueued:
 		return "queued"
 	case TranscodeStatusRunning:
@@ -544,9 +553,8 @@ func (s *TranscodeService) currentState(absPath string) (TranscodeInfo, *transco
 		return info, nil
 	}
 
-	// 旧版本任务不代表当前文件已启动转码。
-	info.Status = TranscodeStatusFailed
-	info.Error = "transcode not started"
+	// 旧版本任务不代表当前文件已启动转码：还没开始 ≠ 失败。
+	info.Status = TranscodeStatusPending
 	return info, nil
 }
 

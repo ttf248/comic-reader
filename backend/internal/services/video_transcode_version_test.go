@@ -88,12 +88,13 @@ func TestTranscodeChangedSourceDoesNotReuseQueuedJob(t *testing.T) {
 			old := s.inflight[src]
 			s.mu.Unlock()
 			changeTranscodeSourceVersion(t, src, version)
-			if info := s.GetStatus(src); info.Status != TranscodeStatusFailed || info.Error != "transcode not started" {
+			// 新版本尚未开始转码：状态是 pending（不是失败）。
+			if info := s.GetStatus(src); info.Status != TranscodeStatusPending || info.Error != "" {
 				t.Errorf("old version remained visible: %+v", info)
 			}
 			// 新版本尚未启动，订阅也不能挂在旧排队任务上。
 			events, cancel := s.Subscribe(src)
-			assertTranscodeTerminalReplay(t, events, TranscodeInfo{Status: TranscodeStatusFailed, Error: "transcode not started"})
+			assertTranscodeTerminalReplay(t, events, TranscodeInfo{Status: TranscodeStatusPending})
 			cancel()
 			s.Resolve(src, nil)
 			s.mu.Lock()

@@ -74,6 +74,9 @@ func TestTranscodeSubscriptionReplaysCurrentTerminalStatus(t *testing.T) {
 				wantStatus = TranscodeStatusCached
 			case "closed":
 				wantStatus = TranscodeStatusUnavailable
+			case "not-started":
+				// 需要转码但任务还没开始：不是失败。
+				wantStatus = TranscodeStatusPending
 			}
 			if want.Status != wantStatus {
 				t.Fatalf("status fixture: got %+v, want %v", want, wantStatus)
@@ -217,5 +220,22 @@ func TestTranscodeBroadcastAndCancellationAreSerialized(t *testing.T) {
 		if len(job.subs) != 0 {
 			t.Fatalf("terminal broadcast retained %d subscribers", len(job.subs))
 		}
+	}
+}
+
+// TestTranscodeStatusPendingBeforeFirstRun 验证"需要转码但任务还没开始"
+// 的状态是 pending 而不是 failed。
+//
+// 转码是按需触发的：用户真正播放视频时才启动任务。在那之前，视频既没有
+// 缓存也没有在跑的任务——这不是故障。早先这里报 failed，前端据此给每张
+// 需要转码的视频卡片挂上红色「转码失败」角标，等于虚报故障。
+func TestTranscodeStatusPendingBeforeFirstRun(t *testing.T) {
+	s, src := newTranscodeEventFixture(t)
+	info := s.GetStatus(src)
+	if info.Status != TranscodeStatusPending {
+		t.Fatalf("未开始转码时状态应为 pending: %+v", info)
+	}
+	if info.Error != "" {
+		t.Fatalf("pending 不应携带错误信息: %+v", info)
 	}
 }

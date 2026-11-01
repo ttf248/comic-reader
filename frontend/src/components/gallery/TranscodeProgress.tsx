@@ -25,6 +25,7 @@ const STATUS_TEXT: Record<TranscodeStatusValue, { title: string; desc?: string }
   queued: { title: '正在排队…', desc: '前面还有别的视频在转码' },
   running: { title: '正在转码', desc: '服务端正在把视频转成浏览器能播的格式' },
   failed: { title: '转码失败' },
+  pending: { title: '正在准备转码…', desc: '开始播放后会自动转码' },
 }
 
 /**
@@ -45,20 +46,42 @@ export default function TranscodeProgress({ src, onReady, onDismiss }: Props) {
   useEffect(() => {
     setStatus(null)
     setEtaSec(0)
-    const close = subscribeTranscodeEvents(src, {
-      onProgress: (s) => {
-        setStatus(s)
-        // 简单 ETA 估算：拿最近两次 progress 差算速率
-        // V1 不做精细实现(等下个版本接 ffmpeg out_time_ms 算精确 ETA)
-      },
-      onDone: (s) => {
-        setStatus(s)
-        if (s.status === 'cached') {
-          onReady?.()
-        }
-      },
-    })
-    return close
+    let closed = false
+    let close: (() => void) | null = null
+    let retryTimer: ReturnType<typeof setTimeout> | null = null
+    let retries = 0
+
+    const connect = () => {
+      if (closed) return
+      close = subscribeTranscodeEvents(src, {
+        onProgress: (s) => {
+          setStatus(s)
+          // 简单 ETA 估算：拿最近两次 progress 差算速率
+          // V1 不做精细实现(等下个版本接 ffmpeg out_time_ms 算精确 ETA)
+        },
+        onDone: (s) => {
+          setStatus(s)
+          if (s.status === 'cached') {
+            onReady?.()
+            return
+          }
+          // pending：视频需要转码但任务还没起来（转码由媒体请求触发）。
+          // 服务端此时没有可订阅的任务，连接会立刻关闭——稍后重连一次，
+          // 等任务真正开始后就能收到进度。
+          if (s.status === 'pending' && retries < 10) {
+            retries += 1
+            retryTimer = setTimeout(connect, 800)
+          }
+        },
+      })
+    }
+
+    connect()
+    return () => {
+      closed = true
+      if (retryTimer) clearTimeout(retryTimer)
+      close?.()
+    }
   }, [src, onReady])
 
   const onCancel = useCallback(async () => {
