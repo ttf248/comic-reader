@@ -11,6 +11,9 @@ import { useUIStore } from "../store/uiStore";
 import { useFavorites } from "../hooks/useFavorites";
 import { libraryApi } from "../api/library";
 import { libraryQueryKeys, useLibraryNodes } from "../hooks/useLibrary";
+import { fsApi } from "../api/fs";
+import { useFsCapabilities } from "../hooks/useFsCapabilities";
+import { fileManagerErrorMessage } from "../utils/fileManager";
 import { toggleFullscreen as toggleFullscreenImpl } from "../utils/fullscreen";
 import ImageGallery from "../components/gallery/ImageGallery";
 import VideoPlayer from "../components/gallery/VideoPlayer";
@@ -20,7 +23,7 @@ import HelpOverlay from "../components/common/HelpOverlay";
 import GalleryHeader from "../components/gallery/GalleryHeader";
 import GalleryControls from "../components/gallery/GalleryControls";
 import ContextMenu, { type AnyMenuItem } from "../components/album/ContextMenu";
-import { ImageIcon, RefreshIcon } from "../components/common/Icon";
+import { ImageIcon, RefreshIcon, ArrowUpRightIcon } from "../components/common/Icon";
 import { displayedPageIndex } from "../utils/progress";
 import { albumRoute } from "../utils/path";
 import { useSafeBack } from "../utils/navigation";
@@ -168,6 +171,8 @@ export default function Gallery() {
 
   const { favorites, toggle: toggleFavorite } = useFavorites();
   const isFav = pathParam ? favorites.includes(pathParam) : false;
+  // 服务端是否允许打开系统文件管理器（配置项 allowOsOpen）。
+  const allowOsOpen = useFsCapabilities();
 
   // 当前相册是否已有自定义封面。摘要索引和媒体清单都来自同一份目录快照，
   // 因此阅读器无需为这个小状态额外请求含完整媒体数组的相册详情。
@@ -906,6 +911,29 @@ export default function Gallery() {
       .catch(() => pushToast({ kind: "error", message: "收藏失败" }));
   }, [pathParam, favorites, toggleFavorite, pushToast]);
 
+  // 在系统文件管理器里定位当前这一份媒体文件。
+  // 服务端对文件资源走 explorer /select 的方式打开所在目录并高亮该文件，
+  // 这正是"我正在看的就是磁盘上这一份"的诉求。
+  const onOpenInExplorer = useCallback(() => {
+    const id = currentRef.current;
+    if (!id) return;
+    void fsApi
+      .openInExplorer(id)
+      .then(() =>
+        pushToast({
+          kind: "success",
+          message: "已请求打开文件",
+          ttl: 1200,
+        }),
+      )
+      .catch((error: unknown) =>
+        pushToast({
+          kind: "error",
+          message: fileManagerErrorMessage(error),
+        }),
+      );
+  }, [pushToast]);
+
   // 把当前展示的图片/视频设为本相册的封面。成功后统一失效摘要查询，
   // 卡片、搜索和阅读器的封面状态会从同一个新 revision 重新读取。
   //
@@ -1271,12 +1299,20 @@ export default function Gallery() {
                     label: "清除自定义封面",
                     disabled: true,
                   },
+              { id: "separator", separator: true },
+              {
+                id: "explorer",
+                label: "在资源管理器中打开",
+                icon: <ArrowUpRightIcon />,
+                disabled: !allowOsOpen,
+              },
             ] satisfies AnyMenuItem[]
           }
           onSelect={(id) => {
             setContextMenu(null);
             if (id === "set-cover") onSetCover();
             else if (id === "clear-cover") onClearCover();
+            else if (id === "explorer") onOpenInExplorer();
           }}
           onClose={() => setContextMenu(null)}
         />

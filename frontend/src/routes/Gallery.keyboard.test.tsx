@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   getVideo: vi.fn(),
   setVideo: vi.fn(),
   keepalive: vi.fn(),
+  openInExplorer: vi.fn(),
 }));
 
 vi.mock("../api/library", async (importOriginal) => {
@@ -60,6 +61,12 @@ vi.mock("../api/videos", () => ({
   videoUrl: (id: string) => `/api/media/${id}`,
   createVideoPlaybackId: () => "keyboard-test",
   getTranscodeStatus: vi.fn(async () => ({ status: "not_needed" })),
+}));
+vi.mock("../api/fs", () => ({
+  fsApi: {
+    openInExplorer: mocks.openInExplorer,
+    capabilities: vi.fn(async () => ({ allowOsOpen: true })),
+  },
 }));
 vi.mock("../components/gallery/ImageGallery", () => ({
   default: () => <div data-testid="image-gallery" />,
@@ -260,5 +267,21 @@ describe("Gallery 按媒体类型隔离快捷键", () => {
     expect(items).toContain("图片信息");
     expect(items).toContain("第一张");
     expect(items).toContain("最后张");
+  });
+
+  it("阅读器右键菜单可以在系统文件管理器中定位当前文件", async () => {
+    mocks.openInExplorer.mockResolvedValue({ ok: true });
+    renderGallery("image");
+    await screen.findByTestId("image-gallery");
+    await waitFor(() => expect(useGalleryStore.getState().index).toBe(1));
+    await act(async () => {
+      fireEvent.contextMenu(document.querySelector("div.relative.bg-neutral-950")!);
+    });
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("menuitem", { name: "在资源管理器中打开" }),
+      );
+    });
+    expect(mocks.openInExplorer).toHaveBeenCalledWith("f_image_1");
   });
 });
