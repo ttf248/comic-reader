@@ -29,15 +29,26 @@ interface Props {
 // 视觉：极细的边 + 中性背景。
 export default function ContextMenu({ x, y, items, onSelect, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null);
+  // 打开菜单前获得焦点的元素（右键时是卡片链接），关闭后还回去。
+  const previousRef = useRef<HTMLElement | null>(null);
+  // StrictMode 会"挂载→卸载→再挂载"一次，用来保证焦点只被接管一次。
+  const focusedRef = useRef(false);
 
   useEffect(() => {
-    const previous = document.activeElement;
+    if (focusedRef.current) return;
+    focusedRef.current = true;
+    previousRef.current = document.activeElement as HTMLElement | null;
     const menu = ref.current;
     const firstItem = ref.current?.querySelector<HTMLButtonElement>(
       "button:not(:disabled)",
     );
     (firstItem ?? menu)?.focus();
-    return () => {
+  }, []);
+
+  useEffect(() => {
+    const menu = ref.current;
+    const restoreFocus = () => {
+      const previous = previousRef.current;
       const active = document.activeElement;
       if (
         previous instanceof HTMLElement &&
@@ -47,6 +58,25 @@ export default function ContextMenu({ x, y, items, onSelect, onClose }: Props) {
       ) {
         previous.focus({ preventScroll: true });
       }
+    };
+    return () => {
+      // 卸载时把焦点还给来源元素。
+      //
+      // 但 React 18 的 StrictMode 在开发模式下会额外做一次"假卸载"：
+      // 上面那个 effect 的清理如果立刻抢回焦点，菜单刚打开就被自己的
+      // onBlur 关掉（右键菜单在开发模式下等于不可用）。
+      //
+      // 真实卸载时 React 已经把菜单节点从文档里摘掉，可以立刻还焦点；
+      // 假卸载时节点还在文档里，推迟到下一个任务再判断，届时组件仍挂着
+      // 就说明只是 StrictMode 的假卸载，不动焦点。
+      if (menu && !menu.isConnected) {
+        restoreFocus();
+        return;
+      }
+      window.setTimeout(() => {
+        if (ref.current) return; // 还挂着 → 只是 StrictMode 的假卸载
+        restoreFocus();
+      }, 0);
     };
   }, []);
 
