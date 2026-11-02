@@ -21,10 +21,10 @@
 | A1 | 阅读器顶栏 1440px 下仍偏密（模式组 + 适配 + ★ + ⛶ + ⚙ + ⋯ 共 6 组控件） | VERIFIED | 提交 `502aa33`：阅读控制整体移到画面底部浮动工具条，顶栏只剩返回 / 名称 / 页码 / ★ / ⛶ / ⋯。截图 `frontend/.smoke/a1/`；e2e `smoke.spec.ts` 两条用例（工具条常驻模式与适配、窄屏右侧不再有悬浮控件） |
 | A2 | 年份卡的大号年份数字在白底 / 浅色封面（2020 白底文档）上对比度不足 | VERIFIED | 提交 `c0a6046`：年份卡加 85% 黑色渐变蒙版 + 文字描边。截图 `frontend/.smoke/a3clip/`、`frontend/.smoke/a3mark/`（白点 / 年份区块 8× 放大） |
 | A3 | 未读页取消「新」角标后，未读状态缺少表达 | VERIFIED | 提交 `e5d236e`：三态系统（未读=白点 / 在读=进度条 / 已读=✓ chip），全部取自真实数据；删除无数据来源的「重温」角标。单元测试 `AlbumCard.test.tsx` 新增 8 例；截图 `frontend/.smoke/a3z2/`、`frontend/.smoke/a3read/` |
-| A4 | 深色主题未做 WCAG AA 对比度审计 | VERIFIED | 提交 `e38d8f7`：新增 `frontend/scripts/contrast-audit.mjs`（DOM 判定 + 像素判定 + `--self-test` 自检），审计前 132 处不达标 → 修复后 0 处。命令 `npm run audit:contrast` |
-| A5 | 平板断点（768 / 1024px）未走查 | OPEN | — |
-| A6 | 主要网格加载仍是转圈 + 文案，没有布局稳定的骨架屏 | OPEN | — |
-| A7 | 列表视图在超宽屏仍是单列，标题与右侧数字之间大片空白 | OPEN | — |
+| A4 | 深色主题未做 WCAG AA 对比度审计（顺带发现浅色主题同样不达标） | VERIFIED | 提交 `e38d8f7`：新增 `frontend/scripts/contrast-audit.mjs`（DOM 判定 + 像素判定 + `--self-test` 自检），审计前 132 处不达标 → 修复后 0 处。命令 `npm run audit:contrast` |
+| A5 | 平板断点（768 / 1024px）未走查 | VERIFIED | 提交 `c0cad04`：溢出用例扩到 1920 / 1440 / 1024 / 768 / 390 五档并逐档实跑；截图 `frontend/.smoke/a5/`（首页 / 未读 / 最近 / 设置 / 文件夹页，明暗两套）与 `frontend/.smoke/a5d/`（768px 下的右键菜单与属性弹窗） |
+| A6 | 主要网格加载仍是转圈 + 文案，没有布局稳定的骨架屏 | VERIFIED | 提交 `db88d58`：新增 `AlbumGridSkeleton`，首页 / 未读 / 最近 / 收藏 / 文件夹页改用与真实网格同形的骨架；截图 `frontend/.smoke/a6c/`（API 延迟 4 秒后的加载态） |
+| A7 | 列表视图在超宽屏仍是单列，标题与右侧数字之间大片空白 | VERIFIED | 提交 `59e05e2`：≥1536px 列表改双列、行高固定 86px；截图 `frontend/.smoke/a7b/`（1920px 下 10 项排成 5 行 2 列） |
 
 ---
 
@@ -56,8 +56,22 @@
 | A3 卡片状态表达 | `e5d236e` | Vitest 8 例 + 运行态截图 |
 | A4 对比度审计 | `e38d8f7` | `npm run audit:contrast`（含 `--self-test`）全绿 |
 
-### C2. 进行中
+### C2. 第二遍全产品复审（section 三）中发现并已修复的问题
 
-- A5 平板断点（768 / 1024px）走查。
-- A6 骨架屏。
-- A7 超宽屏列表。
+| 问题 | 提交 | 说明 |
+|------|------|------|
+| 浅色主题次级文字只有 2.5:1，10px 中文遍布界面 | `1dd628c` | 字号统一提到规范下限 12.5px，中文标签去掉 uppercase / 大字距 |
+| 收藏页"1 项"配一张空网格 | `1dd628c` | 改成"N 项可用 · M 项暂不可用"，空状态说明失效原因 |
+| 首页正文中重复一排与侧边栏相同的快捷入口 | `1b9320b` | 删除正文中间的按钮排，浏览主线不再被切断 |
+| 三个图标按钮只有 title，读屏软件读不到名称 | `1b9320b` | 补 aria-label |
+
+### C3. 复审方式
+
+- 逐页截图（`frontend/.smoke/pages.mjs`）：首页 / 未读 / 最近 / 收藏 /
+  设置 / 文件夹页 / 阅读器，明暗两套主题。
+- 自动检查脚本（临时，不入仓）：
+  - `.smoke/overflow.mjs`：五档断点逐元素查横向溢出；
+  - `.smoke/typesize.mjs`：扫描渲染后的实际字号；
+  - `.smoke/nameless.mjs`：找没有可访问名的按钮；
+  - `.smoke/tab.mjs`：连按 Tab 检查焦点环；
+  - `scripts/contrast-audit.mjs`（已入库）：对比度审计。
