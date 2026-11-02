@@ -75,12 +75,15 @@ export default function Sidebar({
     }
   };
 
+  // 选中态：强调色浅底 + 前景色文字（文字保持 --fg，图标用强调色）。
+  // 这样在六套强调色下都能保持稳定对比度 —— 选中文字直接用强调色时，
+  // 浅色背景 + 靛蓝/琥珀这类中明度强调色的对比度并不总是够。
   const navItemClass = (isActive: boolean) =>
     `group relative flex items-center gap-2.5 h-9 rounded-md text-[13.5px] transition-colors ${
       collapsed ? "justify-center px-0" : "px-2.5"
     } ${
       isActive
-        ? "bg-accent-soft text-accent font-medium"
+        ? "bg-accent-soft text-fg font-medium"
         : "text-fg-muted hover:bg-bg-subtle hover:text-fg"
     }`;
 
@@ -147,8 +150,15 @@ export default function Sidebar({
             end={it.end}
             className={({ isActive }) => navItemClass(isActive)}
           >
-            <it.Icon size={16} className="shrink-0" />
-            {!collapsed && <span className="truncate">{it.label}</span>}
+            {({ isActive }) => (
+              <>
+                <it.Icon
+                  size={16}
+                  className={`shrink-0 ${isActive ? "text-accent" : ""}`}
+                />
+                {!collapsed && <span className="truncate">{it.label}</span>}
+              </>
+            )}
           </NavLink>
         ))}
 
@@ -193,8 +203,15 @@ export default function Sidebar({
             end={it.end}
             className={({ isActive }) => navItemClass(isActive)}
           >
-            <it.Icon size={16} className="shrink-0" />
-            {!collapsed && <span className="truncate">{it.label}</span>}
+            {({ isActive }) => (
+              <>
+                <it.Icon
+                  size={16}
+                  className={`shrink-0 ${isActive ? "text-accent" : ""}`}
+                />
+                {!collapsed && <span className="truncate">{it.label}</span>}
+              </>
+            )}
           </NavLink>
         ))}
         <button

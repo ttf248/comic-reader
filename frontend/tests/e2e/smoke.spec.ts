@@ -2508,8 +2508,10 @@ for (const mode of ["grid", "list"] as const) {
       await expect(card).toBeVisible();
       await expect(card.getByText("已读", { exact: true })).toHaveCount(0);
       await expect(card.getByText("100%", { exact: true })).toHaveCount(0);
+      // 未读页整页都是未读，卡片不再逐张挂「新」角标 —— 那是纯视觉噪音。
+      // 未读状态由服务端筛选保证，卡片上只保留「已读」这类真实状态。
       if (mode === "grid")
-        await expect(card.getByText("新", { exact: true })).toBeVisible();
+        await expect(card.getByText("新", { exact: true })).toHaveCount(0);
       const menu = page.getByRole("menu", { name: "上下文菜单" });
       await card.click({ button: "right" });
       await expect(menu).toHaveCount(1);
@@ -4602,3 +4604,117 @@ test("阅读器连续模式按视口宽度请求预览图，不发原图", async
     page.locator("[data-image-gallery] img").first(),
   ).toHaveAttribute("src", /\/api\/previews\/.*\?w=\d+/);
 });
+
+// ==== UI 重设计新增的界面契约 ====
+//
+// 这次重设计把阅读器的核心操作（阅读模式 / 适配方式）从"…"菜单提到顶栏常驻，
+// 并给首页重排了信息架构。下面几条用例把这些新契约固定下来，避免后续
+// 迭代时把可发现性改回去。
+
+test("阅读器顶栏常驻阅读模式与适配方式，切换后写入本地偏好", async ({
+  page,
+}) => {
+  const nodes = await scannedNodes(page.request);
+  const album = nodes.find((node) => node.name === "sample-album")!;
+  expect(album).toBeDefined();
+  await page.goto(`/gallery?path=${encodeURIComponent(album.id)}&type=image`);
+  const group = page.getByRole("group", { name: "阅读模式与适配" });
+  await expect(group).toBeVisible();
+
+  // 阅读模式：分段控件直接可点，不必先打开"…"菜单。
+  await group.getByRole("button", { name: "连续", exact: true }).click();
+  await expect(
+    group.getByRole("button", { name: "连续", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        () =>
+          JSON.parse(localStorage.getItem("local-gallery") ?? "{}").state?.mode ??
+          null,
+      ),
+    )
+    .toBe("continuous");
+
+  // 适配方式：一个按钮循环 适应 → 按宽 → 按高 → 原始。
+  const fit = group.getByRole("button", { name: /^适配：/ });
+  await expect(fit).toHaveAttribute("aria-label", "适配：适应");
+  await fit.click();
+  await expect(fit).toHaveAttribute("aria-label", "适配：按宽");
+
+  // 键盘路径依旧可用：1 / 2 / 3 切模式，F 循环适配。
+  await page.keyboard.press("1");
+  await expect(
+    group.getByRole("button", { name: "单张", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+});
+
+test("重设计后的首页把继续阅读放在首屏，未读区不再逐张挂「新」角标", async ({
+  page,
+}) => {
+  const nodes = await scannedNodes(page.request);
+  const album = nodes.find((node) => node.name === "sample-album")!;
+  expect(album).toBeDefined();
+  // 造一条「读到一半」的记录，首页才会出现「继续阅读」区块。
+  const activityPath = `/api/activity?albumId=${album.id}&mediaKind=image`;
+  expect(
+    (
+      await page.request.put("/api/activity", {
+        data: {
+          albumId: album.id,
+          mediaKind: "image",
+          pageIndex: 1,
+          pageCount: 3,
+        },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  try {
+    await page.goto("/");
+    // 首页第一屏就要能看到「继续阅读」区块，而不是藏在第三个模块里。
+    const continueSection = page.getByTestId("continue-hero");
+    await expect(continueSection).toBeVisible();
+    await expect(
+      continueSection.getByRole("heading", { name: "继续阅读", level: 2 }),
+    ).toBeVisible();
+
+    // 未读区整页都是未读，卡片不再逐张挂「新」角标。
+    const unread = page.getByTestId("unread-hero");
+    await expect(unread).toBeVisible();
+    await expect(unread.getByText("新", { exact: true })).toHaveCount(0);
+  } finally {
+    expect((await page.request.delete(activityPath)).ok()).toBeTruthy();
+  }
+});
+
+for (const width of [1440, 390]) {
+  test(`${width}px 下首页、相册与阅读器均无横向溢出`, async ({ page }) => {
+    const nodes = await scannedNodes(page.request);
+    const album = nodes.find((node) => node.name === "sample-album")!;
+    expect(album).toBeDefined();
+    await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+    for (const path of ["/", "/unread", `/albums/${album.id}`]) {
+      await page.goto(path);
+      await page.waitForTimeout(400);
+      const overflow = await page.evaluate(() => {
+        const root = document.documentElement;
+        const main = document.querySelector("main");
+        return {
+          doc: root.scrollWidth - root.clientWidth,
+          main: main ? main.scrollWidth - main.clientWidth : 0,
+        };
+      });
+      expect(overflow.doc, `${path} 文档横向溢出`).toBeLessThanOrEqual(1);
+      expect(overflow.main, `${path} 主内容横向溢出`).toBeLessThanOrEqual(1);
+    }
+    // 阅读器是独立路由（不套 AppShell），单独检查。
+    await page.goto(`/gallery?path=${encodeURIComponent(album.id)}&type=image`);
+    await page.waitForTimeout(600);
+    const galleryOverflow = await page.evaluate(
+      () =>
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth,
+    );
+    expect(galleryOverflow).toBeLessThanOrEqual(1);
+  });
+}

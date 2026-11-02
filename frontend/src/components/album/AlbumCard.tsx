@@ -359,12 +359,18 @@ function GridCard({
             {(() => {
               const media = formatMediaCount(data);
               if (media) {
-                // album 变体：按图/视频分别展示
-                return <span title={media.title}>{media.label}</span>;
+                // album 变体：按图/视频分别展示。
+                // 不允许换行 —— 「384 张 · 19 个视 频」这种断字很难看，
+                // 空间不够时应该让后面的来源副标题截断。
+                return (
+                  <span title={media.title} className="shrink-0 whitespace-nowrap">
+                    {media.label}
+                  </span>
+                );
               }
               // collection / smart 变体：维持 count + "卷"（语义是子相册数）
               return (
-                <span>
+                <span className="shrink-0 whitespace-nowrap">
                   {data.count}{" "}
                   {data.variant === "collection"
                     ? "卷"

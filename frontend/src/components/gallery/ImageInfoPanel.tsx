@@ -13,7 +13,7 @@ interface Props {
 // 画廊右侧图片信息面板。
 //
 // 布局：阅读器根节点是横向 flex，面板在宽屏（md+）作为独立的一栏与画布并排，
-// 不叠在顶栏上；窄屏没有并排空间，改为顶栏下方的整宽浮层（top-11 让开顶栏），
+// 不叠在顶栏上；窄屏没有并排空间，改为顶栏下方的整宽浮层（top-12 让开顶栏），
 // 至少不遮住返回按钮和相册名。
 //
 // 配色：阅读器画布恒为深色（bg-neutral-950），顶栏和右侧控件都用白色系。
@@ -28,7 +28,7 @@ export default function ImageInfoPanel({ absPath, onClose }: Props) {
     <aside
       data-testid="image-info-panel"
       className="
-        absolute inset-x-0 bottom-0 top-11 z-30 flex flex-col
+        absolute inset-x-0 bottom-0 top-12 z-30 flex flex-col
         border-t border-white/10 bg-neutral-900/95 backdrop-blur-md
         md:static md:inset-auto md:z-auto md:w-72 md:shrink-0 md:border-l md:border-t-0
       "
