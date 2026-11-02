@@ -25,9 +25,28 @@ npm run preview    # 本地预览生产构建
 ## 测试
 
 ```bash
-npm run test         # 单元测试
-npx playwright test  # e2e 测试
+npm run test             # 单元测试
+npx playwright test      # e2e 测试
+npm run audit:contrast   # 对比度审计（需要 dev server 或后端在跑）
 ```
+
+### 对比度审计
+
+`scripts/contrast-audit.mjs` 按 WCAG 2.1 AA 检查运行中的界面：
+
+- **DOM 判定**：沿祖先链合成背景色，算文字与背景的对比度；
+- **像素判定**：压在图片 / 渐变上的文字静态算不出背景，改为截屏后取
+  文字包围盒外一圈像素当底色，按最不利的一侧算；
+- **自检**：`--self-test` 会注入已知好坏样本，先证明工具分得清，
+  再看它报"全部通过"。
+
+```bash
+npm run audit:contrast                      # 默认页面，明暗两套主题
+npm run audit:contrast -- --self-test       # 自检
+LG_PAGES=/,/unread npm run audit:contrast  # 自定义页面
+```
+
+有低于 AA 阈值的项时进程退出码为 1。
 
 ## 环境变量
 

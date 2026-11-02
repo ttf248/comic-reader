@@ -175,17 +175,23 @@ export default function Favorites() {
         <h1 className="page-title">
           我收藏的图像
         </h1>
-        <p className="text-[13px] text-fg-muted mt-2 tabular-nums">
-          {favoritesQuery.isLoading
-            ? "正在加载收藏…"
-            : favoritesFailed && favorites.length === 0
-              ? "收藏暂不可用"
-              : missingCount > 0
-                ? // 收藏里有一部分指向已经不存在（改名 / 移动）的资源：
-                  // 标题里的数量要说清楚，否则会出现"1 项"配一张空网格。
-                  `${cards.length} 项可用 · ${missingCount} 项暂不可用`
+        {/* 条数说的是"收藏了多少"，与网格里能显示几张无关：失效的收藏
+            也是用户收藏过的。失效数量另起一行说明，避免出现"1 项"配一
+            张空网格这种自相矛盾的读数。 */}
+        <div className="flex items-baseline gap-2.5 mt-2 flex-wrap">
+          <p className="text-[13px] text-fg-muted tabular-nums">
+            {favoritesQuery.isLoading
+              ? "正在加载收藏…"
+              : favoritesFailed && favorites.length === 0
+                ? "收藏暂不可用"
                 : `${favorites.length} 项`}
-        </p>
+          </p>
+          {missingCount > 0 && (
+            <span className="text-[12.5px] text-fg-subtle">
+              其中 {missingCount} 项暂时找不到
+            </span>
+          )}
+        </div>
       </section>
 
       {loadFailed && (

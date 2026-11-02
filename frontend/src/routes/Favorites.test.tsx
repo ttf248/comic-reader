@@ -181,8 +181,10 @@ it("收藏资源均失效时不引导清除筛选", async () => {
   expect(
     await screen.findByText("收藏的 1 项内容暂时找不到"),
   ).toBeInTheDocument();
+  // 条数说的是"收藏了多少"，失效的那一项另起一行说明。
+  expect(screen.getByText("1 项")).toBeInTheDocument();
   expect(
-    screen.getByText("0 项可用 · 1 项暂不可用"),
+    screen.getByText("其中 1 项暂时找不到"),
   ).toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "清除筛选" }),
