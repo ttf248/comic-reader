@@ -10,7 +10,6 @@ import { decodeFavPath } from "./path";
 export type GallerySource =
   | {
       type: "home";
-      section?: "inProgress" | "fresh" | "rewind" | "recent" | "all";
     }
   | { type: "favorites" }
   | { type: "recents" }

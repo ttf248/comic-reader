@@ -187,6 +187,83 @@ describe("AlbumCard 封面语义", () => {
   });
 });
 
+describe("AlbumCard 状态表达", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useUIStore.setState({ toasts: [] });
+  });
+
+  it("从未打开过的相册在封面左上角标一个安静的未读点，而不是一个「新」字块", () => {
+    renderCard(card());
+
+    // 未读：深色蒙版上的白点 + 屏幕阅读器可读的文本。
+    expect(screen.getByText("未读")).toBeInTheDocument();
+    expect(screen.queryByText("新", { exact: true })).not.toBeInTheDocument();
+    // 未读相册不能同时显示「已读」。
+    expect(screen.queryByText("已读", { exact: true })).not.toBeInTheDocument();
+  });
+
+  it("已读完的相册在封面右下角显示已读 chip，且不再显示未读点", () => {
+    renderCard(card({ progress: { index: 11, total: 12 } }));
+
+    expect(screen.getByText("已读", { exact: true })).toBeInTheDocument();
+    expect(screen.queryByText("未读")).not.toBeInTheDocument();
+  });
+
+  it("在读的相册不再显示未读点，状态由封面底部的进度条承担", () => {
+    renderCard(card({ progress: { index: 3, total: 12 } }));
+
+    expect(screen.queryByText("未读")).not.toBeInTheDocument();
+    expect(screen.getByText("27%")).toBeInTheDocument();
+  });
+
+  it("整页都是未读的列表关掉逐卡未读标记", () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <AlbumCard data={card()} showUnreadBadge={false} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.queryByText("未读")).not.toBeInTheDocument();
+    expect(screen.queryByText("新", { exact: true })).not.toBeInTheDocument();
+  });
+
+  it("集合与标签是类型而不是状态：类型信息放在元信息行，不占封面角位", () => {
+    renderCard(card({ variant: "collection", title: "2026 年", subtitle: "集合" }));
+
+    // 仍然能看到类型信息，但不再占用封面角位（角位留给未读 / 已读）。
+    const chip = screen.getByText("集合");
+    expect(chip).toBeInTheDocument();
+    expect(screen.getByTestId("card-cover").contains(chip)).toBe(false);
+  });
+
+  it("标签（智能视图）在元信息行标出类型", () => {
+    renderCard(card({ variant: "smart", title: "旅行" }));
+
+    const chip = screen.getByText("标签");
+    expect(screen.getByTestId("card-cover").contains(chip)).toBe(false);
+  });
+
+  it("列表视图把状态写在标题行，不再在缩略图上重复已读", () => {
+    renderCard(card({ progress: { index: 11, total: 12 } }), "list");
+
+    const marks = screen.getAllByText("已读", { exact: true });
+    expect(marks).toHaveLength(1);
+    expect(screen.getByTestId("card-cover").contains(marks[0])).toBe(false);
+  });
+
+  it("列表视图的未读标记带可读文字而不是只有一颗点", () => {
+    renderCard(card(), "list");
+
+    expect(screen.getByText("未读")).toBeInTheDocument();
+  });
+});
+
 describe("AlbumCard 收藏星标", () => {
   beforeEach(() => {
     vi.clearAllMocks();

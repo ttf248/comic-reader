@@ -12,7 +12,6 @@ import {
   StarIcon,
   FolderIcon,
   ReaderIcon,
-  RewindIcon,
   CheckIcon,
   ClockIcon,
   PlayFilledIcon,
@@ -28,7 +27,6 @@ import { useToggleFavorite } from "../../hooks/useFavorites";
 import CardCover from "./CardCover";
 
 export type CardVariant = "album" | "collection" | "smart";
-export type CardBadge = "rewind"; // 重温：30 天以上没看
 
 export interface CardData {
   id: string;
@@ -70,8 +68,6 @@ export interface CardData {
   sourceRoot?: string;
   // 来源媒体根的 basename（直接给 UI 用）
   sourceName?: string;
-  // 角标：当前只支持重温；未来可扩展
-  badge?: CardBadge;
 }
 
 interface Props {
@@ -87,8 +83,8 @@ interface Props {
    */
   overlayAction?: ReactNode;
   /**
-   * 是否显示「新」角标。在「未读」这类整页都是未读的列表里，
-   * 每张卡都挂同一个角标只是噪音，直接关掉。
+   * 是否显示未读标记。在「未读」这类整页都是未读的列表里，
+   * 每张卡都挂同一个标记只是噪音，直接关掉。
    */
   showUnreadBadge?: boolean;
 }
@@ -147,6 +143,7 @@ export default function AlbumCard({
           data={data}
           showLastSeen={showLastSeen}
           onToggleFavorite={onToggleFavorite}
+          showUnreadBadge={showUnreadBadge}
         />
       ) : (
         <GridCard
@@ -221,10 +218,8 @@ function GridCard({
   const progressPct = progressPercent(data.progress);
   // 0-based 页码到达 total - 1 即已读完。
   const isFinished = isCompleted(data.progress);
-  // 全新：没有有效进度记录。保存过 index=0 说明已经打开第一张，属于在读。
-  // 重要：仅 album 变体显示；智能集合 / 集合不适用。
-  const isFresh =
-    showUnreadBadge && data.variant === "album" && isUnread(data.progress);
+  // 未读标记（见文件底部 showUnreadMark）：只对相册、且页面不是「整页未读」时出现。
+  const unread = showUnreadMark(data, showUnreadBadge);
   // 只有配置了多个媒体根才需要标来源。
   const multiRoot = useUIStore((s) => s.multiRoot);
 
@@ -282,68 +277,49 @@ function GridCard({
         >
           <CardCover data={data} />
 
-          {/* 服务端转码状态（仅在转码中/失败时显示；不与上面 ▶ 角标冲突） */}
-          {data.coverKind === "video" && (
-            <div className="absolute top-2 left-2">
+          {/* 封面左上角：状态槽 + 视频转码角标（同一列堆叠，互不遮挡）。 */}
+          <div className="absolute top-2 left-2 flex flex-col items-start gap-1">
+            {data.coverKind === "video" && (
               <TranscodeStatusBadge
                 videoPath={data.coverPath ?? ""}
                 size="sm"
               />
-            </div>
-          )}
+            )}
+            {unread && <UnreadDot />}
+          </div>
 
           {/* 底部暗化蒙版（hover 时让进度条与徽章更清晰） */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
 
-          {/* 全新 / 重温 / 集合 / 标签 角标（同一位置，优先级：fresh > rewind > collection > smart） */}
-          {isFresh && data.badge !== "rewind" ? (
-            // 全新：强调色 + 白圆点 + "新"字
-            // 用 accent 而非 info（tailwind 没定义 info 颜色）
-            <div className="absolute top-2 left-2 inline-flex items-center gap-1 bg-accent text-accent-contrast text-[11.5px] font-medium px-1.5 h-5 rounded shadow-sm">
-              <span>新</span>
-            </div>
-          ) : data.badge === "rewind" ? (
-            <div className="absolute top-2 left-2 inline-flex items-center gap-1 bg-bg-elevated/95 backdrop-blur text-fg-muted text-[11.5px] font-medium px-1.5 h-5 rounded border border-border-faint shadow-xs">
-              <RewindIcon size={10} className="text-accent" />
-              <span>重温</span>
-            </div>
-          ) : data.variant === "collection" ? (
-            <div className="absolute top-2 left-2 bg-bg-elevated/90 backdrop-blur text-fg-muted text-[11.5px] font-medium px-1.5 h-5 rounded inline-flex items-center">
-              <FolderIcon size={10} className="mr-1" />
-              集合
-            </div>
-          ) : data.variant === "smart" ? (
-            <div className="absolute top-2 left-2 bg-accent text-accent-contrast text-[11.5px] font-medium px-1.5 h-5 rounded inline-flex items-center">
-              标签
-            </div>
-          ) : null}
+          {/* 集合 / 标签 这类"类型"信息不属于阅读状态，已移到标题下的元信息行，
+              封面角位只留给状态（未读点 / 已读），避免角标互相打架。 */}
 
-          {/* 阅读进度 */}
+
+          {/* 阅读进度：百分比放深色蒙版 chip，进度条压在封面底边的暗色条上。
+              以前整块用一层渐变蒙版，白字在亮封面（照片里的白墙、白纸）上
+              会直接糊掉 —— 蒙版越往上越透明，而文字正好在透明那一侧。 */}
           {progressPct !== null && progressPct > 0 && (
-            <div className="absolute bottom-0 left-0 right-0 px-2.5 py-2 bg-gradient-to-t from-black/55 to-transparent">
-              <div className="flex items-center gap-1.5 text-white/95">
-                <ReaderIcon size={11} className="shrink-0" />
-                <span className="text-[11.5px] font-medium tabular-nums">
-                  {progressPct}%
-                </span>
-              </div>
-              <div className="mt-1.5 h-0.5 bg-white/20 rounded-full overflow-hidden">
+            <>
+              {!isFinished && (
+                <div className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-md bg-black/65 backdrop-blur-sm ring-1 ring-white/20 px-1.5 h-5 text-[11.5px] font-medium text-white shadow-sm">
+                  <ReaderIcon size={11} className="shrink-0" />
+                  <span className="tabular-nums">{progressPct}%</span>
+                </div>
+              )}
+              <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/55">
                 <div
                   className="h-full bg-white/90"
                   style={{ width: `${progressPct}%` }}
                 />
               </div>
-            </div>
+            </>
           )}
 
-          {/* 已读：右下角徽章，封面略微提亮（叠在 cover 上时通过 mix-blend 强可读） */}
+          {/* 已读：右下角 chip。深色蒙版材质压在任何封面上都读得清
+              （原来的实心绿块在深色主题 / 浅色封面上都会糊掉）。 */}
           {isFinished && data.variant === "album" && (
-            <div
-              className="absolute bottom-2 right-2 inline-flex items-center gap-1 bg-success/95 text-white text-[11.5px] font-medium px-1.5 h-5 rounded shadow-sm"
-              title="已读完"
-            >
-              <CheckIcon size={10} />
-              <span>已读</span>
+            <div className="absolute bottom-2 right-2">
+              <ReadChip />
             </div>
           )}
         </div>
@@ -356,6 +332,7 @@ function GridCard({
             {data.displayTitle ?? data.title}
           </div>
           <div className="text-[12.5px] text-fg-muted mt-1 tabular-nums flex items-center gap-1.5 min-w-0">
+            <TypeChip variant={data.variant} />
             {(() => {
               const media = formatMediaCount(data);
               if (media) {
@@ -382,7 +359,7 @@ function GridCard({
             })()}
             {data.subtitle && (
               <>
-                <span className="text-fg-subtle/50">·</span>
+                <span className="text-fg-subtle">·</span>
                 <span className="truncate">{data.subtitle}</span>
               </>
             )}
@@ -400,7 +377,7 @@ function GridCard({
               className="text-[12.5px] text-fg-subtle mt-0.5 tabular-nums flex items-center gap-1.5 truncate"
               title={`上次 ${timeAgo(data.lastSeenAt)}`}
             >
-              <ClockIcon size={10} className="shrink-0 text-fg-subtle/70" />
+              <ClockIcon size={10} className="shrink-0 text-fg-subtle" />
               {data.progress &&
                 data.progress.total > 0 &&
                 data.progress.index >= 0 && (
@@ -408,7 +385,7 @@ function GridCard({
                     <span>
                       看到 {data.progress.index + 1} / {data.progress.total}
                     </span>
-                    <span className="text-fg-subtle/40">·</span>
+                    <span className="text-fg-subtle">·</span>
                   </>
                 )}
               <span>上次 {timeAgo(data.lastSeenAt)}</span>
@@ -458,14 +435,18 @@ function ListCard({
   data,
   showLastSeen,
   onToggleFavorite,
+  showUnreadBadge,
 }: {
   data: CardData;
   showLastSeen?: boolean;
   onToggleFavorite: () => void;
+  showUnreadBadge: boolean;
 }) {
   // 与 GridCard 一致：直接依赖 <img loading="lazy">，不重复自写 IO。
   const progressPct = progressPercent(data.progress);
   const isFinished = isCompleted(data.progress);
+  // 未读标记与网格视图同源。
+  const unread = showUnreadMark(data, showUnreadBadge);
   // 只有配置了多个媒体根才需要标来源。
   const multiRoot = useUIStore((s) => s.multiRoot);
 
@@ -490,15 +471,8 @@ function ListCard({
               <span>{formatDuration(data.durationSec)}</span>
             </div>
           )}
-          {isFinished && data.variant === "album" && (
-            <div
-              className="absolute bottom-1 right-1 bg-success/95 text-white rounded px-1.5 h-5 text-[11.5px] font-medium inline-flex items-center gap-0.5 shadow-sm"
-              title="已读完"
-            >
-              <CheckIcon size={10} />
-              <span>已读</span>
-            </div>
-          )}
+          {/* 状态角位（未读点）在列表视图改放到标题行：
+              56px 的缩略图上塞不下标记，且标题行的文字更易扫读。 */}
         </div>
 
         <div className="flex-1 min-w-0">
@@ -506,17 +480,30 @@ function ListCard({
             <span className="truncate" title={data.displayTitle ?? data.title}>
               {data.displayTitle ?? data.title}
             </span>
+            {unread && (
+              <span
+                className="inline-flex items-center gap-1 text-[12px] font-medium text-fg-muted shrink-0"
+                title="未读"
+              >
+                <span
+                  className="h-2 w-2 rounded-full bg-accent"
+                  aria-hidden="true"
+                />
+                <span>未读</span>
+              </span>
+            )}
             {isFinished && data.variant === "album" && (
-              <span className="inline-flex items-center gap-0.5 text-success text-[12px] font-medium shrink-0">
-                <CheckIcon size={11} />
+              <span className="inline-flex items-center gap-0.5 text-[12px] font-medium text-fg-muted shrink-0">
+                <CheckIcon size={11} className="text-success" />
                 <span>已读</span>
               </span>
             )}
           </div>
           <div className="text-[12.5px] text-fg-subtle mt-1 flex items-center gap-2">
+            <TypeChip variant={data.variant} />
             {data.subtitle && <span className="truncate">{data.subtitle}</span>}
             {data.sourceName && multiRoot && (
-              <span className="text-fg-subtle/80 inline-flex items-center gap-0.5 shrink-0">
+              <span className="text-fg-subtle inline-flex items-center gap-0.5 shrink-0">
                 <FolderIcon size={11} className="shrink-0" />
                 <span className="truncate">来自 {data.sourceName}</span>
               </span>
@@ -561,7 +548,7 @@ function ListCard({
           </span>
           {showLastSeen && data.lastSeenAt && (
             <span className="text-[12.5px] text-fg-subtle inline-flex items-center gap-1">
-              <ClockIcon size={11} className="shrink-0 text-fg-subtle/70" />
+              <ClockIcon size={11} className="shrink-0 text-fg-subtle" />
               <span>上次 {timeAgo(data.lastSeenAt)}</span>
             </span>
           )}
@@ -580,6 +567,74 @@ function ListCard({
         className="shrink-0 mr-1"
       />
     </div>
+  );
+}
+
+// ============================================================================
+// 卡片状态表达（grid / list 共用同一套语义）
+//
+// 状态全部来自真实数据，不推断、不虚构：
+//   未读 —— 从未打开过（没有阅读进度记录）。
+//   在读 —— 已经翻开但还没看完（封面底部的进度条 + 百分比）。
+//   已读 —— 已经翻到最后一页（封面右下角的「✓ 已读」chip）。
+//
+// 表达方式刻意做得安静：
+//   - 封面左上角只放"待办"信号：未读是一颗不带文字的白点。
+//     一页 78 张卡片各挂一个「新」字块只是噪音，点本身已经够用。
+//   - 已读放在封面右下角，和左上角的"待办"分区隔开。
+//   - 集合 / 标签是"类型"而不是状态，类型信息放在元信息行。
+//
+// chip 一律用"深色蒙版 + 浅色前景"的材质：封面可能是纯白、纯黑或任意
+// 颜色，只有蒙版材质才能保证文字在所有封面上都读得清（浅色 chip 压在
+// 白色封面上会整个消失）。
+// ============================================================================
+
+/** 是否给这张卡挂未读标记。
+ *  未读只对相册有意义（集合 / 智能视图是聚合视图，谈不上"翻开过"）。
+ *  showUnreadBadge=false 用于"整页都是未读"的列表：那里每张卡挂同一个
+ *  标记纯属重复，未读状态由服务端筛选保证。 */
+function showUnreadMark(data: CardData, showUnreadBadge: boolean): boolean {
+  return (
+    showUnreadBadge && data.variant === "album" && isUnread(data.progress)
+  );
+}
+
+/** 未读：一颗白点 + 深色描边。
+ *  白心在深色封面上直接可见，深色描边在白色封面上把点的轮廓兜住 ——
+ *  两边都不需要额外的底板，也不会像一个空心的圆环按钮。 */
+function UnreadDot() {
+  return (
+    <span
+      className="inline-flex h-2.5 w-2.5 items-center justify-center rounded-full bg-white ring-2 ring-black/45 shadow-[0_1px_3px_rgba(0,0,0,0.35)]"
+      title="未读"
+    >
+      <span className="sr-only">未读</span>
+    </span>
+  );
+}
+
+/** 已读：蒙版 chip + 绿色对勾。 */
+function ReadChip() {
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-md bg-black/65 backdrop-blur-sm ring-1 ring-white/20 px-1.5 h-5 text-[11.5px] font-medium text-white shadow-sm"
+      title="已读完"
+    >
+      <CheckIcon size={10} className="text-emerald-300" />
+      <span>已读</span>
+    </span>
+  );
+}
+
+/** 类型标记（标签）：放在元信息行，不占封面角位。
+ *  集合卡片本身已有「集合 / 子集合」副标题说明类型，不再重复挂 chip。 */
+function TypeChip({ variant }: { variant: CardVariant }) {
+  if (variant !== "smart") return null;
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1 rounded bg-bg-subtle px-1.5 py-px text-[11.5px] font-medium leading-4 text-fg-muted ring-1 ring-border-faint">
+      <FolderIcon size={10} />
+      标签
+    </span>
   );
 }
 
