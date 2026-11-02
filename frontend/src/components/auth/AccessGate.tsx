@@ -10,7 +10,7 @@ import {
   AUTH_ESTABLISHED_EVENT,
   AUTH_REQUIRED_EVENT,
 } from "../../api/client";
-import { authApi } from "../../api/auth";
+import { authApi, SESSION_CHECK_TIMEOUT_MS } from "../../api/auth";
 
 type GateState = "checking" | "unlocked" | "locked" | "local-only" | "offline";
 
@@ -23,8 +23,15 @@ export default function AccessGate({ children }: { children: ReactNode }) {
   const checkSession = useCallback(() => {
     setState("checking");
     setError("");
+    // 超时保护：请求卡住时按时进入「离线」态，让用户可以重试，
+    // 而不是一直看着「正在确认访问权限…」。
+    const controller = new AbortController();
+    const timer = window.setTimeout(
+      () => controller.abort(),
+      SESSION_CHECK_TIMEOUT_MS,
+    );
     authApi
-      .status()
+      .status(controller.signal)
       .then((session) =>
         setState(session.authenticated ? "unlocked" : "locked"),
       )
@@ -37,7 +44,8 @@ export default function AccessGate({ children }: { children: ReactNode }) {
           return;
         }
         setState("offline");
-      });
+      })
+      .finally(() => window.clearTimeout(timer));
   }, []);
 
   useEffect(() => {
