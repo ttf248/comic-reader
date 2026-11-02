@@ -270,3 +270,39 @@ func TestCacheStatsService_ThumbsDirectory(t *testing.T) {
 		t.Errorf("nested.jpg leaked into thumbs.FileCount: %+v", u.Thumbs)
 	}
 }
+
+// 整图转换缓存(HEIC/HEIF/TIFF → JPEG)必须单独统计。
+//
+// 它单张可达 MB 级,和缩略图混在一起时,设置页的细分之和会与总占用对不上,
+// 用户既看不到大头在哪,也没法只清这一类。
+func TestCacheStatsService_ConvertedSubDir(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := EnsureCacheLayout(dir); err != nil {
+		t.Fatal(err)
+	}
+	converted := filepath.Join(dir, "derived", "converted", "0123456789abcdef0123456789abcdef.jpg")
+	if err := os.WriteFile(converted, make([]byte, 4096), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	thumb := filepath.Join(dir, "derived", "thumbnails", "fedcba9876543210fedcba9876543210.jpg")
+	if err := os.WriteFile(thumb, make([]byte, 1000), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	svc := NewCacheStatsService(time.Second)
+	u, _, err := svc.Usage(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !u.Converted.Available {
+		t.Error("Converted.Available should be true")
+	}
+	if u.Converted.FileCount != 1 || u.Converted.Bytes != 4096 {
+		t.Errorf("Converted: got %+v want 1 file / 4096 bytes", u.Converted)
+	}
+	// 各细分之和必须等于总占用，否则设置页展示的细分对不上总数。
+	sum := u.Thumbs.Bytes + u.Converted.Bytes + u.VideoFaststart.Bytes + u.VideoTranscode.Bytes
+	if sum != u.TotalBytes {
+		t.Errorf("细分之和=%d, totalBytes=%d, want equal", sum, u.TotalBytes)
+	}
+}

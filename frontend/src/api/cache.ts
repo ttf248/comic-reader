@@ -11,9 +11,14 @@ export interface CacheStats {
   available: boolean;
   // 缓存剩余秒数(后端 30s TTL),前端可据此显示"30s 前更新"
   cacheTtlSeconds: number;
-  // 按子目录细分 — 后端独立扫描 thumbs / video-faststart / video-transcode。
-  // 子目录不存在时 Available=false,bytes/fileCount 为 0(还没产生过该类缓存)。
+  // 按子目录细分 — 后端独立扫描 thumbs / converted / video-faststart /
+  // video-transcode。子目录不存在时 Available=false,bytes/fileCount 为 0
+  // (还没产生过该类缓存)。
+  //
+  // converted 是 HEIC/HEIF/TIFF 的整图转换产物,单张可达 MB 级,单独列出
+  // 才能让各细分之和等于 totalBytes。
   thumbs: SubUsage;
+  converted: SubUsage;
   videoFaststart: SubUsage;
   videoTranscode: SubUsage;
 }
@@ -30,11 +35,12 @@ export interface SubUsage {
 // POST /api/cache/clear 的响应(scope 化清空)。
 //
 // 响应结构按 scope 区分字段(scope=thumbs 时只有 thumbs 非空,scope=all
-// 时 thumbs/faststart/transcode 全非空,totalDeleted/totalFreedBytes 是三者和)。
+// 时各子项全非空,totalDeleted/totalFreedBytes 是它们之和)。
 // 前端 toast "已清空 X" 优先用 total* 字段(scope=all 路径下)。
 export interface CacheScopeClearResult {
-  scope: "thumbs" | "faststart" | "transcode" | "all";
+  scope: "thumbs" | "converted" | "faststart" | "transcode" | "all";
   thumbs?: { deleted: number; freedBytes: number };
+  converted?: { deleted: number; freedBytes: number };
   faststart?: { deleted: number; freedBytes: number };
   transcode?: { deleted: number; freedBytes: number };
   totalDeleted: number;
@@ -43,9 +49,11 @@ export interface CacheScopeClearResult {
 
 export const cacheApi = {
   stats: () => api<CacheStats>("/api/cache/stats"),
-  // 统一清空入口(scope=thumbs|faststart|transcode|all)。
+  // 统一清空入口(scope=thumbs|converted|faststart|transcode|all)。
   // scope=all 一键全清,响应里有 totalDeleted/totalFreedBytes 便于 toast。
-  clearCache: (scope: "thumbs" | "faststart" | "transcode" | "all") =>
+  clearCache: (
+    scope: "thumbs" | "converted" | "faststart" | "transcode" | "all",
+  ) =>
     api<CacheScopeClearResult>(`/api/cache/clear?scope=${scope}`, {
       method: "POST",
     }),

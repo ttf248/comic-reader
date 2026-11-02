@@ -687,7 +687,7 @@ func (s *ThumbnailService) Cleanup() (int, error) {
 	return count, nil
 }
 
-// ClearAll 删除缓存目录中的所有文件,并清空内存 LRU。
+// ClearThumbnails 删除缩略图缓存目录中的所有文件,并清空缩略图内存 LRU。
 //
 // 与 Cleanup 不同:不按 mtime 过滤,无条件删除所有缓存条目。
 // 行为契约:
@@ -695,9 +695,10 @@ func (s *ThumbnailService) Cleanup() (int, error) {
 //   - 磁盘文件全部删除;但 cacheDir 本身保留,后续 GetOrCreate 还能写回
 //   - 调用方负责:删除后通常希望"强制重建"——即下一次访问重新生成;
 //     本方法不主动重新生成,只清空,避免阻塞 HTTP 路径
+//   - 整图转换缓存(convertedDir)不在本方法范围内,见 ClearConverted
 //
 // 返回删除的文件数 + 释放的字节数(用于前端展示"已清空 N 个文件 / 释放 X MB")。
-func (s *ThumbnailService) ClearAll() (deleted int, freedBytes int64, err error) {
+func (s *ThumbnailService) ClearThumbnails() (deleted int, freedBytes int64, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -705,16 +706,24 @@ func (s *ThumbnailService) ClearAll() (deleted int, freedBytes int64, err error)
 	if err != nil {
 		return deleted, freedBytes, err
 	}
-	// 整图转换结果同样属于可重建的派生缓存，"清空缓存"应一并清掉。
-	convertedDeleted, convertedFreed, convertedErr := clearCacheDir(s.convertedDir)
-	deleted += convertedDeleted
-	freedBytes += convertedFreed
-
-	// 清空内存 LRU(全部条目)
 	s.memCache.Purge()
-	s.convertedCache.Purge()
+	return deleted, freedBytes, nil
+}
 
-	return deleted, freedBytes, convertedErr
+// ClearConverted 删除整图转换缓存(HEIC/HEIF/TIFF 转 JPEG)并清空对应内存 LRU。
+//
+// 与缩略图分开清理:两者占用量级差很多(整图单张可达 MB 级),
+// 用户在设置页按类型分别清理时,释放字节数才能对得上自己点的那个按钮。
+func (s *ThumbnailService) ClearConverted() (deleted int, freedBytes int64, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	deleted, freedBytes, err = clearCacheDir(s.convertedDir)
+	if err != nil {
+		return deleted, freedBytes, err
+	}
+	s.convertedCache.Purge()
+	return deleted, freedBytes, nil
 }
 
 // clearCacheDir 删除目录里的缩略图缓存文件，返回删除数量与释放字节数。

@@ -65,7 +65,7 @@ func TestThumbnailClearNeverDeletesUnknownFiles(t *testing.T) {
 		}
 	}
 
-	deleted, _, err := svc.ClearAll()
+	deleted, _, err := svc.ClearThumbnails()
 	if err != nil {
 		t.Fatal(err)
 	}

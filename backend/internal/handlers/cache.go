@@ -14,9 +14,8 @@ import (
 // CacheStatsResponse GET /api/cache/stats 的响应体。
 //
 // 与 services.CacheUsage 字段一一对应,前端 Settings 缓存占用行需要
-// 三个子项(thumbs / videoFaststart / videoTranscode)来告诉用户大头在哪。
-// 任何字段缺失都会让前端的 SubUsageBadge 拿到 undefined,直接读 .available
-// 时炸掉整页。
+// 各子项来告诉用户大头在哪。任何字段缺失都会让前端的 SubUsageBadge
+// 拿到 undefined,直接读 .available 时炸掉整页。
 type CacheStatsResponse struct {
 	Path       string `json:"path"`
 	TotalBytes int64  `json:"totalBytes"`
@@ -26,9 +25,10 @@ type CacheStatsResponse struct {
 	Available  bool   `json:"available"`
 	// CacheTTLSeconds 缓存剩余秒数(前端可据此显示"30s 前更新"等提示)
 	CacheTTLSeconds int `json:"cacheTtlSeconds"`
-	// 按子目录细分:thumbs / video-faststart / video-transcode。
+	// 按子目录细分:thumbs / converted / video-faststart / video-transcode。
 	// 子目录不存在时 Available=false,前端灰显。
 	Thumbs         services.SubUsage `json:"thumbs"`
+	Converted      services.SubUsage `json:"converted"`
 	VideoFaststart services.SubUsage `json:"videoFaststart"`
 	VideoTranscode services.SubUsage `json:"videoTranscode"`
 }
@@ -53,10 +53,12 @@ func CacheStatsHandler(mgr *config.Manager, stats *services.CacheStatsService) f
 			Available:       usage.Available,
 			CacheTTLSeconds: 0,
 			Thumbs:          usage.Thumbs,
+			Converted:       usage.Converted,
 			VideoFaststart:  usage.VideoFaststart,
 			VideoTranscode:  usage.VideoTranscode,
 		}
 		resp.Thumbs.Path = "thumbs"
+		resp.Converted.Path = "converted"
 		resp.VideoFaststart.Path = "video-faststart"
 		resp.VideoTranscode.Path = "video-transcode"
 		if expiresAt != nil {
@@ -76,6 +78,7 @@ func CacheStatsHandler(mgr *config.Manager, stats *services.CacheStatsService) f
 // 非法 scope 直接 400,让前端尽早发现错别字。
 const (
 	CacheClearScopeThumbs    = "thumbs"
+	CacheClearScopeConverted = "converted"
 	CacheClearScopeFaststart = "faststart"
 	CacheClearScopeTranscode = "transcode"
 	CacheClearScopeAll       = "all"
@@ -85,18 +88,20 @@ const (
 //
 // 字段设计:
 //   - scope    请求的 scope,供前端在 toast 里复述"已清空 X"
-//   - thumbs/faststart/transcode 三个独立子项,各自报告 deleted / freedBytes;
-//     未涉及的 scope 字段为 nil,前端用 "scope in 响应" 来判断是否要展示。
-//   - totalDeleted/totalFreedBytes 三个 scope 的累加(便于一键全清时一次性显示)。
+//   - thumbs/converted/faststart/transcode 四个独立子项,各自报告
+//     deleted / freedBytes;未涉及的 scope 字段为 nil,前端用
+//     "scope in 响应" 来判断是否要展示。
+//   - totalDeleted/totalFreedBytes 各 scope 的累加(便于一键全清时一次性显示)。
 //
 // 前端约定:scope=thumbs 时只读 thumbs 字段,以此类推;scope=all 时
 // 读 total* 字段。无效 scope 走 400 分支。
 type CacheClearResult struct {
 	Scope string `json:"scope"`
-	// 三个子项,各自 pointer 允许 nil(JSON 序列化为 null 即可,
+	// 四个子项,各自 pointer 允许 nil(JSON 序列化为 null 即可,
 	// 前端用 ?? 兜底)。三个 service 都可能为 nil(ffmpeg 缺失场景),
 	// 此时 bytes/fileCount 为 0。
 	Thumbs          *CacheScopeResult `json:"thumbs,omitempty"`
+	Converted       *CacheScopeResult `json:"converted,omitempty"`
 	Faststart       *CacheScopeResult `json:"faststart,omitempty"`
 	Transcode       *CacheScopeResult `json:"transcode,omitempty"`
 	TotalDeleted    int               `json:"totalDeleted"`
@@ -111,13 +116,14 @@ type CacheScopeResult struct {
 
 // CacheClearHandler 统一清空缓存的处理函数(POST /api/cache/clear)。
 //
-//	POST /api/cache/clear?scope=thumbs|faststart|transcode|all
+//	POST /api/cache/clear?scope=thumbs|converted|faststart|transcode|all
 //
 // 行为:
-//   - scope=thumbs     调 ThumbnailService.ClearAll()
+//   - scope=thumbs     调 ThumbnailService.ClearThumbnails()
+//   - scope=converted  调 ThumbnailService.ClearConverted()(HEIC 等整图转换)
 //   - scope=faststart  调 VideoFaststartService.ClearCache()(本接口新增能力)
 //   - scope=transcode  调 TranscodeService.ClearCache()(转码缓存全清)
-//   - scope=all        上面三件事都做
+//   - scope=all        上面四件事都做
 //     并重置视频元数据的内存摘要，不计入磁盘文件数与释放字节。
 //   - 无效 scope → 400
 //
@@ -133,13 +139,14 @@ func CacheClearHandler(
 	return func(c *fiber.Ctx) error {
 		scope := strings.ToLower(strings.TrimSpace(c.Query("scope")))
 		if scope == "" {
-			return writeError(c, fiber.StatusBadRequest, "missing_cache_scope", "missing 'scope' query parameter (thumbs|faststart|transcode|all)")
+			return writeError(c, fiber.StatusBadRequest, "missing_cache_scope", "missing 'scope' query parameter (thumbs|converted|faststart|transcode|all)")
 		}
 		if scope != CacheClearScopeThumbs &&
+			scope != CacheClearScopeConverted &&
 			scope != CacheClearScopeFaststart &&
 			scope != CacheClearScopeTranscode &&
 			scope != CacheClearScopeAll {
-			return writeError(c, fiber.StatusBadRequest, "invalid_cache_scope", "invalid scope: must be one of thumbs|faststart|transcode|all")
+			return writeError(c, fiber.StatusBadRequest, "invalid_cache_scope", "invalid scope: must be one of thumbs|converted|faststart|transcode|all")
 		}
 
 		result := CacheClearResult{Scope: scope}
@@ -148,11 +155,22 @@ func CacheClearHandler(
 		// 这里不做并发(三个 service 都有内部锁,串行更简单可调试)。
 		if scope == CacheClearScopeThumbs || scope == CacheClearScopeAll {
 			if thumbs != nil {
-				deleted, freed, err := thumbs.ClearAll()
+				deleted, freed, err := thumbs.ClearThumbnails()
 				if err != nil {
 					return writeError(c, fiber.StatusInternalServerError, "cache_clear_failed", "clear thumbnails")
 				}
 				result.Thumbs = &CacheScopeResult{Deleted: deleted, FreedBytes: freed}
+				result.TotalDeleted += deleted
+				result.TotalFreedBytes += freed
+			}
+		}
+		if scope == CacheClearScopeConverted || scope == CacheClearScopeAll {
+			if thumbs != nil {
+				deleted, freed, err := thumbs.ClearConverted()
+				if err != nil {
+					return writeError(c, fiber.StatusInternalServerError, "cache_clear_failed", "clear converted cache")
+				}
+				result.Converted = &CacheScopeResult{Deleted: deleted, FreedBytes: freed}
 				result.TotalDeleted += deleted
 				result.TotalFreedBytes += freed
 			}

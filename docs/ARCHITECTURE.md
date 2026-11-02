@@ -108,7 +108,7 @@ POST /api/scans
 
 ## 缓存读路径
 
-后台维护在启动及每小时执行，只枚举 `derived/thumbnails`、`derived/video-faststart`、`derived/video-transcode` 的哈希命名完整产物。删除通过 `os.Root` 限制在派生根内，不跟随越界链接，不遍历 `state`，不处理临时文件；十分钟内的新产物保留。按年龄或全局容量软上限从旧到新淘汰，取消信号贯穿枚举和删除，退出等待维护任务结束。配置 `cacheMaxSizeMB: 0` 只关闭容量淘汰，不关闭过期清理。
+后台维护在启动及每小时执行，只枚举 `derived/thumbnails`、`derived/converted`、`derived/video-faststart`、`derived/video-transcode` 的哈希命名完整产物。删除通过 `os.Root` 限制在派生根内，不跟随越界链接，不遍历 `state`，不处理临时文件；十分钟内的新产物保留。按年龄或全局容量软上限从旧到新淘汰，取消信号贯穿枚举和删除，退出等待维护任务结束。配置 `cacheMaxSizeMB: 0` 只关闭容量淘汰，不关闭过期清理。
 
 `ScanResultCache` 内部用 `atomic.Pointer[scanResultSnapshot]`。
 `Get` 走 `atomic.Load` 无锁，5k 相册 100+ 并发请求不再争夺 RWMutex。
@@ -287,7 +287,7 @@ faststart 与转码共用缓存条目校验：使用 `Lstat`，仅非空普通�
 - `pathutil.NormalizeRoots` 相对进程 CWD 绝对化、去空并保序去重；`RootKey` 与根资源 ID 共用 Windows 忽略大小写、其他平台区分大小写的规则。规范化不读取目录，不解析链接；离线根仍能参与配置和缓存比较。读取配置、写回 YAML、扫描进度根数、资源根索引和 `mediaRootsChanged` 使用同一规则，避免等价路径重复扫描或触发清库。
 - 默认工作目录：进程 CWD 下 `.local-gallery/`。启动时只创建当前分层布局；旧顶层文件不会被读取、移动或删除。
 - 持久状态：`state/scan_cache.json`、`state/web_settings.json`、`state/activity.json`、`state/cover_overrides.json`；任何缓存清理接口都不得进入 `state/`。
-- 派生缓存：`derived/thumbnails/`、`derived/video-faststart/`、`derived/video-transcode/`；按内容派生键写入，可安全重建。
+- 派生缓存：`derived/thumbnails/`、`derived/converted/`、`derived/video-faststart/`、`derived/video-transcode/`；按内容派生键写入，可安全重建。`derived/converted/` 存 HEIC/HEIF/TIFF 的整图转换产物，单张可达 MB 级，因此在缓存占用统计与清空接口（scope=converted）里都单独成类，不与缩略图混算。
 - 临时文件：统一写入 `temp/`，不与状态和派生缓存混放。
 
 `host`、`port`、`staticDir`、`cacheDir` 和 `ffmpegPath` 属于启动期资源，修改后重启。扫描根、扫描排除规则、缩略图尺寸/LRU/保留天数和 `allowOsOpen` 可热更新。

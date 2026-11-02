@@ -68,7 +68,7 @@
 - **自动转码**：AV1 / HEVC / ProRes / 未知编码 → H.264 + AAC 喂给浏览器
 - 冷门编码转码状态可在列表卡片上看到（转码中 X% / 已缓存 / 转码失败）
 - 转码 singleflight 去重 + 全局并发限流 + 可取消
-- **缓存清理**：设置页按 thumbs / faststart / transcode 三个 scope 独立清理 + 一键全清（`POST /api/cache/clear?scope=…`）
+- **缓存清理**：设置页按 thumbs / converted（HEIC 等整图转换）/ faststart / transcode 四个 scope 独立清理 + 一键全清（`POST /api/cache/clear?scope=…`）；占用统计按这四类细分，各项之和等于总占用
 - 视频元数据成功结果使用最多 512 项的内存 LRU，同一文件的并发查询共享探测；文件大小或修改时间变化会失效，失败可立即重试，一键全清同时重置摘要
 
 ### 画廊

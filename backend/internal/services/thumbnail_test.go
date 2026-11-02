@@ -49,7 +49,7 @@ func TestThumbnailConcurrentReloadAndClear(t *testing.T) {
 			if err := svc.UpdateOptions(ThumbnailOptions{Width: size, Height: size, LRUSize: i + 1}); err != nil {
 				t.Error(err)
 			}
-			if _, _, err := svc.ClearAll(); err != nil {
+			if _, _, err := svc.ClearThumbnails(); err != nil {
 				t.Error(err)
 			}
 		}(i)

@@ -18,7 +18,7 @@ vi.mock("../api/prefs", () => ({
   historyApi: { clear: vi.fn() },
 }));
 vi.mock("../api/cache", () => ({
-  cacheApi: { stats: vi.fn() },
+  cacheApi: { stats: vi.fn(), clearCache: vi.fn() },
   formatBytes: (value: number) => `${value} B`,
 }));
 vi.mock("../hooks/useScanSSE", () => ({
@@ -72,6 +72,7 @@ beforeEach(() => {
     available: false,
     cacheTtlSeconds: 0,
     thumbs: sub,
+    converted: sub,
     videoFaststart: sub,
     videoTranscode: sub,
   });
@@ -371,3 +372,41 @@ for (const kind of ["prune", "history"] as const) {
     expect(operation).toHaveBeenCalledTimes(1);
   });
 }
+
+// 缓存占用必须按类型细分列全：整图转换产物(HEIC/HEIF/TIFF → JPEG)单张
+// 可达 MB 级，少列一类，用户既看不到大头在哪，各细分之和也与总占用对不上。
+it("缓存占用列出转换图分类，并能单独清理", async () => {
+  const empty = { path: "cache", bytes: 0, fileCount: 0, available: false };
+  vi.mocked(cacheApi.stats).mockResolvedValue({
+    path: "cache",
+    totalBytes: 5000,
+    fileCount: 3,
+    scannedAt: "",
+    durationMs: 0,
+    available: true,
+    cacheTtlSeconds: 0,
+    thumbs: { path: "thumbs", bytes: 1000, fileCount: 2, available: true },
+    converted: {
+      path: "converted",
+      bytes: 3000,
+      fileCount: 1,
+      available: true,
+    },
+    videoFaststart: empty,
+    videoTranscode: empty,
+  });
+  vi.mocked(cacheApi.clearCache).mockResolvedValue({
+    scope: "converted",
+    converted: { deleted: 1, freedBytes: 3000 },
+    totalDeleted: 1,
+    totalFreedBytes: 3000,
+  });
+
+  renderSettings();
+  expect(await screen.findByText("转换图")).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "清空 转换图 缓存" }));
+  await waitFor(() =>
+    expect(cacheApi.clearCache).toHaveBeenCalledWith("converted"),
+  );
+});

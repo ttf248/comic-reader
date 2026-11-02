@@ -22,9 +22,14 @@ type CacheUsage struct {
 	// cacheDir/state 中的扫描结果、偏好和封面设置不计入缓存占用。
 	//
 	// Settings 页面用这些数据告诉用户「大头在哪」,让用户知道
-	// 转码缓存过大时可以批量清理。totalBytes = 三个子目录之和
+	// 转码缓存过大时可以批量清理。totalBytes = 各子目录之和
 	// totalBytes 只统计 derived 子树。
+	//
+	// Converted 是 HEIC/HEIF/TIFF 的整图转换产物(浏览器解不了的格式),
+	// 单张可达 MB 级,必须单独列出来——否则细分之和与 totalBytes 对不上,
+	// 用户既看不到大头在哪,也没法只清这一类。
 	Thumbs         SubUsage `json:"thumbs"`
+	Converted      SubUsage `json:"converted"`
 	VideoFaststart SubUsage `json:"videoFaststart"`
 	VideoTranscode SubUsage `json:"videoTranscode"`
 }
@@ -143,7 +148,8 @@ func (s *CacheStatsService) Usage(cacheDir string) (*CacheUsage, *time.Time, err
 		ScannedAt:      time.Now(),
 		DurationMs:     time.Since(start).Milliseconds(),
 		Available:      walkErr == nil,
-		Thumbs:         scanThumbnailDir(layout.ThumbnailDir),
+		Thumbs:         scanCacheDir(layout.ThumbnailDir),
+		Converted:      scanCacheDir(layout.ConvertedDir),
 		VideoFaststart: scanSubDir(filepath.Join(layout.DerivedDir, "video-faststart")),
 		VideoTranscode: scanSubDir(filepath.Join(layout.DerivedDir, "video-transcode")),
 	}
@@ -197,9 +203,12 @@ func scanSubDir(path string) SubUsage {
 	return su
 }
 
-// scanThumbnailDir 只统计 ThumbnailService 能识别并清理的缓存文件。
+// scanCacheDir 只统计 ThumbnailService 能识别并清理的缓存文件。
 // 即使目录里被误放了其他文件，统计和清理也不会把它们当成派生缩略图。
-func scanThumbnailDir(path string) SubUsage {
+//
+// 缩略图目录与整图转换目录都用它：两者的产物都是 <md5>.jpg，
+// 走同一套命名与清理规则。
+func scanCacheDir(path string) SubUsage {
 	su := SubUsage{Path: path, Available: false}
 	info, err := os.Stat(path)
 	if err != nil || !info.IsDir() {
