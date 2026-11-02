@@ -527,4 +527,40 @@ describe("Gallery 媒体活动恢复门禁", () => {
       100_000,
     );
   });
+  // 恢复查询的依赖里不能出现每次渲染都变的新函数，否则查询会被反复重启，
+  // 组件陷入"恢复 → setState → 重渲染 → 再恢复"的循环。
+  it("恢复成功后不因重渲染重复发起查询", async () => {
+    mocks.media.mockResolvedValue({
+      revision: 1,
+      items: [
+        {
+          id: videoId,
+          kind: "video",
+          name: "video.mp4",
+          index: 0,
+          kindIndex: 0,
+        },
+      ],
+      total: 1,
+    });
+    mocks.getVideo.mockResolvedValue({
+      albumId,
+      mediaKind: "video",
+      itemId: videoId,
+      positionMs: 42_000,
+      durationMs: 100_000,
+      status: "in_progress",
+      updated: "2026-09-05T00:00:00Z",
+    });
+
+    renderGallery(`path=${albumId}&type=video&index=0`);
+    await waitFor(() => expect(activityApi.getVideo).toHaveBeenCalledTimes(1));
+    await waitFor(() =>
+      expect((mocks.videoProps as MockVideoProps).initialPositionSec).toBe(42),
+    );
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+    expect(activityApi.getVideo).toHaveBeenCalledTimes(1);
+  });
 });

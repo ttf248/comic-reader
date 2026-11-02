@@ -38,37 +38,7 @@ import {
   type GalleryContextEntry,
 } from "../utils/galleryContext";
 import { usePrefs } from "../hooks/usePrefs";
-
-type VideoActivityPhase = "pending" | "writable" | "blocked";
-
-interface VideoActivitySession {
-  key: string;
-  albumId: string;
-  itemId: string;
-  positionMs: number;
-  durationMs: number;
-  phase: VideoActivityPhase;
-  dirty: boolean;
-}
-
-function flushVideoSession(session: VideoActivitySession | null) {
-  if (
-    !session ||
-    session.phase !== "writable" ||
-    !session.dirty ||
-    session.durationMs <= 0
-  ) {
-    return;
-  }
-  session.dirty = false;
-  activityApi.keepalive({
-    albumId: session.albumId,
-    mediaKind: "video",
-    itemId: session.itemId,
-    positionMs: session.positionMs,
-    durationMs: session.durationMs,
-  });
-}
+import { useVideoActivity } from "../hooks/useVideoActivity";
 
 // 画廊页面：从 URL 读取 path/index/name。
 // 关闭时持久化阅读进度到后端。
@@ -445,141 +415,19 @@ export default function Gallery() {
     setShowInfo(false);
   }, [currentMediaId]);
 
-  // 视频以「相册 ID + 文件 ID」独立保存毫秒位置。播放过程最多
-  // 每 10 秒落盘一次，切换文件或卸载时再用 keepalive 补写最后位置。
-  const [videoResume, setVideoResume] = useState<{
-    key: string;
-    seconds?: number;
-  }>({ key: "" });
-  const videoActivityRef = useRef<VideoActivitySession | null>(null);
-  const lastVideoWriteAtRef = useRef(0);
-
-  const onVideoMetaLoaded = useCallback(
-    (durationSec: number) => {
-      if (!pathParam || !currentVideo) return;
-      const durationMs = Math.max(1, Math.round(durationSec * 1000));
-      const session = videoActivityRef.current;
-      if (!session || session.key !== videoActivityKey) return;
-      session.durationMs = durationMs;
-      session.positionMs = Math.min(session.positionMs, durationMs);
-    },
-    [pathParam, currentVideo, videoActivityKey],
-  );
-
-  const onVideoProgress = useCallback(
-    (currentTimeSec: number) => {
-      if (!pathParam || !currentVideo) return;
-      const session = videoActivityRef.current;
-      if (
-        !session ||
-        session.key !== videoActivityKey ||
-        session.durationMs <= 0
-      ) {
-        return;
-      }
-      session.positionMs = Math.max(
-        0,
-        Math.min(session.durationMs, Math.round(currentTimeSec * 1000)),
-      );
-      // 查询完成前只记本次会话位置，不能用自动播放产生的 timeupdate
-      // 覆盖服务端已有恢复点。
-      if (session.phase !== "writable") return;
-      session.dirty = true;
-      const now = Date.now();
-      if (now - lastVideoWriteAtRef.current < 10_000) return;
-      lastVideoWriteAtRef.current = now;
-      const savedPositionMs = session.positionMs;
-      activityApi
-        .setVideo(
-          session.albumId,
-          session.itemId,
-          savedPositionMs,
-          session.durationMs,
-        )
-        .then(() => {
-          clearProgressFailure("save");
-          if (
-            videoActivityRef.current === session &&
-            session.positionMs === savedPositionMs
-          ) {
-            session.dirty = false;
-          }
-        })
-        .catch(() => reportProgressFailure("save"));
-    },
-    [
-      pathParam,
-      currentVideo,
-      videoActivityKey,
-      clearProgressFailure,
-      reportProgressFailure,
-    ],
-  );
-
-  useEffect(() => {
-    setVideoResume({ key: "" });
-    lastVideoWriteAtRef.current = 0;
-    if (!isVideo || !pathParam || !currentVideo || !videosReady) {
-      videoActivityRef.current = null;
-      return;
-    }
-    const session: VideoActivitySession = {
-      key: videoActivityKey,
-      albumId: pathParam,
-      itemId: currentVideo,
-      positionMs: 0,
-      durationMs: 0,
-      phase: "pending",
-      dirty: false,
-    };
-    videoActivityRef.current = session;
-    let cancelled = false;
-    activityApi
-      .getVideo(pathParam, currentVideo)
-      .then((activity) => {
-        if (cancelled || videoActivityRef.current !== session) return;
-        const positionMs =
-          activity.status === "completed" ? 0 : activity.positionMs;
-        const durationMs = session.durationMs || activity.durationMs;
-        session.positionMs = Math.min(positionMs, durationMs);
-        session.durationMs = durationMs;
-        session.phase = "writable";
-        session.dirty = false;
-        clearProgressFailure("restore");
-        lastVideoWriteAtRef.current = Date.now();
-        setVideoResume({
-          key: videoActivityKey,
-          seconds:
-            session.positionMs > 0 ? session.positionMs / 1000 : undefined,
-        });
-      })
-      .catch((error) => {
-        if (cancelled || videoActivityRef.current !== session) return;
-        if (isActivityNotFound(error)) {
-          session.phase = "writable";
-          session.dirty = false;
-          clearProgressFailure("restore");
-          lastVideoWriteAtRef.current = Date.now();
-          setVideoResume({ key: videoActivityKey });
-          return;
-        }
-        session.phase = "blocked";
-        session.dirty = false;
-        reportProgressFailure("restore");
-      });
-    return () => {
-      cancelled = true;
-      if (videoActivityRef.current === session) flushVideoSession(session);
-    };
-  }, [
+  // 视频的播放位置（毫秒）由 useVideoActivity 单独管：恢复 → 节流写入 →
+  // 补写，和图片的页码进度是两套模型。
+  const videoActivity = useVideoActivity({
     isVideo,
-    pathParam,
-    currentVideo,
-    videoActivityKey,
-    videosReady,
-    clearProgressFailure,
-    reportProgressFailure,
-  ]);
+    albumId: pathParam,
+    itemId: currentVideo,
+    ready: videosReady,
+    activityKey: videoActivityKey,
+    onRestored: () => clearProgressFailure("restore"),
+    onRestoreFailed: () => reportProgressFailure("restore"),
+    onSaved: () => clearProgressFailure("save"),
+    onSaveFailed: () => reportProgressFailure("save"),
+  });
 
   async function retryProgress() {
     if (retryingProgress) return;
@@ -590,32 +438,19 @@ export default function Gallery() {
     setRetryingProgress(true);
     try {
       if (isVideo) {
-        const session = videoActivityRef.current;
-        if (!session || session.phase !== "writable" || session.durationMs <= 0)
-          return;
-        const savedPosition = session.positionMs;
-        await activityApi.setVideo(
-          session.albumId,
-          session.itemId,
-          savedPosition,
-          session.durationMs,
-        );
-        if (session.positionMs === savedPosition) session.dirty = false;
-      } else {
-        const progress = progressRef.current;
-        if (!imageActivityWritable || progress.path !== pathParam) return;
-        await activityApi.setImage(
-          progress.path,
-          progress.index,
-          progress.total,
-        );
-        queryClient.invalidateQueries({
-          queryKey: ["activity-query", "image"],
-        });
-        queryClient.invalidateQueries({
-          queryKey: ["activity", "image", pathParam],
-        });
+        // 视频位置由 hook 自己落盘：成功时它会清掉提示，失败时上报。
+        await videoActivity.retrySave();
+        return;
       }
+      const progress = progressRef.current;
+      if (!imageActivityWritable || progress.path !== pathParam) return;
+      await activityApi.setImage(progress.path, progress.index, progress.total);
+      queryClient.invalidateQueries({
+        queryKey: ["activity-query", "image"],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["activity", "image", pathParam],
+      });
       clearProgressFailure("save");
     } catch {
       reportProgressFailure("save");
@@ -715,10 +550,8 @@ export default function Gallery() {
 
   useEffect(() => {
     const flushCurrentActivity = () => {
-      if (isVideoRef.current) {
-        flushVideoSession(videoActivityRef.current);
-        return;
-      }
+      // 视频位置由 useVideoActivity 自己补写（它有独立的会话状态机）。
+      if (isVideoRef.current) return;
       // pagehide 覆盖刷新/关闭页签；cleanup 覆盖 SPA 卸载。
       // 只发送已完成恢复、且属于当前相册的最后有效图片活动。
       const cur = progressRef.current;
@@ -1210,43 +1043,16 @@ export default function Gallery() {
             <VideoPlayer
               src={current ?? ""}
               initialPositionSec={
-                videoResume.key === videoActivityKey
-                  ? videoResume.seconds
+                videoActivity.resume.key === videoActivityKey
+                  ? videoActivity.resume.seconds
                   : undefined
               }
-              onMetaLoaded={onVideoMetaLoaded}
-              onProgress={onVideoProgress}
+              onMetaLoaded={videoActivity.onMetaLoaded}
+              onProgress={videoActivity.onProgress}
               onEnded={() => {
                 // onEnded 只会在视频模式下触发（<VideoPlayer> 仅在 isVideo 时渲染）。
                 // 从 URL 的 initialIndex 派生当前 item 索引。
-                const completed = videoActivityRef.current;
-                if (
-                  completed &&
-                  completed.key === videoActivityKey &&
-                  completed.phase === "writable" &&
-                  completed.durationMs > 0
-                ) {
-                  completed.positionMs = completed.durationMs;
-                  completed.dirty = true;
-                  const savedPositionMs = completed.positionMs;
-                  activityApi
-                    .setVideo(
-                      completed.albumId,
-                      completed.itemId,
-                      savedPositionMs,
-                      completed.durationMs,
-                    )
-                    .then(() => {
-                      clearProgressFailure("save");
-                      if (
-                        videoActivityRef.current === completed &&
-                        completed.positionMs === savedPositionMs
-                      ) {
-                        completed.dirty = false;
-                      }
-                    })
-                    .catch(() => reportProgressFailure("save"));
-                }
+                videoActivity.markCompleted();
                 const cur = Math.max(
                   0,
                   Math.min(initialIndex, Math.max(0, videos.length - 1)),
