@@ -384,4 +384,23 @@ if (worstPixels.length) {
   }
   console.log();
 }
+if (SELF_TEST_ONLY) {
+  // 自检结论：坏样本必须被判不合格，好样本必须被判合格。
+  // 工具自己分不清好坏时，它报"全部通过"就没有意义。
+  const bad1 = pixelResults.find((r) => r.text?.includes("自检-坏-白字压白底"));
+  const bad2 = pixelResults.find((r) => r.text?.includes("自检-坏-白字压中灰底"));
+  const good = pixelResults.find((r) => r.text?.includes("自检-好"));
+  const ok =
+    !!bad1 && bad1.pixelRatio < bad1.need &&
+    !!bad2 && bad2.pixelRatio < bad2.need &&
+    !!good && good.pixelRatio >= good.need;
+  console.log(
+    ok
+      ? "✓ 自检通过：坏样本被判不合格，好样本被判合格。"
+      : `✗ 自检失败：白字压白底 ${bad1?.pixelRatio}:1、白字压中灰底 ${bad2?.pixelRatio}:1（都应低于 ${bad1?.need}），白字压黑底 ${good?.pixelRatio}:1（应不低于 ${good?.need}）`,
+  );
+  console.log();
+  process.exit(ok ? 0 : 1);
+}
+
 process.exit(bad.length || badPixels.length ? 1 : 0);

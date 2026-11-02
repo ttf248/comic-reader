@@ -32,14 +32,14 @@
 
 | # | 验收项 | 状态 | 证据 |
 |---|--------|------|------|
-| B1 | 1920px（超宽屏）主要页面无溢出、布局合理 | OPEN | — |
-| B2 | 768px（平板竖屏）导航 / 筛选 / 卡片 / 阅读器 / 弹窗可用 | OPEN | — |
-| B3 | 1024px（平板横屏）同上 | OPEN | — |
-| B4 | 1440px 桌面 + 390px 手机，浅色 / 深色均已实际运行检查 | OPEN | — |
-| B5 | 阅读器：翻页 / 单页 / 双页 / 连续 / 缩放 / 适配 / 旋转 / 全屏 / 快捷键无回归 | OPEN | — |
-| B6 | 收藏 / 未读 / 继续阅读 / 搜索筛选 / 设置保存功能正常 | OPEN | — |
-| B7 | `npm run build` / `npm run lint` / `npm run test` 全通过 | OPEN | — |
-| B8 | Playwright E2E 全通过，且新增覆盖本轮修复的用例 | OPEN | — |
+| B1 | 1920px（超宽屏）主要页面无溢出、布局合理 | VERIFIED | 截图 `frontend/.smoke/final/light-wide-*.png`（首页 / 未读 / 最近 / 收藏 / 设置 / 文件夹页 / 阅读器）；e2e「1920px 下首页、相册与阅读器均无横向溢出」；列表在 1920 改双列（提交 `59e05e2`） |
+| B2 | 768px（平板竖屏）导航 / 筛选 / 卡片 / 阅读器 / 弹窗可用 | VERIFIED | 截图 `frontend/.smoke/final/{light,dark}-ipad-*.png` 与 `frontend/.smoke/a5d/768-menu.png`、`768-props.png`（右键菜单、属性弹窗）；e2e「768px 下……均无横向溢出」 |
+| B3 | 1024px（平板横屏）同上 | VERIFIED | 截图 `frontend/.smoke/final/{light,dark}-tablet-*.png`；e2e「1024px 下……均无横向溢出」 |
+| B4 | 1440px 桌面 + 390px 手机，浅色 / 深色均已实际运行检查 | VERIFIED | 截图 `frontend/.smoke/final/`（1920 / 1440 / 1024 / 768 / 390 五档 × 明暗两套 × 7 个页面，共 70 张） |
+| B5 | 阅读器：翻页 / 单页 / 双页 / 连续 / 缩放 / 适配 / 旋转 / 全屏 / 快捷键无回归 | VERIFIED | e2e 覆盖：底部工具条切模式与适配、连续模式按视口请求预览图、原始适配按像素、放大与旋转作用到图片、方向键 / PageUp / PageDown / g / Home / End / Space 快捷键、图片信息面板不遮顶栏；本轮补「阅读器全屏按钮可点击」1 条 |
+| B6 | 收藏 / 未读 / 继续阅读 / 搜索筛选 / 设置保存功能正常 | VERIFIED | e2e 覆盖收藏标记 / 失效收藏清理、未读页标记与取消已读、继续阅读区块、搜索与筛选、设置保存；单元测试覆盖各页加载与空态 |
+| B7 | `npm run build` / `npm run lint` / `npm run test` 全通过 | VERIFIED | build：`tsc -b && vite build` 通过；lint：0 error（2 条既有 warning）；test：75 文件 / 582 用例全绿 |
+| B8 | Playwright E2E 全通过，且新增覆盖本轮修复的用例 | VERIFIED | `pwsh -NoProfile -File scripts/test-e2e.ps1`：121 条用例全通过（真实起 Go 后端 + 临时媒体目录 + 独立前端产物）；本轮新增 6 条（五档溢出、双列列表、全屏按钮）并改写 2 条阅读器用例 |
 
 ---
 

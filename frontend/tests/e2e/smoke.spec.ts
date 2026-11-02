@@ -4743,3 +4743,24 @@ test("列表视图在超宽屏切成双列，普通宽度仍是单列", async ({
   await cards.first().click();
   await expect(page).toHaveURL(/\/albums\//);
 });
+
+test("阅读器全屏按钮可点击，点击后阅读器控制仍然可用", async ({ page }) => {
+  const nodes = await scannedNodes(page.request);
+  const album = nodes.find((node) => node.name === "sample-album")!;
+  expect(album).toBeDefined();
+  await page.goto(`/gallery?path=${encodeURIComponent(album.id)}&type=image`);
+  await page.waitForTimeout(800);
+
+  const fullscreen = page.getByRole("button", { name: "全屏 (F11)" });
+  await expect(fullscreen).toBeVisible();
+  await fullscreen.click();
+  // 无头浏览器里 Fullscreen API 不一定生效，这里只锁定"点击不报错、
+  // 阅读器状态不被破坏"。
+  await page.waitForTimeout(400);
+  await expect(
+    page.getByRole("toolbar", { name: "阅读控制" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "下一张" }),
+  ).toBeEnabled();
+});
