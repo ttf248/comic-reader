@@ -1059,8 +1059,12 @@ func TestEtaSeconds(t *testing.T) {
 	if got := etaSeconds(1, started); got != 0 {
 		t.Errorf("进度 100%% 时 etaSeconds = %d, want 0", got)
 	}
+	// 进度还太小时速率不准,不给预计时间(否则会出现「预计 24 小时」)。
+	if got := etaSeconds(0.001, time.Now().Add(-10*time.Second)); got != 0 {
+		t.Errorf("进度过小时 etaSeconds = %d, want 0", got)
+	}
 	// 异常估算封顶 24 小时,避免吓到用户。
-	if got := etaSeconds(0.0001, time.Now().Add(-100*time.Second)); got != 24*60*60 {
+	if got := etaSeconds(0.005, time.Now().Add(-600*time.Second)); got != 24*60*60 {
 		t.Errorf("极小进度时 etaSeconds = %d, want %d", got, 24*60*60)
 	}
 }

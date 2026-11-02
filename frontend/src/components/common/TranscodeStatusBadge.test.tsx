@@ -45,6 +45,37 @@ describe("TranscodeStatusBadge", () => {
     expect(screen.queryByText("转码中")).not.toBeInTheDocument();
   });
 
+  it("终态后不再继续轮询", async () => {
+    mockedStatus.mockResolvedValue({
+      status: "not_needed",
+      progress: 1,
+      etaSec: 0,
+    });
+
+    render(<TranscodeStatusBadge videoPath="f_1" pollIntervalMs={10} />);
+
+    await waitFor(() => {
+      expect(mockedStatus).toHaveBeenCalledTimes(1);
+    });
+    // 角标不会再变化，继续轮询只是后台噪音。
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    expect(mockedStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it("转码中继续轮询进度", async () => {
+    mockedStatus.mockResolvedValue({
+      status: "running",
+      progress: 0.4,
+      etaSec: 10,
+    });
+
+    render(<TranscodeStatusBadge videoPath="f_1" pollIntervalMs={10} />);
+
+    await waitFor(() => {
+      expect(mockedStatus.mock.calls.length).toBeGreaterThan(1);
+    });
+  });
+
   it("转码中显示进度角标", async () => {
     mockedStatus.mockResolvedValue({
       status: "running",

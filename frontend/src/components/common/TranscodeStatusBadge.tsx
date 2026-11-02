@@ -14,6 +14,15 @@ interface Props {
   pollIntervalMs?: number;
 }
 
+// 终态：角标不会再变化，继续轮询只是白白发请求。
+// failed 不算终态 —— 用户可能重试，角标要能跟着变回「转码中」。
+const TERMINAL_STATUS = new Set<TranscodeStatusValue>([
+  "not_needed",
+  "cached",
+  "skipped",
+  "unavailable",
+]);
+
 const SIZE_CLASS = {
   sm: { box: "h-4 px-1 text-[9px] gap-0.5", icon: 8 },
   lg: { box: "h-5 px-1.5 text-[10px] gap-1", icon: 10 },
@@ -65,7 +74,10 @@ export default function TranscodeStatusBadge({
     const tick = async () => {
       try {
         const s = await getTranscodeStatus(videoPath);
-        if (!cancelled) setStatus(s);
+        if (cancelled) return;
+        setStatus(s);
+        // 终态不再继续轮询：角标不会变，轮询只是后台噪音。
+        if (TERMINAL_STATUS.has(s.status)) return;
       } catch {
         // status 端点失败 → 当作没服务,隐藏
         if (!cancelled) setStatus(null);

@@ -1217,6 +1217,9 @@ func parseProgressLine(line string, totalDurSec float64, job *transcodeJob, svc 
 //   - 订阅者 channel 容量 8,满了就丢;订阅者慢不会拖慢 ffmpeg
 //   - 任务结束(cached / failed)后 defer broadcast 还会跑一次,
 //     broadcast 内部判断 job.done 关闭后会关掉所有 sub channel
+// etaMinProgress:低于该进度时不给预计时间（速率还不准）。
+const etaMinProgress = 0.005
+
 // etaSeconds 估算转码剩余秒数(best-effort)。
 //
 // 依据「已耗时 × 剩余比例」线性外推：ffmpeg 只给已处理时长,不给速率,
@@ -1224,6 +1227,11 @@ func parseProgressLine(line string, totalDurSec float64, job *transcodeJob, svc 
 // 表示未知 —— 上界封顶 24 小时,避免异常估算吓到用户。
 func etaSeconds(progress float64, startedAt time.Time) int {
 	if progress <= 0 || startedAt.IsZero() {
+		return 0
+	}
+	// 进度还太小的时候，外推的速率很不准（首帧解码、seek 等开销都摊在
+	// 前几秒里），此时给出一个几十小时的预计时间反而误导用户。
+	if progress < etaMinProgress {
 		return 0
 	}
 	elapsed := time.Since(startedAt).Seconds()
