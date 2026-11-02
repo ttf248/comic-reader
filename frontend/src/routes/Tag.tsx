@@ -112,7 +112,14 @@ export default function Tag() {
 
   // 标签页作为上下文源
   const tagEntries = useMemo<GalleryContextEntry[]>(
-    () => cards.map((c) => ({ key: c.to, to: c.to, name: c.title })),
+    () =>
+      cards.map((c) => ({
+        key: c.to,
+        to: c.to,
+        name: c.title,
+        imageCount: c.imageCount,
+        videoCount: c.videoCount,
+      })),
     [cards],
   );
   useGalleryContextSync({ type: "tag", tag }, tagEntries);

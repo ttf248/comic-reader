@@ -30,8 +30,10 @@ import { albumRoute } from "../utils/path";
 import { useSafeBack } from "../utils/navigation";
 import {
   getGalleryContext,
+  entryReaderUrl,
   type GalleryContextEntry,
 } from "../utils/galleryContext";
+import { usePrefs } from "../hooks/usePrefs";
 
 type VideoActivityPhase = "pending" | "writable" | "blocked";
 
@@ -117,6 +119,11 @@ export default function Gallery() {
     x: number;
     y: number;
   } | null>(null);
+  // 「阅读到末尾自动切换下一本」「切换时显示通知」两个阅读偏好。
+  // 未加载前按服务端默认值处理（都是开启）。
+  const { data: prefs } = usePrefs();
+  const autoSwitchAlbum = prefs?.autoSwitchAlbum ?? true;
+  const showSwitchNotif = prefs?.showSwitchNotif ?? true;
   const [markingRead, setMarkingRead] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -777,6 +784,14 @@ export default function Gallery() {
   // 因 user 操作 stale,但回调需要读最新 store + push 最新 toast)。
   const onReachEndRef = useRef<() => void>(() => {});
   onReachEndRef.current = () => {
+    // 「阅读到末尾自动切换下一本」：读完直接进入上下文里的下一本相册，
+    // 幻灯片也跟着继续（不当作异常终止）。
+    if (
+      autoSwitchAlbum &&
+      goAdjacent(1, { notify: showSwitchNotif, albumsOnly: true })
+    ) {
+      return;
+    }
     pushToast({
       kind: "info",
       message: isVideo
@@ -856,46 +871,80 @@ export default function Gallery() {
     [isVideo, images.length, scrollContinuousTo, setIndex, goToVideo],
   );
 
+  // 跳本：上一本 / 下一本。
+  //
+  // - 相册继续在阅读器里读（不必回到相册首页再点「开始浏览」）；
+  //   集合没有阅读器入口，回到它的首页。
+  // - notify=false 时不弹「下一本：xxx」提示（跟随「切换时显示通知」设置）。
+  // - albumsOnly=true 时跳过集合，只找相册（自动切换下一本用）。
   const goAdjacent = useCallback(
-    (direction: 1 | -1) => {
+    (
+      direction: 1 | -1,
+      options?: { notify?: boolean; albumsOnly?: boolean },
+    ) => {
+      const notify = options?.notify ?? true;
+      const albumsOnly = options?.albumsOnly ?? false;
       const ctx = getGalleryContext();
       if (!ctx || ctx.list.length <= 1 || !pathParam) {
+        if (notify) {
+          pushToast({
+            kind: "info",
+            message: "当前无可用的「上一本 / 下一本」列表",
+            ttl: 1500,
+          });
+        }
+        return false;
+      }
+      const curIdx = ctx.list.findIndex((it) => it.key === pathParam);
+      const base = curIdx >= 0 ? curIdx : ctx.index;
+      const n = ctx.list.length;
+      for (let step = 1; step <= n; step++) {
+        const nextIdx = (((base + direction * step) % n) + n) % n;
+        const nextEntry: GalleryContextEntry | undefined = ctx.list[nextIdx];
+        if (!nextEntry) continue;
+        const readerUrl = entryReaderUrl(nextEntry);
+        if (albumsOnly && !readerUrl) continue;
+        if (albumsOnly) {
+          // 跳到没有可读媒体的相册没有意义：图片模式跳进纯视频相册只会
+          // 看到「没有图片」。数量未知（undefined）时不跳过。
+          const count = isVideo ? nextEntry.videoCount : nextEntry.imageCount;
+          if (count === 0) continue;
+        }
+        const dirLabel = direction === 1 ? "下一本" : "上一本";
+        if (notify) {
+          pushToast({
+            kind: "info",
+            message: `${dirLabel}：${nextEntry.name}`,
+            ttl: 1200,
+          });
+        }
+        try {
+          sessionStorage.setItem(
+            "local-gallery-context",
+            JSON.stringify({
+              ...ctx,
+              index: nextIdx,
+              openedAt: Date.now(),
+            }),
+          );
+        } catch {
+          // ignore
+        }
+        setShowInfo(false);
+        setMode(useGalleryStore.getState().mode);
+        navigate(readerUrl ?? nextEntry.to, { replace: false });
+        return true;
+      }
+      if (notify) {
         pushToast({
           kind: "info",
           message: "当前无可用的「上一本 / 下一本」列表",
           ttl: 1500,
         });
-        return;
       }
-      const curIdx = ctx.list.findIndex((it) => it.key === pathParam);
-      const base = curIdx >= 0 ? curIdx : ctx.index;
-      const n = ctx.list.length;
-      const nextIdx = (((base + direction) % n) + n) % n;
-      const nextEntry: GalleryContextEntry | undefined = ctx.list[nextIdx];
-      if (!nextEntry) return;
-      const dirLabel = direction === 1 ? "下一本" : "上一本";
-      pushToast({
-        kind: "info",
-        message: `${dirLabel}：${nextEntry.name}`,
-        ttl: 1200,
-      });
-      try {
-        sessionStorage.setItem(
-          "local-gallery-context",
-          JSON.stringify({
-            ...ctx,
-            index: nextIdx,
-            openedAt: Date.now(),
-          }),
-        );
-      } catch {
-        // ignore
-      }
-      setShowInfo(false);
-      setMode(useGalleryStore.getState().mode);
-      navigate(nextEntry.to, { replace: false });
+      return false;
     },
-    [pathParam, pushToast, navigate, setMode],
+    [pathParam, pushToast, navigate, setMode, isVideo],
   );
 
   const onToggleFavorite = useCallback(() => {
@@ -1026,8 +1075,8 @@ export default function Gallery() {
     f11: () => toggleFullscreenImpl(),
     "ctrl+/": () => setShowHelp((v) => !v),
     "?": () => setShowHelp((v) => !v),
-    n: () => goAdjacent(1),
-    p: () => goAdjacent(-1),
+    n: () => goAdjacent(1, { notify: showSwitchNotif }),
+    p: () => goAdjacent(-1, { notify: showSwitchNotif }),
     s: () => onToggleFavorite(),
     u: () => onSetCover(),
     "shift+u": () => onClearCover(),
@@ -1232,8 +1281,8 @@ export default function Gallery() {
         onToggleHelp={() => setShowHelp((v) => !v)}
         onPrev={prev}
         onNext={next}
-        onPrevAlbum={() => goAdjacent(-1)}
-        onNextAlbum={() => goAdjacent(1)}
+        onPrevAlbum={() => goAdjacent(-1, { notify: showSwitchNotif })}
+        onNextAlbum={() => goAdjacent(1, { notify: showSwitchNotif })}
         onSetCover={onSetCover}
         onClearCover={onClearCover}
         hasCustomCover={hasCustomCover}
@@ -1254,8 +1303,8 @@ export default function Gallery() {
           visible={chromeVisible}
           onPrev={prev}
           onNext={next}
-          onPrevAlbum={() => goAdjacent(-1)}
-          onNextAlbum={() => goAdjacent(1)}
+          onPrevAlbum={() => goAdjacent(-1, { notify: showSwitchNotif })}
+          onNextAlbum={() => goAdjacent(1, { notify: showSwitchNotif })}
         />
       )}
 

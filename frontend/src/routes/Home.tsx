@@ -287,7 +287,13 @@ export default function Home() {
     () =>
       filtered
         .filter((c) => c.variant === "album")
-        .map((c) => ({ key: decodeFavPath(c.to), to: c.to, name: c.title })),
+        .map((c) => ({
+          key: decodeFavPath(c.to),
+          to: c.to,
+          name: c.title,
+          imageCount: c.imageCount,
+          videoCount: c.videoCount,
+        })),
     [filtered],
   );
   useGalleryContextSync({ type: "home" }, homeEntries);

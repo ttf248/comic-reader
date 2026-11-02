@@ -61,6 +61,17 @@ vi.mock("../api/activity", async (importOriginal) => {
 
 vi.mock("../api/prefs", () => ({
   historyApi: { add: mocks.historyAdd },
+  prefsApi: {
+    get: vi.fn(async () => ({
+      favorites: [],
+      history: [],
+      maxRecent: 10,
+      autoSwitchAlbum: false,
+      showSwitchNotif: false,
+      theme: "system",
+      sidebarCollapsed: false,
+    })),
+  },
 }));
 
 vi.mock("../hooks/useKeyboard", () => ({ useKeyboard: vi.fn() }));

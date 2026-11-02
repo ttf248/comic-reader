@@ -5,6 +5,8 @@
 // 写入由各列表页负责，读取由 Gallery 负责。同一 session 内有效，
 // 关闭标签页或点开完全不同的来源时由写入方覆盖。
 
+import { decodeFavPath } from "./path";
+
 export type GallerySource =
   | {
       type: "home";
@@ -27,6 +29,31 @@ export interface GalleryContextEntry {
   to: string;
   /** 显示用名称（列表页上展示的标题）。 */
   name: string;
+  /**
+   * 条目类型：集合没有阅读器入口（集合下是子相册，不能直接翻页）。
+   * 缺省按相册处理 —— 列表页给相册写上下文时无需重复标注。
+   */
+  kind?: "album" | "collection";
+  /** 图片数：跳本时用来跳过没有可读图片的相册。缺省表示未知，不跳过。 */
+  imageCount?: number;
+  /** 视频数：同上，用于视频模式。 */
+  videoCount?: number;
+}
+
+/**
+ * 条目在阅读器里的地址；集合没有阅读器入口，返回 null。
+ *
+ * 跳本（上一本 / 下一本、读到末尾自动切换）时用它留在阅读器里继续读，
+ * 而不是跳到相册首页再让用户重新点「开始浏览」。
+ */
+export function entryReaderUrl(entry: GalleryContextEntry): string | null {
+  if (entry.kind === "collection") return null;
+  if (!entry.to.startsWith("/albums/")) return null;
+  const id = decodeFavPath(entry.to);
+  if (!id) return null;
+  const params = new URLSearchParams({ path: id, index: "0" });
+  if (entry.name) params.set("name", entry.name);
+  return `/gallery?${params.toString()}`;
 }
 
 export interface GalleryContext {

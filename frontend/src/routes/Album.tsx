@@ -970,7 +970,16 @@ function CollectionView({
 
   // 集合页面作为上下文源
   const collEntries = useMemo<GalleryContextEntry[]>(
-    () => cards.map((c) => ({ key: c.to, to: c.to, name: c.title })),
+    () =>
+      cards.map((c) => ({
+        key: c.to,
+        to: c.to,
+        name: c.title,
+        // 集合下是子相册，不能直接翻页：跳本时要跳过它。
+        kind: c.variant === "collection" ? "collection" : "album",
+        imageCount: c.imageCount,
+        videoCount: c.videoCount,
+      })),
     [cards],
   );
   useGalleryContextSync(

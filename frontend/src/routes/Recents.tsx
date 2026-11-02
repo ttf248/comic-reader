@@ -103,6 +103,8 @@ export default function Recents() {
         key: decodeFavPath(c.to),
         to: c.to,
         name: c.title,
+        imageCount: c.imageCount,
+        videoCount: c.videoCount,
       })),
     [filtered],
   );

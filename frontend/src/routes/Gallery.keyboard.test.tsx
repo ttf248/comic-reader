@@ -53,6 +53,17 @@ vi.mock("../api/activity", async (importOriginal) => ({
 }));
 vi.mock("../api/prefs", () => ({
   historyApi: { add: vi.fn(async () => ({ history: [] })) },
+  prefsApi: {
+    get: vi.fn(async () => ({
+      favorites: [],
+      history: [],
+      maxRecent: 10,
+      autoSwitchAlbum: false,
+      showSwitchNotif: false,
+      theme: "system",
+      sidebarCollapsed: false,
+    })),
+  },
 }));
 vi.mock("../hooks/useFavorites", () => ({
   useFavorites: () => ({ favorites: [], toggle: vi.fn() }),

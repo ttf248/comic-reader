@@ -65,7 +65,14 @@ export default function Unread() {
 
   // 跨卷翻页(N / P)需要这个 list,跟 Recents/Favorites 一致
   const entries = useMemo<GalleryContextEntry[]>(
-    () => filtered.map((c) => ({ key: c.to, to: c.to, name: c.title })),
+    () =>
+      filtered.map((c) => ({
+        key: c.to,
+        to: c.to,
+        name: c.title,
+        imageCount: c.imageCount,
+        videoCount: c.videoCount,
+      })),
     [filtered],
   );
   useGalleryContextSync({ type: "unread" }, entries);
