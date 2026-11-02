@@ -95,7 +95,7 @@ export default function GlobalSearch() {
             }
           }}
           placeholder="搜索文件夹 / 标签…"
-          className="flex-1 min-w-0 bg-transparent border-0 outline-none text-sm placeholder:text-fg-subtle"
+          className="flex-1 min-w-0 bg-transparent border-0 outline-none text-[13.5px] placeholder:text-fg-subtle"
           role="combobox"
           aria-autocomplete="list"
           aria-controls="global-search-results"
@@ -136,8 +136,8 @@ export default function GlobalSearch() {
                 <div className="w-8 h-10 bg-bg-subtle rounded border border-border-faint" />
               )}
               <div className="flex-1 min-w-0">
-                <div className="text-sm truncate">{h.name}</div>
-                <div className="text-[11px] text-fg-subtle truncate">
+                <div className="text-[13.5px] truncate">{h.name}</div>
+                <div className="text-[12.5px] text-fg-subtle truncate">
                   {h.kind === "album"
                     ? h.virtual
                       ? "本目录媒体"
@@ -157,13 +157,13 @@ export default function GlobalSearch() {
       {/* 无结果提示：用户至少敲了 2 个字符才显示，避免抖动 */}
       {open && searchEnabled && searchQuery.isFetching && (
         <div className="absolute top-full left-0 right-0 mt-1.5 bg-bg-elevated border border-border rounded-lg shadow-lg overflow-hidden z-30 fade-up">
-          <div className="px-3 py-2.5 text-[12px] text-fg-muted">搜索中…</div>
+          <div className="px-3 py-2.5 text-[12.5px] text-fg-muted">搜索中…</div>
         </div>
       )}
 
       {open && searchEnabled && searchQuery.isError && !searchQuery.isFetching && (
         <div className="absolute top-full left-0 right-0 mt-1.5 bg-bg-elevated border border-border rounded-lg shadow-lg overflow-hidden z-30 fade-up">
-          <div className="px-3 py-2.5 text-[12px] text-fg-muted">
+          <div className="px-3 py-2.5 text-[12.5px] text-fg-muted">
             搜索暂不可用，请稍后重试
           </div>
         </div>
@@ -172,7 +172,7 @@ export default function GlobalSearch() {
       {/* 无结果提示：用户至少敲了 2 个字符且请求完成才显示，避免把加载误报为无结果。 */}
       {open && searchEnabled && !searchQuery.isFetching && !searchQuery.isError && hits.length === 0 && (
         <div className="absolute top-full left-0 right-0 mt-1.5 bg-bg-elevated border border-border rounded-lg shadow-lg overflow-hidden z-30 fade-up">
-          <div className="px-3 py-2.5 text-[12px] text-fg-muted">
+          <div className="px-3 py-2.5 text-[12.5px] text-fg-muted">
             没有匹配「{searchTerm}」的文件夹或标签
           </div>
         </div>

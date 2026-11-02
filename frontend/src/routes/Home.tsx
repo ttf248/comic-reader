@@ -412,21 +412,23 @@ export default function Home() {
               随机一本
               <span className="text-[12px] opacity-70">R</span>
             </button>
-            <QuickLink to="/unread" icon={<SparkleIcon size={14} />}>
+            <QuickLink
+              to="/unread"
+              icon={<SparkleIcon size={14} />}
+              count={unreadCount > 0 ? unreadCount : undefined}
+            >
               未读
-              {unreadCount > 0 && (
-                <span className="tabular-nums text-fg-subtle">
-                  {unreadCount}
-                </span>
-              )}
             </QuickLink>
             <QuickLink to="/recents" icon={<ClockIcon size={14} />}>
               最近
             </QuickLink>
             {favCount > 0 && (
-              <QuickLink to="/favorites" icon={<StarIcon size={13} filled />}>
+              <QuickLink
+                to="/favorites"
+                icon={<StarIcon size={13} filled />}
+                count={favCount}
+              >
                 收藏
-                <span className="tabular-nums text-fg-subtle">{favCount}</span>
               </QuickLink>
             )}
           </div>
@@ -461,19 +463,23 @@ export default function Home() {
             <ShuffleIcon size={13} />
             随机一本
           </button>
-          <QuickLink to="/unread" icon={<SparkleIcon size={13} />}>
+          <QuickLink
+            to="/unread"
+            icon={<SparkleIcon size={13} />}
+            count={unreadCount > 0 ? unreadCount : undefined}
+          >
             未读
-            {unreadCount > 0 && (
-              <span className="tabular-nums text-fg-subtle">{unreadCount}</span>
-            )}
           </QuickLink>
           <QuickLink to="/recents" icon={<ClockIcon size={13} />}>
             最近
           </QuickLink>
           {favCount > 0 && (
-            <QuickLink to="/favorites" icon={<StarIcon size={12} filled />}>
+            <QuickLink
+              to="/favorites"
+              icon={<StarIcon size={12} filled />}
+              count={favCount}
+            >
               收藏
-              <span className="tabular-nums text-fg-subtle">{favCount}</span>
             </QuickLink>
           )}
         </div>
@@ -649,10 +655,12 @@ function QuickLink({
   to,
   icon,
   children,
+  count,
 }: {
   to: string;
   icon: React.ReactNode;
   children: React.ReactNode;
+  count?: number;
 }) {
   return (
     <Link
@@ -661,6 +669,9 @@ function QuickLink({
     >
       {icon}
       <span>{children}</span>
+      {count !== undefined && (
+        <span className="tabular-nums text-fg-subtle">{count}</span>
+      )}
     </Link>
   );
 }

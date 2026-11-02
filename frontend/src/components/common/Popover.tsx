@@ -145,7 +145,7 @@ export default function Popover({
 
   // 默认菜单样式 + 用户覆盖
   const baseCls =
-    "min-w-[180px] bg-bg-elevated border border-border rounded-md shadow-lg p-1 text-sm";
+    "min-w-[180px] bg-bg-elevated border border-border rounded-lg shadow-lg p-1.5 text-[13px]";
   const enhancedTrigger = isValidElement(trigger)
     ? cloneElement(trigger as ReactElement<TriggerProps>, {
         "aria-haspopup": "menu",
@@ -223,7 +223,7 @@ export function PopoverItem({
           close?.();
         }
       }}
-      className={`w-full text-left flex items-center gap-2 px-2.5 h-8 rounded text-[12px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+      className={`w-full text-left flex items-center gap-2.5 px-2.5 h-9 rounded-md text-[13px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
         active
           ? "bg-bg-subtle text-fg"
           : "text-fg-muted hover:text-fg hover:bg-bg-subtle/70"
@@ -242,7 +242,7 @@ export function PopoverSeparator() {
 // 菜单分组标签（不可点击的灰色小标题）
 export function PopoverLabel({ children }: { children: ReactNode }) {
   return (
-    <div className="px-2.5 pt-1.5 pb-1 text-[10px] uppercase tracking-[0.14em] text-fg-subtle">
+    <div className="px-2.5 pt-2 pb-1.5 text-[12px] font-medium text-fg-subtle">
       {children}
     </div>
   );

@@ -959,19 +959,21 @@ export default function Gallery() {
         <div className="flex-1 flex items-center justify-center px-6">
           {!pathParam ? (
             <div className="text-center">
-              <div className="text-white/60 text-sm">无可显示的图片</div>
-              <div className="text-white/45 text-xs mt-1">未指定相册路径</div>
+              <div className="font-display text-[20px] font-semibold text-white/90">
+                无可显示的图片
+              </div>
+              <div className="text-[13px] text-white/50 mt-1.5">未指定相册路径</div>
             </div>
           ) : loadError ? (
             <div className="text-center max-w-sm">
-              <div className="text-base font-medium text-white/85 mb-1">
+              <div className="font-display text-[20px] font-semibold text-white/90 mb-2">
                 {loadError === "EMPTY"
                   ? isVideo
                     ? "这个文件夹没有视频"
                     : "这个文件夹没有图片"
                   : "加载失败"}
               </div>
-              <div className="text-white/60 text-sm mb-5">
+              <div className="text-[13px] leading-relaxed text-white/60 mb-6">
                 {loadError === "EMPTY"
                   ? isVideo
                     ? "可以换个文件夹，或检查视频是否已被移动/删除。"
@@ -982,21 +984,21 @@ export default function Gallery() {
                 <button
                   type="button"
                   onClick={goBack}
-                  className="px-4 h-8 text-sm rounded border border-white/15 bg-white/10 hover:bg-white/15 text-white/85"
+                  className="px-4 h-9 text-[13px] rounded-md border border-white/15 bg-white/10 hover:bg-white/15 text-white/85 transition-colors"
                 >
                   返回
                 </button>
                 <button
                   type="button"
                   onClick={() => setReloadKey((k) => k + 1)}
-                  className="px-4 h-8 text-sm rounded bg-accent text-white hover:opacity-90"
+                  className="px-4 h-9 text-[13px] rounded-md bg-accent text-accent-contrast hover:opacity-90 transition-opacity"
                 >
                   重试
                 </button>
               </div>
             </div>
           ) : (
-            <div className="flex flex-col items-center gap-3 text-white/60 text-sm">
+            <div className="flex flex-col items-center gap-3 text-[13px] text-white/60">
               <div
                 className="w-5 h-5 rounded-full border-2 border-white/40 border-t-transparent animate-spin"
                 aria-hidden

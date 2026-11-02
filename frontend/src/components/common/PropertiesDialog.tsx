@@ -70,7 +70,7 @@ export default function PropertiesDialog({ target, onClose }: Props) {
       onContextMenu={(event) => event.stopPropagation()}
     >
       <header className="sticky top-0 z-10 flex items-center justify-between px-5 h-12 border-b border-border-faint bg-bg-elevated">
-        <h2 id={titleId} className="font-display text-sm font-medium">
+        <h2 id={titleId} className="font-display text-[15px] font-semibold">
           属性
         </h2>
         <button
@@ -83,7 +83,7 @@ export default function PropertiesDialog({ target, onClose }: Props) {
           <CloseIcon size={14} />
         </button>
       </header>
-      <div className="p-5 text-sm space-y-3">
+      <div className="p-5 text-[13px] space-y-3">
         {target.kind === "node" ? (
           <NodeProperties key={targetKey} nodeId={target.id} />
         ) : (
@@ -211,7 +211,7 @@ function LoadError({
   return (
     <div
       role="alert"
-      className="flex items-center justify-between gap-3 rounded-md border border-danger/30 bg-danger/5 p-3 text-xs"
+      className="flex items-center justify-between gap-3 rounded-lg border border-danger/30 bg-danger/5 p-3 text-[12.5px]"
     >
       <p>{message}</p>
       <button
@@ -246,12 +246,12 @@ function Field({
 }) {
   return (
     <div>
-      <dt className="text-[10px] uppercase tracking-[0.14em] text-fg-subtle mb-1 flex items-center gap-1.5">
+      <dt className="text-[12.5px] font-medium text-fg-muted mb-1 flex items-center gap-1.5">
         <span>{label}</span>
         {copyable && <CopyButton value={value} title={`复制${label}`} />}
       </dt>
       <dd
-        className={`break-all ${mono ? "font-mono text-[11px] text-fg-muted" : ""}`}
+        className={`break-all text-[13px] ${mono ? "font-mono text-[12.5px] text-fg-muted" : ""}`}
       >
         {value}
       </dd>

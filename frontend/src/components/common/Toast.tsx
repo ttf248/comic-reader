@@ -9,7 +9,7 @@ export default function ToastViewport() {
   if (!toasts.length) return null
   return (
     <div
-      className="fixed bottom-5 right-5 z-[60] flex flex-col gap-2 pointer-events-none"
+      className="fixed bottom-12 right-5 z-[60] flex flex-col gap-2 pointer-events-none"
       aria-live="polite"
     >
       {toasts.map((t) => {
@@ -17,7 +17,7 @@ export default function ToastViewport() {
         return (
           <div
             key={t.id}
-            className="pointer-events-auto flex items-center gap-3 glass-strong border border-border rounded-lg px-3.5 py-2.5 shadow-md min-w-[240px] max-w-[380px] fade-up text-sm"
+            className="pointer-events-auto flex items-center gap-3 bg-bg-elevated/95 backdrop-blur-xl border border-border rounded-lg px-3.5 py-2.5 shadow-lg min-w-[240px] max-w-[380px] fade-up text-[13px]"
           >
             <Icon size={15} className="shrink-0 text-fg-muted" />
             <div className="flex-1 leading-snug">{t.message}</div>

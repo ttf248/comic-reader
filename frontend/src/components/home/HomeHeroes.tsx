@@ -67,6 +67,8 @@ export function UnreadHero({
               ...card,
               isFavorite: favoriteIds.has(decodeFavPath(card.to)),
             }}
+            /* 整个区块都是未读，卡片再挂「新」角标只是噪音 */
+            showUnreadBadge={false}
             overlayAction={
               <button
                 type="button"
@@ -75,7 +77,7 @@ export function UnreadHero({
                   event.stopPropagation();
                   onMarkRead(card);
                 }}
-                className="w-7 h-7 rounded-full bg-black/55 text-white/90 hover:bg-accent hover:text-white flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-all"
+                className="w-7 h-7 rounded-full bg-black/55 text-white/90 hover:bg-accent hover:text-accent-contrast flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-all"
                 title={`将「${card.title}」标记为已读`}
                 aria-label={`将${card.title}标记为已读`}
               >
@@ -183,7 +185,7 @@ function ContinueFeature({
         aria-label={`继续阅读「${card.title}」`}
         className="flex flex-1 min-w-0 items-center gap-4 sm:gap-5 rounded-lg cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
-        <div className="relative w-[92px] h-[120px] sm:w-[112px] sm:h-[150px] shrink-0 rounded-lg overflow-hidden bg-bg-subtle">
+        <div className="relative w-[104px] h-[130px] sm:w-[140px] sm:h-[176px] shrink-0 rounded-lg overflow-hidden bg-bg-subtle">
           {card.coverPath ? (
             <img
               src={thumbUrl(card.coverPath)}
@@ -206,11 +208,8 @@ function ContinueFeature({
           <div className="text-[13px] text-fg-muted mt-1.5 tabular-nums">
             看到 {index + 1} / {total}
           </div>
-          <div className="mt-3 h-1 w-full bg-bg-strong rounded-full overflow-hidden">
-            <div
-              className="h-full bg-accent rounded-full"
-              style={{ width: `${percent}%` }}
-            />
+          <div className="mt-2.5 text-[12.5px] text-fg-subtle tabular-nums">
+            {percent > 0 ? `已读 ${percent}%` : "尚未开始"}
           </div>
           <div className="mt-3 sm:hidden inline-flex items-center gap-1.5 text-[13px] font-medium text-accent">
             继续阅读
@@ -227,6 +226,14 @@ function ContinueFeature({
         继续阅读
         <ArrowRightLineIcon size={12} />
       </button>
+
+      {/* 进度条贴在卡片底边：既是进度，也给这张横幅一个视觉收尾 */}
+      <div className="absolute left-0 right-0 bottom-0 h-[3px] bg-bg-strong/60">
+        <div
+          className="h-full bg-accent transition-[width] duration-300"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
 
       <button
         type="button"
@@ -295,7 +302,9 @@ function ContinueCard({
               <FolderIcon size={20} />
             </div>
           )}
-          {progressPercent !== null && progress && (
+          {/* 进度角标只在真正读过几页时出现：刚打开过的相册（index=0）
+              挂一层暗化蒙版 + 「看到 1 / N」只是噪音。 */}
+          {progressPercent !== null && progress && progress.index > 0 && (
             <div className="absolute bottom-0 left-0 right-0 px-2.5 py-2 bg-gradient-to-t from-black/70 to-transparent">
               <div className="text-white/95 text-[11.5px] font-medium tabular-nums">
                 看到 {progress.index + 1} / {progress.total}

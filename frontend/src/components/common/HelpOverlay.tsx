@@ -121,10 +121,10 @@ export default function HelpOverlay({ open, onClose, context }: Props) {
               <KeyboardIcon size={14} />
             </div>
             <div>
-              <h2 id={titleId} className="font-display text-sm font-medium">
+              <h2 id={titleId} className="font-display text-[15px] font-semibold">
                 快捷键
               </h2>
-              <p className="text-[11px] text-fg-subtle mt-0.5">
+              <p className="text-[12.5px] text-fg-subtle mt-0.5">
                 按 <kbd className="kbd">?</kbd> 随时唤起
               </p>
             </div>
@@ -147,7 +147,7 @@ export default function HelpOverlay({ open, onClose, context }: Props) {
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="搜索快捷键…"
-              className="flex-1 bg-transparent border-0 outline-none text-sm placeholder:text-fg-subtle"
+              className="flex-1 bg-transparent border-0 outline-none text-[13.5px] placeholder:text-fg-subtle"
             />
             {q && (
               <button
@@ -155,7 +155,7 @@ export default function HelpOverlay({ open, onClose, context }: Props) {
                   setQ("");
                   searchRef.current?.focus({ preventScroll: true });
                 }}
-                className="text-fg-subtle hover:text-fg text-xs"
+                className="text-fg-subtle hover:text-fg text-[12.5px]"
               >
                 清除
               </button>
@@ -167,13 +167,13 @@ export default function HelpOverlay({ open, onClose, context }: Props) {
           className={`flex-1 overflow-auto p-6 grid grid-cols-1 ${filteredGroups.length > 1 ? "md:grid-cols-2" : ""} gap-x-10 gap-y-6 scroll-thin`}
         >
           {total === 0 && (
-            <div className="col-span-full text-center text-fg-muted text-sm py-12">
+            <div className="col-span-full text-center text-[13px] text-fg-muted py-12">
               没有匹配「{q}」的快捷键
             </div>
           )}
           {filteredGroups.map((g) => (
             <div key={g.title}>
-              <h3 className="text-[10px] font-medium text-fg-subtle uppercase tracking-[0.18em] mb-3">
+              <h3 className="text-[13px] font-semibold text-fg mb-3">
                 {g.title}
               </h3>
               <ul className="space-y-1">

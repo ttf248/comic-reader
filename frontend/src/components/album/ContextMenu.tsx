@@ -112,7 +112,7 @@ export default function ContextMenu({ x, y, items, onSelect, onClose }: Props) {
     <div
       ref={ref}
       style={{ position: "fixed", top: y, left: x, zIndex: 1000 }}
-      className="min-w-[180px] bg-bg-elevated border border-border rounded-lg shadow-lg py-1 fade-up text-[13px]"
+      className="min-w-[190px] bg-bg-elevated border border-border rounded-lg shadow-lg py-1.5 fade-up text-[13px]"
       role="menu"
       tabIndex={-1}
       aria-label="上下文菜单"
@@ -136,7 +136,7 @@ export default function ContextMenu({ x, y, items, onSelect, onClose }: Props) {
             onClick={() => {
               if (!it.disabled) onSelect(it.id);
             }}
-            className={`w-full text-left px-3 py-1.5 flex items-center gap-2.5 transition-colors ${
+            className={`w-full text-left px-3 py-2 flex items-center gap-2.5 rounded-md transition-colors ${
               it.disabled
                 ? "text-fg-subtle cursor-not-allowed"
                 : "text-fg hover:bg-bg-subtle"

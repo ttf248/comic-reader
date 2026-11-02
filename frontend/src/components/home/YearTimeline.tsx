@@ -167,15 +167,12 @@ function YearCard({
 
         {/* === 顶部渐变 + 年份大字（左上）=== */}
         {validCovers.length > 0 && (
-          <div className="absolute top-0 left-0 right-0 p-3.5 sm:p-4 bg-gradient-to-b from-black/65 via-black/30 to-transparent pointer-events-none">
-            <div className="text-[12px] text-white/80 font-medium">
-              {isOther ? '未分类' : '年份'}
-            </div>
+          <div className="absolute top-0 left-0 right-0 p-3.5 sm:p-4 bg-gradient-to-b from-black/70 via-black/35 to-transparent pointer-events-none">
             <div
-              className={`font-display leading-none tracking-[-0.03em] tabular-nums text-white mt-0.5 ${
+              className={`font-display leading-none tracking-[-0.03em] tabular-nums text-white ${
                 isOther
                   ? 'text-xl sm:text-2xl font-semibold'
-                  : 'text-3xl sm:text-4xl font-semibold'
+                  : 'text-[28px] sm:text-[32px] font-semibold'
               }`}
             >
               {group.label}

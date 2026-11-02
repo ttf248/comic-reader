@@ -536,8 +536,8 @@ function AlbumView({
           <div className="absolute inset-0 bg-gradient-to-b from-transparent via-bg-elevated/70 to-bg-elevated" />
         </div>
 
-        <div className="page-shell relative pt-6 pb-8">
-          <div className="flex items-center gap-2 mb-5">
+        <div className="page-shell relative pt-5 pb-6">
+          <div className="flex items-center gap-2 mb-4">
             <button
               onClick={onBack}
               className="btn btn-sm btn-ghost -ml-2"
@@ -547,9 +547,9 @@ function AlbumView({
             </button>
           </div>
 
-          <div className="flex items-end gap-8 flex-wrap">
+          <div className="flex items-center gap-5 sm:gap-7 flex-wrap lg:items-end">
             {/* 大封面缩略图 */}
-            <div className="relative w-32 h-44 sm:w-40 sm:h-56 rounded-lg overflow-hidden border border-border shadow-md shrink-0 bg-bg-subtle">
+            <div className="relative w-[104px] h-[132px] sm:w-[120px] sm:h-[152px] rounded-lg overflow-hidden border border-border shadow-md shrink-0 bg-bg-subtle">
               <img
                 src={thumbUrl(detail.coverImage)}
                 alt={detail.name}
@@ -639,96 +639,97 @@ function AlbumView({
                 </div>
               )}
 
-              {/* CTA 行 */}
-              <div className="mt-5 flex items-center gap-2 flex-wrap">
-                {progressPct !== null && progressPct > 0 ? (
-                  <button
-                    onClick={() => openGallery(startIndex)}
-                    className="btn btn-primary"
-                  >
-                    {/* 与下面「开始浏览」同一个动作，图标也要一致：
-                        阅读器里看的是照片，用图片框而不是播放三角
-                        （播放三角会让人以为相册里是视频）。 */}
-                    <ImageIcon size={14} />
-                    <span>继续上次</span>
-                    <span className="text-[12px] opacity-70 tabular-nums">
-                      {Math.min(progress!.pageIndex + 1, currentPageCount)}/
-                      {currentPageCount}
-                    </span>
-                  </button>
-                ) : (
-                  <button
-                    onClick={() => {
-                      openGallery(0);
-                      pushToast({ kind: "info", message: "开始浏览" });
-                    }}
-                    className="btn btn-primary"
-                  >
-                    <ImageIcon size={14} />
-                    <span>开始浏览</span>
-                  </button>
-                )}
+            </div>
 
+            {/* CTA 行 */}
+            <div className="flex items-center gap-2 flex-wrap shrink-0">
+              {progressPct !== null && progressPct > 0 ? (
                 <button
-                  onClick={toggleFavorite}
-                  className={`btn ${
-                    isFav
-                      ? "bg-warning/10 text-warning border border-warning/30"
-                      : "btn-outline"
-                  }`}
+                  onClick={() => openGallery(startIndex)}
+                  className="btn btn-primary"
                 >
-                  <StarIcon size={13} filled={isFav} />
-                  <span>{isFav ? "已收藏" : "收藏"}</span>
+                  {/* 与下面「开始浏览」同一个动作，图标也要一致：
+                      阅读器里看的是照片，用图片框而不是播放三角
+                      （播放三角会让人以为相册里是视频）。 */}
+                  <ImageIcon size={14} />
+                  <span>继续上次</span>
+                  <span className="text-[12px] opacity-70 tabular-nums">
+                    {Math.min(progress!.pageIndex + 1, currentPageCount)}/
+                    {currentPageCount}
+                  </span>
                 </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    openGallery(0);
+                    pushToast({ kind: "info", message: "开始浏览" });
+                  }}
+                  className="btn btn-primary"
+                >
+                  <ImageIcon size={14} />
+                  <span>开始浏览</span>
+                </button>
+              )}
 
-                <div ref={moreRef} className="relative">
-                  <button
-                    ref={moreButtonRef}
-                    type="button"
-                    onClick={() => setMoreOpen((v) => !v)}
-                    className="inline-flex items-center justify-center w-9 h-9 rounded-md text-fg-muted hover:text-fg hover:bg-bg-subtle border border-border-faint transition-colors"
-                    title="更多"
-                    aria-label="更多操作"
-                    aria-haspopup="menu"
-                    aria-expanded={moreOpen}
+              <button
+                onClick={toggleFavorite}
+                className={`btn ${
+                  isFav
+                    ? "bg-warning/10 text-warning border border-warning/30"
+                    : "btn-outline"
+                }`}
+              >
+                <StarIcon size={13} filled={isFav} />
+                <span>{isFav ? "已收藏" : "收藏"}</span>
+              </button>
+
+              <div ref={moreRef} className="relative">
+                <button
+                  ref={moreButtonRef}
+                  type="button"
+                  onClick={() => setMoreOpen((v) => !v)}
+                  className="inline-flex items-center justify-center w-9 h-9 rounded-md text-fg-muted hover:text-fg hover:bg-bg-subtle border border-border-faint transition-colors"
+                  title="更多"
+                  aria-label="更多操作"
+                  aria-haspopup="menu"
+                  aria-expanded={moreOpen}
+                >
+                  <MoreHorizontalIcon size={15} />
+                </button>
+                {moreOpen && (
+                  <div
+                    ref={moreMenuRef}
+                    role="menu"
+                    aria-label="相册更多操作"
+                    className="absolute right-0 top-full mt-1.5 min-w-[180px] bg-bg-elevated border border-border rounded-lg shadow-lg py-1 z-40 fade-up"
                   >
-                    <MoreHorizontalIcon size={15} />
-                  </button>
-                  {moreOpen && (
-                    <div
-                      ref={moreMenuRef}
-                      role="menu"
-                      aria-label="相册更多操作"
-                      className="absolute right-0 top-full mt-1.5 min-w-[180px] bg-bg-elevated border border-border rounded-lg shadow-lg py-1 z-40 fade-up"
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMoreOpen(false);
+                        openInExplorer();
+                      }}
+                      disabled={!actions.canOpenInExplorer}
+                      className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[13px] text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => {
-                          setMoreOpen(false);
-                          openInExplorer();
-                        }}
-                        disabled={!actions.canOpenInExplorer}
-                        className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[13px] text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                      >
-                        <FolderIcon size={12} />
-                        <span>在资源管理器中打开</span>
-                      </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => {
-                          setMoreOpen(false);
-                          copyLink();
-                        }}
-                        className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[13px] text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors"
-                      >
-                        <CopyIcon size={12} />
-                        <span>复制链接</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
+                      <FolderIcon size={12} />
+                      <span>在资源管理器中打开</span>
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMoreOpen(false);
+                        copyLink();
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[13px] text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors"
+                    >
+                      <CopyIcon size={12} />
+                      <span>复制链接</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>
