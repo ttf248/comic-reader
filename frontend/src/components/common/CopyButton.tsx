@@ -8,12 +8,17 @@ interface Props {
   value: string;
   /** 触屏/鼠标 enter 时显示的提示文字。 */
   title?: string;
+  /**
+   * 深色底上使用：图标与悬停态改用白色系，避免浅色主题下浅灰图标
+   * 落在深色面板上几乎看不见。
+   */
+  onDark?: boolean;
 }
 
 type CopyStatus = "idle" | "copying" | "copied" | "failed";
 
 // 优先使用剪贴板 API；不可用或被拒绝时尝试临时选区，并在按钮上反馈结果。
-export default function CopyButton({ value, title }: Props) {
+export default function CopyButton({ value, title, onDark }: Props) {
   const [status, setStatus] = useState<CopyStatus>("idle");
   const feedbackTimer = useRef<number | null>(null);
   const request = useRef(0);
@@ -77,7 +82,11 @@ export default function CopyButton({ value, title }: Props) {
     <button
       type="button"
       onClick={onClick}
-      className="inline-flex items-center justify-center w-4 h-4 rounded text-fg-subtle hover:text-fg hover:bg-bg-subtle transition-colors"
+      className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${
+        onDark
+          ? "text-white/45 hover:text-white hover:bg-white/10"
+          : "text-fg-subtle hover:text-fg hover:bg-bg-subtle"
+      }`}
       title={label}
       aria-label={label}
       aria-busy={status === "copying" || undefined}

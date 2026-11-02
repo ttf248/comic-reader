@@ -24,7 +24,11 @@ import HelpOverlay from "../components/common/HelpOverlay";
 import GalleryHeader from "../components/gallery/GalleryHeader";
 import GalleryControls from "../components/gallery/GalleryControls";
 import ContextMenu, { type AnyMenuItem } from "../components/album/ContextMenu";
-import { ImageIcon, RefreshIcon, ArrowUpRightIcon } from "../components/common/Icon";
+import {
+  ImageIcon,
+  RefreshIcon,
+  ArrowUpRightIcon,
+} from "../components/common/Icon";
 import { displayedPageIndex } from "../utils/progress";
 import { albumRoute } from "../utils/path";
 import { useSafeBack } from "../utils/navigation";
@@ -394,9 +398,12 @@ export default function Gallery() {
       .catch(() => {});
   }, [pathParam, historyName, historyImageCount, queryClient, historyReady]);
 
-  // 切换图片/视频时关闭信息面板 + 防抖持久化进度
+  // 防抖持久化阅读进度
+  //
+  // 这里不负责关闭信息面板：imageActivityPageIndex 在连续模式下取决于
+  // 「可见区末页」，面板开合会改变画布宽度 → 可见区重排 → 该值跟着变，
+  // 两者互相触发会让面板一打开就被关掉。关闭面板另由下面的 currentMediaId 驱动。
   useEffect(() => {
-    setShowInfo(false);
     // 视频的 currentTime 不是相册页码，写入独立的 video activity。
     if (!imageActivityWritable || !pathParam) return;
     const total = images.length;
@@ -426,6 +433,17 @@ export default function Gallery() {
     clearProgressFailure,
     reportProgressFailure,
   ]);
+
+  // 切换到另一张图片/另一个视频时关闭信息面板。
+  //
+  // 判据是「当前媒体的资源 ID」而不是页码：连续模式下画布宽度变化会让
+  // 可见区末页跟着变，用页码当判据会导致面板一打开就被自己关掉。
+  // 这里不能直接引用下面才声明的 `current`（const 有暂时性死区），
+  // 所以按同样的规则在这里另算一份。
+  const currentMediaId = (isVideo ? currentVideo : images[index]) ?? null;
+  useEffect(() => {
+    setShowInfo(false);
+  }, [currentMediaId]);
 
   // 视频以「相册 ID + 文件 ID」独立保存毫秒位置。播放过程最多
   // 每 10 秒落盘一次，切换文件或卸载时再用 keepalive 补写最后位置。
@@ -1167,7 +1185,7 @@ export default function Gallery() {
 
   return (
     <div
-      className="relative bg-neutral-950 overflow-hidden select-none"
+      className="relative flex bg-neutral-950 overflow-hidden select-none"
       style={{ height: "100vh" }}
       onMouseMove={markActive}
       onContextMenu={(e) => {
@@ -1179,150 +1197,159 @@ export default function Gallery() {
         setContextMenu({ x: e.clientX, y: e.clientY });
       }}
     >
-      {/* 暗色画布层：让图片有「画廊」氛围 */}
-      {/* flex flex-col 是关键：让 ImageGallery 内部的 `flex-1` + `min-h-0`
+      {/* 舞台：画布 + 顶栏 + 浮层控件 + 底部进度条。
+          信息面板打开时（md+）这一列横向收缩，面板成为独立的一栏；
+          窄屏时面板改为浮在顶栏下方的整宽浮层，不遮挡顶栏。 */}
+      <div className="relative flex-1 min-w-0">
+        {/* 暗色画布层：让图片有「画廊」氛围 */}
+        {/* flex flex-col 是关键：让 ImageGallery 内部的 `flex-1` + `min-h-0`
           容器拿到约束高度,连续模式才能在容器内纵向滚动,
           而不是被外层 overflow-hidden 裁掉。 */}
-      <div className="absolute inset-0 flex flex-col">
-        {isVideo ? (
-          <VideoPlayer
-            src={current ?? ""}
-            initialPositionSec={
-              videoResume.key === videoActivityKey
-                ? videoResume.seconds
-                : undefined
-            }
-            onMetaLoaded={onVideoMetaLoaded}
-            onProgress={onVideoProgress}
-            onEnded={() => {
-              // onEnded 只会在视频模式下触发（<VideoPlayer> 仅在 isVideo 时渲染）。
-              // 从 URL 的 initialIndex 派生当前 item 索引。
-              const completed = videoActivityRef.current;
-              if (
-                completed &&
-                completed.key === videoActivityKey &&
-                completed.phase === "writable" &&
-                completed.durationMs > 0
-              ) {
-                completed.positionMs = completed.durationMs;
-                completed.dirty = true;
-                const savedPositionMs = completed.positionMs;
-                activityApi
-                  .setVideo(
-                    completed.albumId,
-                    completed.itemId,
-                    savedPositionMs,
-                    completed.durationMs,
-                  )
-                  .then(() => {
-                    clearProgressFailure("save");
-                    if (
-                      videoActivityRef.current === completed &&
-                      completed.positionMs === savedPositionMs
-                    ) {
-                      completed.dirty = false;
-                    }
-                  })
-                  .catch(() => reportProgressFailure("save"));
+        <div className="absolute inset-0 flex flex-col">
+          {isVideo ? (
+            <VideoPlayer
+              src={current ?? ""}
+              initialPositionSec={
+                videoResume.key === videoActivityKey
+                  ? videoResume.seconds
+                  : undefined
               }
-              const cur = Math.max(
-                0,
-                Math.min(initialIndex, Math.max(0, videos.length - 1)),
-              );
-              if (cur < videos.length - 1) {
-                goToVideo(cur + 1);
-              } else {
-                pushToast({ kind: "success", message: "已看完 🎉", ttl: 1500 });
-              }
-            }}
-          />
-        ) : (
-          <ImageGallery
-            images={images}
-            onVisibleRangeChange={onContinuousVisibleRangeChange}
-            onClickNavigate={(dir) => {
-              if (dir === -1) prev();
-              else if (dir === 1) next();
-            }}
-          />
-        )}
-      </div>
-
-      {/* 顶部常驻条：返回 / 名称 / 页码 / 全屏 / 菜单 */}
-      {progressFailure?.key === progressKey && (
-        <div
-          role="alert"
-          className="absolute top-16 left-3 right-3 z-30 mx-auto flex max-w-xl items-center justify-between gap-3 rounded-md border border-border bg-bg-elevated p-3 text-sm text-fg shadow-lg"
-        >
-          <span>
-            {progressFailure.operation === "restore"
-              ? "无法恢复上次进度，已暂停保存，避免覆盖原记录。"
-              : "阅读进度未保存，请重试。"}
-          </span>
-          <button
-            type="button"
-            disabled={retryingProgress}
-            onClick={() => void retryProgress()}
-            className="shrink-0 rounded border border-border px-3 py-1 hover:bg-bg-hover disabled:opacity-50"
-          >
-            {retryingProgress ? "重试中…" : "重试进度"}
-          </button>
+              onMetaLoaded={onVideoMetaLoaded}
+              onProgress={onVideoProgress}
+              onEnded={() => {
+                // onEnded 只会在视频模式下触发（<VideoPlayer> 仅在 isVideo 时渲染）。
+                // 从 URL 的 initialIndex 派生当前 item 索引。
+                const completed = videoActivityRef.current;
+                if (
+                  completed &&
+                  completed.key === videoActivityKey &&
+                  completed.phase === "writable" &&
+                  completed.durationMs > 0
+                ) {
+                  completed.positionMs = completed.durationMs;
+                  completed.dirty = true;
+                  const savedPositionMs = completed.positionMs;
+                  activityApi
+                    .setVideo(
+                      completed.albumId,
+                      completed.itemId,
+                      savedPositionMs,
+                      completed.durationMs,
+                    )
+                    .then(() => {
+                      clearProgressFailure("save");
+                      if (
+                        videoActivityRef.current === completed &&
+                        completed.positionMs === savedPositionMs
+                      ) {
+                        completed.dirty = false;
+                      }
+                    })
+                    .catch(() => reportProgressFailure("save"));
+                }
+                const cur = Math.max(
+                  0,
+                  Math.min(initialIndex, Math.max(0, videos.length - 1)),
+                );
+                if (cur < videos.length - 1) {
+                  goToVideo(cur + 1);
+                } else {
+                  pushToast({
+                    kind: "success",
+                    message: "已看完 🎉",
+                    ttl: 1500,
+                  });
+                }
+              }}
+            />
+          ) : (
+            <ImageGallery
+              images={images}
+              onVisibleRangeChange={onContinuousVisibleRangeChange}
+              onClickNavigate={(dir) => {
+                if (dir === -1) prev();
+                else if (dir === 1) next();
+              }}
+            />
+          )}
         </div>
-      )}
-      <GalleryHeader
-        name={name}
-        index={index}
-        itemIndex={isVideo ? itemIndex : undefined}
-        total={total}
-        isFavorite={isFav}
-        onBack={goBack}
-        onToggleFavorite={onToggleFavorite}
-        onToggleInfo={() => setShowInfo((v) => !v)}
-        onToggleHelp={() => setShowHelp((v) => !v)}
-        onPrev={prev}
-        onNext={next}
-        onPrevAlbum={() => goAdjacent(-1, { notify: showSwitchNotif })}
-        onNextAlbum={() => goAdjacent(1, { notify: showSwitchNotif })}
-        onSetCover={onSetCover}
-        onClearCover={onClearCover}
-        hasCustomCover={hasCustomCover}
-        onJumpToFirst={isVideo ? () => goToVideo(0) : () => setIndex(0)}
-        onJumpToLast={
-          isVideo
-            ? () => {
-                if (videos.length > 0) goToVideo(videos.length - 1);
-              }
-            : () => setIndex(Math.max(0, images.length - 1))
-        }
-      />
 
-      {/* 浮层控件：右侧（模式 / 适配 / 缩放 / 旋转 / 方向）+ 左下（上一本/下一本）
-          视频模式不显示（视频有原生 controls） */}
-      {!isVideo && (
-        <GalleryControls
-          visible={chromeVisible}
+        {/* 顶部常驻条：返回 / 名称 / 页码 / 全屏 / 菜单 */}
+        {progressFailure?.key === progressKey && (
+          <div
+            role="alert"
+            className="absolute top-16 left-3 right-3 z-30 mx-auto flex max-w-xl items-center justify-between gap-3 rounded-md border border-border bg-bg-elevated p-3 text-sm text-fg shadow-lg"
+          >
+            <span>
+              {progressFailure.operation === "restore"
+                ? "无法恢复上次进度，已暂停保存，避免覆盖原记录。"
+                : "阅读进度未保存，请重试。"}
+            </span>
+            <button
+              type="button"
+              disabled={retryingProgress}
+              onClick={() => void retryProgress()}
+              className="shrink-0 rounded border border-border px-3 py-1 hover:bg-bg-hover disabled:opacity-50"
+            >
+              {retryingProgress ? "重试中…" : "重试进度"}
+            </button>
+          </div>
+        )}
+        <GalleryHeader
+          name={name}
+          index={index}
+          itemIndex={isVideo ? itemIndex : undefined}
+          total={total}
+          isFavorite={isFav}
+          onBack={goBack}
+          onToggleFavorite={onToggleFavorite}
+          onToggleInfo={() => setShowInfo((v) => !v)}
+          onToggleHelp={() => setShowHelp((v) => !v)}
           onPrev={prev}
           onNext={next}
           onPrevAlbum={() => goAdjacent(-1, { notify: showSwitchNotif })}
           onNextAlbum={() => goAdjacent(1, { notify: showSwitchNotif })}
+          onSetCover={onSetCover}
+          onClearCover={onClearCover}
+          hasCustomCover={hasCustomCover}
+          onJumpToFirst={isVideo ? () => goToVideo(0) : () => setIndex(0)}
+          onJumpToLast={
+            isVideo
+              ? () => {
+                  if (videos.length > 0) goToVideo(videos.length - 1);
+                }
+              : () => setIndex(Math.max(0, images.length - 1))
+          }
         />
-      )}
 
-      {/* 底部进度条 + 跳转：浮在图上，chromeVisible 联动。视频模式下隐藏（<video> 自带 controls） */}
-      {!isVideo && (
-        <div
-          className={`absolute bottom-0 inset-x-0 z-10 transition-opacity duration-300 ${
-            chromeVisible ? "opacity-100" : "opacity-0 pointer-events-none"
-          }`}
-        >
-          <PageSlider
-            total={images.length}
-            index={index}
-            onJump={jumpTo}
-            images={images}
+        {/* 浮层控件：右侧（模式 / 适配 / 缩放 / 旋转 / 方向）+ 左下（上一本/下一本）
+          视频模式不显示（视频有原生 controls） */}
+        {!isVideo && (
+          <GalleryControls
+            visible={chromeVisible}
+            onPrev={prev}
+            onNext={next}
+            onPrevAlbum={() => goAdjacent(-1, { notify: showSwitchNotif })}
+            onNextAlbum={() => goAdjacent(1, { notify: showSwitchNotif })}
           />
-        </div>
-      )}
+        )}
+
+        {/* 底部进度条 + 跳转：浮在图上，chromeVisible 联动。视频模式下隐藏（<video> 自带 controls） */}
+        {!isVideo && (
+          <div
+            className={`absolute bottom-0 inset-x-0 z-10 transition-opacity duration-300 ${
+              chromeVisible ? "opacity-100" : "opacity-0 pointer-events-none"
+            }`}
+          >
+            <PageSlider
+              total={images.length}
+              index={index}
+              onJump={jumpTo}
+              images={images}
+            />
+          </div>
+        )}
+      </div>
 
       {showInfo && !isVideo && current && (
         <ImageInfoPanel absPath={current} onClose={() => setShowInfo(false)} />

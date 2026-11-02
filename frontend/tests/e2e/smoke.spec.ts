@@ -4235,6 +4235,44 @@ test("阅读器放大与旋转真正作用到图片上", async ({ page }) => {
   );
 });
 
+test("图片信息面板不遮挡阅读器顶栏：宽屏并排，窄屏落到顶栏下方", async ({
+  page,
+}) => {
+  const nodes = await scannedNodes(page.request);
+  const album = nodes.find((node) => node.name === "sample-paged-images");
+  expect(album).toBeDefined();
+  await page.goto(`/gallery?path=${encodeURIComponent(album!.id)}&index=0`);
+  await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("1");
+
+  const panel = page.getByTestId("image-info-panel");
+  const header = page.locator("header").first();
+
+  await page.keyboard.press("i");
+  await expect(panel).toBeVisible();
+
+  // 宽屏：面板是右侧独立一栏，左边缘不越过顶栏右边缘。
+  const widePanel = await panel.boundingBox();
+  const wideHeader = await header.boundingBox();
+  expect(widePanel).not.toBeNull();
+  expect(wideHeader).not.toBeNull();
+  expect(widePanel!.x).toBeGreaterThanOrEqual(
+    wideHeader!.x + wideHeader!.width,
+  );
+  expect(widePanel!.y).toBe(0);
+  expect(widePanel!.height).toBeGreaterThan(400);
+
+  // 窄屏：没有并排空间，面板落到顶栏下方，不覆盖返回按钮与相册名。
+  await page.setViewportSize({ width: 390, height: 780 });
+  await expect(panel).toBeVisible();
+  const narrowPanel = await panel.boundingBox();
+  const narrowHeader = await header.boundingBox();
+  expect(narrowPanel).not.toBeNull();
+  expect(narrowHeader).not.toBeNull();
+  expect(narrowPanel!.y).toBeGreaterThanOrEqual(
+    narrowHeader!.y + narrowHeader!.height,
+  );
+});
+
 test("阅读器「原始」适配模式按像素显示图片，超出视口时可滚动查看", async ({
   page,
   request,
