@@ -4385,3 +4385,30 @@ test("窄屏阅读器不再显示悬浮控件，显示设置收进顶栏弹层",
   await page.mouse.click(360, 400);
   await expect(page.getByText(new RegExp(`^2 / ${total}$`))).toBeVisible();
 });
+
+test("窄屏设置项的标签保持一行，不被挤成竖排", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/settings");
+  // 标签与控件并排时，路径输入框会把中文标签挤成一列竖排文字。
+  await expect
+    .poll(async () =>
+      page.evaluate(() =>
+        [...document.querySelectorAll("span")].some((span) =>
+          (span.textContent ?? "").trim().startsWith("缓存目录"),
+        ),
+      ),
+    )
+    .toBe(true);
+  const label = await page.evaluate(() => {
+    const spans = [...document.querySelectorAll("span")].filter((span) =>
+      (span.textContent ?? "").trim().startsWith("缓存目录"),
+    );
+    const target = spans[spans.length - 1];
+    if (!target) return null;
+    const rect = target.getBoundingClientRect();
+    return { height: Math.round(rect.height), width: Math.round(rect.width) };
+  });
+  expect(label).not.toBeNull();
+  expect(label!.height, "设置项标签被压成竖排").toBeLessThan(40);
+  expect(label!.width, "设置项标签宽度不足一行").toBeGreaterThan(40);
+});

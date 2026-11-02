@@ -928,7 +928,8 @@ function ConfigRow({
     }
   }, onCompositionChange);
   return (
-    <div className="flex items-center justify-between gap-4 px-4 py-3 text-sm">
+    // 窄屏改为上下堆叠：标签与控件并排时，路径输入框会把标签挤成一列竖排文字。
+    <div className="flex flex-col items-stretch sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 px-4 py-3 text-sm">
       <div className="flex flex-col min-w-0">
         <span className="text-fg flex items-center gap-2">
           {def.label}
@@ -943,7 +944,7 @@ function ConfigRow({
           <span className="text-xs text-fg-subtle mt-0.5">{def.hint}</span>
         )}
       </div>
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex items-center gap-2 min-w-0 sm:shrink-0">
         {def.kind === "text" && isPath ? (
           <PathField
             value={String(value)}
