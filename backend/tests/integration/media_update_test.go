@@ -95,6 +95,6 @@ func mediaUpdateRoute(t *testing.T, h *harness, src string) (*fiber.App, string)
 	id := h.catalog.ExternalID(src, services.ResourceFile)
 	_, validator := middleware.PathSafetyMiddleware([]string{h.root})
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
-	app.Get("/api/media/:id", middleware.ResourceParam(h.catalog, validator), handlers.MediaHandler(nil, nil))
+	app.Get("/api/media/:id", middleware.ResourceParam(h.catalog, validator), handlers.MediaHandler(nil, nil, nil))
 	return app, "/api/media/" + id
 }

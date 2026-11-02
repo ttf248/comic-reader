@@ -153,7 +153,7 @@ func newHarness(t *testing.T) *harness {
 	api.Get("/videos/transcode/status", handlers.TranscodeStatusHandler(nil))
 	api.Get("/videos/transcode/events", handlers.TranscodeEventsHandler(nil))
 	api.Post("/videos/transcode/cancel", handlers.TranscodeCancelHandler(nil))
-	api.Get("/images", handlers.ImageHandler())
+	api.Get("/images", handlers.ImageHandler(nil))
 	api.Get("/images/:id/info", middleware.ResourceParam(catalog, safetyState), handlers.ImageInfoHandler(catalog))
 	api.Get("/prefs", handlers.PrefsGetHandler(prefsStore))
 	api.Patch("/prefs", handlers.PrefsPatchHandler(prefsStore))

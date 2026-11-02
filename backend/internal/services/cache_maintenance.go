@@ -26,7 +26,7 @@ func MaintainDerivedCache(ctx context.Context, layout CacheLayout, maxBytes int6
 	}
 	var entries []entry
 	var total int64
-	for _, scope := range []string{"thumbnails", "video-faststart", "video-transcode"} {
+	for _, scope := range []string{"thumbnails", "converted", "video-faststart", "video-transcode"} {
 		if err := ctx.Err(); err != nil {
 			return 0, err
 		}
@@ -47,7 +47,7 @@ func MaintainDerivedCache(ctx context.Context, layout CacheLayout, maxBytes int6
 				continue
 			}
 			ext := ".mp4"
-			if scope == "thumbnails" {
+			if scope == "thumbnails" || scope == "converted" {
 				ext = ".jpg"
 			}
 			name := file.Name()

@@ -18,7 +18,7 @@ func TestNestedRootsPublishUniqueOwnedAlbumsAndReadableMedia(t *testing.T) {
 	child := filepath.Join(h.root, "[作者A] vol1")
 	roots := []string{h.root, child}
 	_, validator := middleware.PathSafetyMiddleware(roots)
-	h.app.Get("/api/media/:id", middleware.ResourceParam(h.catalog, validator), handlers.MediaHandler(nil, nil))
+	h.app.Get("/api/media/:id", middleware.ResourceParam(h.catalog, validator), handlers.MediaHandler(nil, nil, nil))
 	if _, err := h.mgr.Update(config.ConfigPatch{MediaRoots: roots, MediaRootsSet: true}); err != nil {
 		t.Fatal(err)
 	}

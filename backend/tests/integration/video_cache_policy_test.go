@@ -36,7 +36,7 @@ func testStableMediaCachePolicy(t *testing.T, extension string) {
 	id := h.catalog.ExternalID(src, services.ResourceFile)
 	_, validator := middleware.PathSafetyMiddleware([]string{h.root})
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
-	app.Get("/api/media/:id", middleware.ResourceParam(h.catalog, validator), handlers.MediaHandler(nil, nil))
+	app.Get("/api/media/:id", middleware.ResourceParam(h.catalog, validator), handlers.MediaHandler(nil, nil, nil))
 	url := "/api/media/" + id
 	first, body := doHTTP(t, app, http.MethodGet, url)
 	if first.StatusCode != http.StatusOK || string(body) != "temporary-video-content" {

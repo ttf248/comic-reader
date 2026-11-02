@@ -272,3 +272,19 @@ func TestAlbumUnmarshalVideoFields(t *testing.T) {
 		t.Errorf("legacy VideoFiles 应为零值, got %v", old.VideoFiles)
 	}
 }
+
+// TestNeedsBrowserConversion 验证只有浏览器解不了的格式才需要服务端转换。
+func TestNeedsBrowserConversion(t *testing.T) {
+	convert := []string{"a.heic", "a.HEIC", "b.heif", "c.tif", "d.TIFF"}
+	for _, name := range convert {
+		if !NeedsBrowserConversion(name) {
+			t.Errorf("%s 应需要转换", name)
+		}
+	}
+	keep := []string{"a.jpg", "b.PNG", "c.gif", "d.webp", "e.mp4", "f"}
+	for _, name := range keep {
+		if NeedsBrowserConversion(name) {
+			t.Errorf("%s 不应需要转换", name)
+		}
+	}
+}

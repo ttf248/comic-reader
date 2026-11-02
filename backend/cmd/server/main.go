@@ -182,6 +182,7 @@ func main() {
 
 	thumbs, err := services.NewThumbnailService(services.ThumbnailOptions{
 		CacheDir:       cacheLayout.ThumbnailDir,
+		ConvertedDir:   cacheLayout.ConvertedDir,
 		Width:          cfg.ThumbSizeW,
 		Height:         cfg.ThumbSizeH,
 		MaxAgeDays:     cfg.CacheMaxAgeDays,
@@ -326,7 +327,7 @@ func main() {
 	// Settings 页在"缓存占用"面板中按 scope 提供独立清理和一键全清。
 	api.Post("/cache/clear", handlers.CacheClearHandler(thumbs, faststart, transcode, videoInfo.ClearCache, cacheStats))
 	api.Get("/cache/stats", handlers.CacheStatsHandler(mgr, cacheStats))
-	api.Get("/media/:id", resourceParam, handlers.MediaHandler(transcode, faststart))
+	api.Get("/media/:id", resourceParam, handlers.MediaHandler(transcode, faststart, thumbs))
 	api.Get("/images/:id/info", resourceParam, handlers.ImageInfoHandler(resourceCatalog))
 	// 视频流 + 元信息（前端 <video> 元素 / HoverPreview / 时长显示使用）
 	api.Get("/videos/:id/info", resourceParam, handlers.VideoInfoHandler(videoInfo, transcode, resourceCatalog))

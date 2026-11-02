@@ -178,3 +178,44 @@ func TestImageInfoDecodeFailureHidesFilesystemPath(t *testing.T) {
 		t.Fatalf("decode failure leaked filesystem details: %s", body)
 	}
 }
+
+// TestMediaHandlerRejectsUnconvertibleImage 验证浏览器原生解不了的图片
+// （HEIC/TIFF）在没有转换器时返回 415 + 稳定 code，而不是把原文件当图片
+// 发出去——阅读器拿到 HEIC 只会显示破图。
+func TestMediaHandlerRejectsUnconvertibleImage(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "photo.heic")
+	if err := os.WriteFile(path, []byte("not really an image"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	catalog := services.NewResourceCatalog()
+	catalog.Publish(&models.ScanResult{
+		Roots: []string{root},
+		Collections: []models.Collection{{
+			Path: root,
+			Name: filepath.Base(root),
+			Albums: []models.Album{{
+				Path:       root,
+				Name:       filepath.Base(root),
+				ImageFiles: []string{path},
+			}},
+		}},
+	}, []string{root})
+
+	app := fiber.New()
+	_, safety := middleware.PathSafetyMiddleware([]string{root})
+	app.Get("/api/media/:id", middleware.ResourceParam(catalog, safety), MediaHandler(nil, nil, nil))
+	id := catalog.ExternalID(path, services.ResourceFile)
+	res, err := app.Test(httptest.NewRequest(http.MethodGet, "/api/media/"+id, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusUnsupportedMediaType {
+		t.Fatalf("status = %d, want 415", res.StatusCode)
+	}
+	body, _ := io.ReadAll(res.Body)
+	if !strings.Contains(string(body), "unsupported_image_format") {
+		t.Fatalf("响应应带稳定 code, got %s", body)
+	}
+}

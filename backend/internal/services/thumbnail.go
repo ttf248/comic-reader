@@ -56,6 +56,12 @@ const (
 	// thumbnailUnknownPixelWeight 读不到图片头时的保守权重：
 	// 按大图对待，只允许少量并发，避免意外的文件把内存打爆。
 	thumbnailUnknownPixelWeight = 24
+
+	// convertedMaxDim 整图转换后的最长边像素上限。
+	// 12MP 原图转成 JPEG 约 3–5MB，缩到 2560 后约 1MB，够看也够快。
+	convertedMaxDim = 2560
+	// convertedCacheSize 整图转换结果的内存缓存条数（每条约 1MB）。
+	convertedCacheSize = 8
 )
 
 // ThumbnailService 缩略图服务：LRU 内存缓存 + 磁盘缓存。
@@ -67,9 +73,15 @@ type ThumbnailService struct {
 	height     int
 	maxAgeDays int
 	lruSize    int
+	// convertedDir 存放"浏览器可直接显示"的整图转换结果（HEIC/TIFF 等）。
+	// 与缩略图分开存放，避免同一目录里混两种用途的文件。
+	convertedDir string
 
 	mu       sync.RWMutex
 	memCache *lru.Cache[string, []byte]
+	// convertedCache 单独缓存整图转换结果：一张 JPEG 动辄几 MB，
+	// 与缩略图共用一个 LRU 会把缩略图全部挤掉。
+	convertedCache *lru.Cache[string, []byte]
 
 	// singleflight 防缓存击穿：同一 key 并发请求时只跑一次生成，
 	// 其他协程等结果。冷启动 / 用户翻到未缓存的合集时（首页 20+ 张
@@ -104,6 +116,10 @@ type ThumbnailOptions struct {
 	Height     int    // 默认 350
 	MaxAgeDays int    // 默认 30
 	LRUSize    int    // 默认 500
+
+	// ConvertedDir 可选：整图转换结果的缓存目录。
+	// 留空时复用 CacheDir 下的 converted 子目录。
+	ConvertedDir string
 
 	// VideoCover 可选:传入后,视频封面在服务端用 ffmpeg 抽帧;
 	// 不传则维持原"客户端抽帧 + 上传"流程。
@@ -140,18 +156,29 @@ func NewThumbnailService(opts ThumbnailOptions) (*ThumbnailService, error) {
 		lruSize = 500
 	}
 
+	convertedDir := opts.ConvertedDir
+	if convertedDir == "" {
+		convertedDir = filepath.Join(opts.CacheDir, "converted")
+	}
+
 	cache, err := lru.New[string, []byte](lruSize)
 	if err != nil {
 		return nil, fmt.Errorf("create lru: %w", err)
 	}
+	convertedCache, err := lru.New[string, []byte](convertedCacheSize)
+	if err != nil {
+		return nil, fmt.Errorf("create converted lru: %w", err)
+	}
 
 	return &ThumbnailService{
 		cacheDir:        opts.CacheDir,
+		convertedDir:    convertedDir,
 		width:           w,
 		height:          h,
 		maxAgeDays:      days,
 		lruSize:         lruSize,
 		memCache:        cache,
+		convertedCache:  convertedCache,
 		videoCover:      opts.VideoCover,
 		imageConverter:  opts.ImageConverter,
 		videoCoverSlots: make(chan struct{}, 2),
@@ -189,6 +216,80 @@ func videoCoverKey(absPath string, mtime time.Time, size int64) string {
 // 这种平滑渐变内容性价比极低；JPEG quality 85 同样大小降 5-10x 且肉眼
 // 几乎无差。文件扩展名与 Content-Type 一致，方便手动排错。
 const JPEGExt = ".jpg"
+
+// GetConvertedImage 返回浏览器可直接显示的整图 JPEG。
+//
+// HEIC/HEIF（iPhone 照片）与 TIFF 浏览器原生解不了，原样发送只会得到
+// 破图；这里用 ffmpeg 转成 JPEG，并用独立的内存 LRU + 磁盘缓存保存，
+// 转换只做一次（磁盘命中即返回）。
+//
+// 转换不可用（没有 ffmpeg）或失败时返回 ErrUnsupportedFormat，调用方
+// 应回退成"该格式无法显示"的提示，而不是把原文件当图片发出去。
+func (s *ThumbnailService) GetConvertedImage(absPath string) ([]byte, error) {
+	if s.imageConverter == nil || !s.imageConverter.Available() {
+		return nil, ErrUnsupportedFormat
+	}
+	fi, err := os.Stat(absPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, ErrSourceMissing
+		}
+		return nil, err
+	}
+	if !fi.Mode().IsRegular() {
+		return nil, ErrSourceMissing
+	}
+
+	key := convertedKey(CacheKeyFromStat(absPath, fi))
+	if data, ok := s.convertedCache.Get(key); ok {
+		return data, nil
+	}
+	diskPath := filepath.Join(s.convertedDir, key+JPEGExt)
+	if data, err := os.ReadFile(diskPath); err == nil {
+		s.convertedCache.Add(key, data)
+		return data, nil
+	}
+
+	v, err, _ := s.flight.Do(key, func() (interface{}, error) {
+		if data, ok := s.convertedCache.Get(key); ok {
+			return data, nil
+		}
+		if data, err := os.ReadFile(diskPath); err == nil {
+			s.convertedCache.Add(key, data)
+			return data, nil
+		}
+		return s.generateConverted(absPath, diskPath, key)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return v.([]byte), nil
+}
+
+// convertedKey 整图转换的缓存键：在普通 CacheKey 前加 "cv:" 前缀，
+// 避免与同源文件的缩略图缓存键碰撞。
+func convertedKey(sourceKey string) string {
+	sum := md5.Sum([]byte("cv:" + sourceKey))
+	return hex.EncodeToString(sum[:])
+}
+
+// generateConverted 转换整图并写盘 + 写内存缓存。
+func (s *ThumbnailService) generateConverted(absPath, diskPath, key string) ([]byte, error) {
+	data, err := s.imageConverter.ConvertJPEGBytes(absPath, convertedMaxDim)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", ErrUnsupportedFormat, err.Error())
+	}
+	// 目录按需创建：没有转换任务时不留空目录，缩略图缓存目录保持干净。
+	if derr := os.MkdirAll(s.convertedDir, 0o755); derr != nil {
+		return nil, fmt.Errorf("create converted cache dir: %w", derr)
+	}
+	if werr := os.WriteFile(diskPath, data, 0o644); werr != nil {
+		// 写失败不影响返回（仅缓存丢失，下次重新转换）
+		fmt.Fprintf(os.Stderr, "write converted cache key=%s: %v\n", key, werr)
+	}
+	s.convertedCache.Add(key, data)
+	return data, nil
+}
 
 // GetOrCreate 获取或生成缩略图。返回 JPEG 字节。
 //
@@ -596,16 +697,39 @@ func (s *ThumbnailService) ClearAll() (deleted int, freedBytes int64, err error)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	entries, err := os.ReadDir(s.cacheDir)
+	deleted, freedBytes, err = clearCacheDir(s.cacheDir)
 	if err != nil {
+		return deleted, freedBytes, err
+	}
+	// 整图转换结果同样属于可重建的派生缓存，"清空缓存"应一并清掉。
+	convertedDeleted, convertedFreed, convertedErr := clearCacheDir(s.convertedDir)
+	deleted += convertedDeleted
+	freedBytes += convertedFreed
+
+	// 清空内存 LRU(全部条目)
+	s.memCache.Purge()
+	s.convertedCache.Purge()
+
+	return deleted, freedBytes, convertedErr
+}
+
+// clearCacheDir 删除目录里的缩略图缓存文件，返回删除数量与释放字节数。
+func clearCacheDir(dir string) (int, int64, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, 0, nil
+		}
 		return 0, 0, err
 	}
 
+	deleted := 0
+	var freed int64
 	for _, e := range entries {
 		if e.IsDir() || !isThumbnailCacheFile(e.Name()) {
 			continue
 		}
-		path := filepath.Join(s.cacheDir, e.Name())
+		path := filepath.Join(dir, e.Name())
 		fi, infoErr := e.Info()
 		var size int64
 		if infoErr == nil {
@@ -613,14 +737,10 @@ func (s *ThumbnailService) ClearAll() (deleted int, freedBytes int64, err error)
 		}
 		if rmErr := os.Remove(path); rmErr == nil {
 			deleted++
-			freedBytes += size
+			freed += size
 		}
 	}
-
-	// 清空内存 LRU(全部条目)
-	s.memCache.Purge()
-
-	return deleted, freedBytes, nil
+	return deleted, freed, nil
 }
 
 // Stats 返回缓存统计信息。

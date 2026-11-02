@@ -32,6 +32,18 @@ func IsImageFile(name string) bool {
 	return ImageExts[ext]
 }
 
+// NeedsBrowserConversion 判断该图片格式浏览器原生解不了，需要服务端转换。
+//
+// HEIC/HEIF 是 iPhone 照片的默认格式，TIFF 常见于扫描件与设计稿；
+// 浏览器拿到原文件只会显示破图，因此这类文件改由服务端转成 JPEG。
+func NeedsBrowserConversion(name string) bool {
+	switch lowerExt(name) {
+	case ".heic", ".heif", ".tif", ".tiff":
+		return true
+	}
+	return false
+}
+
 // VideoExts 支持的视频扩展名（小写，含点）。
 //
 // 选型：覆盖浏览器原生 `<video>` 元素能直接播放的常见容器。

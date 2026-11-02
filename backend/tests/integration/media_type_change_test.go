@@ -68,7 +68,7 @@ func TestMediaFileReplacedByDirectoryIsUnavailable(t *testing.T) {
 			_, validator := middleware.PathSafetyMiddleware([]string{h.root})
 			app := fiber.New(fiber.Config{DisableStartupMessage: true})
 			guard := middleware.ResourceParam(h.catalog, validator)
-			app.Get("/api/media/:id", guard, handlers.MediaHandler(nil, nil))
+			app.Get("/api/media/:id", guard, handlers.MediaHandler(nil, nil, nil))
 			app.Get("/api/images/:id/info", guard, handlers.ImageInfoHandler(h.catalog))
 			app.Get("/api/videos/:id/info", guard, handlers.VideoInfoHandler(nil, nil, h.catalog))
 			app.Get("/api/thumbs/:id", guard, handlers.ThumbHandler(thumbs))

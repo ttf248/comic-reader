@@ -77,7 +77,7 @@ func TestVideoStreamInvalidCacheFallsBackAndRebuilds(t *testing.T) {
 				id := h.catalog.ExternalID(src, services.ResourceFile)
 				_, validator := middleware.PathSafetyMiddleware([]string{h.root})
 				app := fiber.New(fiber.Config{DisableStartupMessage: true})
-				app.Get("/api/media/:id", middleware.ResourceParam(h.catalog, validator), handlers.MediaHandler(transcode, faststart))
+				app.Get("/api/media/:id", middleware.ResourceParam(h.catalog, validator), handlers.MediaHandler(transcode, faststart, nil))
 				url := "/api/media/" + id
 				conditional := httptest.NewRequest(http.MethodGet, url, nil)
 				conditional.Header.Set("If-None-Match", badETag)

@@ -48,7 +48,7 @@ func TestTranscodeCurrentVersionCacheOverridesOldFailure(t *testing.T) {
 	_, validator := middleware.PathSafetyMiddleware([]string{h.root})
 	app := fiber.New(fiber.Config{DisableStartupMessage: true})
 	guard := middleware.ResourceParam(h.catalog, validator)
-	app.Get("/api/media/:id", guard, handlers.MediaHandler(current, nil))
+	app.Get("/api/media/:id", guard, handlers.MediaHandler(current, nil, nil))
 	app.Get("/api/videos/:id/transcode/status", guard, handlers.TranscodeStatusHandler(current))
 	app.Get("/api/videos/:id/transcode/events", guard, handlers.TranscodeEventsHandler(current))
 	for _, mode := range []string{"same", "mtime", "size"} {

@@ -112,8 +112,27 @@ func (c *ImageConverter) Available() bool {
 // 失败时返回 ErrImageConvertUnavailable（ffmpeg 不可用 / 转换失败），
 // 调用方应回退到"不支持的格式"。
 func (c *ImageConverter) Convert(absPath string) (image.Image, error) {
+	img, _, err := c.convert(absPath, c.scaleW, c.scaleH)
+	return img, err
+}
+
+// ConvertJPEGBytes 把图片转成 JPEG 字节，最长边不超过 maxDim。
+//
+// 与 Convert 的区别：不再解码回位图，直接返回 ffmpeg 编码好的 JPEG，
+// 少一次解码 + 重编码，画质损失更小、内存占用也更低。用于"原图直出"
+// 这类浏览器原生解不了的格式（HEIC/HEIF/TIFF）。
+func (c *ImageConverter) ConvertJPEGBytes(absPath string, maxDim int) ([]byte, error) {
+	if maxDim <= 0 {
+		maxDim = 2560
+	}
+	_, out, err := c.convert(absPath, maxDim, maxDim)
+	return out, err
+}
+
+// convert 统一执行 ffmpeg 转换：返回解码后的位图与原始 JPEG 字节。
+func (c *ImageConverter) convert(absPath string, scaleW, scaleH int) (image.Image, []byte, error) {
 	if !c.Available() {
-		return nil, ErrImageConvertUnavailable
+		return nil, nil, ErrImageConvertUnavailable
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
 	defer cancel()
@@ -122,7 +141,7 @@ func (c *ImageConverter) Convert(absPath string) (image.Image, error) {
 	// 因此这里必须用 -filter_complex + -map，-vf 会直接报错。
 	filter := fmt.Sprintf(
 		"[0:v:0]scale=%d:%d:force_original_aspect_ratio=decrease[v]",
-		c.scaleW, c.scaleH,
+		scaleW, scaleH,
 	)
 	cmd := exec.CommandContext(ctx, c.ffmpegPath,
 		"-hide_banner",
@@ -141,25 +160,25 @@ func (c *ImageConverter) Convert(absPath string) (image.Image, error) {
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		if cmd.ProcessState == nil {
-			return nil, fmt.Errorf("%w: %s", ErrImageConvertUnavailable, err.Error())
+			return nil, nil, fmt.Errorf("%w: %s", ErrImageConvertUnavailable, err.Error())
 		}
 		if ctx.Err() == context.DeadlineExceeded {
-			return nil, fmt.Errorf("image convert timeout: %w", ctx.Err())
+			return nil, nil, fmt.Errorf("image convert timeout: %w", ctx.Err())
 		}
 		msg := strings.TrimSpace(stderr.String())
 		if msg == "" {
 			msg = err.Error()
 		}
-		return nil, fmt.Errorf("image convert: %s", msg)
+		return nil, nil, fmt.Errorf("image convert: %s", msg)
 	}
 	out := stdout.Bytes()
 	if len(out) == 0 {
-		return nil, fmt.Errorf("%w: empty output", ErrImageConvertUnavailable)
+		return nil, nil, fmt.Errorf("%w: empty output", ErrImageConvertUnavailable)
 	}
 
 	img, _, err := image.Decode(bytes.NewReader(out))
 	if err != nil {
-		return nil, fmt.Errorf("decode converted image: %w", err)
+		return nil, nil, fmt.Errorf("decode converted image: %w", err)
 	}
-	return img, nil
+	return img, out, nil
 }

@@ -178,6 +178,8 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 视频派生缓存仅命中非空普通文件，不跟随缓存条目自身的链接。空文件、目录及链接不会直接发送或用于 304 协商；空缓存按需重新生成，生成失败时沿用后续 faststart 或源文件流程，不返回缓存目录重定向。目录占位及其内容保留。
 
+浏览器原生解不了的图片格式（HEIC/HEIF/TIFF）不按原文件发送：服务端用 ffmpeg 转成 JPEG（最长边 2560）后再返回，`Content-Type` 为 `image/jpeg`，ETag 仍取源文件的 mtime+size，因此条件请求照常协商 304。转换结果按源文件 mtime+size 派生的键缓存在 `derived/converted/`，第二次访问直接命中缓存。ffmpeg 不可用或转换失败时返回 `415 unsupported_image_format`，前端显示"该图片无法显示"，不再把浏览器解不了的原文件当图片发出去。
+
 ### `GET /api/thumbs/:fileId`
 
 返回 JPEG 缩略图。视频尚无封面时返回 `404` 和 `code: video_cover_missing`。

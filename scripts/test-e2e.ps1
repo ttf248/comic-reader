@@ -29,6 +29,15 @@ try {
     [System.IO.File]::WriteAllBytes((Join-Path $sampleDir "page-$_.png"), $pngBytes)
   }
 
+  # 浏览器解不了的格式单独放一个相册：HEIC 走服务端转换路径，没有 ffmpeg
+  # 时返回 415，前端应显示明确提示而不是破图。单独放避免影响其它用例的
+  # 图片序号。
+  $formatDir = Join-Path (Join-Path $testRoot "media") "sample-format"
+  New-Item -ItemType Directory -Path $formatDir -Force | Out-Null
+  # 内容故意不是可解码的图像：模拟"格式不被支持 / 文件损坏"，服务端转换
+  # 会失败并返回 415。
+  [System.IO.File]::WriteAllBytes((Join-Path $formatDir "photo.heic"), [System.Text.Encoding]::ASCII.GetBytes("not a decodable image"))
+
   # 标签和排序使用真实扫描素材；名称、目录修改时间及媒体业务日期故意不同序。
   $taggedSamples = @(
     @{ Name = "A"; Modified = "2023-01-01T00:00:00Z"; MediaModified = "2025-01-01T00:00:00Z" },

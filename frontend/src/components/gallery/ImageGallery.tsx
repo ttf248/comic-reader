@@ -1,7 +1,15 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import {
+  memo,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useGalleryStore } from "../../store/galleryStore";
 import { imageUrl } from "../../api/images";
+import { ImageIcon } from "../common/Icon";
 
 interface Props {
   images: string[];
@@ -282,11 +290,10 @@ export default function ImageGallery({
         {...dataImageGalleryProps}
       >
         {current ? (
-          <img
+          <GalleryImage
             key={imgKey}
             src={imageUrl(current)}
             alt={`第 ${index + 1} 张`}
-            draggable={false}
             onDoubleClick={() => {
               const store = useGalleryStore.getState();
               if (store.zoom > 1) {
@@ -424,10 +431,9 @@ function DoublePage({ images, index, aspect, direction, imgKey }: DoubleProps) {
       {ordered.map((p, i) => (
         <div key={p.key + i} className="flex-1 min-w-0 flex justify-center">
           {p.src ? (
-            <img
+            <GalleryImage
               src={imageUrl(p.src)}
               alt={`第 ${p.key === "left" ? "左" : "右"} 页`}
-              draggable={false}
               loading="eager"
               className={`select-none ${pageClass()}`}
             />
@@ -506,10 +512,9 @@ const ContinuousImage = memo(function ContinuousImage({
 
   return (
     <div className="w-full flex justify-center" data-image-index={index}>
-      <img
+      <GalleryImage
         src={imageUrl(src)}
         alt={`第 ${index + 1} 张`}
-        draggable={false}
         loading={nearIndex ? "eager" : "lazy"}
         decoding={nearIndex ? "sync" : "async"}
         className="select-none scale-fade"
@@ -518,3 +523,58 @@ const ContinuousImage = memo(function ContinuousImage({
     </div>
   );
 });
+
+// 阅读器里的单张图片：加载失败时显示占位，而不是浏览器的破图图标。
+//
+// 失败是真实存在的：服务端没有 ffmpeg 时 HEIC/TIFF 会被拒绝（415），
+// 源文件被删除或损坏时也会 404。破图图标没有任何说明，用户无从判断
+// 是图片坏了还是网络断了。
+function GalleryImage({
+  src,
+  alt,
+  className,
+  style,
+  loading = "eager",
+  decoding = "async",
+  onDoubleClick,
+}: {
+  src: string;
+  alt: string;
+  className?: string;
+  style?: CSSProperties;
+  loading?: "eager" | "lazy";
+  decoding?: "sync" | "async";
+  onDoubleClick?: () => void;
+}) {
+  const [failed, setFailed] = useState(false);
+  // 换图后重置失败态，避免上一张的失败影响下一张。
+  useEffect(() => setFailed(false), [src]);
+
+  if (failed) {
+    return (
+      <div
+        className={`flex flex-col items-center justify-center gap-2 text-fg-subtle ${className ?? ""}`}
+        role="img"
+        aria-label={alt}
+        title="该图片无法显示"
+      >
+        <ImageIcon size={28} />
+        <span className="text-xs">该图片无法显示</span>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      draggable={false}
+      loading={loading}
+      decoding={decoding}
+      onError={() => setFailed(true)}
+      onDoubleClick={onDoubleClick}
+      className={className}
+      style={style}
+    />
+  );
+}

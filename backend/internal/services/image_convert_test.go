@@ -169,3 +169,90 @@ func TestDecodeImageReportsUnsupportedFormat(t *testing.T) {
 		t.Fatalf("认不出格式的损坏文件应返回 ErrUnsupportedFormat, got %v", err)
 	}
 }
+
+// TestGetConvertedImageRequiresConverter 验证没有转换器时整图转换直接
+// 返回"不支持的格式"，而不是把原文件（HEIC）当成图片发出去。
+func TestGetConvertedImageRequiresConverter(t *testing.T) {
+	dir := t.TempDir()
+	sample := filepath.Join(dir, "photo.heic")
+	if err := os.WriteFile(sample, []byte("not really an image"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	svc, err := NewThumbnailService(ThumbnailOptions{CacheDir: filepath.Join(dir, "cache")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.GetConvertedImage(sample); err != ErrUnsupportedFormat {
+		t.Fatalf("无转换器时应返回 ErrUnsupportedFormat, got %v", err)
+	}
+}
+
+// TestGetConvertedImageConvertsAndCaches 验证整图转换能产出 JPEG，
+// 且第二次访问命中磁盘缓存（不重复调用 ffmpeg）。
+func TestGetConvertedImageConvertsAndCaches(t *testing.T) {
+	ffmpeg := ffmpegPathForTest(t)
+	if ffmpeg == "" {
+		t.Skip("未找到 ffmpeg，跳过整图转换用例")
+	}
+	sample := os.Getenv("THUMB_TEST_HEIC")
+	if sample == "" {
+		t.Skip("设置 THUMB_TEST_HEIC 指向一张真实 HEIC 样本后再跑")
+	}
+	if _, err := os.Stat(sample); err != nil {
+		t.Skipf("HEIC 样本不存在: %v", err)
+	}
+
+	dir := t.TempDir()
+	local := filepath.Join(dir, "sample.heic")
+	data, err := os.ReadFile(sample)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(local, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cacheDir := filepath.Join(dir, "cache")
+	svc, err := NewThumbnailService(ThumbnailOptions{
+		CacheDir: cacheDir,
+		ImageConverter: NewImageConverter(ImageConverterOptions{
+			FFmpegPath: ffmpeg,
+			Timeout:    30_000_000_000,
+		}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err := svc.GetConvertedImage(local)
+	if err != nil {
+		t.Fatalf("整图转换失败: %v", err)
+	}
+	if len(out) == 0 || !isJPEG(out) {
+		t.Fatal("整图转换结果应是有效 JPEG")
+	}
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(out))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Width > convertedMaxDim || cfg.Height > convertedMaxDim {
+		t.Fatalf("整图尺寸超限: %dx%d", cfg.Width, cfg.Height)
+	}
+
+	// 磁盘缓存：转换目录里应有一个 jpg。
+	entries, err := os.ReadDir(filepath.Join(cacheDir, "converted"))
+	if err != nil {
+		t.Fatalf("读取转换缓存目录失败: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("转换缓存应有 1 个文件, got %d", len(entries))
+	}
+
+	// 第二次访问命中缓存，返回同样的字节。
+	again, err := svc.GetConvertedImage(local)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(out, again) {
+		t.Fatal("缓存命中时应返回同样的字节")
+	}
+}

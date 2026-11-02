@@ -4412,3 +4412,17 @@ test("窄屏设置项的标签保持一行，不被挤成竖排", async ({ page 
   expect(label!.height, "设置项标签被压成竖排").toBeLessThan(40);
   expect(label!.width, "设置项标签宽度不足一行").toBeGreaterThan(40);
 });
+
+test("浏览器解不了的图片给出明确提示而不是破图", async ({ page, request }) => {
+  const nodes = await scannedNodes(request);
+  const album = nodes.find((node) => node.name === "sample-format")!;
+  await page.goto(`/albums/${album.id}`);
+  await expect(
+    page.getByRole("button", { name: "打开第 1 张", exact: true }),
+  ).toBeVisible();
+
+  // 素材里的 photo.heic 浏览器解不了；服务端无法转换时返回 415，
+  // 阅读器应显示提示，而不是浏览器的破图图标。
+  await page.getByRole("button", { name: "打开第 1 张", exact: true }).click();
+  await expect(page.getByText("该图片无法显示")).toBeVisible();
+});
