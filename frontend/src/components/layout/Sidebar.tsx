@@ -1,5 +1,5 @@
 import { NavLink, useLocation } from "react-router-dom";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import {
   HomeIcon,
@@ -13,9 +13,18 @@ import {
 } from "../common/Icon";
 import { useNavigate } from "react-router-dom";
 import { useUIStore } from "../../store/uiStore";
-import { useLibraryActivitySummary } from "../../hooks/useLibrary";
+import {
+  useLibraryActivitySummary,
+  useLibraryDashboard,
+} from "../../hooks/useLibrary";
 import { libraryApi } from "../../api/library";
 import { albumRoute } from "../../utils/path";
+import { thumbUrl } from "../../api/thumbs";
+import { nodeSummaryToCard } from "../../utils/libraryCard";
+import {
+  continueReadingTarget,
+  readingPercent,
+} from "../../utils/continueReading";
 
 interface Props {
   collapsed: boolean;
@@ -69,11 +78,21 @@ export default function Sidebar({
     if (!randomAlbum.isPending) randomAlbum.mutate("all");
   };
 
-  const onShuffleUnread = () => {
-    if (!randomAlbum.isPending && unreadCount > 0) {
-      randomAlbum.mutate("unread");
-    }
-  };
+  // 「接着读」迷你卡：侧栏底部常驻最近在读的一本。
+  //
+  // 侧栏中段原本是一整片空白（4 个导航项撑不满 208px × 900px），
+  // 而"接着看上一本"是全局最高频的动作。与其留白，不如把最高频的
+  // 入口钉在侧栏底部 —— 像播放器的"正在播放"条。
+  // 数据来自与首页同一个 dashboard 查询（React Query 共享缓存，不额外请求）。
+  const dashboard = useLibraryDashboard();
+  const continueCard = useMemo(() => {
+    const first = dashboard.data?.dashboard.inProgress?.[0];
+    if (!first) return null;
+    return {
+      ...nodeSummaryToCard(first.album),
+      progress: { index: first.pageIndex, total: first.pageCount },
+    };
+  }, [dashboard.data]);
 
   // 选中态：强调色浅底 + 前景色文字（文字保持 --fg，图标用强调色）。
   // 这样在六套强调色下都能保持稳定对比度 —— 选中文字直接用强调色时，
@@ -226,35 +245,18 @@ export default function Sidebar({
           {!collapsed && <span className="truncate">随机一本</span>}
         </button>
 
-        {/* 随机未读 — 仅在有未读时高亮可点;没未读时变灰提示 */}
-        <button
-          onClick={onShuffleUnread}
-          disabled={unreadCount === 0 || randomAlbum.isPending}
-          title={
-            unreadCount === 0
-              ? "没有未读相册"
-              : `从 ${unreadCount} 本未读里随机挑一本`
-          }
-          className={`w-full flex items-center gap-2.5 h-9 rounded-md text-[13.5px] transition-colors ${
-            collapsed ? "justify-center px-0" : "px-2.5"
-          } ${
-            unreadCount === 0
-              ? "text-fg-disabled cursor-not-allowed"
-              : "text-fg-muted hover:bg-bg-subtle hover:text-accent"
-          }`}
-        >
-          <SparkleIcon size={16} className="shrink-0" />
-          {!collapsed && (
-            <>
-              <span className="truncate">随机未读</span>
-              {unreadCount > 0 && (
-                <span className="ml-auto text-[11.5px] tabular-nums text-fg-subtle">
-                  {unreadCount}
-                </span>
-              )}
-            </>
-          )}
-        </button>
+        {/* 「接着读」迷你卡：见上方说明。
+            「随机未读」原本也在这里，与「未读」页 / 首页的"随机未读"重复，
+            已移除 —— 同一动作只保留一个入口。 */}
+        {!collapsed && continueCard && (
+          <ContinueMiniCard
+            title={continueCard.displayTitle ?? continueCard.title}
+            coverPath={continueCard.coverPath}
+            index={continueCard.progress?.index ?? 0}
+            total={continueCard.progress?.total ?? 0}
+            onOpen={() => navigate(continueReadingTarget(continueCard))}
+          />
+        )}
       </div>
 
       {!collapsed && (
@@ -285,5 +287,64 @@ function Logo() {
     <div className="relative w-7 h-7 shrink-0 rounded-lg bg-accent flex items-center justify-center text-accent-contrast font-display font-semibold text-[13px] tracking-tighter">
       L
     </div>
+  );
+}
+
+// 「接着读」迷你卡：侧栏底部常驻最近在读的一本。
+//
+// 版式参照播放器的"正在播放"条：左侧封面缩略图 + 右侧标题与进度。
+// 点击直接回到上次看到的那一页（与首页封面台同一份跳转逻辑）。
+function ContinueMiniCard({
+  title,
+  coverPath,
+  index,
+  total,
+  onOpen,
+}: {
+  title: string;
+  coverPath?: string;
+  index: number;
+  total: number;
+  onOpen: () => void;
+}) {
+  const percent = readingPercent({ index, total });
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      title={`继续阅读「${title}」`}
+      className="mt-2 w-full rounded-lg bg-bg-subtle hover:bg-bg-strong/70 p-2 flex gap-2.5 items-center text-left transition-colors group/mini focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+    >
+      <span className="relative w-9 h-12 shrink-0 rounded overflow-hidden bg-bg-strong block">
+        {coverPath ? (
+          <img
+            src={thumbUrl(coverPath)}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            className="w-full h-full object-cover object-[50%_30%]"
+          />
+        ) : null}
+      </span>
+      <span className="min-w-0 flex-1">
+        {/* 用 --fg-muted 而不是 --fg-subtle：卡片底色是 bg-bg-subtle，
+            fg-subtle 在这个底上只有 4.4:1（AA 要求 4.5:1）。 */}
+        <span className="block text-[12px] text-fg-muted leading-none mb-1">
+          接着读
+        </span>
+        <span className="block text-[12.5px] font-medium text-fg truncate leading-tight group-hover/mini:text-accent transition-colors">
+          {title}
+        </span>
+        <span className="mt-1.5 block h-[3px] rounded-full bg-bg-strong overflow-hidden">
+          <span
+            className="block h-full rounded-full bg-accent"
+            style={{ width: `${percent}%` }}
+          />
+        </span>
+        <span className="mt-1 block text-[12px] text-fg-muted tabular-nums">
+          看到 {index + 1} / {total}
+        </span>
+      </span>
+    </button>
   );
 }

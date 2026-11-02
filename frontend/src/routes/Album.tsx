@@ -1124,8 +1124,10 @@ function VideoAlbumView({
           </div>
 
           <div className="flex items-end gap-8 flex-wrap">
-            {/* 大封面（视频时由 VideoCoverImage 处理抽帧） */}
-            <div className="relative w-32 h-44 sm:w-40 sm:h-56 rounded-lg overflow-hidden border border-border shadow-md shrink-0 bg-bg-subtle">
+            {/* 大封面（视频时由 VideoCoverImage 处理抽帧）
+                底色用深色媒体画布：视频是 16:9，竖框里必然有上下留边，
+                留边落在浅灰底上会被读成"图缺了一块"。 */}
+            <div className="relative w-32 h-44 sm:w-40 sm:h-56 rounded-lg overflow-hidden border border-border shadow-md shrink-0 bg-bg-media">
               <VideoCoverImage
                 videoPath={detail.coverImage}
                 alt={detail.name}
@@ -1134,10 +1136,13 @@ function VideoAlbumView({
             </div>
 
             <div className="min-w-0 flex-1">
-              <h1 className="font-display text-2xl sm:text-[28px] font-semibold tracking-[-0.01em] leading-tight">
+              {/* 与图片相册页共用 .page-title / .btn —— 视频相册页此前是
+                  一套独立写死的字号与按钮样式，同一个应用的两种标题大小
+                  会让"哪个才是标准"变得不可预期。 */}
+              <h1 className="page-title">
                 {detail.name}
               </h1>
-              <div className="flex items-center gap-2 text-sm text-fg-muted mt-2 flex-wrap">
+              <div className="flex items-center gap-2 text-[13px] text-fg-muted mt-2 flex-wrap">
                 {detail.tags.length > 0 && (
                   <>
                     <span className="text-fg">{detail.tags.join(" · ")}</span>
@@ -1166,27 +1171,28 @@ function VideoAlbumView({
                 )}
               </div>
 
-              <div className="mt-5 flex items-center gap-2 flex-wrap">
-                <button
-                  onClick={() => openVideo(0)}
-                  className="inline-flex items-center gap-2 h-10 px-5 rounded-lg bg-accent text-accent-contrast hover:bg-accent-hover transition-colors text-sm font-medium shadow-sm"
-                >
-                  <PlayFilledIcon size={13} />
-                  <span>开始播放</span>
-                </button>
+            </div>
 
-                <button
-                  onClick={toggleFavorite}
-                  className={`inline-flex items-center gap-1.5 h-10 px-3.5 rounded-lg text-[13px] transition-colors ${
-                    isFav
-                      ? "bg-warning/10 text-warning border border-warning/30"
-                      : "border border-border-faint text-fg-muted hover:text-fg hover:bg-bg-subtle"
-                  }`}
-                >
-                  <StarIcon size={13} filled={isFav} />
-                  <span>{isFav ? "已收藏" : "收藏"}</span>
-                </button>
-              </div>
+            {/* CTA 行：与标题块并排，落在同一行的右端。
+                旧版把按钮塞在标题下面，右侧整片空着 —— 和首页那条
+                "横幅空洞"是同一类问题：内容集中在左侧，右边没有重量。 */}
+            <div className="flex items-center gap-2 flex-wrap shrink-0">
+              <button onClick={() => openVideo(0)} className="btn btn-primary">
+                <PlayFilledIcon size={13} />
+                <span>开始播放</span>
+              </button>
+
+              <button
+                onClick={toggleFavorite}
+                className={`btn ${
+                  isFav
+                    ? "bg-warning/10 text-warning border border-warning/30"
+                    : "btn-outline"
+                }`}
+              >
+                <StarIcon size={13} filled={isFav} />
+                <span>{isFav ? "已收藏" : "收藏"}</span>
+              </button>
             </div>
           </div>
         </div>

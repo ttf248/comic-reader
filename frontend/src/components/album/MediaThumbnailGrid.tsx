@@ -78,7 +78,11 @@ export default function MediaThumbnailGrid({
             <ThumbImage
               fileId={file}
               alt={`第 ${index + 1} 张`}
-              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+              /* 裁切但保留页面上半部分：object-contain 会让横构图照片在
+                 竖格里留下大片上下留边，整页网格看起来像一堆灰框；
+                 改成 object-cover + 偏上取景（漫画页的标题与人物头部
+                 都在上半部分），既有内容又不产生噪音。 */
+              className="w-full h-full object-cover object-[50%_25%] transition-transform duration-300 group-hover:scale-[1.03]"
             />
             {isCurrent && (
               <div className="absolute top-1.5 left-1.5 bg-accent text-accent-fg text-[11.5px] font-medium px-1.5 py-0.5 rounded">

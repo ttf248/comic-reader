@@ -242,6 +242,11 @@ function GridCard({
   const unread = showUnreadMark(data, showUnreadBadge);
   // 只有配置了多个媒体根才需要标来源。
   const multiRoot = useUIStore((s) => s.multiRoot);
+  // 时长是否已知：视频角标只在有真实时长时才显示数字。
+  const hasDuration =
+    typeof data.durationSec === "number" &&
+    Number.isFinite(data.durationSec) &&
+    data.durationSec >= 0;
 
   // 悬停预览：350ms 后弹出，移出卡片或预览延迟 150ms 关闭。
   // （延迟是为了让用户能从卡片顺利移到预览上，预览是 portal 元素，
@@ -420,7 +425,9 @@ function GridCard({
         {data.coverKind === "video" && (
           <div className="pointer-events-none inline-flex items-center gap-1 bg-bg-elevated/90 backdrop-blur text-fg text-[11.5px] font-medium px-1.5 h-5 rounded shadow-sm">
             <PlayFilledIcon size={9} className="text-accent" />
-            <span>{formatDuration(data.durationSec)}</span>
+            {/* 时长未知时不要显示 "—"：一个破折号看起来像"读不出来 / 坏了"，
+                而不是"视频时长暂不可用"。只留播放图标。 */}
+            {hasDuration && <span>{formatDuration(data.durationSec)}</span>}
           </div>
         )}
         {overlayAction}
@@ -469,6 +476,11 @@ function ListCard({
   const unread = showUnreadMark(data, showUnreadBadge);
   // 只有配置了多个媒体根才需要标来源。
   const multiRoot = useUIStore((s) => s.multiRoot);
+  // 时长是否已知：视频角标只在有真实时长时才显示数字。
+  const hasDuration =
+    typeof data.durationSec === "number" &&
+    Number.isFinite(data.durationSec) &&
+    data.durationSec >= 0;
 
   return (
     // 列表行：缩略图压到 56px，行高固定 86px —— 一屏能扫到更多条目。
@@ -490,7 +502,8 @@ function ListCard({
           {data.coverKind === "video" && (
             <div className="pointer-events-none absolute top-1 right-1 inline-flex items-center gap-1 bg-bg-elevated/90 backdrop-blur text-fg text-[11.5px] font-medium px-1.5 h-5 rounded shadow-sm">
               <PlayFilledIcon size={9} className="text-accent" />
-              <span>{formatDuration(data.durationSec)}</span>
+              {/* 时长未知时不显示数字：破折号看起来像"读不出来 / 坏了"。 */}
+              {hasDuration && <span>{formatDuration(data.durationSec)}</span>}
             </div>
           )}
           {/* 状态角位（未读点）在列表视图改放到标题行：

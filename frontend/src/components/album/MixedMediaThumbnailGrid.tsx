@@ -86,7 +86,12 @@ export default function MixedMediaThumbnailGrid({
 
         return (
           <div
-            className={`group relative w-full aspect-[3/4] bg-bg-subtle rounded overflow-hidden ${
+            /* 混合网格里图片与视频共用一个格子：图片用浅底，
+               视频用深色媒体画布，让宽银幕的上下留边读成"电影画幅"
+               而不是"缺图"。 */
+            className={`group relative w-full aspect-[3/4] rounded overflow-hidden ${
+              isImage ? "bg-bg-subtle" : "bg-bg-media"
+            } ${
               isCurrent ? "ring-2 ring-accent" : isPast ? "opacity-70" : ""
             }`}
           >

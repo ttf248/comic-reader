@@ -52,6 +52,9 @@ export default function CardCover({ data, loading = "lazy", compact }: Props) {
         path={paths[0]}
         alt={data.title}
         loading={loading}
+        /* 相册封面统一偏上取景：漫画封面的标题与人物头部在���方，
+           居中裁切会把它们切掉；横向照片本身是横向裁切，不受影响。 */
+        position="50% 25%"
       />
     );
   }
@@ -104,10 +107,12 @@ function CoverImage({
   path,
   alt,
   loading,
+  position = "50% 50%",
 }: {
   path: string;
   alt: string;
   loading: "lazy" | "eager";
+  position?: string;
 }) {
   const [failed, setFailed] = useState(false);
 
@@ -120,6 +125,7 @@ function CoverImage({
       loading={loading}
       decoding="async"
       onError={() => setFailed(true)}
+      style={{ objectPosition: position }}
       className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
     />
   );

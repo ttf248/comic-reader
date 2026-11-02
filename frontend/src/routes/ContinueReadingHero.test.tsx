@@ -67,15 +67,15 @@ describe('ContinueReadingHero', () => {
     expect(onContinue.mock.calls[0][0].progress?.index).toBe(12)
   })
 
-  it('cards 超过 6 张时只显示前 6 张', () => {
-    const eight = Array.from({ length: 8 }, (_, i) =>
+  it('cards 超过 11 张时只显示 1 张主封面 + 10 张货架', () => {
+    const many = Array.from({ length: 14 }, (_, i) =>
       makeCard(`/p${i}`, `P${i}`, i, 30),
     )
-    const { container } = renderHero(eight)
+    const { container } = renderHero(many)
     const cardButtons = container.querySelectorAll('button[aria-label^="将"][aria-label$="标记为已读"]')
-    // 8 张里网格渲染只取前 6。每张卡有 1 个 X button 标 aria-label
-    // "将X标记为已读"，所以正好 6 个
-    expect(cardButtons.length).toBe(6)
+    // 1 张主封面（"标记为已读"文字按钮）+ 10 张货架海报（X 按钮）= 11 个。
+    // 上限存在的意义是"首页不铺满 32 本在读"，而不是"只给 6 本"。
+    expect(cardButtons.length).toBe(11)
   })
 
   it('空 cards 仍渲染(由 Home 条件决定是否显示)', () => {

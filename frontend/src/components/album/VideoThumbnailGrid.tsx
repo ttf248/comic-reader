@@ -56,7 +56,9 @@ export default function VideoThumbnailGrid({
         const name = info?.name ?? `视频 ${index + 1}`;
         const duration = info?.duration;
         return (
-          <div className="group relative w-full aspect-[3/4] bg-bg-subtle rounded overflow-hidden">
+          // 视频用 16:9 画幅，不再塞进 3:4 —— 竖着框住宽银幕会留下
+          // 上下两条空白，看起来像"图缺了一块"。
+          <div className="group relative w-full aspect-video bg-bg-media rounded overflow-hidden">
             <VideoCoverImage videoPath={video} alt={name} loading="lazy" />
             <button
               type="button"
@@ -92,7 +94,7 @@ export default function VideoThumbnailGrid({
 function VideoPlaceholder() {
   return (
     <div
-      className="w-full aspect-[3/4] rounded bg-bg-subtle animate-pulse"
+      className="w-full aspect-video rounded bg-bg-media animate-pulse"
       aria-hidden="true"
     />
   );

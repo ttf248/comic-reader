@@ -133,7 +133,10 @@ export function ContinueReadingHero({
   onClearAll,
 }: ContinueReadingHeroProps) {
   const featured = cards[0];
-  const rest = cards.slice(1, 6);
+  // 货架展示 10 本（而不是 6 本）：货架是"还有更多"的可视化 ——
+  // 6 本在宽屏上只占半行，右侧留一大块空白，看起来像排版没做完；
+  // 10 本刚好把一整行铺满并溢出，渐隐 + 横向滚动明确表达"还有"。
+  const rest = cards.slice(1, 11);
 
   return (
     <section className="page-shell pt-2 pb-10" data-testid="continue-hero">

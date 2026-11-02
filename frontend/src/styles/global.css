@@ -237,6 +237,19 @@ button:not(:disabled):active {
     }
   }
 
+  /* 首页专用：标题让位给主角。
+     首页有一张 2:3 的大封面当主角，如果页标题还占 30px，
+     全页最大的字就成了一句导航性标签（"图像库"），内容反而被压下去。
+     有主角的页面用这个变体，把字号让给 .hero-title。 */
+  .page-title--compact {
+    font-size: 24px;
+  }
+  @media (max-width: 640px) {
+    .page-title--compact {
+      font-size: 20px;
+    }
+  }
+
   /* --- 主角标题：首页"继续阅读"那一本 ---
      层级必须高于区块标题（17px），否则界面框架又会比内容大。
      只在一个地方出现，全站唯一。 */

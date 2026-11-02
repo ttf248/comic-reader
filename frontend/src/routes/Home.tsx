@@ -18,6 +18,7 @@ import YearTimeline from "../components/home/YearTimeline";
 import { ContinueReadingHero, UnreadHero } from "../components/home/HomeHeroes";
 import { useUIStore } from "../store/uiStore";
 import { albumRoute, decodeFavPath } from "../utils/path";
+import { continueReadingTarget } from "../utils/continueReading";
 import { compareDatesDesc } from "../utils/date";
 import type { GalleryContextEntry } from "../utils/galleryContext";
 import {
@@ -321,28 +322,9 @@ export default function Home() {
 
   // 「继续上次」直跳画廊：进首页最大的目的是「接着看」，
   // 中转 Album 详情会多一次点击，对随手翻翻的场景不友好。
-  //
-  // type 推断：
-  //  - imageCount > 0（混合 / 纯图）→ type=image（Gallery 缺省值，显式传更稳）
-  //  - imageCount === 0 && videoCount > 0（纯视频相册）→ type=video
-  // 不传 type 时 Gallery 把当前相册当图库,纯视频相册会显示「这个文件夹没有图片」。
+  // 跳转目标的拼装集中在 utils/continueReading.ts，侧栏的迷你卡复用同一份逻辑。
   const onContinue = (card: CardData) => {
-    if (card.variant !== "album") {
-      navigate(card.to);
-      return;
-    }
-    const idx = card.progress?.index ?? 0;
-    const imgs = card.imageCount ?? 0;
-    const vids = card.videoCount ?? 0;
-    const galleryType: "image" | "video" =
-      imgs > 0 ? "image" : vids > 0 ? "video" : "image";
-    const qs = new URLSearchParams({
-      path: decodeFavPath(card.to),
-      index: String(idx),
-      name: card.title,
-      type: galleryType,
-    });
-    navigate(`/gallery?${qs.toString()}`);
+    navigate(continueReadingTarget(card));
   };
 
   // 年份筛选的"全部图像"section 顶部 chip
@@ -356,7 +338,7 @@ export default function Home() {
       <section className="page-shell pt-9 pb-6">
         <div className="flex items-end justify-between gap-6 flex-wrap">
           <div className="min-w-0">
-            <h1 className="page-title">图像库</h1>
+            <h1 className="page-title page-title--compact">图像库</h1>
             <p className="text-[13px] text-fg-muted mt-2">
               {manifest ? (
                 <>
