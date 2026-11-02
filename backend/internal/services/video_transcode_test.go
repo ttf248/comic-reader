@@ -1039,3 +1039,28 @@ func TestParseProgressLine(t *testing.T) {
 		t.Errorf("zero total: got %v, want 0.5", job.progress)
 	}
 }
+
+func TestEtaSeconds(t *testing.T) {
+	// 刚开始:进度为 0,剩余时间未知。
+	if got := etaSeconds(0, time.Now()); got != 0 {
+		t.Errorf("进度为 0 时 etaSeconds = %d, want 0", got)
+	}
+	// 任务还没开始(没有打点):同样未知。
+	if got := etaSeconds(0.5, time.Time{}); got != 0 {
+		t.Errorf("未开始时 etaSeconds = %d, want 0", got)
+	}
+	// 跑了 100 秒、完成 25%:按比例还剩 300 秒。
+	started := time.Now().Add(-100 * time.Second)
+	got := etaSeconds(0.25, started)
+	if got < 290 || got > 310 {
+		t.Errorf("etaSeconds(0.25, 已耗时 100s) = %d, want 约 300", got)
+	}
+	// 进度接近完成:剩余时间趋近 0。
+	if got := etaSeconds(1, started); got != 0 {
+		t.Errorf("进度 100%% 时 etaSeconds = %d, want 0", got)
+	}
+	// 异常估算封顶 24 小时,避免吓到用户。
+	if got := etaSeconds(0.0001, time.Now().Add(-100*time.Second)); got != 24*60*60 {
+		t.Errorf("极小进度时 etaSeconds = %d, want %d", got, 24*60*60)
+	}
+}

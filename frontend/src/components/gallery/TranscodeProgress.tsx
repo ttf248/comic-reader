@@ -41,11 +41,9 @@ const STATUS_TEXT: Record<TranscodeStatusValue, { title: string; desc?: string }
  */
 export default function TranscodeProgress({ src, onReady, onDismiss }: Props) {
   const [status, setStatus] = useState<TranscodeStatus | null>(null)
-  const [etaSec, setEtaSec] = useState<number>(0)
 
   useEffect(() => {
     setStatus(null)
-    setEtaSec(0)
     let closed = false
     let close: (() => void) | null = null
     let retryTimer: ReturnType<typeof setTimeout> | null = null
@@ -55,9 +53,9 @@ export default function TranscodeProgress({ src, onReady, onDismiss }: Props) {
       if (closed) return
       close = subscribeTranscodeEvents(src, {
         onProgress: (s) => {
+          // 剩余时间由服务端按「已耗时 × 剩余比例」估算(etaSec);
+          // 进度刚开始时服务端给 0,此时不显示预计时间。
           setStatus(s)
-          // 简单 ETA 估算：拿最近两次 progress 差算速率
-          // V1 不做精细实现(等下个版本接 ffmpeg out_time_ms 算精确 ETA)
         },
         onDone: (s) => {
           setStatus(s)
@@ -100,6 +98,7 @@ export default function TranscodeProgress({ src, onReady, onDismiss }: Props) {
 
   const text = STATUS_TEXT[status.status] || STATUS_TEXT.unknown
   const pct = Math.round(status.progress * 100)
+  const etaSec = status.etaSec ?? 0
 
   // 终态（cached / failed / unavailable）:不一样的展示
   if (status.status === 'cached') {

@@ -290,6 +290,9 @@ type transcodeJob struct {
 	mu       sync.Mutex
 	progress float64              // 最新进度(0-1)
 	subs     []chan TranscodeInfo // SSE 订阅者;job 结束时全部关闭
+	// startedAt:任务真正开始跑的时刻(拿到并发槽位时打点)。
+	// 用来估算剩余时间:已耗时 × (1 - 进度) / 进度。
+	startedAt time.Time
 }
 
 // TranscodeOptions 构造选项。
@@ -531,6 +534,7 @@ func (s *TranscodeService) currentState(absPath string) (TranscodeInfo, *transco
 		switch jobStatus {
 		case TranscodeStatusRunning:
 			info.Status = TranscodeStatusRunning
+			info.EtaSec = etaSeconds(info.Progress, job.startedAt)
 			return info, job
 		case TranscodeStatusQueued:
 			info.Status = TranscodeStatusQueued
@@ -966,6 +970,7 @@ func (s *TranscodeService) ensureRunning(absPath, cachePath string, fi os.FileIn
 		// 拿到槽位,开始转码
 		job.mu.Lock()
 		job.status = TranscodeStatusRunning
+		job.startedAt = time.Now()
 		job.mu.Unlock()
 		s.broadcast(job) // 状态变 Running,推给订阅者
 		// 懒加载:首次转码时再选编码器
@@ -1212,11 +1217,36 @@ func parseProgressLine(line string, totalDurSec float64, job *transcodeJob, svc 
 //   - 订阅者 channel 容量 8,满了就丢;订阅者慢不会拖慢 ffmpeg
 //   - 任务结束(cached / failed)后 defer broadcast 还会跑一次,
 //     broadcast 内部判断 job.done 关闭后会关掉所有 sub channel
+// etaSeconds 估算转码剩余秒数(best-effort)。
+//
+// 依据「已耗时 × 剩余比例」线性外推：ffmpeg 只给已处理时长,不给速率,
+// 所以这是估算值而不是精确值。进度为 0(刚开始)或任务未开始时返回 0,
+// 表示未知 —— 上界封顶 24 小时,避免异常估算吓到用户。
+func etaSeconds(progress float64, startedAt time.Time) int {
+	if progress <= 0 || startedAt.IsZero() {
+		return 0
+	}
+	elapsed := time.Since(startedAt).Seconds()
+	if elapsed <= 0 {
+		return 0
+	}
+	remaining := elapsed * (1 - progress) / progress
+	if remaining <= 0 {
+		return 0
+	}
+	const maxETA = 24 * 60 * 60
+	if remaining > maxETA {
+		return maxETA
+	}
+	return int(remaining)
+}
+
 func (s *TranscodeService) broadcast(job *transcodeJob) {
 	job.mu.Lock()
 	info := TranscodeInfo{
 		Status:   job.status,
 		Progress: job.progress,
+		EtaSec:   etaSeconds(job.progress, job.startedAt),
 	}
 	if job.status == TranscodeStatusFailed && job.err != nil {
 		info.Error = publicTranscodeError(job.err)
