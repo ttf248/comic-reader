@@ -36,8 +36,8 @@ export default function YearTimeline({ groups, gridRef }: Props) {
   if (groups.length === 0) return null
 
   return (
-    <div className="px-6 lg:px-10 max-w-[1400px] mx-auto w-full">
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+    <div className="page-shell">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 lg:gap-4">
         {groups.map((g) => (
           <YearCard key={g.year ?? 'other'} group={g} gridRef={gridRef} />
         ))}
@@ -115,7 +115,7 @@ function YearCard({
         {validCovers.length === 0 ? (
           // 0 张：纯色背景 + 中央显示年份
           <div className="absolute inset-0 bg-bg-subtle flex flex-col items-center justify-center">
-            <div className="text-[10px] uppercase tracking-[0.18em] text-fg-subtle font-medium">
+            <div className="text-[12.5px] text-fg-subtle font-medium">
               {isOther ? '未分类' : '年份'}
             </div>
             <div
@@ -168,11 +168,11 @@ function YearCard({
         {/* === 顶部渐变 + 年份大字（左上）=== */}
         {validCovers.length > 0 && (
           <div className="absolute top-0 left-0 right-0 p-3.5 sm:p-4 bg-gradient-to-b from-black/65 via-black/30 to-transparent pointer-events-none">
-            <div className="text-[9px] sm:text-[10px] uppercase tracking-[0.18em] text-white/75 font-medium">
+            <div className="text-[12px] text-white/80 font-medium">
               {isOther ? '未分类' : '年份'}
             </div>
             <div
-              className={`font-display leading-none tracking-[-0.03em] tabular-nums text-white mt-1 ${
+              className={`font-display leading-none tracking-[-0.03em] tabular-nums text-white mt-0.5 ${
                 isOther
                   ? 'text-xl sm:text-2xl font-semibold'
                   : 'text-3xl sm:text-4xl font-semibold'
@@ -184,8 +184,8 @@ function YearCard({
         )}
 
         {/* === 底部渐变 + 统计（左下）=== */}
-        <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-3.5 bg-gradient-to-t from-black/65 via-black/25 to-transparent">
-          <div className="flex items-center gap-2.5 text-[11px] text-white/90 tabular-nums">
+        <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-3.5 bg-gradient-to-t from-black/70 via-black/30 to-transparent">
+          <div className="flex items-center gap-2.5 text-[12.5px] text-white/90 tabular-nums">
             <span className="inline-flex items-center gap-1">
               <ImageIcon size={10} className="text-white/70" />
               <span>{formatNum(group.imageTotal)}</span>
@@ -201,11 +201,6 @@ function YearCard({
               <span>{totalCovers}</span>
             </span>
           </div>
-          {canOpenDirectly && (
-            <div className="mt-0.5 text-[10px] text-white/55">
-              点击打开
-            </div>
-          )}
         </div>
       </div>
 

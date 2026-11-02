@@ -37,7 +37,7 @@ import {
   ClockIcon,
   CloseIcon,
   ImageIcon,
-  CalendarIcon,
+  SparkleIcon,
 } from "../components/common/Icon";
 
 export default function Home() {
@@ -351,37 +351,32 @@ export default function Home() {
     <div className="min-h-full">
       {/* ScanProgress 已提升到 AppShell，跨路由常驻显示 */}
 
-      {/* === Hero: 标题 + 统计 + 4 动作卡 + 重新扫描 === */}
-      <section className="px-6 lg:px-10 pt-12 pb-8 max-w-[1400px] mx-auto w-full">
-        <div className="flex items-end justify-between gap-8 flex-wrap mb-6">
+      {/* === 页头：标题 + 库统计 + 次级入口 === */}
+      <section className="page-shell pt-9 pb-6">
+        <div className="flex items-end justify-between gap-6 flex-wrap">
           <div className="min-w-0">
-            <div className="text-[11px] uppercase tracking-[0.18em] text-fg-subtle font-medium">
-              库 · Library
-            </div>
-            <h1 className="font-display text-[44px] leading-[1.04] font-semibold tracking-[-0.02em] mt-2.5">
-              图像库
-            </h1>
-            <p className="text-sm text-fg-muted mt-3.5">
+            <h1 className="page-title">图像库</h1>
+            <p className="text-[13px] text-fg-muted mt-2">
               {manifest ? (
                 <>
                   {/* 标题描述整个库，而不是当前根目录下的条目数：
                       下面的标签页已经区分「文件夹 / 集合」，这里再叫
                       「N 个文件夹」既不准确也容易和标签页打架。 */}
-                  <span className="tabular-nums text-fg">
+                  <span className="tabular-nums text-fg font-medium">
                     {manifest.statistics.albumCount}
                   </span>{" "}
                   本相册
                   {manifest.statistics.collectionCount > 0 && (
                     <>
                       {" · "}
-                      <span className="tabular-nums text-fg">
+                      <span className="tabular-nums text-fg font-medium">
                         {manifest.statistics.collectionCount}
                       </span>{" "}
                       个集合
                     </>
                   )}
                   {manifest.scannedAt && (
-                    <span className="text-fg-subtle ml-1.5">
+                    <span className="text-fg-subtle ml-1">
                       · 上次更新 {formatTime(manifest.scannedAt)}
                     </span>
                   )}
@@ -391,93 +386,54 @@ export default function Home() {
               )}
             </p>
           </div>
-          <button
-            onClick={() => startScan.mutate()}
-            disabled={startScan.isPending || sse.isRunning}
-            className="inline-flex items-center gap-1.5 h-11 px-3.5 rounded-lg text-[13px] text-fg-muted hover:text-fg hover:bg-bg-subtle border border-border-faint transition-colors disabled:opacity-50"
-            title="扫描 (Ctrl+S)"
-          >
-            <RefreshIcon size={13} />
-            <span>{scanLabel}</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => startScan.mutate()}
+              disabled={startScan.isPending || sse.isRunning}
+              className="btn btn-sm btn-outline"
+              title="扫描 (Ctrl+S)"
+            >
+              <RefreshIcon size={13} />
+              <span>{scanLabel}</span>
+            </button>
+          </div>
         </div>
 
-        {/* === 4 动作卡（核心入口） === */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          {/* 1. 主 CTA：继续上次（如果有进度）or 随机翻翻 */}
-          {primaryAlbum ? (
-            <ActionCard
-              /* 「继续上次」进的是图片阅读器（进度也是图片页码），
-                 用图片框而不是播放三角——播放三角会让人以为是视频。 */
-              icon={<ImageIcon size={14} />}
-              title="继续上次"
-              subtitle={primaryAlbum.title}
-              meta={
-                primaryAlbum.progress
-                  ? `${primaryAlbum.progress.index + 1}/${primaryAlbum.progress.total}`
-                  : ""
-              }
-              variant="primary"
-              onClick={() => onContinue(primaryAlbum)}
-            />
-          ) : (
-            <ActionCard
-              icon={<ShuffleIcon size={14} />}
-              title="随机翻翻"
-              subtitle="随便看一本"
-              meta="(R)"
-              variant="primary"
-              disabled={!hasContent}
+        {/* 次级入口：没有在读内容时，「随机一本」升为主操作。
+            有在读内容时它退到次级，避免和「继续阅读」抢主位。 */}
+        {!primaryAlbum && (
+          <div className="mt-5 flex items-center gap-2 flex-wrap">
+            <button
               onClick={onShuffle}
-            />
-          )}
-
-          {/* 2. 随机翻翻（如果主 CTA 是继续上次，则并排展示） */}
-          {primaryAlbum && (
-            <ActionCard
-              icon={<ShuffleIcon size={14} />}
-              title="随机翻翻"
-              subtitle="随便看一本"
-              meta="(R)"
-              variant="secondary"
               disabled={!hasContent}
-              onClick={onShuffle}
-            />
-          )}
-
-          {/* 3. 最近打开 */}
-          <ActionCard
-            icon={<ClockIcon size={14} />}
-            title="最近打开"
-            subtitle="按时间倒序"
-            variant="secondary"
-            onClick={() => navigate("/recents")}
-          />
-
-          {/* 4. 收藏（仅当有收藏时） */}
-          {favCount > 0 && (
-            <ActionCard
-              icon={<StarIcon size={13} filled className="text-warning" />}
-              title="收藏"
-              subtitle={`${favCount} 项`}
-              variant="secondary"
-              onClick={() => navigate("/favorites")}
-            />
-          )}
-        </div>
+              className="btn btn-primary"
+            >
+              <ShuffleIcon size={14} />
+              随机一本
+              <span className="text-[12px] opacity-70">R</span>
+            </button>
+            <QuickLink to="/unread" icon={<SparkleIcon size={14} />}>
+              未读
+              {unreadCount > 0 && (
+                <span className="tabular-nums text-fg-subtle">
+                  {unreadCount}
+                </span>
+              )}
+            </QuickLink>
+            <QuickLink to="/recents" icon={<ClockIcon size={14} />}>
+              最近
+            </QuickLink>
+            {favCount > 0 && (
+              <QuickLink to="/favorites" icon={<StarIcon size={13} filled />}>
+                收藏
+                <span className="tabular-nums text-fg-subtle">{favCount}</span>
+              </QuickLink>
+            )}
+          </div>
+        )}
       </section>
 
-      {/* === 未读 hero(有未读时置顶 6 张,直接引导用户进下一本)== */}
-      {hasContent && unreadCards.length > 0 && (
-        <UnreadHero
-          cards={unreadCards}
-          count={unreadCount}
-          onShuffle={onShuffleUnread}
-          onMarkRead={onMarkReadUnread}
-        />
-      )}
-
-      {/* === 继续阅读 hero(有进行中的相册时,展示前 6 张)== */}
+      {/* === 继续阅读（有在读相册时置顶，是首页第一主入口） === */}
       {hasContent && inProgressAll.length > 0 && (
         <ContinueReadingHero
           cards={inProgressAll}
@@ -487,53 +443,82 @@ export default function Home() {
         />
       )}
 
+      {/* === 未读推荐(有未读时置顶 6 张,直接引导用户进下一本)== */}
+      {hasContent && unreadCards.length > 0 && (
+        <UnreadHero
+          cards={unreadCards}
+          count={unreadCount}
+          onShuffle={onShuffleUnread}
+          onMarkRead={onMarkReadUnread}
+        />
+      )}
+
+      {/* 有在读内容时，把「随机一本 / 未读 / 最近 / 收藏」放在继续阅读之后，
+          视觉上作为同一组次级入口。 */}
+      {hasContent && primaryAlbum && (
+        <div className="page-shell pt-6 pb-2 flex items-center gap-2 flex-wrap">
+          <button onClick={onShuffle} disabled={!hasContent} className="btn btn-sm btn-outline">
+            <ShuffleIcon size={13} />
+            随机一本
+          </button>
+          <QuickLink to="/unread" icon={<SparkleIcon size={13} />}>
+            未读
+            {unreadCount > 0 && (
+              <span className="tabular-nums text-fg-subtle">{unreadCount}</span>
+            )}
+          </QuickLink>
+          <QuickLink to="/recents" icon={<ClockIcon size={13} />}>
+            最近
+          </QuickLink>
+          {favCount > 0 && (
+            <QuickLink to="/favorites" icon={<StarIcon size={12} filled />}>
+              收藏
+              <span className="tabular-nums text-fg-subtle">{favCount}</span>
+            </QuickLink>
+          )}
+        </div>
+      )}
+
       {/* === 时间线（仅当有内容时显示） === */}
       {hasContent && yearGroups.length > 0 && (
-        <div className="py-6">
-          <SectionHeader
-            title="时间线"
-            subtitle="按年份浏览 — 点击海报打开该年份,点右上漏斗可筛选下方网格"
-            icon={<CalendarIcon size={13} />}
-          />
+        <section className="page-shell pt-8">
+          <div className="flex items-center gap-3 mb-4">
+            <h2 className="section-title">时间线</h2>
+            <span className="section-meta">按年份浏览</span>
+          </div>
           <YearTimeline groups={yearGroups} gridRef={gridRef} />
-        </div>
+        </section>
       )}
 
       {/* === 全部图像 === */}
       {hasContent && (
         <section
           ref={gridRef}
-          className="max-w-[1400px] mx-auto w-full pt-8 pb-4 scroll-mt-6"
+          className="page-shell pt-10 pb-4 scroll-mt-6"
         >
-          <div className="px-6 lg:px-10 flex items-center gap-2 flex-wrap">
-            <LibraryIcon size={12} className="text-fg-muted" />
-            <h2 className="text-[11px] uppercase tracking-[0.18em] text-fg-muted font-medium">
+          <div className="flex items-center gap-3 flex-wrap">
+            <h2 className="section-title">
               {yearFilterActive ? "该年份的图像" : "全部图像"}
             </h2>
-            <span className="text-[11px] text-fg-subtle tabular-nums">
-              {filtered.length}
-            </span>
+            <span className="section-meta tabular-nums">{filtered.length}</span>
             {yearFilterActive && (
               <button
                 onClick={() => setYearFilter(null)}
-                className="inline-flex items-center gap-1.5 h-6 px-2 rounded-md bg-accent-soft text-accent text-[11px] font-medium hover:bg-accent-soft/70 transition-colors"
+                className="chip bg-accent-soft text-accent"
                 title="清除年份筛选"
               >
                 <span>{yearFilterLabel}</span>
-                <CloseIcon size={10} />
+                <CloseIcon size={11} />
               </button>
             )}
             {favCount > 0 && !yearFilterActive && (
-              <>
-                <span className="text-fg-subtle/40 mx-1">·</span>
-                <button
-                  onClick={() => navigate("/favorites")}
-                  className="inline-flex items-center gap-1 text-[11px] text-warning/90 hover:text-warning transition-colors"
-                >
-                  <StarIcon size={10} filled />
-                  <span>{favCount} 收藏</span>
-                </button>
-              </>
+              <button
+                onClick={() => navigate("/favorites")}
+                className="chip"
+              >
+                <StarIcon size={11} filled className="text-warning" />
+                <span>{favCount} 收藏</span>
+              </button>
             )}
           </div>
 
@@ -582,14 +567,14 @@ export default function Home() {
                   {yearFilterActive && (
                     <button
                       onClick={() => setYearFilter(null)}
-                      className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md border border-border hover:bg-bg-subtle text-sm"
+                      className="btn btn-outline"
                     >
                       清除年份筛选
                     </button>
                   )}
                   <button
                     onClick={() => useSearchStore.getState().reset()}
-                    className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md border border-border hover:bg-bg-subtle text-sm"
+                    className="btn btn-outline"
                   >
                     清除筛选
                   </button>
@@ -597,7 +582,7 @@ export default function Home() {
               }
             />
           ) : (
-            <div className="px-6 lg:px-10 pb-10">
+            <div className="pb-10">
               <AlbumGrid items={filtered} variant={viewMode} />
             </div>
           )}
@@ -606,23 +591,20 @@ export default function Home() {
 
       {/* 空状态 — 尚未扫描 */}
       {!hasContent && !isLoadingInitial && (
-        <section className="px-6 lg:px-10 max-w-[1400px] mx-auto w-full">
+        <section className="page-shell">
           <EmptyState
             title="欢迎使用本地画廊"
             description="首次使用请先设置媒体目录，再开始扫描。目录离线时可在设置中修复。"
             icon={<LibraryIcon size={20} />}
             action={
               <div className="flex items-center gap-3">
-                <Link
-                  to="/settings"
-                  className="inline-flex items-center h-9 px-4 rounded-md border border-border text-sm hover:bg-bg-hover"
-                >
+                <Link to="/settings" className="btn btn-outline">
                   设置媒体目录
                 </Link>
                 <button
                   onClick={() => startScan.mutate()}
                   disabled={startScan.isPending}
-                  className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md bg-accent text-accent-contrast hover:bg-accent-hover text-sm disabled:opacity-50"
+                  className="btn btn-primary"
                 >
                   {startScan.isPending ? "启动中…" : "开始扫描"}
                 </button>
@@ -632,7 +614,7 @@ export default function Home() {
         </section>
       )}
 
-      <div className="h-12" />
+      <div className="h-8" />
     </div>
   );
 }
@@ -661,101 +643,24 @@ function extractYearOrNull(name: string): number | null {
 
 // ===== 复用组件 =====
 
-function ActionCard({
+// 次级入口：轻量的幽灵按钮 + 计数。取代旧版"动作卡"——
+// 旧版四张大卡占据大量面积却只承载极少信息，还会和内容区争夺注意力。
+function QuickLink({
+  to,
   icon,
-  title,
-  subtitle,
-  meta,
-  variant,
-  disabled,
-  onClick,
+  children,
 }: {
+  to: string;
   icon: React.ReactNode;
-  title: string;
-  subtitle?: string;
-  meta?: string;
-  variant: "primary" | "secondary";
-  disabled?: boolean;
-  onClick: () => void;
+  children: React.ReactNode;
 }) {
-  const base =
-    "group relative flex flex-col gap-2 rounded-xl border p-4 sm:p-5 text-left transition-all duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/40";
-  const primaryCls =
-    "bg-accent text-accent-contrast border-transparent hover:bg-accent-hover shadow-sm hover:shadow-md";
-  const secondaryCls =
-    "bg-bg-elevated text-fg border-border hover:border-border-strong hover:-translate-y-0.5 hover:shadow-md";
-  const disabledCls =
-    "opacity-40 cursor-not-allowed hover:!translate-y-0 hover:!shadow-sm";
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={`${base} ${variant === "primary" ? primaryCls : secondaryCls} ${
-        disabled ? disabledCls : ""
-      }`}
+    <Link
+      to={to}
+      className="btn btn-sm btn-ghost border border-border-faint"
     >
-      <div
-        className={`inline-flex items-center justify-center w-7 h-7 rounded-md ${
-          variant === "primary"
-            ? "bg-accent-contrast/15 text-accent-contrast"
-            : "bg-bg-subtle text-fg-muted group-hover:text-fg"
-        }`}
-      >
-        {icon}
-      </div>
-      <div className="min-w-0">
-        <div
-          className={`text-[14px] font-medium leading-tight ${
-            variant === "primary" ? "text-accent-contrast" : "text-fg"
-          }`}
-        >
-          {title}
-        </div>
-        {subtitle && (
-          <div
-            className={`text-[11.5px] mt-0.5 truncate ${
-              variant === "primary"
-                ? "text-accent-contrast/70"
-                : "text-fg-muted"
-            }`}
-            title={subtitle}
-          >
-            {subtitle}
-          </div>
-        )}
-      </div>
-      {meta && (
-        <div
-          className={`absolute top-3 right-3 text-[10px] tabular-nums ${
-            variant === "primary" ? "text-accent-contrast/60" : "text-fg-subtle"
-          }`}
-        >
-          {meta}
-        </div>
-      )}
-    </button>
-  );
-}
-
-function SectionHeader({
-  title,
-  subtitle,
-  icon,
-}: {
-  title: string;
-  subtitle?: string;
-  icon?: React.ReactNode;
-}) {
-  return (
-    <div className="px-6 lg:px-10 max-w-[1400px] mx-auto w-full flex items-center gap-3 mb-4">
       {icon}
-      <h2 className="text-[11px] uppercase tracking-[0.18em] text-fg-muted font-medium">
-        {title}
-      </h2>
-      {subtitle && (
-        <span className="text-[11.5px] text-fg-subtle">{subtitle}</span>
-      )}
-    </div>
+      <span>{children}</span>
+    </Link>
   );
 }
