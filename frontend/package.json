@@ -14,6 +14,8 @@
     "test:e2e": "pwsh -NoProfile -File ../scripts/test-e2e.ps1",
     "lint": "eslint . --ext .ts,.tsx",
     "audit:contrast": "node scripts/contrast-audit.mjs",
+    "audit:layout": "node scripts/layout-audit.mjs",
+    "shot": "node scripts/screenshot.mjs",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\""
   },
   "dependencies": {
