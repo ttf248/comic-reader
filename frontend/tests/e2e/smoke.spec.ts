@@ -4686,7 +4686,7 @@ test("重设计后的首页把继续阅读放在首屏，未读区不再逐张�
   }
 });
 
-for (const width of [1440, 390]) {
+for (const width of [1920, 1440, 1024, 768, 390]) {
   test(`${width}px 下首页、相册与阅读器均无横向溢出`, async ({ page }) => {
     const nodes = await scannedNodes(page.request);
     const album = nodes.find((node) => node.name === "sample-album")!;
