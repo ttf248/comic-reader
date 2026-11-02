@@ -83,6 +83,7 @@ function CompactSwitch({
           type="button"
           className="inline-flex items-center justify-center w-8 h-8 rounded-md text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors relative"
           title={`主题: ${theme === "light" ? "浅色" : theme === "dark" ? "深色" : "系统"} · 强调色`}
+          aria-label={`主题: ${theme === "light" ? "浅色" : theme === "dark" ? "深色" : "系统"} · 强调色`}
         >
           <Icon size={14} />
           <span

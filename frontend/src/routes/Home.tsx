@@ -456,35 +456,11 @@ export default function Home() {
         />
       )}
 
-      {/* 有在读内容时，把「随机一本 / 未读 / 最近 / 收藏」放在继续阅读之后，
-          视觉上作为同一组次级入口。 */}
-      {hasContent && primaryAlbum && (
-        <div className="page-shell pt-6 pb-2 flex items-center gap-2 flex-wrap">
-          <button onClick={onShuffle} disabled={!hasContent} className="btn btn-sm btn-outline">
-            <ShuffleIcon size={13} />
-            随机一本
-          </button>
-          <QuickLink
-            to="/unread"
-            icon={<SparkleIcon size={13} />}
-            count={unreadCount > 0 ? unreadCount : undefined}
-          >
-            未读
-          </QuickLink>
-          <QuickLink to="/recents" icon={<ClockIcon size={13} />}>
-            最近
-          </QuickLink>
-          {favCount > 0 && (
-            <QuickLink
-              to="/favorites"
-              icon={<StarIcon size={12} filled />}
-              count={favCount}
-            >
-              收藏
-            </QuickLink>
-          )}
-        </div>
-      )}
+      {/* 有在读内容时不再重复一排「随机一本 / 未读 / 最近 / 收藏」：
+          这四项侧边栏里都有（随机在侧栏底部一组），在首页正文中间再摆一排
+          既是重复按钮，又把「继续阅读 → 未读 → 时间线 → 全部图像」这条
+          浏览主线切成了两段。没有在读内容时，主操作位由上面的
+          「随机一本」按钮承担。 */}
 
       {/* === 时间线（仅当有内容时显示） === */}
       {hasContent && yearGroups.length > 0 && (

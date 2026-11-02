@@ -1221,6 +1221,7 @@ function PathField({
         type="button"
         onClick={() => setPicking(true)}
         title="选择本地目录"
+        aria-label="选择本地目录"
         className={`inline-flex items-center justify-center ${btnSize} rounded-md border border-border-faint text-fg-muted hover:text-fg hover:border-border-strong transition-colors disabled:opacity-40`}
       >
         <FolderSearchIcon size={iconSize} />
@@ -1231,6 +1232,7 @@ function PathField({
           type="button"
           onClick={onOpenInExplorer}
           title="在系统文件管理器中打开此目录"
+          aria-label="在系统文件管理器中打开此目录"
           className={`inline-flex items-center justify-center ${btnSize} rounded-md border border-border-faint text-fg-muted hover:text-fg hover:border-border-strong transition-colors`}
         >
           <FolderOpenIcon size={iconSize} />
