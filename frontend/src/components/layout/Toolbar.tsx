@@ -76,7 +76,7 @@ export default function Toolbar({
   }, [queryClient, sse.isComplete, sse.scanId, pushToast]);
 
   return (
-    <header className="h-14 flex items-center gap-4 px-5 lg:px-7 border-b border-border-faint glass">
+    <header className="h-14 flex items-center gap-2 sm:gap-4 px-3 sm:px-5 lg:px-7 border-b border-border-faint glass">
       {/* 左侧：极简字标（窄屏隐藏） */}
       <div className="hidden lg:flex items-center gap-2 min-w-0">
         <span className="font-display text-sm text-fg-muted">
@@ -88,7 +88,7 @@ export default function Toolbar({
         </span>
       </div>
       {/* 窄屏：返回按钮 */}
-      <div className="flex items-center gap-1 lg:hidden">
+      <div className="flex items-center gap-1 lg:hidden shrink-0">
         {onOpenMobileNav && (
           <button
             type="button"
@@ -113,13 +113,13 @@ export default function Toolbar({
       </div>
 
       {!onGallery && (
-        <div className="flex-1 max-w-[560px]">
+        <div className="flex-1 min-w-0 max-w-[560px]">
           <GlobalSearch />
         </div>
       )}
-      {onGallery && <div className="flex-1" />}
+      {onGallery && <div className="flex-1 min-w-0" />}
 
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 shrink-0">
         <button
           onClick={() =>
             window.dispatchEvent(new CustomEvent("comic:open-help"))

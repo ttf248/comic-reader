@@ -169,36 +169,40 @@ button:not(:disabled):active {
 }
 
 /* === 统一的 kbd 样式 === */
-.kbd {
-  display: inline-flex;
-  align-items: center;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  line-height: 1;
-  padding: 3px 6px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--bg-elevated);
-  color: var(--fg-muted);
-  box-shadow: 0 1px 0 var(--border-faint);
-  min-width: 18px;
-  justify-content: center;
-}
+/* 放在 @layer components 里：否则未分层的自定义规则会盖掉 Tailwind 的
+   工具类（例如 GlobalSearch 里的 `hidden sm:inline-flex kbd` 会永远显示）。 */
+@layer components {
+  .kbd {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    line-height: 1;
+    padding: 3px 6px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--bg-elevated);
+    color: var(--fg-muted);
+    box-shadow: 0 1px 0 var(--border-faint);
+    min-width: 18px;
+    justify-content: center;
+  }
 
-/* 暗色画布上的 kbd（Gallery）：用半透明白 */
-.kbd-light {
-  display: inline-flex;
-  align-items: center;
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  line-height: 1;
-  padding: 2px 5px;
-  border-radius: 4px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.75);
-  min-width: 16px;
-  justify-content: center;
+  /* 暗色画布上的 kbd（Gallery）：用半透明白 */
+  .kbd-light {
+    display: inline-flex;
+    align-items: center;
+    font-family: var(--font-mono);
+    font-size: 10.5px;
+    line-height: 1;
+    padding: 2px 5px;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.08);
+    color: rgba(255, 255, 255, 0.75);
+    min-width: 16px;
+    justify-content: center;
+  }
 }
 
 /* === 输入框聚焦时的微妙 inset 高光（与组件 focus-within 配合） === */

@@ -4277,3 +4277,36 @@ test("时间线年份卡的筛选按钮可访问名不与卡片本身混淆", as
   ).toBeVisible();
   await expect(page).toHaveURL(/\/$/);
 });
+
+test("窄屏下顶栏不横向溢出，筛选标签保持一行", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await expect(
+    page.getByRole("combobox", { name: "搜索文件夹或标签" }),
+  ).toBeVisible();
+
+  // 顶栏控件不能把整页撑宽，否则窄屏下会出现横向滚动。
+  const width = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    innerWidth: window.innerWidth,
+  }));
+  expect(width.scrollWidth).toBeLessThanOrEqual(width.innerWidth);
+
+  // 快捷键提示在窄屏隐藏，把宽度让给搜索框。
+  await expect(page.locator("header kbd")).toBeHidden();
+
+  // 视图标签不能被压成竖排文字（一个字一行）。
+  const chips = await page.evaluate(() => {
+    const matched = [...document.querySelectorAll("button")].filter((button) =>
+      /^(全部|文件夹|集合|标签)\s*\d*$/.test((button.textContent ?? "").trim()),
+    );
+    return matched.map((button) => ({
+      text: (button.textContent ?? "").trim(),
+      height: Math.round(button.getBoundingClientRect().height),
+    }));
+  });
+  expect(chips.length).toBeGreaterThan(0);
+  for (const chip of chips) {
+    expect(chip.height, `标签「${chip.text}」被压成竖排`).toBeLessThan(40);
+  }
+});

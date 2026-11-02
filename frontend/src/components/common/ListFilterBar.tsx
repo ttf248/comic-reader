@@ -34,15 +34,15 @@ export function ListFilterBar({
 
   return (
     <div className="px-6 lg:px-10 max-w-[1400px] mx-auto w-full">
-      <div className="flex items-center justify-between gap-3 border-t border-border-faint py-3">
-        <div className="flex items-center gap-1 flex-wrap min-w-0">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-border-faint py-3">
+        <div className="flex items-center gap-1 flex-wrap min-w-0 w-full sm:w-auto sm:flex-1">
           {viewChips?.map((v) => {
             const active = activeViewKey === v.key;
             return (
               <button
                 key={v.key}
                 onClick={() => onChangeView?.(v.key)}
-                className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-[12.5px] transition-colors ${
+                className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-[12.5px] whitespace-nowrap transition-colors ${
                   active
                     ? "bg-bg-strong text-fg"
                     : "text-fg-muted hover:bg-bg-subtle hover:text-fg"

@@ -54,8 +54,8 @@ export default function GlobalSearch() {
   }
 
   return (
-    <div className="relative w-full max-w-md">
-      <div className="input-focus-ring flex items-center gap-2 bg-bg-subtle rounded-md px-3 h-9 focus-within:bg-bg-elevated focus-within:border focus-within:border-border-strong">
+    <div className="relative w-full max-w-md min-w-0">
+      <div className="input-focus-ring flex items-center gap-2 bg-bg-subtle rounded-md px-3 h-9 focus-within:bg-bg-elevated focus-within:border focus-within:border-border-strong min-w-0">
         <SearchIcon size={14} className="text-fg-subtle shrink-0" />
         <input
           value={query}
@@ -95,7 +95,7 @@ export default function GlobalSearch() {
             }
           }}
           placeholder="搜索文件夹 / 标签…"
-          className="flex-1 bg-transparent border-0 outline-none text-sm placeholder:text-fg-subtle"
+          className="flex-1 min-w-0 bg-transparent border-0 outline-none text-sm placeholder:text-fg-subtle"
           role="combobox"
           aria-autocomplete="list"
           aria-controls="global-search-results"
@@ -104,7 +104,7 @@ export default function GlobalSearch() {
             activeIndex >= 0 ? `global-search-result-${activeIndex}` : undefined
           }
         />
-        <kbd className="hidden sm:inline-block kbd">/</kbd>
+        <kbd className="hidden sm:inline-flex kbd">/</kbd>
       </div>
 
       {open && hits.length > 0 && (
