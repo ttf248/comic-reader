@@ -30,7 +30,6 @@ import {
   cardMatchesQuery,
 } from "../utils/libraryCard";
 import {
-  PlayFilledIcon,
   StarIcon,
   ShuffleIcon,
   RefreshIcon,
@@ -408,7 +407,9 @@ export default function Home() {
           {/* 1. 主 CTA：继续上次（如果有进度）or 随机翻翻 */}
           {primaryAlbum ? (
             <ActionCard
-              icon={<PlayFilledIcon size={14} />}
+              /* 「继续上次」进的是图片阅读器（进度也是图片页码），
+                 用图片框而不是播放三角——播放三角会让人以为是视频。 */
+              icon={<ImageIcon size={14} />}
               title="继续上次"
               subtitle={primaryAlbum.title}
               meta={

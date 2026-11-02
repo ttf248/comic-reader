@@ -23,7 +23,6 @@ import { compareDatesDesc, formatRelative } from "../utils/date";
 import { formatSize } from "../utils/format";
 import {
   ChevronLeftIcon,
-  ReaderIcon,
   StarIcon,
   FolderIcon,
   PlayFilledIcon,
@@ -652,7 +651,10 @@ function AlbumView({
                     onClick={() => openGallery(startIndex)}
                     className="inline-flex items-center gap-2 h-10 px-5 rounded-lg bg-accent text-accent-contrast hover:bg-accent-hover transition-colors text-sm font-medium shadow-sm"
                   >
-                    <PlayFilledIcon size={13} />
+                    {/* 与下面「开始浏览」同一个动作，图标也要一致：
+                        阅读器里看的是照片，用图片框而不是播放三角
+                        （播放三角会让人以为相册里是视频）。 */}
+                    <ImageIcon size={13} />
                     <span>继续上次</span>
                     <span className="text-[11px] opacity-70 tabular-nums">
                       {Math.min(progress!.pageIndex + 1, currentPageCount)}/
@@ -667,7 +669,7 @@ function AlbumView({
                     }}
                     className="inline-flex items-center gap-2 h-10 px-5 rounded-lg bg-accent text-accent-contrast hover:bg-accent-hover transition-colors text-sm font-medium shadow-sm"
                   >
-                    <ReaderIcon size={13} />
+                    <ImageIcon size={13} />
                     <span>开始浏览</span>
                   </button>
                 )}

@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   act,
+  cleanup,
   fireEvent,
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -16,6 +18,7 @@ import {
   useTagAlbums,
 } from "../hooks/useLibrary";
 import { useFavorites } from "../hooks/useFavorites";
+import { useImageActivity } from "../hooks/useImageActivity";
 import { useSearchStore } from "../store/searchStore";
 import { historyApi } from "../api/prefs";
 import { useUIStore } from "../store/uiStore";
@@ -27,6 +30,9 @@ vi.mock("../hooks/useLibrary", () => ({
   useTagAlbums: vi.fn(),
 }));
 vi.mock("../hooks/useFavorites", () => ({ useFavorites: vi.fn() }));
+vi.mock("../hooks/useImageActivity", () => ({
+  useImageActivity: vi.fn(() => ({ data: undefined })),
+}));
 vi.mock("../api/fs", () => ({
   fsApi: { capabilities: vi.fn().mockResolvedValue({ allowOsOpen: false }) },
 }));
@@ -242,6 +248,62 @@ describe("Album", () => {
     renderAlbum("/albums/a_mix");
 
     expect(screen.getByRole("heading", { name: title })).toBeInTheDocument();
+  });
+
+  // 「继续上次」和「开始浏览」是同一个动作（进图片阅读器），
+  // 之前一个用阅读图标、一个用视频播放三角，用户会以为相册里是视频。
+  it("「继续上次」与「开始浏览」用同一个阅读图标", () => {
+    const mockAlbum = () => {
+      vi.mocked(useLibraryNodes).mockReturnValue({
+        data: {
+          revision: 4,
+          missing: [],
+          items: [
+            {
+              id: "a_mix",
+              kind: "album",
+              name: "混合相册",
+              imageCount: 10,
+              videoCount: 0,
+            },
+          ],
+        },
+        isLoading: false,
+      } as never);
+      vi.mocked(useAlbumMedia).mockReturnValue({
+        data: {
+          pages: [{ items: [{ id: "f_first", kind: "image", index: 0 }] }],
+        },
+        hasNextPage: false,
+        isFetchingNextPage: false,
+        fetchNextPage: vi.fn(),
+      } as never);
+    };
+    const iconOf = (el: HTMLElement) =>
+      el.querySelector("svg")?.innerHTML ?? "";
+
+    mockAlbum();
+    const fresh = renderAlbum("/albums/a_mix");
+    const startIcon = iconOf(
+      within(fresh.container).getByRole("button", { name: /开始浏览/ }),
+    );
+    cleanup();
+
+    vi.mocked(useImageActivity).mockReturnValue({
+      data: {
+        albumId: "a_mix",
+        mediaKind: "image",
+        pageIndex: 3,
+        pageCount: 10,
+      },
+    } as never);
+    mockAlbum();
+    const resumed = renderAlbum("/albums/a_mix");
+    const resumeIcon = iconOf(
+      within(resumed.container).getByRole("button", { name: /继续上次/ }),
+    );
+
+    expect(resumeIcon).toBe(startIcon);
   });
 
   it("分页失败保留相册并提供不取消活动请求的重试", () => {
