@@ -10,12 +10,15 @@ interface Props {
   images?: string[];
 }
 
-// 页码跳转条：
-// - 左：页码输入（直接敲数字回车跳）
+// 张数跳转条：
+// - 左：张数输入（直接敲数字回车跳）
 // - 中：横向拖拽进度条
 // - 右：上一张 / 下一张按钮 + 「第 N / 总 M」
 // - 拖拽时浮出 5-6 张缩略图条，让翻页所见即所得
-// 设计目标：让 100+ 页的合集不再「翻到手酸」。
+// 设计目标：让 100+ 张的合集不再「翻到手酸」。
+//
+// 用词与全局一致：图片按「张」计数（相册卡片与网格都用「X 张」），
+// 不再沿用漫画域的「页」。
 export default function PageSlider({ total, index, onJump, images }: Props) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
@@ -163,17 +166,17 @@ export default function PageSlider({ total, index, onJump, images }: Props) {
             );
           })}
           <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[11px] text-white/70 tabular-nums">
-            第 {scrubIndex + 1} / {total} 页
+            第 {scrubIndex + 1} / {total} 张
           </div>
         </div>
       )}
 
-      {/* 页码输入 / 显示 */}
+      {/* 张数输入 / 显示 */}
       {editing ? (
         <input
           ref={inputRef}
           value={draft}
-          aria-label="页码"
+          aria-label="跳转到第几张"
           onChange={(e) => setDraft(e.target.value.replace(/[^\d]/g, ""))}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
@@ -193,7 +196,7 @@ export default function PageSlider({ total, index, onJump, images }: Props) {
         <button
           onClick={startEditing}
           className="min-w-[44px] h-7 px-1.5 rounded text-[12px] tabular-nums text-white/85 hover:bg-white/10 transition-colors"
-          title="跳转到指定页 (G)"
+          title="跳转到指定张 (G)"
         >
           {safeIndex + 1}
         </button>
@@ -227,7 +230,7 @@ export default function PageSlider({ total, index, onJump, images }: Props) {
 
       {/* 快捷键提示 */}
       <span className="text-[10px] text-white/40 hidden md:inline">
-        <kbd className="kbd-light">G</kbd> 跳页
+        <kbd className="kbd-light">G</kbd> 跳转
       </span>
     </div>
   );

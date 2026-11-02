@@ -179,7 +179,7 @@ export const SHORTCUTS: Shortcut[] = [
   {
     id: "gotoPage",
     label: "G",
-    description: "跳到指定页（输入数字回车）",
+    description: "跳到指定张（输入数字回车）",
     combo: "g",
     group: "image",
   },

@@ -246,7 +246,7 @@ test("扫描并打开示例相册", async ({ page }) => {
     })
     .toBe(1);
   await page.goto(`/gallery?path=${encodeURIComponent(albumId)}`);
-  await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("2");
+  await expect(page.getByTitle("跳转到指定张 (G)")).toHaveText("2");
 });
 
 for (const recovery of ["manual", "automatic"] as const) {
@@ -947,7 +947,7 @@ for (const kind of ["image", "video"] as const) {
           element.currentTime = 5;
           element.volume = 1;
         });
-      } else await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("1");
+      } else await expect(page.getByTitle("跳转到指定张 (G)")).toHaveText("1");
       const initialURL = page.url();
       const opener = page.getByTitle("更多", { exact: true });
       if (menuType === "popover") await opener.click();
@@ -982,7 +982,7 @@ for (const kind of ["image", "video"] as const) {
             video.evaluate((element: HTMLVideoElement) => element.currentTime),
           )
           .toBeCloseTo(5, 1);
-      else await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("1");
+      else await expect(page.getByTitle("跳转到指定张 (G)")).toHaveText("1");
       await page.keyboard.press("Escape");
       await expect(menu).not.toBeVisible();
       await expect(page).toHaveURL(initialURL);
@@ -1029,7 +1029,7 @@ for (const kind of ["image", "video"] as const) {
         )
         .toBeCloseTo(5, 1);
     } else {
-      await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("1");
+      await expect(page.getByTitle("跳转到指定张 (G)")).toHaveText("1");
       await page.keyboard.press("Control+g");
       await expect(page.locator('input[inputmode="numeric"]')).toHaveCount(0);
       await page.keyboard.press("g");
@@ -1037,7 +1037,7 @@ for (const kind of ["image", "video"] as const) {
       await expect(input).toBeFocused();
       await input.fill("2");
       await input.press("Enter");
-      await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("2");
+      await expect(page.getByTitle("跳转到指定张 (G)")).toHaveText("2");
     }
     await back.focus();
     await page.keyboard.press("Space");
@@ -1235,7 +1235,7 @@ for (const kind of ["image", "video"] as const) {
         element.muted = false;
         element.currentTime = 5;
       });
-    } else await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("1");
+    } else await expect(page.getByTitle("跳转到指定张 (G)")).toHaveText("1");
     const opener = page.getByTitle("更多", { exact: true });
     await opener.click();
     await page.getByRole("menuitem", { name: "快捷键", exact: false }).click();
@@ -1285,7 +1285,7 @@ for (const kind of ["image", "video"] as const) {
           (element: HTMLVideoElement) => element.paused && !element.muted,
         ),
       ).toBe(true);
-    } else await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("1");
+    } else await expect(page.getByTitle("跳转到指定张 (G)")).toHaveText("1");
     await page.keyboard.press("Escape");
     await expect(dialog).not.toBeVisible();
     await expect(page).toHaveURL(/\/gallery\?/);
@@ -4186,7 +4186,7 @@ test("配置保存等待 LAN 会话建立后再发送后续写入", async ({ pag
   }
 });
 
-test("阅读器按 G 跳页时预填值被选中，输入页码直接替换而不是追加", async ({
+test("阅读器按 G 跳转时预填值被选中，输入张数直接替换而不是追加", async ({
   page,
 }) => {
   const nodes = await scannedNodes(page.request);
@@ -4194,9 +4194,9 @@ test("阅读器按 G 跳页时预填值被选中，输入页码直接替换而�
   expect(album).toBeDefined();
   await page.goto(`/gallery?path=${encodeURIComponent(album!.id)}&index=0`);
   // 等阅读器挂载（路由是懒加载的），否则按键会落在挂载之前
-  await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("1");
+  await expect(page.getByTitle("跳转到指定张 (G)")).toHaveText("1");
 
-  // 进入跳页编辑态：预填当前页并全选
+  // 进入跳转编辑态：预填当前张数并全选
   await page.keyboard.press("g");
   const input = page.getByRole("textbox");
   await expect(input).toHaveValue("1");
@@ -4206,7 +4206,7 @@ test("阅读器按 G 跳页时预填值被选中，输入页码直接替换而�
   await expect(input).toHaveValue("100");
   await page.keyboard.press("Enter");
 
-  await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("100");
+  await expect(page.getByTitle("跳转到指定张 (G)")).toHaveText("100");
 });
 
 test("阅读器放大与旋转真正作用到图片上", async ({ page }) => {
@@ -4214,7 +4214,7 @@ test("阅读器放大与旋转真正作用到图片上", async ({ page }) => {
   const album = nodes.find((node) => node.name === "sample-paged-images");
   expect(album).toBeDefined();
   await page.goto(`/gallery?path=${encodeURIComponent(album!.id)}&index=0`);
-  await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("1");
+  await expect(page.getByTitle("跳转到指定张 (G)")).toHaveText("1");
 
   const img = page.locator("[data-image-gallery] img").first();
   const matrix = async () =>
@@ -4242,7 +4242,7 @@ test("图片信息面板不遮挡阅读器顶栏：宽屏并排，窄屏落到�
   const album = nodes.find((node) => node.name === "sample-paged-images");
   expect(album).toBeDefined();
   await page.goto(`/gallery?path=${encodeURIComponent(album!.id)}&index=0`);
-  await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("1");
+  await expect(page.getByTitle("跳转到指定张 (G)")).toHaveText("1");
 
   const panel = page.getByTestId("image-info-panel");
   const header = page.locator("header").first();
@@ -4290,7 +4290,7 @@ test("阅读器「原始」适配模式按像素显示图片，超出视口时�
   const album = nodes.find((node) => node.name === "sample-original-size");
   expect(album).toBeDefined();
   await page.goto(`/gallery?path=${encodeURIComponent(album!.id)}&index=0`);
-  await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("1");
+  await expect(page.getByTitle("跳转到指定张 (G)")).toHaveText("1");
 
   const img = page.locator("[data-image-gallery] img").first();
   // 切到「原始」适配模式：适应 → 按宽 → 按高 → 原始

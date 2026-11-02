@@ -7,13 +7,13 @@ it.each([
   { key: "g", altKey: true },
   { key: "g", metaKey: true },
   { key: "g", isComposing: true },
-])("页码跳转不拦截系统组合或输入法事件 %j", (init) => {
+])("张数跳转不拦截系统组合或输入法事件 %j", (init) => {
   render(<PageSlider total={3} index={0} onJump={vi.fn()} />);
   fireEvent.keyDown(window, init);
   expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
 });
 
-it("已处理的 G 不打开编辑框，普通 G 仍可定位页码", () => {
+it("已处理的 G 不打开编辑框，普通 G 仍可定位张数", () => {
   const jump = vi.fn();
   render(<PageSlider total={3} index={0} onJump={jump} />);
   const handled = new KeyboardEvent("keydown", { key: "g", cancelable: true });
@@ -27,13 +27,13 @@ it("已处理的 G 不打开编辑框，普通 G 仍可定位页码", () => {
   expect(jump).toHaveBeenCalledWith(1);
 });
 
-it("进入跳页编辑态后预填当前页并全选，输入直接覆盖而不是追加", async () => {
+it("进入跳转编辑态后预填当前张数并全选，输入直接覆盖而不是追加", async () => {
   const jump = vi.fn();
   render(<PageSlider total={403} index={0} onJump={jump} />);
   fireEvent.keyDown(window, { key: "g" });
   const input = screen.getByRole("textbox") as HTMLInputElement;
   expect(input.value).toBe("1");
-  // 预填值必须处于选中态：否则用户输入的页码会接在预填值后面
+  // 预填值必须处于选中态：否则用户输入的张数会接在预填值后面
   // （"1" + "100" = "1100"，被夹到最后一页）。
   await waitFor(() => {
     expect(input.selectionStart).toBe(0);
@@ -44,8 +44,10 @@ it("进入跳页编辑态后预填当前页并全选，输入直接覆盖而不�
   expect(jump).toHaveBeenCalledWith(99);
 });
 
-it("跳页输入框有可访问名称", () => {
+it("跳转输入框有可访问名称", () => {
   render(<PageSlider total={3} index={0} onJump={vi.fn()} />);
   fireEvent.keyDown(window, { key: "g" });
-  expect(screen.getByRole("textbox", { name: "页码" })).toBeInTheDocument();
+  expect(
+    screen.getByRole("textbox", { name: "跳转到第几张" }),
+  ).toBeInTheDocument();
 });

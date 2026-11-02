@@ -208,6 +208,42 @@ describe("Album", () => {
     expect(screen.queryByText("找不到此文件夹")).not.toBeInTheDocument();
   });
 
+  // 网格标题按图片 / 视频语义区分：纯图片相册说「所有图片」，
+  // 混有视频时说「全部媒体」。别再用漫画域的「页」。
+  it.each([
+    [0, "所有图片"],
+    [3, "全部媒体"],
+  ])("相册含 %i 个视频时网格标题为 %s", (videoCount, title) => {
+    vi.mocked(useLibraryNodes).mockReturnValue({
+      data: {
+        revision: 4,
+        missing: [],
+        items: [
+          {
+            id: "a_mix",
+            kind: "album",
+            name: "混合相册",
+            imageCount: 8,
+            videoCount,
+          },
+        ],
+      },
+      isLoading: false,
+    } as never);
+    vi.mocked(useAlbumMedia).mockReturnValue({
+      data: {
+        pages: [{ items: [{ id: "f_first", kind: "image", index: 0 }] }],
+      },
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      fetchNextPage: vi.fn(),
+    } as never);
+
+    renderAlbum("/albums/a_mix");
+
+    expect(screen.getByRole("heading", { name: title })).toBeInTheDocument();
+  });
+
   it("分页失败保留相册并提供不取消活动请求的重试", () => {
     const fetchNextPage = vi.fn();
     vi.mocked(useLibraryNodes).mockReturnValue({

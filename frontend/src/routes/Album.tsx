@@ -742,14 +742,13 @@ function AlbumView({
       <div className="px-6 lg:px-10 pt-5 pb-3 flex items-center gap-3 max-w-[1400px] mx-auto w-full">
         <ImageIcon size={12} className="text-fg-muted" />
         <h2 className="text-[11px] uppercase tracking-[0.18em] text-fg-muted font-medium">
-          {videoCount > 0 ? "全部媒体" : "所有页面"}
+          {videoCount > 0 ? "全部媒体" : "所有图片"}
         </h2>
         <span className="text-[11px] text-fg-subtle tabular-nums">
           {videoCount > 0
             ? `${detail.imageCount} 张 · ${videoCount} 个视频`
             : `${detail.imageCount} 张`}
         </span>
-        <span className="text-fg-subtle/40">·</span>
         <div className="flex items-center border border-border-faint rounded-md overflow-hidden text-xs ml-auto">
           {(["sm", "md", "lg"] as const).map((k) => (
             <button
