@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { thumbUrl } from '../../api/thumbs'
 import { timeAgo } from '../../utils/date'
@@ -31,6 +31,7 @@ interface Props {
 //   - 智能集合：附 4 张缩略图 strip
 //   - 默认靠右，溢出视口则靠左
 //   - 垂直方向：尽量对齐卡片中心；上下溢出则夹紧
+//     （夹紧按"封面 + 信息区"的整体高度算，只按封面算会把信息区裁到视口外）
 //   - 通过 portal 渲染到 body，避免 transform / overflow 裁剪
 const COVER_W = 240
 const COVER_H = 300
@@ -40,6 +41,17 @@ const MARGIN = 12 // 视口边距
 export default function HoverPreview({ data, anchorRect, lastSeenAt, onPointerEnter, onPointerLeave }: Props) {
   // 客户端尺寸（避免 SSR 不一致；本项目无 SSR，加 useState 仅为防御性）
   const [vp, setVp] = useState({ w: 0, h: 0 })
+  // 预览整体高度：封面固定 300，信息区随内容（标题行数、有无进度条）变化，
+  // 垂直夹紧必须用实测高度，否则靠近视口下缘时信息区会被裁掉。
+  const boxRef = useRef<HTMLDivElement>(null)
+  const [boxHeight, setBoxHeight] = useState(COVER_H)
+
+  useLayoutEffect(() => {
+    const el = boxRef.current
+    if (!el) return
+    const h = el.offsetHeight
+    setBoxHeight((prev) => (Math.abs(prev - h) < 1 ? prev : h))
+  })
 
   useEffect(() => {
     const update = () => setVp({ w: window.innerWidth, h: window.innerHeight })
@@ -64,13 +76,14 @@ export default function HoverPreview({ data, anchorRect, lastSeenAt, onPointerEn
   const idealTop = anchorRect.top + anchorRect.height / 2 - COVER_H / 2
   const top = Math.max(
     MARGIN,
-    Math.min(idealTop, vp.h - COVER_H - MARGIN),
+    Math.min(idealTop, vp.h - boxHeight - MARGIN),
   )
 
   const isCollection = data.variant === 'collection'
 
   return createPortal(
     <div
+      ref={boxRef}
       role="dialog"
       aria-label={`预览 ${data.title}`}
       onMouseEnter={onPointerEnter}

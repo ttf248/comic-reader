@@ -4382,6 +4382,25 @@ test("时间线年份卡的筛选按钮可访问名不与卡片本身混淆", as
   await expect(page).toHaveURL(/\/$/);
 });
 
+test("卡片悬停预览完整落在视口内，不被视口下缘裁掉", async ({ page }) => {
+  await page.goto("/");
+  const card = page.getByRole("link", { name: /打开相册/ }).first();
+  await expect(card).toBeVisible();
+  // 把卡片滚到视口下缘：预览会向下溢出，只有按整体高度夹紧才不会越界。
+  await card.evaluate((el) => el.scrollIntoView({ block: "end" }));
+  await page.waitForTimeout(300);
+  await card.hover();
+
+  const preview = page.getByRole("dialog", { name: /预览/ });
+  await expect(preview).toBeVisible();
+  const box = await preview.boundingBox();
+  const viewport = page.viewportSize();
+  expect(box).not.toBeNull();
+  expect(viewport).not.toBeNull();
+  expect(box!.y).toBeGreaterThanOrEqual(0);
+  expect(box!.y + box!.height).toBeLessThanOrEqual(viewport!.height);
+});
+
 test("窄屏下顶栏不横向溢出，筛选标签保持一行", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
