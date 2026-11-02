@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { act, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
+import { subscribeTranscodeEvents } from '../../api/videos'
 import TranscodeProgress from './TranscodeProgress'
 
 type StatusHandler = (status: {
@@ -40,6 +41,32 @@ describe('TranscodeProgress', () => {
     })
     expect(screen.getByText(/25%/)).toBeInTheDocument()
     expect(screen.queryByText(/预计/)).not.toBeInTheDocument()
+  })
+
+  it('用户取消转码后显示已取消，而不是转码失败', async () => {
+    render(<TranscodeProgress src="f_1" />)
+    act(() => {
+      handlers.progress?.({ status: 'running', progress: 0.25, etaSec: 600 })
+    })
+    fireEvent.click(screen.getByRole('button', { name: '取消转码' }))
+    await act(async () => {})
+    expect(screen.getByText('已取消转码')).toBeInTheDocument()
+    expect(screen.queryByText('转码失败')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '重新转码' })).toBeInTheDocument()
+  })
+
+  it('父组件重渲染不会清空面板状态，也不会重复订阅进度流', () => {
+    const { rerender } = render(<TranscodeProgress src="f_1" onReady={() => {}} />)
+    act(() => {
+      handlers.progress?.({ status: 'running', progress: 0.25, etaSec: 600 })
+    })
+    expect(screen.getByText(/25%/)).toBeInTheDocument()
+    const calls = vi.mocked(subscribeTranscodeEvents).mock.calls.length
+
+    // 父组件重渲染会传新的 onReady 引用：面板状态与订阅都不能因此重置。
+    rerender(<TranscodeProgress src="f_1" onReady={() => {}} />)
+    expect(screen.getByText(/25%/)).toBeInTheDocument()
+    expect(vi.mocked(subscribeTranscodeEvents).mock.calls.length).toBe(calls)
   })
 
   it('排队时显示等待中而不是进度百分比', () => {

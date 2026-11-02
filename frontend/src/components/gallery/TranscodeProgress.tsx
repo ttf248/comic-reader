@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import {
   subscribeTranscodeEvents,
   cancelTranscode,
@@ -41,9 +41,18 @@ const STATUS_TEXT: Record<TranscodeStatusValue, { title: string; desc?: string }
  */
 export default function TranscodeProgress({ src, onReady, onDismiss }: Props) {
   const [status, setStatus] = useState<TranscodeStatus | null>(null)
+  // 用户主动取消：服务端把任务标记成 failed，但那是用户自己的选择，
+  // 不能显示成「转码失败」。这里单独记住取消动作，给出「已取消」的文案。
+  const [cancelled, setCancelled] = useState(false)
+  // 父组件每次渲染都会新建 onReady（内联箭头函数）。若把它放进依赖数组，
+  // 订阅会在每次父组件重渲染时重建：面板状态被清空、进度连接反复重连。
+  // 这里用 ref 持有最新回调，effect 只依赖 src。
+  const onReadyRef = useRef(onReady)
+  onReadyRef.current = onReady
 
   useEffect(() => {
     setStatus(null)
+    setCancelled(false)
     let closed = false
     let close: (() => void) | null = null
     let retryTimer: ReturnType<typeof setTimeout> | null = null
@@ -60,7 +69,7 @@ export default function TranscodeProgress({ src, onReady, onDismiss }: Props) {
         onDone: (s) => {
           setStatus(s)
           if (s.status === 'cached') {
-            onReady?.()
+            onReadyRef.current?.()
             return
           }
           // pending：视频需要转码但任务还没起来（转码由媒体请求触发）。
@@ -80,11 +89,47 @@ export default function TranscodeProgress({ src, onReady, onDismiss }: Props) {
       if (retryTimer) clearTimeout(retryTimer)
       close?.()
     }
-  }, [src, onReady])
+  }, [src])
 
   const onCancel = useCallback(async () => {
     await cancelTranscode(src)
+    setCancelled(true)
   }, [src])
+
+  if (cancelled) {
+    return (
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div className="max-w-md mx-4 bg-black/85 text-white/90 text-sm px-5 py-4 rounded-lg flex flex-col items-center gap-3 pointer-events-auto min-w-[320px]">
+          <div className="font-medium text-base">已取消转码</div>
+          <div className="text-xs text-white/60 text-center">
+            已停止服务端的转码任务；重新转码会从头开始。
+          </div>
+          <div className="flex items-center gap-2 mt-1">
+            <button
+              type="button"
+              className="text-xs px-3 py-1 rounded border border-white/30 hover:bg-white/10"
+              onClick={() => {
+                setCancelled(false)
+                // 重挂 <video> 会重新请求媒体，服务端随之重新排队转码。
+                onReady?.()
+              }}
+            >
+              重新转码
+            </button>
+            {onDismiss && (
+              <button
+                type="button"
+                className="text-xs px-3 py-1 rounded text-white/60 hover:text-white/90"
+                onClick={onDismiss}
+              >
+                关闭
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
 
   if (!status) {
     return (
