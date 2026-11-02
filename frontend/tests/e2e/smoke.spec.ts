@@ -4637,10 +4637,12 @@ test("阅读器顶栏常驻阅读模式与适配方式，切换后写入本地�
     .toBe("continuous");
 
   // 适配方式：一个按钮循环 适应 → 按宽 → 按高 → 原始。
-  const fit = group.getByRole("button", { name: /^适配：/ });
-  await expect(fit).toHaveAttribute("aria-label", "适配：适应");
+  // 可访问名用「适配方式：xx」，与右侧悬浮控件的「适应 (F 循环)」区分开，
+  // 窄屏用例才能分别定位这两个入口。
+  const fit = group.getByRole("button", { name: /^适配方式：/ });
+  await expect(fit).toHaveAttribute("aria-label", "适配方式：适应");
   await fit.click();
-  await expect(fit).toHaveAttribute("aria-label", "适配：按宽");
+  await expect(fit).toHaveAttribute("aria-label", "适配方式：按宽");
 
   // 键盘路径依旧可用：1 / 2 / 3 切模式，F 循环适配。
   await page.keyboard.press("1");

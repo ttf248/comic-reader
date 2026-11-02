@@ -208,9 +208,11 @@ function ContinueFeature({
           <div className="text-[13px] text-fg-muted mt-1.5 tabular-nums">
             看到 {index + 1} / {total}
           </div>
-          <div className="mt-2.5 text-[12.5px] text-fg-subtle tabular-nums">
-            {percent > 0 ? `已读 ${percent}%` : "尚未开始"}
-          </div>
+          {percent > 0 && (
+            <div className="mt-2.5 text-[12.5px] text-fg-subtle tabular-nums">
+              已读 {percent}%
+            </div>
+          )}
           <div className="mt-3 sm:hidden inline-flex items-center gap-1.5 text-[13px] font-medium text-accent">
             继续阅读
             <ArrowRightLineIcon size={12} />

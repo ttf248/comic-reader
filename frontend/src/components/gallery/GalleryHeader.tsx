@@ -198,8 +198,8 @@ export default function GalleryHeader({
           <button
             type="button"
             onClick={cycleFit}
-            title={`适配：${FIT_LABEL[fit]} (F 循环)`}
-            aria-label={`适配：${FIT_LABEL[fit]}`}
+            title={`适配方式：${FIT_LABEL[fit]}（F 循环）`}
+            aria-label={`适配方式：${FIT_LABEL[fit]}`}
             className="inline-flex items-center justify-center h-7 w-8 rounded-md text-white/70 hover:text-white hover:bg-white/10 transition-colors"
           >
             {FIT_ICON[fit]}
@@ -212,7 +212,8 @@ export default function GalleryHeader({
         <HeaderIconButton
           onClick={cycleFit}
           hideOnDesktop
-          title={`适配：${FIT_LABEL[fit]} (F 循环)`}
+          title={`适配方式：${FIT_LABEL[fit]}（F 循环）`}
+          ariaLabel={`适配方式：${FIT_LABEL[fit]}`}
         >
           {FIT_ICON[fit]}
         </HeaderIconButton>
@@ -326,6 +327,7 @@ function HeaderIconButton({
   onClick,
   disabled,
   title,
+  ariaLabel,
   active,
   hideOnMobile,
   hideOnDesktop,
@@ -334,6 +336,8 @@ function HeaderIconButton({
   onClick?: () => void;
   disabled?: boolean;
   title?: string;
+  /** 可访问名；缺省时退回 title（图标按钮的可访问名不能只靠图标）。 */
+  ariaLabel?: string;
   active?: boolean;
   hideOnMobile?: boolean;
   hideOnDesktop?: boolean;
@@ -343,10 +347,10 @@ function HeaderIconButton({
       onClick={onClick}
       disabled={disabled}
       title={title}
-      aria-label={title}
+      aria-label={ariaLabel ?? title}
       className={`inline-flex items-center justify-center h-8 w-8 rounded-md transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
         hideOnMobile ? "hidden sm:inline-flex" : ""
-      } ${hideOnDesktop ? "hidden md:inline-flex" : ""} ${
+      } ${hideOnDesktop ? "md:hidden" : ""} ${
         active
           ? "bg-white/15 text-white"
           : "text-white/80 hover:text-white hover:bg-white/10"
