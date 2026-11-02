@@ -4209,6 +4209,45 @@ test("阅读器按 G 跳转时预填值被选中，输入张数直接替换而�
   await expect(page.getByTitle("跳转到指定张 (G)")).toHaveText("100");
 });
 
+test("阅读器加载态沿用深色画布，不闪白底", async ({ page }) => {
+  const nodes = await scannedNodes(page.request);
+  const album = nodes.find((node) => node.name === "sample-paged-images");
+  expect(album).toBeDefined();
+  // 固定成浅色主题：只有浅色主题下"加载态跟着主题变"才会露出白底。
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      "local-gallery-ui",
+      JSON.stringify({ state: { theme: "light", accent: "blue" }, version: 0 }),
+    );
+  });
+  // 拖慢媒体接口，让加载态停留足够长以便断言。
+  await page.route("**/api/albums/*/media*", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+    await route.continue();
+  });
+
+  await page.goto(`/gallery?path=${encodeURIComponent(album!.id)}&index=0`);
+  const loading = page.getByText("正在加载图片…");
+  await expect(loading).toBeVisible();
+
+  // 阅读器画布恒为深色：加载态的背景不能跟随应用主题（浅色主题下会先闪一屏白底）。
+  const bg = await loading.evaluate((el) => {
+    let node: HTMLElement | null = el;
+    while (node) {
+      const color = getComputedStyle(node).backgroundColor;
+      if (color && color !== "rgba(0, 0, 0, 0)" && color !== "transparent") {
+        return color;
+      }
+      node = node.parentElement;
+    }
+    return "none";
+  });
+  const [r, g, b] = (bg.match(/\d+/g) ?? ["0"]).map(Number);
+  expect(r).toBeLessThan(60);
+  expect(g).toBeLessThan(60);
+  expect(b).toBeLessThan(60);
+});
+
 test("阅读器放大与旋转真正作用到图片上", async ({ page }) => {
   const nodes = await scannedNodes(page.request);
   const album = nodes.find((node) => node.name === "sample-paged-images");

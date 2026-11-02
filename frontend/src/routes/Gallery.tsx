@@ -941,35 +941,37 @@ export default function Gallery() {
 
   if (!ready) {
     return (
-      <div className="flex flex-col h-full bg-bg">
+      // 阅读器画布恒为深色：加载态、空态、失败态都跟着深色走，
+      // 否则浅色主题下会先闪一屏白底，再跳到黑色画布。
+      <div className="flex flex-col h-full bg-neutral-950">
         {/* 顶部条：返回 / 名称（常驻） */}
-        <div className="px-4 h-9 text-xs text-fg-muted border-b border-border-faint bg-bg-elevated/60 flex items-center gap-3">
+        <div className="px-4 h-9 text-xs text-white/60 border-b border-white/10 bg-neutral-900/60 flex items-center gap-3">
           <button
             type="button"
             onClick={goBack}
-            className="px-1.5 py-0.5 rounded hover:bg-bg-hover text-fg-muted hover:text-fg"
+            className="px-1.5 py-0.5 rounded hover:bg-white/10 text-white/60 hover:text-white"
             aria-label="返回"
           >
             ←
           </button>
-          <span className="font-medium text-fg truncate">{name}</span>
+          <span className="font-medium text-white/85 truncate">{name}</span>
         </div>
         <div className="flex-1 flex items-center justify-center px-6">
           {!pathParam ? (
             <div className="text-center">
-              <div className="text-fg-muted text-sm">无可显示的图片</div>
-              <div className="text-fg-subtle text-xs mt-1">未指定相册路径</div>
+              <div className="text-white/60 text-sm">无可显示的图片</div>
+              <div className="text-white/45 text-xs mt-1">未指定相册路径</div>
             </div>
           ) : loadError ? (
             <div className="text-center max-w-sm">
-              <div className="text-base font-medium text-fg mb-1">
+              <div className="text-base font-medium text-white/85 mb-1">
                 {loadError === "EMPTY"
                   ? isVideo
                     ? "这个文件夹没有视频"
                     : "这个文件夹没有图片"
                   : "加载失败"}
               </div>
-              <div className="text-fg-muted text-sm mb-5">
+              <div className="text-white/60 text-sm mb-5">
                 {loadError === "EMPTY"
                   ? isVideo
                     ? "可以换个文件夹，或检查视频是否已被移动/删除。"
@@ -980,7 +982,7 @@ export default function Gallery() {
                 <button
                   type="button"
                   onClick={goBack}
-                  className="px-4 h-8 text-sm rounded border border-border bg-bg-elevated hover:bg-bg-hover text-fg"
+                  className="px-4 h-8 text-sm rounded border border-white/15 bg-white/10 hover:bg-white/15 text-white/85"
                 >
                   返回
                 </button>
@@ -994,9 +996,9 @@ export default function Gallery() {
               </div>
             </div>
           ) : (
-            <div className="flex flex-col items-center gap-3 text-fg-muted text-sm">
+            <div className="flex flex-col items-center gap-3 text-white/60 text-sm">
               <div
-                className="w-5 h-5 rounded-full border-2 border-fg-muted border-t-transparent animate-spin"
+                className="w-5 h-5 rounded-full border-2 border-white/40 border-t-transparent animate-spin"
                 aria-hidden
               />
               <span>正在加载图片…</span>
@@ -1084,7 +1086,7 @@ export default function Gallery() {
         {progressFailure?.key === progressKey && (
           <div
             role="alert"
-            className="absolute top-16 left-3 right-3 z-30 mx-auto flex max-w-xl items-center justify-between gap-3 rounded-md border border-border bg-bg-elevated p-3 text-sm text-fg shadow-lg"
+            className="absolute top-16 left-3 right-3 z-30 mx-auto flex max-w-xl items-center justify-between gap-3 rounded-md border border-white/10 bg-neutral-900/95 backdrop-blur-md p-3 text-sm text-white/85 shadow-lg"
           >
             <span>
               {progressFailure.operation === "restore"
@@ -1095,7 +1097,7 @@ export default function Gallery() {
               type="button"
               disabled={retryingProgress}
               onClick={() => void retryProgress()}
-              className="shrink-0 rounded border border-border px-3 py-1 hover:bg-bg-hover disabled:opacity-50"
+              className="shrink-0 rounded border border-white/20 px-3 py-1 text-white/85 hover:bg-white/10 disabled:opacity-50"
             >
               {retryingProgress ? "重试中…" : "重试进度"}
             </button>
