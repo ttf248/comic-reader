@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { Virtuoso, VirtuosoGrid, type ListProps } from "react-virtuoso";
-import AlbumCard, { type CardData } from "./AlbumCard";
+import AlbumCard, { type CardData, type CoverRatio } from "./AlbumCard";
 import AlbumContextMenu from "./AlbumContextMenu";
 import PropertiesDialog from "../common/PropertiesDialog";
 import { useFavorites } from "../../hooks/useFavorites";
@@ -25,6 +25,14 @@ interface Props {
   showLastSeen?: boolean;
   /** 是否显示「新」角标（整页都是未读的列表关掉） */
   showUnreadBadge?: boolean;
+  /**
+   * 封面画幅。不同页面的语义不同，画幅也不同：
+   * - 收藏页 = 精选陈列 → 2:3 海报比例，网格更疏；
+   * - 未读 / 最近 / 全部图像 = 清单与浏览 → 4:5，网格更密。
+   */
+  coverRatio?: CoverRatio;
+  /** 网格列宽下限。越大越疏朗。 */
+  cardMinWidth?: 164 | 224;
 }
 
 // 超宽屏（≥1536px）列表改双列：单列时标题与右侧数字之间会空出上千像素，
@@ -58,6 +66,8 @@ export default function AlbumGrid({
   variant = "grid",
   showLastSeen,
   showUnreadBadge = true,
+  coverRatio = "4/5",
+  cardMinWidth = 164,
 }: Props) {
   const [menu, setMenu] = useState<{
     x: number;
@@ -86,6 +96,14 @@ export default function AlbumGrid({
 
   const { favorites } = useFavorites();
 
+  /* Tailwind 的 JIT 只认源码里的字面量类名，写成模板字符串
+     (`grid-cols-[...minmax(${cardMinWidth}px...)]`) 不会被生成 ——
+     所以两个宽度各写一个字面量类名，在这里二选一。 */
+  const gridColsClass =
+    cardMinWidth === 224
+      ? "grid-cols-[repeat(auto-fill,minmax(224px,1fr))]"
+      : "grid-cols-[repeat(auto-fill,minmax(164px,1fr))]";
+
   // 列表按列数分组：一列时每组一张卡，两列时每组两张并排。
   // 分组后交给 Virtuoso 渲染，行高一致（列表行固定高度），
   // 虚拟滚动的行高计算才不会出错。
@@ -110,6 +128,7 @@ export default function AlbumGrid({
         variant={mode}
         showLastSeen={showLastSeen}
         showUnreadBadge={showUnreadBadge}
+        coverRatio={coverRatio}
         onContextMenu={(e) => {
           e.preventDefault();
           setMenu({ x: e.clientX, y: e.clientY, item: it });
@@ -147,8 +166,10 @@ export default function AlbumGrid({
           increaseViewportBy={{ top: 720, bottom: 1080 }}
           /* 列数由容器宽度决定（auto-fill + minmax），不用固定的
              grid-cols-6：固定列数在宽屏上只填 6 列、右侧留一整块空白，
-             而条目数不足 6 时最后一列又空着。 */
-          listClassName="pt-2 pb-10 grid gap-x-5 gap-y-8 grid-cols-[repeat(auto-fill,minmax(164px,1fr))]"
+             而条目数不足 6 时最后一列又空着。
+             minmax 的下限按页面语义给：收藏（精选陈列）用 224px 疏朗网格，
+             未读 / 最近 / 全部图像（清单与浏览）用 164px 密集网格。 */
+          listClassName={`pt-2 pb-10 grid gap-x-5 gap-y-8 ${gridColsClass}`}
           itemClassName="min-w-0"
           itemContent={(_index, item) => renderCard(item)}
         />

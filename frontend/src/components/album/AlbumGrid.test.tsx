@@ -43,8 +43,14 @@ vi.mock("react-virtuoso", () => ({
   },
 }));
 
+// AlbumCard 在本文件里被 mock 掉（避免 react-query 依赖），
+// 但把收到的 coverRatio 透出来，供断言"页面语义 → 画幅"这条契约。
+const albumCardMock = vi.hoisted(() => ({ props: [] as unknown[] }));
 vi.mock("./AlbumCard", () => ({
-  default: ({ data }: { data: CardData }) => <article>{data.title}</article>,
+  default: (props: { data: CardData; coverRatio?: string }) => {
+    albumCardMock.props.push(props);
+    return <article>{props.data.title}</article>;
+  },
 }));
 vi.mock("../../hooks/useFavorites", () => ({
   useFavorites: () => ({ favorites: [], toggle: vi.fn() }),
@@ -95,6 +101,34 @@ describe("AlbumGrid", () => {
     };
     expect(props.useWindowScroll).toBe(true);
     expect(props.computeItemKey(1, cards[1])).toBe("a_2");
+  });
+
+  it("封面画幅与网格密度按页面语义可切换", () => {
+    albumCardMock.props.length = 0;
+    // 收藏页 = 精选陈列：2:3 海报比例 + 疏朗网格（minmax 224px）
+    const { unmount } = render(
+      <AlbumGrid items={cards} variant="grid" coverRatio="2/3" cardMinWidth={224} />,
+    );
+    let props = virtuoso.grid.mock.calls[0]?.[0] as { listClassName: string };
+    expect(props.listClassName).toContain("minmax(224px,1fr)");
+    expect(
+      albumCardMock.props.every(
+        (p) => (p as { coverRatio?: string }).coverRatio === "2/3",
+      ),
+    ).toBe(true);
+    unmount();
+
+    // 未读 / 最近 / 全部图像 = 清单与浏览：默认 4:5 + 密集网格
+    virtuoso.grid.mockClear();
+    albumCardMock.props.length = 0;
+    render(<AlbumGrid items={cards} variant="grid" />);
+    props = virtuoso.grid.mock.calls[0]?.[0] as { listClassName: string };
+    expect(props.listClassName).toContain("minmax(164px,1fr)");
+    expect(
+      albumCardMock.props.every(
+        (p) => (p as { coverRatio?: string }).coverRatio === "4/5",
+      ),
+    ).toBe(true);
   });
 
   it("独立列表使用窗口滚动并保留稳定卡片键", () => {

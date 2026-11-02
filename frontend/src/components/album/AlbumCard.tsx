@@ -356,7 +356,10 @@ function GridCard({
           >
             {data.displayTitle ?? data.title}
           </div>
-          <div className="text-[12.5px] text-fg-muted mt-1 tabular-nums flex items-center gap-1.5 min-w-0">
+          {/* meta 行 12.5px → 13px：全量网格一次显示几十张卡，
+              12.5px 的中文在一屏里会糊成灰团，是"内容存在感不足"
+              的主要来源之一。 */}
+          <div className="text-[13px] text-fg-muted mt-1 tabular-nums flex items-center gap-1.5 min-w-0">
             <TypeChip variant={data.variant} />
             {(() => {
               const media = formatMediaCount(data);
