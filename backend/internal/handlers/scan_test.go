@@ -78,7 +78,7 @@ func TestScanEventsReconnectPreservesTerminalSnapshot(t *testing.T) {
 			source := &controlledScanEvents{events: make(chan services.ProgressEvent, 1), released: make(chan struct{})}
 			want := services.ProgressEvent{ScanID: "scan-1", Status: status, Progress: 37, Phase: "scanning", AlbumsFound: 12, ElapsedMs: 321, LibraryRevision: 7}
 			if status == services.ScanStatusError {
-				want.Error = "scan failed"
+				want.Error = services.ScanErrorCodeFailed
 			}
 			source.events <- want
 			close(source.events)

@@ -46,6 +46,22 @@ interface Props {
   defaultExpanded?: boolean;
 }
 
+// 扫描失败事件里的机器可读错误码 → 中文说明。
+//
+// 服务端只给错误码（不暴露绝对路径），文案在前端翻译；
+// 未收录的码原样显示，避免吞掉信息。
+const SCAN_ERROR_TEXT: Record<string, string> = {
+  scan_failed: "扫描失败",
+  root_missing: "媒体根不存在",
+  root_not_dir: "媒体根不是目录",
+  root_unreadable: "媒体根无法读取",
+  root_changed: "媒体根在扫描期间发生变化",
+}
+
+function scanErrorText(code: string): string {
+  return SCAN_ERROR_TEXT[code] ?? code
+}
+
 export default function ScanProgress({
   progress,
   onCancel,
@@ -307,7 +323,7 @@ export default function ScanProgress({
               </span>
               {isError && progress.error && (
                 <span className="text-danger truncate max-w-[40ch]">
-                  {progress.error}
+                  {scanErrorText(progress.error)}
                 </span>
               )}
             </div>

@@ -85,7 +85,7 @@ func TestScanEventReplayMatchesCommittedTerminalSnapshot(t *testing.T) {
 			if string(terminal.Status) != name {
 				t.Fatalf("terminal status=%q want %q", terminal.Status, name)
 			}
-			if failed && terminal.Error != "scan failed" {
+			if failed && terminal.Error != services.ScanErrorCodeRootMissing {
 				t.Fatalf("unexpected public error: %q", terminal.Error)
 			}
 			if !failed && (terminal.AlbumsFound != 2 || terminal.LibraryRevision == 0) {

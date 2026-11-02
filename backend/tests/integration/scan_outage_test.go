@@ -56,7 +56,7 @@ func TestOfflineScanPreservesPublishedLibraryAndDiskCache(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Contains(stream, []byte(`"error":"scan failed"`)) || bytes.Contains(stream, escapedRoot[1:len(escapedRoot)-1]) || bytes.Contains(stream, []byte(filepath.ToSlash(h.root))) {
+	if !bytes.Contains(stream, []byte(`"error":"root_missing"`)) || bytes.Contains(stream, escapedRoot[1:len(escapedRoot)-1]) || bytes.Contains(stream, []byte(filepath.ToSlash(h.root))) {
 		t.Fatalf("scan failure was not sanitized: %s", stream)
 	}
 	res, afterManifest := h.do(t, http.MethodGet, "/api/library/manifest", nil)

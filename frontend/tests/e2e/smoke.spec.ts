@@ -383,7 +383,7 @@ test("扫描 error 业务事件显示任务失败，连接错误不混入业务�
     const scanId = new URL(route.request().url()).pathname.split("/")[3];
     return route.fulfill({
       contentType: "text/event-stream",
-      body: `event: error\ndata: ${JSON.stringify({ scanId, status: "error", progress: 0, albumsFound: 0, elapsedMs: 500, error: "scan failed" })}\n\n`,
+      body: `event: error\ndata: ${JSON.stringify({ scanId, status: "error", progress: 0, albumsFound: 0, elapsedMs: 500, error: "root_missing" })}\n\n`,
     });
   });
   await page.goto("/settings");
@@ -391,7 +391,8 @@ test("扫描 error 业务事件显示任务失败，连接错误不混入业务�
   await scan.click();
   const card = page.getByTestId("scan-progress");
   await expect(card).toContainText("扫描失败");
-  await expect(card).toContainText("scan failed");
+  // 服务端给机器可读的错误码，界面翻译成中文说明。
+  await expect(card).toContainText("媒体根不存在");
   await expect(card.getByRole("button", { name: "重新连接进度" })).toHaveCount(
     0,
   );

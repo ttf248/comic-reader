@@ -346,11 +346,48 @@ func (r *AsyncScanRunner) finishInterrupted(state *ScanState, status ScanStatus,
 	event.LibraryRevision = 0
 	event.Error = ""
 	if status == ScanStatusError {
-		event.Error = "scan failed"
+		// 事件里只放机器可读的码和媒体根别名：绝对路径不能进响应，
+		// 英文句子由前端翻译成中文（与 phase 的处理方式一致）。
+		code, alias := scanFailure(err)
+		event.Error = code
+		if alias != "" {
+			event.CurrentPath = alias
+		}
 	}
 	retention := r.finishLocked(state, event, nil, err)
 	r.mu.Unlock()
 	r.scheduleRemoval(state, retention)
+}
+
+// 扫描失败时写进事件的机器可读错误码。前端据此翻译成中文文案。
+const (
+	ScanErrorCodeFailed         = "scan_failed"
+	ScanErrorCodeRootMissing    = "root_missing"
+	ScanErrorCodeRootNotDir     = "root_not_dir"
+	ScanErrorCodeRootUnreadable = "root_unreadable"
+	ScanErrorCodeRootChanged    = "root_changed"
+)
+
+// scanFailure 把扫描错误翻译成 (错误码, 媒体根别名)。
+//
+// 只返回媒体根的目录名（别名），不返回绝对路径 —— 事件要发给浏览器，
+// 不能把本机文件系统路径原样送出去。
+func scanFailure(err error) (string, string) {
+	var scanErr *ScanError
+	if errors.As(err, &scanErr) {
+		name := filepath.Base(filepath.Clean(scanErr.Path))
+		switch scanErr.Kind {
+		case ScanRootMissing:
+			return ScanErrorCodeRootMissing, name
+		case ScanRootNotDir:
+			return ScanErrorCodeRootNotDir, name
+		case ScanRootUnreadable:
+			return ScanErrorCodeRootUnreadable, name
+		case ScanRootChanged:
+			return ScanErrorCodeRootChanged, name
+		}
+	}
+	return ScanErrorCodeFailed, ""
 }
 
 // finishLocked 更新终态并广播；调用方必须已持有 r.mu。

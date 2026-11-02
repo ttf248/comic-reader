@@ -174,6 +174,22 @@ describe("ScanProgress", () => {
     expect(screen.getByText("媒体根不存在: E:\\nope")).toBeInTheDocument();
   });
 
+  it("把服务端的错误码翻译成中文说明", () => {
+    render(
+      <ScanProgress
+        progress={makeProgress({
+          status: "error",
+          error: "root_missing",
+          currentPath: "存照",
+        })}
+      />,
+    );
+    expect(screen.getByText("扫描失败")).toBeInTheDocument();
+    expect(screen.getByText("媒体根不存在")).toBeInTheDocument();
+    // 媒体根别名照常显示，方便用户知道是哪个根出的问题。
+    expect(screen.getByText("存照")).toBeInTheDocument();
+  });
+
   it("renders cancelled state", () => {
     render(
       <ScanProgress

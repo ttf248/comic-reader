@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strconv"
 	"testing"
@@ -113,7 +114,7 @@ func TestScanInterruptedKeepsLastKnownProgress(t *testing.T) {
 			if event.Status != status || event.Progress != 61 || event.AlbumsFound != 7 || event.Phase != "scanning" || event.CurrentPath != "root/relative" {
 				t.Fatalf("interruption lost progress: %+v", event)
 			}
-			if status == ScanStatusError && event.Error != "scan failed" {
+			if status == ScanStatusError && event.Error != ScanErrorCodeFailed {
 				t.Fatalf("internal error was not sanitized: %q", event.Error)
 			}
 			if status == ScanStatusCancelled && event.Error != "" {
@@ -407,4 +408,35 @@ func filepathJoin(parts ...string) string {
 
 func itoa(n int) string {
 	return strconv.Itoa(n)
+}
+
+func TestScanFailureCodesAndAlias(t *testing.T) {
+	cases := []struct {
+		name string
+		kind ScanErrorKind
+		want string
+	}{
+		{"root missing", ScanRootMissing, ScanErrorCodeRootMissing},
+		{"root not dir", ScanRootNotDir, ScanErrorCodeRootNotDir},
+		{"root unreadable", ScanRootUnreadable, ScanErrorCodeRootUnreadable},
+		{"root changed", ScanRootChanged, ScanErrorCodeRootChanged},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := filepath.Join(t.TempDir(), "media")
+			code, alias := scanFailure(&ScanError{Kind: tc.kind, Path: root})
+			if code != tc.want {
+				t.Fatalf("code = %q, want %q", code, tc.want)
+			}
+			// 只暴露目录名(别名)，绝对路径不能进事件。
+			if alias != "media" {
+				t.Fatalf("alias = %q, want %q", alias, "media")
+			}
+		})
+	}
+	// 非 ScanError：给通用码，不带别名。
+	code, alias := scanFailure(errors.New("boom"))
+	if code != ScanErrorCodeFailed || alias != "" {
+		t.Fatalf("generic failure = (%q, %q)", code, alias)
+	}
 }
