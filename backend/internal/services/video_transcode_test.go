@@ -1068,3 +1068,18 @@ func TestEtaSeconds(t *testing.T) {
 		t.Errorf("极小进度时 etaSeconds = %d, want %d", got, 24*60*60)
 	}
 }
+
+// TestBrowserUnplayableContainer 验证浏览器放不了的容器一律按需要转码：
+// MKV/AVI/3GP 即使里面是 H.264，Chrome 也解不开容器。
+func TestBrowserUnplayableContainer(t *testing.T) {
+	for _, ext := range []string{".mkv", ".avi", ".3gp"} {
+		if !browserUnplayableContainer(ext) {
+			t.Errorf("%s 应判定为浏览器放不了", ext)
+		}
+	}
+	for _, ext := range []string{".mp4", ".m4v", ".webm", ".mov"} {
+		if browserUnplayableContainer(ext) {
+			t.Errorf("%s 不应判定为浏览器放不了", ext)
+		}
+	}
+}

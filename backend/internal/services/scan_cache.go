@@ -679,15 +679,10 @@ func fileInsideDir(file, dir string, caseInsensitive bool) bool {
 }
 
 // coverKindFromExt 按文件扩展名推断 "image" / "video"。
+//
+// 直接用 models.FileMediaKind：扩展名白名单只有一份，避免各处复制后漂移。
 func coverKindFromExt(p string) string {
-	ext := strings.ToLower(filepath.Ext(p))
-	switch ext {
-	case ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".heic", ".heif", ".avif":
-		return "image"
-	case ".mp4", ".webm", ".mov", ".mkv", ".avi":
-		return "video"
-	}
-	return ""
+	return models.FileMediaKind(p)
 }
 
 // SetWithOverrideApplied 把用户设置的 cover 立即应用到缓存结果中的

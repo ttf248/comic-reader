@@ -277,6 +277,8 @@ func videoMime(path string) string {
 		return "video/x-matroska"
 	case ".avi":
 		return "video/x-msvideo"
+	case ".3gp":
+		return "video/3gpp"
 	default:
 		return "application/octet-stream"
 	}

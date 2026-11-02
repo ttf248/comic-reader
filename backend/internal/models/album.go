@@ -13,6 +13,7 @@ import (
 var ImageExts = map[string]bool{
 	".jpg":  true,
 	".jpeg": true,
+	".jfif": true, // JFIF 就是 JPEG 变体，浏览器与 Go 解码器都能直接处理
 	".png":  true,
 	".gif":  true,
 	".bmp":  true,
@@ -56,6 +57,22 @@ var VideoExts = map[string]bool{
 	".mov":  true,
 	".mkv":  true,
 	".avi":  true, // 部分浏览器不支持 AVI 容器（含老式 XviD/DivX），但列入白名单方便后续扩展
+	".3gp":  true, // 手机录制常用；浏览器放不了，走服务端转码
+}
+
+// FileMediaKind 返回文件对应的媒体类型："image" / "video"；不是受支持的媒体时返回空串。
+//
+// 这是扩展名白名单的唯一事实来源：扫描器、封面类型判定、设封面校验都用它，
+// 避免各处复制一份清单后互相漂移（曾经 .tiff 能被扫描却在"设为封面"时被拒）。
+func FileMediaKind(name string) string {
+	ext := lowerExt(name)
+	if ImageExts[ext] {
+		return string(MediaKindImage)
+	}
+	if VideoExts[ext] {
+		return string(MediaKindVideo)
+	}
+	return ""
 }
 
 // IsVideoFile 判断文件名是否为支持的视频格式（不区分大小写）。

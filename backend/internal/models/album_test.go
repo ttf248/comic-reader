@@ -288,3 +288,23 @@ func TestNeedsBrowserConversion(t *testing.T) {
 		}
 	}
 }
+
+// TestSupportedMediaExtensions 验证 JFIF 图片与 3GP 视频在白名单里：
+// 真实媒体库里有这两类文件，漏掉会让整个文件夹在应用里消失。
+func TestSupportedMediaExtensions(t *testing.T) {
+	if !IsImageFile("photo.jfif") {
+		t.Error("JFIF 是 JPEG 变体，应算作图片")
+	}
+	if !IsVideoFile("clip.3gp") {
+		t.Error("3GP 应算作视频")
+	}
+	if FileMediaKind("photo.jfif") != string(MediaKindImage) {
+		t.Error("JFIF 的媒体类型应为 image")
+	}
+	if FileMediaKind("clip.3gp") != string(MediaKindVideo) {
+		t.Error("3GP 的媒体类型应为 video")
+	}
+	if FileMediaKind("notes.txt") != "" {
+		t.Error("非媒体文件不应有媒体类型")
+	}
+}

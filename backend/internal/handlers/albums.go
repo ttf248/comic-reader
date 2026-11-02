@@ -10,6 +10,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 
 	"github.com/tianlongxiang/local-gallery/internal/middleware"
+	"github.com/tianlongxiang/local-gallery/internal/models"
 	"github.com/tianlongxiang/local-gallery/internal/services"
 )
 
@@ -122,17 +123,11 @@ func isFileInsideAlbum(file, albumPath string) bool {
 	return true
 }
 
-// coverKindFromExt 后端 handler 复制，跟 services/scan_cache 里的同名函数
-// 实现一致（services 包不导出）。保持 handler 内部能用。
+// coverKindFromExt 按文件扩展名推断 "image" / "video"。
+//
+// 直接用 models.FileMediaKind：扩展名白名单只有一份，避免各处复制后漂移。
 func coverKindFromExt(p string) string {
-	ext := strings.ToLower(filepath.Ext(p))
-	switch ext {
-	case ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".heic", ".heif", ".avif":
-		return "image"
-	case ".mp4", ".webm", ".mov", ".mkv", ".avi":
-		return "video"
-	}
-	return ""
+	return models.FileMediaKind(p)
 }
 
 //	GET /api/search?q=<keyword>&limit=<n>

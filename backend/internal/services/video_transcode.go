@@ -423,7 +423,7 @@ func (s *TranscodeService) Resolve(absPath string, info os.FileInfo) (servePath 
 	// 非视频文件(理论上 handler 端已经 IsVideoFile 过滤,这里再防一下)
 	ext := strings.ToLower(filepath.Ext(absPath))
 	switch ext {
-	case ".mp4", ".m4v", ".mov", ".mkv", ".webm", ".avi":
+	case ".mp4", ".m4v", ".mov", ".mkv", ".webm", ".avi", ".3gp":
 		// ok
 	default:
 		return absPath, TranscodeStatusSkipped
@@ -496,7 +496,7 @@ func (s *TranscodeService) currentState(absPath string) (TranscodeInfo, *transco
 
 	ext := strings.ToLower(filepath.Ext(absPath))
 	switch ext {
-	case ".mp4", ".m4v", ".mov", ".mkv", ".webm", ".avi":
+	case ".mp4", ".m4v", ".mov", ".mkv", ".webm", ".avi", ".3gp":
 	default:
 		info.Status = TranscodeStatusSkipped
 		return info, nil
@@ -833,6 +833,11 @@ func (s *TranscodeService) Evict(maxBytes int64, maxAgeDays int) (deleted int, f
 // V1 保守策略:不在"已知支持列表"里的就转。判定表见
 // docs/ARCHITECTURE.md §2.4.1。
 func (s *TranscodeService) needsTranscode(absPath, ext string) bool {
+	// 浏览器原生放不了的容器一律转：MKV/AVI/3GP 即使里面是 H.264，
+	// Chrome 也解不开容器（<video> 只认 mp4/webm）。
+	if browserUnplayableContainer(ext) {
+		return true
+	}
 	// 没 info service 就保守按"需要转"
 	if s.info == nil || !s.info.Available() {
 		return true
@@ -869,6 +874,18 @@ func (s *TranscodeService) needsTranscode(absPath, ext string) bool {
 		// 未知 codec:保守按需要转
 		return true
 	}
+}
+
+// browserUnplayableContainer 判断容器是否浏览器原生放不了。
+//
+// <video> 只认 mp4/webm：MKV、AVI、3GP 即使里面是 H.264，Chrome 也放不了，
+// 因此这类容器一律转码，不按码流判断。
+func browserUnplayableContainer(ext string) bool {
+	switch ext {
+	case ".mkv", ".avi", ".3gp":
+		return true
+	}
+	return false
 }
 
 // cacheKey 派生缓存 key(profile 名称参与,不同 profile 互不污染)。
