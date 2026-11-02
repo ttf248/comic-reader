@@ -470,17 +470,20 @@ function ListCard({
   const multiRoot = useUIStore((s) => s.multiRoot);
 
   return (
-    <div className="relative group flex items-center">
+    // 列表行：缩略图压到 56px，行高降到 ~76px —— 一屏能扫到更多条目。
+    // 行底加分隔线：整行铺满内容宽度时，没有分隔线的话标题与右侧数字之间
+    // 会变成一大片空白，分隔线把它读成一张表。
+    <div className="relative group flex items-center border-b border-border-faint">
       <Link
         to={data.to}
         aria-label={`打开${data.variant === "album" ? "相册" : data.variant === "collection" ? "集合" : "智能视图"}“${data.displayTitle ?? data.title}”`}
-        className="group flex flex-1 min-w-0 items-center gap-4 py-2 px-2.5 -mx-2.5 rounded-lg hover:bg-bg-subtle transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="group flex flex-1 min-w-0 items-center gap-3.5 py-2 px-2.5 -mx-2.5 rounded-lg hover:bg-bg-subtle transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
         <div
-          className="relative w-20 aspect-[4/5] rounded-md bg-bg-subtle overflow-hidden shrink-0 border border-border shadow-xs"
+          className="relative w-14 aspect-[4/5] rounded-md bg-bg-subtle overflow-hidden shrink-0 border border-border shadow-xs"
           data-testid="card-cover"
         >
-          <CardCover data={data} loading="eager" />
+          <CardCover data={data} loading="eager" compact />
           {data.coverKind === "video" && (
             <div className="pointer-events-none absolute top-1 right-1 inline-flex items-center gap-1 bg-bg-elevated/90 backdrop-blur text-fg text-[11.5px] font-medium px-1.5 h-5 rounded shadow-sm">
               <PlayFilledIcon size={9} className="text-accent" />

@@ -46,7 +46,7 @@ export default function VideoCoverImage({
       <div className="w-full h-full flex flex-col items-center justify-center bg-bg-subtle text-fg-subtle gap-2">
         <div className="w-5 h-5 border-2 border-fg-subtle/40 border-t-accent rounded-full animate-spin" />
         {showExtractingHint && (
-          <span className="text-[10px] tabular-nums">
+          <span className="text-[11.5px] tabular-nums">
             {status === "extracting" ? "正在生成预览…" : "正在加载…"}
           </span>
         )}
@@ -59,7 +59,7 @@ export default function VideoCoverImage({
     return (
       <div className="w-full h-full flex flex-col items-center justify-center bg-bg-subtle text-fg-subtle gap-1.5">
         <FolderIcon size={22} />
-        <span className="text-[10px]">封面生成失败</span>
+        <span className="text-[11.5px]">封面生成失败</span>
         {showRetryAction ? (
           <button
             type="button"
@@ -68,7 +68,7 @@ export default function VideoCoverImage({
               if (onRetry) onRetry();
               else retry();
             }}
-            className="relative z-10 text-[10px] text-accent hover:underline"
+            className="relative z-10 text-[11.5px] text-accent hover:underline"
           >
             重试
           </button>

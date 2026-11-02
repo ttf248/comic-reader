@@ -27,7 +27,7 @@ const VirtualList = forwardRef<HTMLDivElement, ListProps>(function VirtualList(
   // 之前限制 max-w-4xl 会让右半屏空着，一屏能看的条目比网格视图还少。
   // 左右留白由调用方的 page-shell 统一提供，这里不再重复加 padding。
   return (
-    <div ref={ref} style={style} className="py-2">
+    <div ref={ref} style={style} className="py-1">
       {children}
     </div>
   );

@@ -93,6 +93,7 @@
 - 6 套强调色：graphite / indigo / rose / forest / ochre / plum
 - 工具栏主题菜单支持方向键定位、Enter/Space 确认；主题与强调色分组显示当前选择，色块使用中文名称，可连续调整后按 Esc 关闭
 - CSS 变量驱动，主题切换一次 reflow 不重渲组件树
+- 统一设计系统（排版层级 / 间距 / 圆角 / 阴影 / 动效节奏）沉淀在 `frontend/src/styles/tokens.css` 与 `global.css` 的共享组件层；中文正文最小 12.5px，不再用大写拉丁 + 大字距做章节标签。详见 [docs/UI_REDESIGN.md](./docs/UI_REDESIGN.md)
 
 ### 导航与搜索
 
@@ -306,6 +307,11 @@ local-gallery/
 │       ├── components/     # album / gallery / layout / home / common
 │       └── utils/          # shortcuts / path / storage / format / albumGrouping / libraryCard
 ├── docs/                   # 架构 / API / 快捷键 / 全功能清单
+│   ├── ARCHITECTURE.md     # 模块划分、数据流、扩展点
+│   ├── API.md              # HTTP 接口契约
+│   ├── SHORTCUTS.md        # 快捷键全集
+│   ├── FEATURES.md         # 全功能清单
+│   └── UI_REDESIGN.md      # 前端视觉与交互重设计（设计规范 / 页面改动 / 两轮评审）
 ├── scripts/                # dev / build / package / publish / monitor / install-ffmpeg
 ├── .github/workflows/      # CI 与 v2 发布工作流
 └── .vscode/                # launch / tasks / settings / extensions

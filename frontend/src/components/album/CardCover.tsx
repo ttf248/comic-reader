@@ -10,6 +10,11 @@ interface Props {
     "coverKind" | "coverPath" | "covers" | "title" | "variant"
   >;
   loading?: "lazy" | "eager";
+  /**
+   * 紧凑模式：列表视图的缩略图很小，放不下「正在加载…」这类提示文字，
+   * 只保留转圈指示。
+   */
+  compact?: boolean;
 }
 
 /**
@@ -18,7 +23,7 @@ interface Props {
  * 相册强调一个明确的主封面；集合与智能视图展示最多四张去重后的代表图。
  * `covers` 为空时继续使用 `coverPath`，让旧扫描结果也能得到完整封面。
  */
-export default function CardCover({ data, loading = "lazy" }: Props) {
+export default function CardCover({ data, loading = "lazy", compact }: Props) {
   const paths = getCoverPaths(data);
 
   if (paths.length === 0) return <CoverPlaceholder />;
@@ -32,6 +37,7 @@ export default function CardCover({ data, loading = "lazy" }: Props) {
           loading={loading}
           alt={data.title}
           showRetryAction={false}
+          showExtractingHint={!compact}
         />
       );
     }
