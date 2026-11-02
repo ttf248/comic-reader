@@ -4310,3 +4310,46 @@ test("窄屏下顶栏不横向溢出，筛选标签保持一行", async ({ page 
     expect(chip.height, `标签「${chip.text}」被压成竖排`).toBeLessThan(40);
   }
 });
+
+test("卡片右上角的星标可以直接收藏，且不会跳转", async ({ page, request }) => {
+  await page.goto("/");
+  const link = page.getByRole("link", { name: /^打开相册/ }).first();
+  const href = await link.getAttribute("href");
+  expect(href).toBeTruthy();
+  const albumId = decodeURIComponent(href!.replace("/albums/", ""));
+  await link.hover();
+
+  const star = page.getByRole("button", { name: /^收藏「/ }).first();
+  await expect(star).toBeVisible();
+  await star.click();
+
+  // 星标在链接之外：点击不能带着进入相册。
+  await expect(page).toHaveURL(/\/$/);
+  // 服务端确实写入了收藏。
+  await expect
+    .poll(async () => {
+      const favorites = (await (
+        await request.get("/api/favorites")
+      ).json()) as { favorites: string[] };
+      return favorites.favorites.includes(albumId);
+    })
+    .toBe(true);
+  // 卡片上的星标切换成「取消收藏」。
+  await expect(
+    page.getByRole("button", { name: /^取消收藏「/ }).first(),
+  ).toBeVisible();
+
+  // 复原：取消收藏，避免影响后续用例。
+  await page
+    .getByRole("button", { name: /^取消收藏「/ })
+    .first()
+    .click();
+  await expect
+    .poll(async () => {
+      const favorites = (await (
+        await request.get("/api/favorites")
+      ).json()) as { favorites: string[] };
+      return favorites.favorites.includes(albumId);
+    })
+    .toBe(false);
+});

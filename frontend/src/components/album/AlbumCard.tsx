@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type MouseEventHandler } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type MouseEventHandler,
+  type ReactNode,
+} from "react";
 import { Link } from "react-router-dom";
 import AlbumContextMenu from "./AlbumContextMenu";
 import PropertiesDialog from "../common/PropertiesDialog";
@@ -18,6 +24,8 @@ import { useUIStore, type ViewMode } from "../../store/uiStore";
 import { timeAgo } from "../../utils/date";
 import { formatDuration } from "../../utils/format";
 import { isCompleted, isUnread, progressPercent } from "../../utils/progress";
+import { favoriteResourceId } from "../../utils/path";
+import { useToggleFavorite } from "../../hooks/useFavorites";
 import CardCover from "./CardCover";
 
 export type CardVariant = "album" | "collection" | "smart";
@@ -74,6 +82,11 @@ interface Props {
   showLastSeen?: boolean;
   /** 列表容器统一持有菜单，独立卡片则在本地展示同一套操作。 */
   onContextMenu?: MouseEventHandler<HTMLDivElement>;
+  /**
+   * 封面右上角的额外操作（如「标记为已读」）。
+   * 渲染在链接之外的浮层里，避免在 <a> 内嵌套按钮；仅网格视图支持。
+   */
+  overlayAction?: ReactNode;
 }
 
 // 通用卡片：网格（统一 4:5 封面）/ 列表（横向缩略图 + 元数据）。
@@ -88,9 +101,30 @@ export default function AlbumCard({
   variant = "grid",
   showLastSeen,
   onContextMenu,
+  overlayAction,
 }: Props) {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [propertiesId, setPropertiesId] = useState<string | null>(null);
+  const toggleFavorite = useToggleFavorite();
+  const pushToast = useUIStore((s) => s.pushToast);
+  const label = data.displayTitle ?? data.title;
+
+  // 星标直接写收藏：失败时给出中文提示，不让失败静默。
+  const onToggleFavorite = async () => {
+    try {
+      await toggleFavorite(favoriteResourceId(data));
+      pushToast({
+        kind: "success",
+        message: data.isFavorite
+          ? `已取消收藏「${label}」`
+          : `已收藏「${label}」`,
+        ttl: 1200,
+      });
+    } catch {
+      pushToast({ kind: "error", message: "收藏失败，请稍后重试" });
+    }
+  };
+
   return (
     <div
       onContextMenu={(event) => {
@@ -104,9 +138,18 @@ export default function AlbumCard({
       }}
     >
       {variant === "list" ? (
-        <ListCard data={data} showLastSeen={showLastSeen} />
+        <ListCard
+          data={data}
+          showLastSeen={showLastSeen}
+          onToggleFavorite={onToggleFavorite}
+        />
       ) : (
-        <GridCard data={data} showLastSeen={showLastSeen} />
+        <GridCard
+          data={data}
+          showLastSeen={showLastSeen}
+          onToggleFavorite={onToggleFavorite}
+          overlayAction={overlayAction}
+        />
       )}
       {menu && (
         <AlbumContextMenu
@@ -152,9 +195,13 @@ function formatMediaCount(
 function GridCard({
   data,
   showLastSeen,
+  onToggleFavorite,
+  overlayAction,
 }: {
   data: CardData;
   showLastSeen?: boolean;
+  onToggleFavorite: () => void;
+  overlayAction?: ReactNode;
 }) {
   // 直接渲染 <img loading="lazy">：浏览器原生懒加载比我们自写的 IO 简单且更可靠
   // （自写 IO 在 React 18 StrictMode dev mount-twice + 卡片树整体重渲染时容易
@@ -210,7 +257,11 @@ function GridCard({
   }, []);
 
   return (
-    <div onMouseEnter={onEnter} onMouseLeave={onLeave} className="relative">
+    <div
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
+      className="relative group"
+    >
       <Link
         to={data.to}
         aria-label={`打开${data.variant === "album" ? "相册" : data.variant === "collection" ? "集合" : "智能视图"}“${data.displayTitle ?? data.title}”`}
@@ -221,21 +272,6 @@ function GridCard({
           data-testid="card-cover"
         >
           <CardCover data={data} />
-
-          {/* 视频角标：▶ + 可选时长（覆盖在 cover 之上） */}
-          <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
-            {data.coverKind === "video" && (
-              <div className="inline-flex items-center gap-1 bg-bg-elevated/90 backdrop-blur text-fg text-[10px] font-medium px-1.5 py-0.5 rounded-md shadow-sm">
-                <PlayFilledIcon size={9} className="text-accent" />
-                <span>{formatDuration(data.durationSec)}</span>
-              </div>
-            )}
-            {data.isFavorite && (
-              <div className="bg-bg-elevated/90 backdrop-blur rounded-full p-1 shadow-sm">
-                <StarIcon size={11} className="text-warning" filled />
-              </div>
-            )}
-          </div>
 
           {/* 服务端转码状态（仅在转码中/失败时显示；不与上面 ▶ 角标冲突） */}
           {data.coverKind === "video" && (
@@ -378,6 +414,24 @@ function GridCard({
           )}
         </div>
       </Link>
+
+      {/* 封面右上角浮层：视频角标 + 收藏星标。
+          放在 Link 之外：在 <a> 里嵌按钮既不合法，也会让 Enter 冒泡触发跳转。 */}
+      <div className="absolute top-2 right-2 z-10 flex flex-col items-end gap-1">
+        {data.coverKind === "video" && (
+          <div className="pointer-events-none inline-flex items-center gap-1 bg-bg-elevated/90 backdrop-blur text-fg text-[10px] font-medium px-1.5 py-0.5 rounded-md shadow-sm">
+            <PlayFilledIcon size={9} className="text-accent" />
+            <span>{formatDuration(data.durationSec)}</span>
+          </div>
+        )}
+        {overlayAction}
+        <FavoriteStar
+          fav={Boolean(data.isFavorite)}
+          label={data.displayTitle ?? data.title}
+          onToggle={onToggleFavorite}
+        />
+      </div>
+
       {/* 悬停预览（仅相册/合集；触摸设备不启用） */}
       {previewOn && previewRect && data.variant !== "smart" && (
         <HoverPreview
@@ -401,9 +455,11 @@ function GridCard({
 function ListCard({
   data,
   showLastSeen,
+  onToggleFavorite,
 }: {
   data: CardData;
   showLastSeen?: boolean;
+  onToggleFavorite: () => void;
 }) {
   // 与 GridCard 一致：直接依赖 <img loading="lazy">，不重复自写 IO。
   const progressPct = progressPercent(data.progress);
@@ -412,109 +468,149 @@ function ListCard({
   const multiRoot = useUIStore((s) => s.multiRoot);
 
   return (
-    <Link
-      to={data.to}
-      aria-label={`打开${data.variant === "album" ? "相册" : data.variant === "collection" ? "集合" : "智能视图"}“${data.displayTitle ?? data.title}”`}
-      className="group flex items-center gap-4 py-2 px-2.5 -mx-2.5 rounded-lg hover:bg-bg-subtle transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-    >
-      <div
-        className="relative w-20 aspect-[4/5] rounded-md bg-bg-subtle overflow-hidden shrink-0 border border-border shadow-xs"
-        data-testid="card-cover"
+    <div className="relative group flex items-center">
+      <Link
+        to={data.to}
+        aria-label={`打开${data.variant === "album" ? "相册" : data.variant === "collection" ? "集合" : "智能视图"}“${data.displayTitle ?? data.title}”`}
+        className="group flex flex-1 min-w-0 items-center gap-4 py-2 px-2.5 -mx-2.5 rounded-lg hover:bg-bg-subtle transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
       >
-        <CardCover data={data} loading="eager" />
-        <div className="absolute top-1 right-1 flex flex-col items-end gap-1">
+        <div
+          className="relative w-20 aspect-[4/5] rounded-md bg-bg-subtle overflow-hidden shrink-0 border border-border shadow-xs"
+          data-testid="card-cover"
+        >
+          <CardCover data={data} loading="eager" />
           {data.coverKind === "video" && (
-            <div className="inline-flex items-center gap-1 bg-bg-elevated/90 backdrop-blur text-fg text-[10px] font-medium px-1.5 py-0.5 rounded-md shadow-sm">
+            <div className="pointer-events-none absolute top-1 right-1 inline-flex items-center gap-1 bg-bg-elevated/90 backdrop-blur text-fg text-[10px] font-medium px-1.5 py-0.5 rounded-md shadow-sm">
               <PlayFilledIcon size={9} className="text-accent" />
               <span>{formatDuration(data.durationSec)}</span>
             </div>
           )}
-          {data.isFavorite && (
-            <div className="bg-bg-elevated/90 backdrop-blur rounded-full p-1 shadow-sm">
-              <StarIcon size={11} className="text-warning" filled />
-            </div>
-          )}
-        </div>
-        {isFinished && data.variant === "album" && (
-          <div
-            className="absolute bottom-1 right-1 bg-success/95 text-white rounded-md px-1.5 py-0.5 text-[10px] font-medium inline-flex items-center gap-0.5 shadow-sm"
-            title="已读完"
-          >
-            <CheckIcon size={10} />
-            <span>已读</span>
-          </div>
-        )}
-      </div>
-
-      <div className="flex-1 min-w-0">
-        <div className="text-[14px] font-medium text-fg truncate flex items-center gap-1.5">
-          <span className="truncate" title={data.displayTitle ?? data.title}>
-            {data.displayTitle ?? data.title}
-          </span>
           {isFinished && data.variant === "album" && (
-            <span className="inline-flex items-center gap-0.5 text-success text-[11px] font-medium shrink-0">
-              <CheckIcon size={11} />
+            <div
+              className="absolute bottom-1 right-1 bg-success/95 text-white rounded-md px-1.5 py-0.5 text-[10px] font-medium inline-flex items-center gap-0.5 shadow-sm"
+              title="已读完"
+            >
+              <CheckIcon size={10} />
               <span>已读</span>
-            </span>
-          )}
-        </div>
-        <div className="text-[12px] text-fg-subtle mt-1 flex items-center gap-2">
-          {data.subtitle && <span className="truncate">{data.subtitle}</span>}
-          {data.sourceName && multiRoot && (
-            <span className="text-fg-subtle/80 inline-flex items-center gap-0.5 shrink-0">
-              <FolderIcon size={11} className="shrink-0" />
-              <span className="truncate">来自 {data.sourceName}</span>
-            </span>
-          )}
-        </div>
-        {progressPct !== null && progressPct > 0 && (
-          <div className="mt-2 flex items-center gap-2 max-w-md">
-            <div className="flex-1 h-1 bg-bg-strong rounded-full overflow-hidden">
-              <div
-                className="h-full bg-accent"
-                style={{ width: `${progressPct}%` }}
-              />
             </div>
-            <span className="text-[11px] text-fg-subtle tabular-nums shrink-0">
-              {data.progress!.index + 1} / {data.progress!.total}
+          )}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="text-[14px] font-medium text-fg truncate flex items-center gap-1.5">
+            <span className="truncate" title={data.displayTitle ?? data.title}>
+              {data.displayTitle ?? data.title}
             </span>
+            {isFinished && data.variant === "album" && (
+              <span className="inline-flex items-center gap-0.5 text-success text-[11px] font-medium shrink-0">
+                <CheckIcon size={11} />
+                <span>已读</span>
+              </span>
+            )}
           </div>
-        )}
-      </div>
+          <div className="text-[12px] text-fg-subtle mt-1 flex items-center gap-2">
+            {data.subtitle && <span className="truncate">{data.subtitle}</span>}
+            {data.sourceName && multiRoot && (
+              <span className="text-fg-subtle/80 inline-flex items-center gap-0.5 shrink-0">
+                <FolderIcon size={11} className="shrink-0" />
+                <span className="truncate">来自 {data.sourceName}</span>
+              </span>
+            )}
+          </div>
+          {progressPct !== null && progressPct > 0 && (
+            <div className="mt-2 flex items-center gap-2 max-w-md">
+              <div className="flex-1 h-1 bg-bg-strong rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-accent"
+                  style={{ width: `${progressPct}%` }}
+                />
+              </div>
+              <span className="text-[11px] text-fg-subtle tabular-nums shrink-0">
+                {data.progress!.index + 1} / {data.progress!.total}
+              </span>
+            </div>
+          )}
+        </div>
 
-      {/* 右侧信息列：张数 / 最近查看固定右对齐，逐行对齐便于扫读。 */}
-      <div className="shrink-0 w-24 sm:w-32 text-right flex flex-col items-end gap-1">
-        <span className="text-[12px] text-fg-muted tabular-nums">
-          {(() => {
-            const media = formatMediaCount(data);
-            if (media) {
+        {/* 右侧信息列：张数 / 最近查看固定右对齐，逐行对齐便于扫读。 */}
+        <div className="shrink-0 w-24 sm:w-32 text-right flex flex-col items-end gap-1">
+          <span className="text-[12px] text-fg-muted tabular-nums">
+            {(() => {
+              const media = formatMediaCount(data);
+              if (media) {
+                return (
+                  <span title={media.title}>{media.label}</span>
+                );
+              }
               return (
-                <span title={media.title}>{media.label}</span>
-              );
-            }
-            return (
-              <>
-                {data.count}{" "}
-                {data.variant === "collection"
-                  ? "卷"
-                  : data.variant === "smart"
+                <>
+                  {data.count}{" "}
+                  {data.variant === "collection"
                     ? "卷"
-                    : "张"}
-              </>
-            );
-          })()}
-        </span>
-        {showLastSeen && data.lastSeenAt && (
-          <span className="text-[11px] text-fg-subtle inline-flex items-center gap-1">
-            <ClockIcon size={11} className="shrink-0 text-fg-subtle/70" />
-            <span>上次 {timeAgo(data.lastSeenAt)}</span>
+                    : data.variant === "smart"
+                      ? "卷"
+                      : "张"}
+                </>
+              );
+            })()}
           </span>
-        )}
-      </div>
+          {showLastSeen && data.lastSeenAt && (
+            <span className="text-[11px] text-fg-subtle inline-flex items-center gap-1">
+              <ClockIcon size={11} className="shrink-0 text-fg-subtle/70" />
+              <span>上次 {timeAgo(data.lastSeenAt)}</span>
+            </span>
+          )}
+        </div>
 
-      <div className="text-fg-subtle opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity pr-1">
-        <span className="text-sm">›</span>
-      </div>
-    </Link>
+        <div className="text-fg-subtle opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity pr-1">
+          <span className="text-sm">›</span>
+        </div>
+      </Link>
+
+      {/* 收藏星标：与链接平级，避免在 <a> 内嵌套按钮。 */}
+      <FavoriteStar
+        fav={Boolean(data.isFavorite)}
+        label={data.displayTitle ?? data.title}
+        onToggle={onToggleFavorite}
+        className="shrink-0 mr-1"
+      />
+    </div>
+  );
+}
+
+// 收藏星标：卡片右上角的收藏开关。
+// - 必须是链接的兄弟节点：在 <a> 内嵌按钮会让 Enter 冒泡触发跳转，也不合法。
+// - 桌面端悬停卡片才出现，已收藏的常驻显示；窄屏没有 hover，直接常驻。
+function FavoriteStar({
+  fav,
+  label,
+  onToggle,
+  className = "",
+}: {
+  fav: boolean;
+  label: string;
+  onToggle: () => void;
+  className?: string;
+}) {
+  const visibility = fav
+    ? "opacity-100"
+    : "opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100";
+  return (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onToggle();
+      }}
+      aria-pressed={fav}
+      aria-label={fav ? `取消收藏「${label}」` : `收藏「${label}」`}
+      title={fav ? "取消收藏" : "收藏"}
+      className={`inline-flex items-center justify-center w-6 h-6 rounded-full bg-bg-elevated/90 backdrop-blur shadow-sm transition-opacity ${visibility} ${
+        fav ? "text-warning" : "text-fg-muted hover:text-fg"
+      } ${className}`}
+    >
+      <StarIcon size={12} filled={fav} />
+    </button>
   );
 }

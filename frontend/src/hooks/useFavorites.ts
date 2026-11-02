@@ -1,4 +1,10 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCallback } from "react";
+import {
+  useQuery,
+  useMutation,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query";
 import { favoritesApi } from "../api/prefs";
 
 const EMPTY_FAVORITES: string[] = [];
@@ -8,17 +14,22 @@ const favoritesQueryOptions = {
   staleTime: 30_000,
 };
 
+type FavoritesResponse = Awaited<ReturnType<typeof favoritesApi.list>>;
+
+// 把服务端返回的收藏列表写回缓存，并顺手触发一次后台刷新。
+function applyFavorites(qc: QueryClient, saved: FavoritesResponse) {
+  qc.setQueryData(favoritesQueryOptions.queryKey, saved);
+  void qc.invalidateQueries({ queryKey: favoritesQueryOptions.queryKey });
+}
+
 // 收藏集合的全局 hook：list + toggle
 export function useFavorites() {
   const qc = useQueryClient();
 
   const query = useQuery(favoritesQueryOptions);
 
-  const updateFavorites = (
-    saved: Awaited<ReturnType<typeof favoritesApi.list>>,
-  ) => {
-    qc.setQueryData(favoritesQueryOptions.queryKey, saved);
-    void qc.invalidateQueries({ queryKey: favoritesQueryOptions.queryKey });
+  const updateFavorites = (saved: FavoritesResponse) => {
+    applyFavorites(qc, saved);
   };
 
   const add = useMutation({
@@ -52,4 +63,22 @@ export function useFavorites() {
     remove: (resourceId: string) => remove.mutateAsync(resourceId),
     toggle,
   };
+}
+
+// 只写不订阅：卡片上的星标按钮用。
+// 列表页可能有上百张卡片，每张都订阅收藏列表会让任意一次收藏写入触发全量重渲染，
+// 所以这里直接按需读写缓存，不建立查询订阅。
+export function useToggleFavorite() {
+  const qc = useQueryClient();
+
+  return useCallback(
+    async (resourceId: string) => {
+      const current = await qc.ensureQueryData(favoritesQueryOptions);
+      const saved = current.favorites.includes(resourceId)
+        ? await favoritesApi.remove(resourceId)
+        : await favoritesApi.add(resourceId);
+      applyFavorites(qc, saved);
+    },
+    [qc],
+  );
 }

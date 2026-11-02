@@ -22,6 +22,7 @@ vi.mock("../../hooks/useFavorites", () => ({
     favorites: [],
     toggle: vi.fn().mockResolvedValue([]),
   }),
+  useToggleFavorite: () => vi.fn().mockResolvedValue(undefined),
 }));
 vi.mock("../../hooks/useAlbumActions", () => ({
   useAlbumActions: () => ({

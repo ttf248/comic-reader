@@ -4,7 +4,7 @@ import AlbumCard, { type CardData } from "./AlbumCard";
 import AlbumContextMenu from "./AlbumContextMenu";
 import PropertiesDialog from "../common/PropertiesDialog";
 import { useFavorites } from "../../hooks/useFavorites";
-import { decodeFavPath } from "../../utils/path";
+import { favoriteResourceId } from "../../utils/path";
 import { useUIStore, type ViewMode } from "../../store/uiStore";
 
 export type { CardData } from "./AlbumCard";
@@ -70,9 +70,7 @@ export default function AlbumGrid({
   if (items.length === 0) return <>{empty}</>;
 
   const renderCard = (it: CardData) => {
-    const favPath =
-      it.variant === "smart" ? `smart:${it.title}` : decodeFavPath(it.to);
-    const isFav = favorites.includes(favPath);
+    const isFav = favorites.includes(favoriteResourceId(it));
     return (
       <AlbumCard
         data={{ ...it, isFavorite: isFav }}

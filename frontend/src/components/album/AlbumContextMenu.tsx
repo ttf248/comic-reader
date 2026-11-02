@@ -7,7 +7,7 @@ import {
   useResetAlbumRead,
 } from "../../hooks/useImageActivity";
 import { fileManagerErrorMessage } from "../../utils/fileManager";
-import { decodeFavPath } from "../../utils/path";
+import { favoriteResourceId } from "../../utils/path";
 import { isCompleted } from "../../utils/progress";
 import { useUIStore } from "../../store/uiStore";
 import {
@@ -42,8 +42,7 @@ export default function AlbumContextMenu({
   const resetRead = useResetAlbumRead();
   const pushToast = useUIStore((state) => state.pushToast);
   const isAlbum = item.variant === "album";
-  const resourceId =
-    item.variant === "smart" ? `smart:${item.title}` : decodeFavPath(item.to);
+  const resourceId = favoriteResourceId(item);
   const imageCount = item.imageCount ?? item.progress?.total ?? item.count;
   const completed = isCompleted(item.progress);
   const items: AnyMenuItem[] = [
@@ -101,7 +100,20 @@ export default function AlbumContextMenu({
             actions.open();
             break;
           case "favorite":
-            void toggle(resourceId).catch(() => {});
+            // 写入失败要出声：收藏列表不会自己更新，失败时用户看不到任何反馈。
+            void toggle(resourceId)
+              .then(() =>
+                pushToast({
+                  kind: "success",
+                  message: favorites.includes(resourceId)
+                    ? "已取消收藏"
+                    : "已加入收藏",
+                  ttl: 1200,
+                }),
+              )
+              .catch(() =>
+                pushToast({ kind: "error", message: "收藏失败，请稍后重试" }),
+              );
             break;
           case "explorer":
             void actions

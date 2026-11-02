@@ -68,27 +68,28 @@ export function UnreadHero({
         </div>
         <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2.5">
           {visible.map((card) => (
-            <div key={card.id} className="relative group">
-              <AlbumCard
-                data={{
-                  ...card,
-                  isFavorite: favoriteIds.has(decodeFavPath(card.to)),
-                }}
-              />
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  onMarkRead(card);
-                }}
-                className="absolute top-1.5 right-1.5 z-10 w-6 h-6 rounded-full bg-black/55 text-white/90 hover:bg-accent hover:text-white flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-all"
-                title={`将「${card.title}」标记为已读`}
-                aria-label={`将${card.title}标记为已读`}
-              >
-                <CheckIcon size={12} />
-              </button>
-            </div>
+            <AlbumCard
+              key={card.id}
+              data={{
+                ...card,
+                isFavorite: favoriteIds.has(decodeFavPath(card.to)),
+              }}
+              overlayAction={
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onMarkRead(card);
+                  }}
+                  className="w-6 h-6 rounded-full bg-black/55 text-white/90 hover:bg-accent hover:text-white flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-all"
+                  title={`将「${card.title}」标记为已读`}
+                  aria-label={`将${card.title}标记为已读`}
+                >
+                  <CheckIcon size={12} />
+                </button>
+              }
+            />
           ))}
         </div>
       </div>

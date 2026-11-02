@@ -7,6 +7,7 @@ import { useFavorites } from "../hooks/useFavorites";
 
 vi.mock("../hooks/useFavorites", () => ({
   useFavorites: vi.fn(),
+  useToggleFavorite: () => vi.fn().mockResolvedValue(undefined),
 }));
 
 function makeCard(path: string, name: string) {

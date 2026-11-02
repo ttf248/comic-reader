@@ -17,3 +17,13 @@ export function albumRoute(albumId: string): string {
 export function tagRoute(tag: string): string {
   return `/tags/${encodeURIComponent(tag)}`
 }
+
+// 收藏用的资源 ID：智能集合用 smart: 前缀，其余用收藏路径。
+// 卡片星标、右键菜单和收藏页必须用同一套 ID，否则收藏会互相看不见。
+export function favoriteResourceId(item: {
+  variant?: string
+  title: string
+  to: string
+}): string {
+  return item.variant === 'smart' ? `smart:${item.title}` : decodeFavPath(item.to)
+}

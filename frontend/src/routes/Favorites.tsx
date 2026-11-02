@@ -228,7 +228,7 @@ export default function Favorites() {
       ) : loadFailed && cards.length === 0 ? null : favorites.length === 0 ? (
         <EmptyState
           title="还没有收藏"
-          description="在主页或文件夹页右键点击卡片，或者使用卡片右上角的星标收藏喜欢的图像。"
+          description="在主页或文件夹页点击卡片右上角的星标收藏，或右键点击卡片选择「收藏」。"
           icon={<StarIcon size={20} />}
           action={
             <button
