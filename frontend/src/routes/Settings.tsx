@@ -212,12 +212,10 @@ export default function Settings() {
   );
   if (!data) {
     return (
-      <div className="px-6 lg:px-10 py-10 max-w-3xl mx-auto w-full">
-        <h1 className="font-display text-[32px] font-semibold tracking-[-0.02em] mb-6">
-          设置
-        </h1>
+      <div className="page-shell py-10 max-w-3xl mx-auto">
+        <h1 className="page-title mb-6">设置</h1>
         {prefsError || (
-          <div role="status" className="text-fg-muted text-sm">
+          <div role="status" className="text-fg-muted text-[13px]">
             正在加载设置…
           </div>
         )}
@@ -226,11 +224,9 @@ export default function Settings() {
   }
 
   return (
-    <div className="px-6 lg:px-10 py-10 max-w-3xl mx-auto w-full">
-      <h1 className="font-display text-[32px] font-semibold tracking-[-0.02em]">
-        设置
-      </h1>
-      <p className="text-sm text-fg-muted mt-2 mb-10">个性化你的阅读体验</p>
+    <div className="page-shell py-10 max-w-3xl mx-auto">
+      <h1 className="page-title">设置</h1>
+      <p className="text-[13px] text-fg-muted mt-2 mb-10">个性化你的阅读体验</p>
       {prefsError}
 
       <Section title="外观" icon={<SunIcon size={13} />}>
@@ -487,10 +483,8 @@ export default function Settings() {
           <span className="text-fg-muted">
             <ServerIcon size={13} />
           </span>
-          <h2 className="text-[11px] uppercase tracking-[0.18em] text-fg-muted font-medium">
-            服务端
-          </h2>
-          <span className="text-[10px] text-fg-subtle ml-2">
+          <h2 className="section-title">服务端</h2>
+          <span className="text-[12.5px] text-fg-subtle ml-2">
             改动自动写回后端 config.yaml
           </span>
         </div>
@@ -498,19 +492,19 @@ export default function Settings() {
       </section>
 
       <Section title="关于" icon={<InfoIcon size={13} />}>
-        <div className="text-sm text-fg-muted leading-relaxed">
+        <div className="text-[13px] text-fg-muted leading-relaxed">
           <div className="font-display text-base text-fg">
             Local Gallery · 本地画廊
           </div>
           <div className="mt-1">Web 版 · v{__APP_VERSION__}</div>
-          <div className="mt-4 text-xs text-fg-subtle flex items-center gap-2">
+          <div className="mt-4 text-[12.5px] text-fg-subtle flex items-center gap-2">
             <span>按</span>
             <kbd className="font-mono px-1.5 py-0.5 rounded border border-border-faint bg-bg-subtle">
               ?
             </kbd>
             <span>查看所有快捷键</span>
           </div>
-          <div className="mt-3 text-xs text-fg-subtle flex items-center gap-2">
+          <div className="mt-3 text-[12.5px] text-fg-subtle flex items-center gap-2">
             <KeyboardIcon size={12} />
             <span>所有偏好（主题、强调色、视图、收藏）均存于本机</span>
           </div>
@@ -533,11 +527,9 @@ function Section({
     <section className="mb-10">
       <div className="flex items-center gap-2 mb-3">
         {icon && <span className="text-fg-muted">{icon}</span>}
-        <h2 className="text-[11px] uppercase tracking-[0.18em] text-fg-muted font-medium">
-          {title}
-        </h2>
+        <h2 className="section-title">{title}</h2>
       </div>
-      <div className="bg-bg-elevated border border-border-faint rounded-md divide-y divide-border-faint overflow-hidden">
+      <div className="bg-bg-elevated border border-border-faint rounded-lg divide-y divide-border-faint overflow-hidden">
         {children}
       </div>
     </section>
