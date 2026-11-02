@@ -4549,3 +4549,37 @@ test("浏览器解不了的图片给出明确提示而不是破图", async ({ pa
   await page.getByRole("button", { name: "打开第 1 张", exact: true }).click();
   await expect(page.getByText("该图片无法显示")).toBeVisible();
 });
+
+test("主页的视图筛选条紧贴在「全部图像」网格上方", async ({ page }) => {
+  await page.goto("/");
+  const chip = page.getByRole("button", { name: /^文件夹/ });
+  await expect(chip).toBeVisible();
+  await chip.scrollIntoViewIfNeeded();
+
+  // 筛选条只作用于「全部图像」网格，必须和网格同处一个 section。
+  // 之前它排在未读 / 继续阅读 / 时间线之前，离网格两千多像素，
+  // 用户滚到网格时控件已经不在视野里。
+  const order = await page.evaluate(() => {
+    const heading = [...document.querySelectorAll("h2")].find(
+      (el) => (el.textContent ?? "").trim() === "全部图像",
+    );
+    const chipButton = [...document.querySelectorAll("button")].find((el) =>
+      (el.textContent ?? "").trim().startsWith("文件夹"),
+    );
+    const section = heading?.closest("section");
+    const card = section?.querySelector('[data-testid="card-cover"]');
+    if (!heading || !chipButton || !section || !card) return null;
+    const follows = (a: Element, b: Element) =>
+      (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+    return {
+      chipInSection: section.contains(chipButton),
+      headingBeforeChip: follows(heading, chipButton),
+      chipBeforeCard: follows(chipButton, card),
+    };
+  });
+  expect(order).toEqual({
+    chipInSection: true,
+    headingBeforeChip: true,
+    chipBeforeCard: true,
+  });
+});

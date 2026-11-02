@@ -467,22 +467,6 @@ export default function Home() {
         </div>
       </section>
 
-      {/* === 视图筛选 === */}
-      {hasContent && needsHistory && <ViewedSortNotice query={historyQuery} />}
-      {hasContent && (
-        <ListFilterBar
-          viewChips={[
-            { key: "all", label: "全部", count: counts.all },
-            { key: "album", label: "文件夹", count: counts.album },
-            { key: "collection", label: "集合", count: counts.collection },
-            { key: "smart", label: "标签", count: counts.smart },
-          ]}
-          activeViewKey={view}
-          onChangeView={(k) => setView(k as typeof view)}
-          totalCount={filtered.length}
-        />
-      )}
-
       {/* === 未读 hero(有未读时置顶 6 张,直接引导用户进下一本)== */}
       {hasContent && unreadCards.length > 0 && (
         <UnreadHero
@@ -552,6 +536,23 @@ export default function Home() {
               </>
             )}
           </div>
+
+          {/* 筛选 / 排序 / 视图切换只作用于下面这张网格，因此放在
+              「全部图像」标题正下方贴着网格；不要提到未读 / 继续阅读 /
+              时间线这些区块前面 —— 那里离网格有两千多像素，用户滚到
+              网格时控件早已不在视野里。 */}
+          {needsHistory && <ViewedSortNotice query={historyQuery} />}
+          <ListFilterBar
+            viewChips={[
+              { key: "all", label: "全部", count: counts.all },
+              { key: "album", label: "文件夹", count: counts.album },
+              { key: "collection", label: "集合", count: counts.collection },
+              { key: "smart", label: "标签", count: counts.smart },
+            ]}
+            activeViewKey={view}
+            onChangeView={(k) => setView(k as typeof view)}
+            totalCount={filtered.length}
+          />
 
           {isLoadingInitial ? (
             <EmptyState
