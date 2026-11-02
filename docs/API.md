@@ -190,6 +190,8 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 纯 Go 解码器不支持的图片格式（HEIC/HEIF 等 iPhone 照片）优先用 ffmpeg 转换后生成缩略图；ffmpeg 不可用或转换失败时返回 `415 unsupported_format`，前端显示占位图而不是破图。
 
+缩略图与视频封面都等比缩放到不超过配置尺寸，不补边、不放大，因此返回的 JPEG 尺寸随源文件宽高比变化（例如 16:9 视频返回 320×180，而不是补边后的 320×350）。前端按原始比例展示，不裁切画面。
+
 ### `POST /api/thumbs/:fileId/cover`
 
 上传浏览器抽取的视频封面，body 为 JPEG/PNG 原始字节，最大 5 MiB。

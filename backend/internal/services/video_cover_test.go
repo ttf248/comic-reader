@@ -239,6 +239,86 @@ func TestVideoCoverExtractor_Unavailable(t *testing.T) {
 	}
 }
 
+// 封面不能补黑边:16:9 视频抽出的帧必须保持原始宽高比。
+//
+// 早先的抽帧滤镜用 letterbox 把画面补黑边到固定尺寸,16:9 视频因此有
+// 近一半像素是死黑;而浏览器抽帧回退(SaveVideoCover → imaging.Fit)不补边,
+// 同一个视频会因为封面由哪条路径生成而形状不同。这里锁定"不补边"。
+func TestVideoCoverExtractor_Extract_KeepsAspectRatio(t *testing.T) {
+	ff := findFFmpeg(t)
+	dir := t.TempDir()
+	vidPath := filepath.Join(dir, "wide.mp4")
+	// 640x360 是 16:9;若被补黑边到 320x350,上下会各多出约 85px 黑边。
+	cmd := exec.Command(ff,
+		"-y", "-hide_banner", "-loglevel", "error",
+		"-f", "lavfi", "-i", "color=c=green:s=640x360:d=2:r=25",
+		"-c:v", "libx264", "-pix_fmt", "yuv420p",
+		vidPath,
+	)
+	if outBytes, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("generate wide test video: %v\n%s", err, outBytes)
+	}
+
+	ex := NewVideoCoverExtractor(VideoCoverOptions{
+		FFmpegPath: ff,
+		Width:      320,
+		Height:     350,
+		Quality:    85,
+		Timeout:    10 * 1e9,
+	})
+	data, err := ex.Extract(vidPath)
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+	img, err := jpeg.Decode(bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("decode extracted jpeg: %v", err)
+	}
+	w, h := img.Bounds().Dx(), img.Bounds().Dy()
+	if w != 320 {
+		t.Errorf("width = %d, want 320 (宽边按目标缩放)", w)
+	}
+	// 320 / 16 * 9 = 180。补黑边的话这里会是 350。
+	if h != 180 {
+		t.Errorf("height = %d, want 180 (16:9 应保持比例,不补边)", h)
+	}
+}
+
+// 抽帧帧的尺寸由视频自身宽高比决定,不能被拉成固定尺寸。
+func TestVideoCoverExtractor_Extract_NoUpscale(t *testing.T) {
+	ff := findFFmpeg(t)
+	dir := t.TempDir()
+	vidPath := filepath.Join(dir, "tiny.mp4")
+	cmd := exec.Command(ff,
+		"-y", "-hide_banner", "-loglevel", "error",
+		"-f", "lavfi", "-i", "color=c=green:s=100x50:d=2:r=25",
+		"-c:v", "libx264", "-pix_fmt", "yuv420p",
+		vidPath,
+	)
+	if outBytes, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("generate tiny test video: %v\n%s", err, outBytes)
+	}
+	ex := NewVideoCoverExtractor(VideoCoverOptions{
+		FFmpegPath: ff,
+		Width:      320,
+		Height:     350,
+		Timeout:    10 * 1e9,
+	})
+	data, err := ex.Extract(vidPath)
+	if err != nil {
+		t.Fatalf("Extract: %v", err)
+	}
+	img, err := jpeg.Decode(bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("decode extracted jpeg: %v", err)
+	}
+	w, h := img.Bounds().Dx(), img.Bounds().Dy()
+	// 小于目标的视频不放大(和 imaging.Fit 一样只缩小)。
+	if w != 100 || h != 50 {
+		t.Errorf("got %dx%d, want 100x50 (不应放大到目标尺寸)", w, h)
+	}
+}
+
 // 集成:thumbnail 服务注入 ffmpeg 后,GetOrCreate 一个真实视频,
 // 应返回缩略图 JPEG(不再 ErrVideoCoverMissing)。
 func TestThumbnailService_WithFFmpeg_VideoCover(t *testing.T) {

@@ -623,6 +623,33 @@ for (const albumName of ["sample-video-cover", "sample-mixed-cover"]) {
   });
 }
 
+test("视频封面按原始比例完整显示，不裁切也不补黑边", async ({ page }) => {
+  const nodes = await scannedNodes(page.request);
+  const album = nodes.find((node) => node.name === "sample-video-cover");
+  expect(album).toBeDefined();
+  const response = await page.request.get(`/api/albums/${album!.id}/media`);
+  const media = (await response.json()) as {
+    page: { items: Array<{ id: string; kind: string }> };
+  };
+  const fileId = media.page.items.find((item) => item.kind === "video")!.id;
+  await page.goto(`/albums/${album!.id}`);
+  const cover = page.locator(`img[src="/api/thumbs/${fileId}"]`).first();
+  await expect(cover).toBeVisible();
+  await expect
+    .poll(() => cover.evaluate((image: HTMLImageElement) => image.naturalWidth))
+    .toBeGreaterThan(0);
+  // 网格是竖框（3:4），视频帧是横的：按 contain 完整显示，按 cover 会被裁掉
+  // 大半画面，只剩中间一条。
+  await expect(cover).toHaveClass(/object-contain/);
+  // 封面本身不再补黑边。素材是 16×16 的正方形视频：补过黑边的封面会是
+  // 320×350（不是正方形），等比缩放的封面保持正方形。
+  const natural = await cover.evaluate((image: HTMLImageElement) => ({
+    width: image.naturalWidth,
+    height: image.naturalHeight,
+  }));
+  expect(natural.width).toBe(natural.height);
+});
+
 test("离开相册会取消浏览器抽帧且不继续上传封面", async ({ page }) => {
   const nodes = await scannedNodes(page.request);
   const album = nodes.find((node) => node.name === "sample-video-cover");

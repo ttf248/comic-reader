@@ -84,7 +84,7 @@ export default function VideoCoverImage({
       alt={alt}
       loading={loading}
       decoding="async"
-      className="w-full h-full object-cover scale-fade"
+      className="w-full h-full object-contain scale-fade"
     />
   );
 }

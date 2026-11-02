@@ -326,11 +326,15 @@ func (e *VideoCoverExtractor) Extract(absPath string) ([]byte, error) {
 func (e *VideoCoverExtractor) runExtract(ctx context.Context, absPath string, seek float64) ([]byte, error) {
 	// -ss 在 -i 之前:fast seek(只解码到目标位置),对长视频关键。
 	// -frames:v 1:只要一帧就退出。
-	// scale + pad:保持比例 letterbox 到目标尺寸,跟 imaging.Fit 行为一致。
+	// scale 只按比例缩小、不补黑边:画面保留原始宽高比,和图片缩略图的
+	// imaging.Fit 语义一致(小图不放大)。早先这里用 pad 补黑边到固定
+	// 尺寸,导致 16:9 视频有近一半像素是死黑,而且和浏览器抽帧回退
+	// (SaveVideoCover 走 imaging.Fit、不补边)产出的封面形状不一致 ——
+	// 同一个视频会因为封面由哪条路径生成而长得不一样。
 	// image2pipe + mjpeg:把 JPEG 字节直接写到 stdout,免去落盘再读。
 	filter := fmt.Sprintf(
-		"scale=w=%d:h=%d:force_original_aspect_ratio=decrease,pad=%d:%d:(ow-iw)/2:(oh-ih)/2:black",
-		e.width, e.height, e.width, e.height,
+		"scale=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease",
+		e.width, e.height,
 	)
 	cmd := exec.CommandContext(ctx, e.ffmpegPath,
 		"-hide_banner",

@@ -203,12 +203,16 @@ func CacheKeyFromStat(absPath string, fi os.FileInfo) string {
 
 // videoCoverKey 视频封面专用缓存键。
 //
-// 在普通 CacheKey 前加 "vc:" 前缀，避免与同路径下的图片缩略图键碰撞
+// 在普通 CacheKey 前加 "vc2:" 前缀，避免与同路径下的图片缩略图键碰撞
 // （虽然一般不会同路径同时有图有视频，但显式区分更安全）。失效策略
 // 与图片一致：mtime 或 size 变化时自动重新生成。
+//
+// 前缀里的版本号 vc2：封面早期用 letterbox 补黑边到固定尺寸，与图片
+// 缩略图（等比缩放、不补边）形状不一致；改为等比缩放后必须换前缀，
+// 否则磁盘上已有的补边封面会继续命中缓存，修复不会生效。
 func videoCoverKey(absPath string, mtime time.Time, size int64) string {
 	h := md5.New()
-	fmt.Fprintf(h, "vc:%s|%d|%d", absPath, mtime.UnixNano(), size)
+	fmt.Fprintf(h, "vc2:%s|%d|%d", absPath, mtime.UnixNano(), size)
 	return hex.EncodeToString(h.Sum(nil))
 }
 
