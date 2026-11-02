@@ -4,7 +4,11 @@ import { useUIStore } from "../../store/uiStore";
 import { ChevronDownIcon, GridIcon, ListIcon, FilterIcon } from "./Icon";
 
 // 共享 filter strip: 视图 chips (可选) + 总数 + 排序 + 视图模式
-// 取代原 toolbar 上分散的 4-5 个控件,让 list 页面更克制。
+//
+// 设计约定（与 .chip / .btn 共享组件层一致）：
+// - 所有控件高度统一 30px，文字 13px，激活态 accent-soft + accent 字
+// - 左：视图切换；右：最少图数 · 总数 · 排序 · 网格/列表
+// - 控件之间用 gap-2 分组，不画分隔线，避免视觉噪声
 interface ListFilterBarProps {
   // 视图 chips (全部 / 文件夹 / 集合 / 标签),不需要就传 undefined
   viewChips?: { key: string; label: string; count: number }[];
@@ -33,61 +37,69 @@ export function ListFilterBar({
   const setMinImageCount = useSearchStore((s) => s.setMinImageCount);
 
   return (
-    <div className="px-6 lg:px-10 max-w-[1400px] mx-auto w-full">
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-t border-border-faint py-3">
-        <div className="flex items-center gap-1 flex-wrap min-w-0 w-full sm:w-auto sm:flex-1">
+    <div className="page-shell">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-border-faint py-3">
+        <div className="flex items-center gap-1 flex-wrap min-w-0">
           {viewChips?.map((v) => {
             const active = activeViewKey === v.key;
             return (
               <button
                 key={v.key}
                 onClick={() => onChangeView?.(v.key)}
-                className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md text-[12.5px] whitespace-nowrap transition-colors ${
-                  active
-                    ? "bg-bg-strong text-fg"
-                    : "text-fg-muted hover:bg-bg-subtle hover:text-fg"
-                }`}
+                aria-pressed={active}
+                className="chip"
               >
                 <span>{v.label}</span>
-                <span className="tabular-nums text-[10.5px] opacity-60">
+                <span className="tabular-nums text-[12px] opacity-70">
                   {v.count}
                 </span>
               </button>
             );
           })}
+          {/* 没有视图切换 chip 的页面（如未读 / 最近）：总数靠左，
+              避免整条筛选条只剩右半边、左侧空一大片。 */}
+          {!viewChips?.length && (
+            <span className="text-[12.5px] text-fg-muted tabular-nums">
+              共 {totalCount} 项
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {showMinImageFilter && (
             <MinImageFilter value={minImageCount} onChange={setMinImageCount} />
           )}
-          <span className="text-[11px] text-fg-subtle tabular-nums">
-            共 {totalCount} 项
-          </span>
+          {viewChips?.length ? (
+            <span className="text-[12.5px] text-fg-muted tabular-nums">
+              共 {totalCount} 项
+            </span>
+          ) : null}
           <SortMenu value={sortBy} onChange={setSortBy} />
           <div className="flex items-center border border-border-faint rounded-md overflow-hidden">
             <button
               onClick={() => setViewMode("grid")}
               title="网格"
               aria-label="网格视图"
-              className={`inline-flex items-center justify-center w-7 h-7 transition-colors ${
+              aria-pressed={viewMode === "grid"}
+              className={`inline-flex items-center justify-center w-[30px] h-[30px] transition-colors ${
                 viewMode === "grid"
                   ? "bg-bg-subtle text-fg"
                   : "text-fg-subtle hover:text-fg hover:bg-bg-subtle/60"
               }`}
             >
-              <GridIcon size={12} />
+              <GridIcon size={13} />
             </button>
             <button
               onClick={() => setViewMode("list")}
               title="列表"
               aria-label="列表视图"
-              className={`inline-flex items-center justify-center w-7 h-7 transition-colors ${
+              aria-pressed={viewMode === "list"}
+              className={`inline-flex items-center justify-center w-[30px] h-[30px] transition-colors ${
                 viewMode === "list"
                   ? "bg-bg-subtle text-fg"
                   : "text-fg-subtle hover:text-fg hover:bg-bg-subtle/60"
               }`}
             >
-              <ListIcon size={12} />
+              <ListIcon size={13} />
             </button>
           </div>
         </div>
@@ -152,14 +164,14 @@ function SortMenu({
         ref={triggerRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1 h-7 px-2.5 rounded-md text-[12px] text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors border border-border-faint"
+        className="btn btn-sm btn-outline"
         title="排序"
         aria-label="排序"
         aria-expanded={open}
         aria-controls={open ? optionsId : undefined}
       >
         <span>{cur.label}</span>
-        <ChevronDownIcon size={10} />
+        <ChevronDownIcon size={11} />
       </button>
       {open && (
         <div
@@ -217,15 +229,15 @@ function MinImageFilter({
   }
   return (
     <div
-      className={`inline-flex items-center gap-1 h-7 px-2 rounded-md border transition-colors ${
+      className={`inline-flex items-center gap-1 h-[30px] px-2 rounded-md border transition-colors ${
         active
           ? "border-accent/40 bg-accent-soft text-accent"
           : "border-border-faint text-fg-muted hover:bg-bg-subtle"
       }`}
       title="隐藏图数少于 N 的相册(0 = 不过滤)"
     >
-      <FilterIcon size={10} className="shrink-0" />
-      <span className="text-[11px] whitespace-nowrap">≥</span>
+      <FilterIcon size={11} className="shrink-0" />
+      <span className="text-[12.5px] whitespace-nowrap">≥</span>
       <input
         type="number"
         min={0}
@@ -246,13 +258,13 @@ function MinImageFilter({
             setDraft(String(value));
           }
         }}
-        className="w-10 bg-transparent border-0 outline-none text-[12px] tabular-nums text-right focus:outline-none"
+        className="w-9 bg-transparent border-0 outline-none text-[12.5px] tabular-nums text-right focus:outline-none"
         aria-label="最少图数"
       />
       {active && (
         <button
           onClick={() => onChange(0)}
-          className="text-fg-subtle hover:text-fg text-[12px] leading-none px-0.5"
+          className="text-fg-subtle hover:text-fg text-[13px] leading-none px-0.5"
           title="清除"
           aria-label="清除最小图数"
         >

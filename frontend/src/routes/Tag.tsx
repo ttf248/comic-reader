@@ -148,17 +148,15 @@ export default function Tag() {
   if (albums.length === 0) {
     return (
       <div className="min-h-full">
-        <div className="px-6 lg:px-10 pt-8 pb-5">
+        <div className="page-shell pt-8 pb-5">
           <button
             onClick={() => navigate(-1)}
-            className="inline-flex items-center gap-1 text-xs text-fg-subtle hover:text-fg mb-4 transition-colors"
+            className="btn btn-sm btn-ghost mb-4"
           >
-            <ChevronLeftIcon size={12} />
+            <ChevronLeftIcon size={13} />
             <span>返回</span>
           </button>
-          <h1 className="font-display text-2xl font-semibold tracking-tight">
-            标签：{tag}
-          </h1>
+          <h1 className="page-title">标签：{tag}</h1>
         </div>
         <EmptyState
           title="未找到该标签"
@@ -184,15 +182,10 @@ export default function Tag() {
           <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/40 to-transparent" />
         </div>
 
-        <div className="max-w-[1400px] mx-auto px-6 lg:px-10 -mt-20 relative z-10">
+        <div className="page-shell -mt-20 relative z-10">
           <div className="flex items-end gap-6 flex-wrap">
             <div className="min-w-0">
-              <div className="text-[11px] uppercase tracking-[0.18em] text-fg-subtle font-medium mb-2">
-                标签
-              </div>
-              <h1 className="font-display text-[36px] lg:text-[44px] leading-[1.05] font-semibold tracking-[-0.02em] text-fg">
-                {tag}
-              </h1>
+              <h1 className="page-title text-fg">{tag}</h1>
             </div>
             <div className="flex items-center gap-2 mb-3">
               <button
@@ -250,7 +243,7 @@ export default function Tag() {
       {/* 作品列表 */}
       <section
         aria-label="作品列表"
-        className="max-w-[1400px] mx-auto pt-8 pb-10"
+        className="page-shell pt-8 pb-10"
       >
         {needsHistory && <ViewedSortNotice query={historyQuery} />}
         <ListFilterBar totalCount={cards.length} showMinImageFilter={false} />
@@ -288,7 +281,7 @@ function Stat({
 }) {
   return (
     <div>
-      <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-[0.16em] text-fg-subtle">
+      <div className="flex items-center gap-1.5 text-[12.5px] text-fg-muted">
         {icon}
         <span>{label}</span>
       </div>
@@ -296,7 +289,7 @@ function Stat({
         {value}
       </div>
       {detail && (
-        <div className="text-[10px] text-fg-subtle mt-0.5">{detail}</div>
+        <div className="text-[12px] text-fg-subtle mt-0.5">{detail}</div>
       )}
     </div>
   );

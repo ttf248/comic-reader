@@ -165,17 +165,11 @@ export default function Favorites() {
 
   return (
     <div className="min-h-full">
-      <section className="px-6 lg:px-10 pt-10 pb-6 max-w-[1400px] mx-auto w-full">
-        <div className="flex items-center gap-2 mb-1">
-          <StarIcon size={13} className="text-warning" filled />
-          <span className="text-[11px] uppercase tracking-[0.14em] text-fg-muted">
-            收藏
-          </span>
-        </div>
-        <h1 className="font-display text-[32px] leading-[1.1] font-semibold tracking-tight">
+      <section className="page-shell pt-9 pb-6">
+        <h1 className="page-title">
           我收藏的图像
         </h1>
-        <p className="text-sm text-fg-muted mt-2 tabular-nums">
+        <p className="text-[13px] text-fg-muted mt-2 tabular-nums">
           {favoritesQuery.isLoading
             ? "正在加载收藏…"
             : favoritesFailed && favorites.length === 0
@@ -185,7 +179,7 @@ export default function Favorites() {
       </section>
 
       {loadFailed && (
-        <div className="px-6 lg:px-10 max-w-[1400px] mx-auto w-full mb-4">
+        <div className="page-shell mb-4">
           <div
             role="alert"
             className="flex items-center justify-between gap-3 rounded-md border border-danger/30 bg-danger/5 px-4 py-3 text-sm"
@@ -214,14 +208,14 @@ export default function Favorites() {
       {favoritesQuery.isLoading ? (
         <div
           role="status"
-          className="px-6 lg:px-10 max-w-[1400px] mx-auto text-sm text-fg-muted"
+          className="page-shell text-[13px] text-fg-muted"
         >
           正在加载收藏…
         </div>
       ) : detailsLoading && cards.length === 0 ? (
         <div
           role="status"
-          className="px-6 lg:px-10 max-w-[1400px] mx-auto text-sm text-fg-muted"
+          className="page-shell text-[13px] text-fg-muted"
         >
           正在解析收藏…
         </div>
@@ -233,7 +227,7 @@ export default function Favorites() {
           action={
             <button
               onClick={() => navigate("/")}
-              className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md bg-accent text-accent-fg hover:bg-accent-hover text-sm"
+              className="btn btn-primary"
             >
               去主页看看
             </button>
@@ -246,7 +240,7 @@ export default function Favorites() {
           action={
             <button
               onClick={() => navigate("/")}
-              className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md border border-border hover:bg-bg-subtle text-sm"
+              className="btn btn-outline"
             >
               去主页看看
             </button>
@@ -259,15 +253,15 @@ export default function Favorites() {
           action={
             <button
               onClick={() => useSearchStore.getState().reset()}
-              className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md border border-border hover:bg-bg-subtle text-sm"
+              className="btn btn-outline"
             >
               清除筛选
             </button>
           }
         />
       ) : (
-        <section className="max-w-[1400px] mx-auto w-full">
-          <div className="px-6 lg:px-10 pb-10">
+        <section className="page-shell">
+          <div className="pb-10">
             <AlbumGrid items={filtered} variant={viewMode} />
           </div>
         </section>

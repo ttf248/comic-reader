@@ -88,17 +88,11 @@ export default function Unread() {
 
   return (
     <div className="min-h-full">
-      <section className="px-6 lg:px-10 pt-10 pb-6 max-w-[1400px] mx-auto w-full">
-        <div className="flex items-center gap-2 mb-1">
-          <SparkleIcon size={13} className="text-fg-muted" />
-          <span className="text-[11px] uppercase tracking-[0.14em] text-fg-muted">
-            未读
-          </span>
-        </div>
-        <h1 className="font-display text-[32px] leading-[1.1] font-semibold tracking-tight">
+      <section className="page-shell pt-9 pb-6">
+        <h1 className="page-title">
           未读相册
         </h1>
-        <p className="text-sm text-fg-muted mt-2 tabular-nums flex items-center gap-3 flex-wrap">
+        <p className="text-[13px] text-fg-muted mt-2 tabular-nums flex items-center gap-3 flex-wrap">
           <span>
             还有 <span className="text-fg">{count}</span> 本没看
             <span className="text-fg-subtle/60 mx-1.5">·</span>
@@ -121,7 +115,7 @@ export default function Unread() {
       {count > 0 && <ListFilterBar totalCount={filtered.length} />}
 
       {isLoading && count === 0 ? (
-        <div className="px-6 lg:px-10 max-w-[1400px] mx-auto text-sm text-fg-muted">
+        <div className="page-shell text-[13px] text-fg-muted">
           加载中…
         </div>
       ) : count === 0 ? (
@@ -137,14 +131,14 @@ export default function Unread() {
             total === 0 ? (
               <button
                 onClick={() => navigate("/settings")}
-                className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md bg-accent text-accent-fg hover:bg-accent-hover text-sm"
+                className="btn btn-primary"
               >
                 去设置
               </button>
             ) : (
               <button
                 onClick={() => navigate("/")}
-                className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md border border-border hover:bg-bg-subtle text-sm"
+                className="btn btn-outline"
               >
                 回主页
               </button>
@@ -158,16 +152,16 @@ export default function Unread() {
           action={
             <button
               onClick={() => useSearchStore.getState().reset()}
-              className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md border border-border hover:bg-bg-subtle text-sm"
+              className="btn btn-outline"
             >
               清除筛选
             </button>
           }
         />
       ) : (
-        <section className="max-w-[1400px] mx-auto w-full">
-          <div className="px-6 lg:px-10 pb-10">
-            <AlbumGrid items={filtered} variant={viewMode} />
+        <section className="page-shell">
+          <div className="pb-10">
+            <AlbumGrid items={filtered} variant={viewMode} showUnreadBadge={false} />
           </div>
         </section>
       )}

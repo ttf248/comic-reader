@@ -34,7 +34,6 @@ import {
   ArrowUpRightIcon,
   ArrowRightLineIcon,
   InfoIcon,
-  CalendarIcon,
 } from "../components/common/Icon";
 import { useImageActivity } from "../hooks/useImageActivity";
 import { useAlbumActions } from "../hooks/useAlbumActions";
@@ -259,7 +258,7 @@ export default function Album() {
         action={
           <button
             onClick={() => navigate("/")}
-            className="inline-flex items-center gap-1.5 h-9 px-4 rounded-md border border-border hover:bg-bg-subtle text-sm"
+            className="btn btn-outline"
           >
             返回主页
           </button>
@@ -532,24 +531,20 @@ function AlbumView({
           <img
             src={thumbUrl(detail.coverImage)}
             alt=""
-            className="w-full h-full object-cover scale-110 blur-2xl opacity-25"
+            className="w-full h-full object-cover scale-110 blur-2xl opacity-20"
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-bg-elevated/40 to-bg-elevated" />
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-bg-elevated/70 to-bg-elevated" />
         </div>
 
-        <div className="relative px-6 lg:px-10 pt-6 pb-8 max-w-[1400px] mx-auto w-full">
-          <div className="flex items-center gap-3 mb-5">
+        <div className="page-shell relative pt-6 pb-8">
+          <div className="flex items-center gap-2 mb-5">
             <button
               onClick={onBack}
-              className="inline-flex items-center gap-1 text-xs text-fg-muted hover:text-fg transition-colors"
+              className="btn btn-sm btn-ghost -ml-2"
             >
-              <ChevronLeftIcon size={12} />
+              <ChevronLeftIcon size={13} />
               <span>返回</span>
             </button>
-            <span className="text-fg-subtle/50 text-xs">/</span>
-            <span className="text-xs text-fg-muted truncate">
-              {detail.name}
-            </span>
           </div>
 
           <div className="flex items-end gap-8 flex-wrap">
@@ -572,19 +567,19 @@ function AlbumView({
 
             {/* 标题 + 元信息 + CTA */}
             <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="font-display text-2xl sm:text-[28px] font-semibold tracking-[-0.01em] leading-tight">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h1 className="page-title">
                   {detail.name}
                 </h1>
                 {/* 散图视图：标题已是归属目录，这里标明它是「目录内散图」 */}
                 {detail.virtual && (
-                  <span className="inline-flex items-center gap-1 h-6 px-2 rounded-md bg-bg-subtle text-fg-muted text-[11px] shrink-0">
+                  <span className="inline-flex items-center gap-1 h-6 px-2 rounded-md bg-bg-subtle text-fg-muted text-[12px] shrink-0">
                     <FolderIcon size={11} />
                     本目录媒体
                   </span>
                 )}
               </div>
-              <div className="flex items-center gap-2 text-sm text-fg-muted mt-2 flex-wrap">
+              <div className="flex items-center gap-2 text-[13px] text-fg-muted mt-2 flex-wrap">
                 {detail.tags.length > 0 && (
                   <>
                     <span className="text-fg">{detail.tags.join(" · ")}</span>
@@ -628,7 +623,7 @@ function AlbumView({
               {/* 阅读进度条: 显眼 */}
               {progressPct !== null && progressPct > 0 && (
                 <div className="mt-4 max-w-md">
-                  <div className="flex items-center justify-between text-[11px] text-fg-muted mb-1.5 tabular-nums">
+                  <div className="flex items-center justify-between text-[12.5px] text-fg-muted mb-1.5 tabular-nums">
                     <span>阅读进度</span>
                     <span>
                       {Math.min(progress!.pageIndex + 1, currentPageCount)} /{" "}
@@ -649,14 +644,14 @@ function AlbumView({
                 {progressPct !== null && progressPct > 0 ? (
                   <button
                     onClick={() => openGallery(startIndex)}
-                    className="inline-flex items-center gap-2 h-10 px-5 rounded-lg bg-accent text-accent-contrast hover:bg-accent-hover transition-colors text-sm font-medium shadow-sm"
+                    className="btn btn-primary"
                   >
                     {/* 与下面「开始浏览」同一个动作，图标也要一致：
                         阅读器里看的是照片，用图片框而不是播放三角
                         （播放三角会让人以为相册里是视频）。 */}
-                    <ImageIcon size={13} />
+                    <ImageIcon size={14} />
                     <span>继续上次</span>
-                    <span className="text-[11px] opacity-70 tabular-nums">
+                    <span className="text-[12px] opacity-70 tabular-nums">
                       {Math.min(progress!.pageIndex + 1, currentPageCount)}/
                       {currentPageCount}
                     </span>
@@ -667,19 +662,19 @@ function AlbumView({
                       openGallery(0);
                       pushToast({ kind: "info", message: "开始浏览" });
                     }}
-                    className="inline-flex items-center gap-2 h-10 px-5 rounded-lg bg-accent text-accent-contrast hover:bg-accent-hover transition-colors text-sm font-medium shadow-sm"
+                    className="btn btn-primary"
                   >
-                    <ImageIcon size={13} />
+                    <ImageIcon size={14} />
                     <span>开始浏览</span>
                   </button>
                 )}
 
                 <button
                   onClick={toggleFavorite}
-                  className={`inline-flex items-center gap-1.5 h-10 px-3.5 rounded-lg text-[13px] transition-colors ${
+                  className={`btn ${
                     isFav
                       ? "bg-warning/10 text-warning border border-warning/30"
-                      : "border border-border-faint text-fg-muted hover:text-fg hover:bg-bg-subtle"
+                      : "btn-outline"
                   }`}
                 >
                   <StarIcon size={13} filled={isFav} />
@@ -691,7 +686,7 @@ function AlbumView({
                     ref={moreButtonRef}
                     type="button"
                     onClick={() => setMoreOpen((v) => !v)}
-                    className="inline-flex items-center justify-center w-10 h-10 rounded-lg text-fg-muted hover:text-fg hover:bg-bg-subtle border border-border-faint transition-colors"
+                    className="inline-flex items-center justify-center w-9 h-9 rounded-md text-fg-muted hover:text-fg hover:bg-bg-subtle border border-border-faint transition-colors"
                     title="更多"
                     aria-label="更多操作"
                     aria-haspopup="menu"
@@ -741,12 +736,11 @@ function AlbumView({
       </section>
 
       {/* 缩略图网格 */}
-      <div className="px-6 lg:px-10 pt-5 pb-3 flex items-center gap-3 max-w-[1400px] mx-auto w-full">
-        <ImageIcon size={12} className="text-fg-muted" />
-        <h2 className="text-[11px] uppercase tracking-[0.18em] text-fg-muted font-medium">
+      <div className="page-shell pt-5 pb-3 flex items-center gap-3">
+        <h2 className="section-title">
           {videoCount > 0 ? "全部媒体" : "所有图片"}
         </h2>
-        <span className="text-[11px] text-fg-subtle tabular-nums">
+        <span className="section-meta tabular-nums">
           {videoCount > 0
             ? `${detail.imageCount} 张 · ${videoCount} 个视频`
             : `${detail.imageCount} 张`}
@@ -990,26 +984,20 @@ function CollectionView({
 
   return (
     <div className="flex flex-col h-full">
-      <div className="px-6 lg:px-10 pt-8 pb-5">
+      <div className="page-shell pt-8 pb-5">
         <button
           onClick={onBack}
-          className="inline-flex items-center gap-1 text-xs text-fg-subtle hover:text-fg mb-4 transition-colors"
+          className="btn btn-sm btn-ghost mb-4 -ml-2"
         >
-          <ChevronLeftIcon size={12} />
+          <ChevronLeftIcon size={13} />
           <span>返回</span>
         </button>
         <div className="flex items-end justify-between gap-4 flex-wrap">
           <div className="min-w-0">
-            <div className="flex items-center gap-2 mb-1">
-              <FolderIcon size={13} className="text-fg-muted" />
-              <span className="text-[11px] uppercase tracking-[0.14em] text-fg-muted">
-                集合
-              </span>
-            </div>
-            <h1 className="font-display text-2xl font-semibold tracking-tight truncate">
+            <h1 className="page-title truncate">
               {detail.name}
             </h1>
-            <div className="text-sm text-fg-muted mt-1.5">
+            <div className="text-[13px] text-fg-muted mt-1.5">
               <span className="tabular-nums">{detail.albumCount} 卷</span>
             </div>
           </div>
@@ -1036,12 +1024,9 @@ function CollectionView({
               真正按年分组,这时显示时间线才有用。 */}
         {yearGroups.length >= 2 && (
           <div className="py-6">
-            <div className="px-6 lg:px-10 max-w-[1400px] mx-auto w-full flex items-center gap-3 mb-4">
-              <CalendarIcon size={13} className="text-fg-muted" />
-              <h2 className="text-[11px] uppercase tracking-[0.18em] text-fg-muted font-medium">
-                时间线
-              </h2>
-              <span className="text-[11.5px] text-fg-subtle">
+            <div className="page-shell flex items-center gap-3 mb-4">
+              <h2 className="section-title">时间线</h2>
+              <span className="section-meta">
                 按年份浏览 — 当前集合下的子相册/子集合
               </span>
             </div>
@@ -1125,22 +1110,18 @@ function VideoAlbumView({
       {/* Hero：大封面 + 标题 + CTA（与 AlbumView 视觉一致） */}
       <section className="relative bg-bg-elevated border-b border-border-faint">
         <div className="absolute inset-0 overflow-hidden">
-          <div className="w-full h-full bg-bg-subtle scale-110 blur-2xl opacity-25" />
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-bg-elevated/40 to-bg-elevated" />
+          <div className="w-full h-full bg-bg-subtle scale-110 blur-2xl opacity-20" />
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-bg-elevated/70 to-bg-elevated" />
         </div>
-        <div className="relative px-6 lg:px-10 pt-6 pb-8 max-w-[1400px] mx-auto w-full">
-          <div className="flex items-center gap-3 mb-5">
+        <div className="page-shell relative pt-6 pb-8">
+          <div className="mb-5">
             <button
               onClick={onBack}
-              className="inline-flex items-center gap-1 text-xs text-fg-muted hover:text-fg transition-colors"
+              className="btn btn-sm btn-ghost -ml-2"
             >
-              <ChevronLeftIcon size={12} />
+              <ChevronLeftIcon size={13} />
               <span>返回</span>
             </button>
-            <span className="text-fg-subtle/50 text-xs">/</span>
-            <span className="text-xs text-fg-muted truncate">
-              {detail.name}
-            </span>
           </div>
 
           <div className="flex items-end gap-8 flex-wrap">
@@ -1213,12 +1194,9 @@ function VideoAlbumView({
       </section>
 
       {/* 视频网格 */}
-      <div className="px-6 lg:px-10 pt-5 pb-3 flex items-center gap-3 max-w-[1400px] mx-auto w-full">
-        <ImageIcon size={12} className="text-fg-muted" />
-        <h2 className="text-[11px] uppercase tracking-[0.18em] text-fg-muted font-medium">
-          全部视频
-        </h2>
-        <span className="text-[11px] text-fg-subtle tabular-nums">
+      <div className="page-shell pt-5 pb-3 flex items-center gap-3">
+        <h2 className="section-title">全部视频</h2>
+        <span className="section-meta tabular-nums">
           {detail.videoCount ?? videos.length} 个
         </span>
       </div>
