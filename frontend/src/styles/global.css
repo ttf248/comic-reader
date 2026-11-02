@@ -29,9 +29,10 @@ body {
   background: var(--bg);
   color: var(--fg);
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.65;
   letter-spacing: 0.005em;
   font-weight: 400;
+  /* 中文正文最小 12.5px；更小的字号只允许用于徽章（见 .badge） */
 }
 
 * {
@@ -167,6 +168,166 @@ button:not(:disabled):active {
 .lift-card:hover {
   transform: translateY(-2px);
 }
+
+/* ============================================================
+   共享组件层
+   ------------------------------------------------------------
+   目的：让按钮、章节标题、筛选 chip、面板、徽章在全站只有一种
+   写法与一种尺寸。组件代码里不再散落各写各的 utility class。
+   ============================================================ */
+@layer components {
+  /* --- 页面容器：统一左右留白与最大宽度 --- */
+  .page-shell {
+    width: 100%;
+    max-width: 1440px;
+    margin-inline: auto;
+    padding-inline: 32px;
+  }
+  @media (max-width: 640px) {
+    .page-shell {
+      padding-inline: 16px;
+    }
+  }
+
+  /* --- 页面主标题 --- */
+  .page-title {
+    font-family: var(--font-display);
+    font-size: 30px;
+    line-height: 1.2;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+    color: var(--fg);
+  }
+  @media (max-width: 640px) {
+    .page-title {
+      font-size: 24px;
+    }
+  }
+
+  /* --- 区块标题：中文优先，不用 uppercase / 大字距 --- */
+  .section-title {
+    font-size: 15px;
+    line-height: 1.4;
+    font-weight: 600;
+    color: var(--fg);
+    letter-spacing: 0;
+  }
+  .section-meta {
+    font-size: 12.5px;
+    line-height: 1.45;
+    color: var(--fg-muted);
+  }
+
+  /* --- 按钮：三种语义，尺寸统一（h-8 / h-9 / h-10） --- */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 36px;
+    padding-inline: 14px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    transition:
+      background var(--dur-fast) var(--ease-out),
+      color var(--dur-fast) var(--ease-out),
+      border-color var(--dur-fast) var(--ease-out),
+      box-shadow var(--dur-fast) var(--ease-out),
+      transform var(--dur-fast) var(--ease-out);
+  }
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .btn-sm {
+    height: 30px;
+    padding-inline: 10px;
+    font-size: 12.5px;
+    border-radius: var(--radius-sm);
+  }
+
+  /* 主操作：accent 填充，全站只应有一个视觉主角 */
+  .btn-primary {
+    background: var(--accent);
+    color: var(--accent-contrast);
+  }
+  .btn-primary:not(:disabled):hover {
+    background: var(--accent-hover);
+  }
+
+  /* 次级操作：描边 */
+  .btn-outline {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    color: var(--fg);
+  }
+  .btn-outline:not(:disabled):hover {
+    background: var(--bg-subtle);
+    border-color: var(--border-strong);
+  }
+
+  /* 幽灵操作：用于工具条 / 次要入口 */
+  .btn-ghost {
+    background: transparent;
+    color: var(--fg-muted);
+  }
+  .btn-ghost:not(:disabled):hover {
+    background: var(--bg-subtle);
+    color: var(--fg);
+  }
+
+  /* --- 筛选 chip：视图切换 / 标签切换 --- */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 30px;
+    padding-inline: 10px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    color: var(--fg-muted);
+    white-space: nowrap;
+    transition:
+      background var(--dur-fast) var(--ease-out),
+      color var(--dur-fast) var(--ease-out);
+  }
+  .chip:hover {
+    background: var(--bg-subtle);
+    color: var(--fg);
+  }
+  .chip[aria-pressed="true"],
+  .chip[data-active="true"] {
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  /* --- 徽章：只用于短词 / 数字，正文不使用 --- */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 20px;
+    padding-inline: 6px;
+    border-radius: var(--radius-sm);
+    font-size: 11.5px;
+    line-height: 1;
+    font-weight: 500;
+  }
+
+  /* --- 面板：仅在确实需要"框"时使用（例如设置分组） --- */
+  .panel {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+  }
+}
+
+/* ============================================================
+   共享组件层结束
+   ============================================================ */
 
 /* === 统一的 kbd 样式 === */
 /* 放在 @layer components 里：否则未分层的自定义规则会盖掉 Tailwind 的
