@@ -19,6 +19,9 @@ export interface CacheStats {
   // 才能让各细分之和等于 totalBytes。
   thumbs: SubUsage;
   converted: SubUsage;
+  // previews 是阅读器按宽度缩放出来的预览图,单张几百 KB。
+  // 和缩略图混在一起会让「缩略图」这一栏随翻页剧烈波动。
+  previews: SubUsage;
   videoFaststart: SubUsage;
   videoTranscode: SubUsage;
 }
@@ -38,9 +41,10 @@ export interface SubUsage {
 // 时各子项全非空,totalDeleted/totalFreedBytes 是它们之和)。
 // 前端 toast "已清空 X" 优先用 total* 字段(scope=all 路径下)。
 export interface CacheScopeClearResult {
-  scope: "thumbs" | "converted" | "faststart" | "transcode" | "all";
+  scope: "thumbs" | "converted" | "previews" | "faststart" | "transcode" | "all";
   thumbs?: { deleted: number; freedBytes: number };
   converted?: { deleted: number; freedBytes: number };
+  previews?: { deleted: number; freedBytes: number };
   faststart?: { deleted: number; freedBytes: number };
   transcode?: { deleted: number; freedBytes: number };
   totalDeleted: number;
@@ -49,10 +53,16 @@ export interface CacheScopeClearResult {
 
 export const cacheApi = {
   stats: () => api<CacheStats>("/api/cache/stats"),
-  // 统一清空入口(scope=thumbs|converted|faststart|transcode|all)。
+  // 统一清空入口(scope=thumbs|converted|previews|faststart|transcode|all)。
   // scope=all 一键全清,响应里有 totalDeleted/totalFreedBytes 便于 toast。
   clearCache: (
-    scope: "thumbs" | "converted" | "faststart" | "transcode" | "all",
+    scope:
+      | "thumbs"
+      | "converted"
+      | "previews"
+      | "faststart"
+      | "transcode"
+      | "all",
   ) =>
     api<CacheScopeClearResult>(`/api/cache/clear?scope=${scope}`, {
       method: "POST",

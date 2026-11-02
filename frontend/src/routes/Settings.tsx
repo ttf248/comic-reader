@@ -83,12 +83,12 @@ export default function Settings() {
     onError: () => pushToast({ kind: "error", message: "清理失效收藏失败" }),
   });
 
-  // 单 scope 清空(thumbs / converted / faststart / transcode)。四个独立
+  // 单 scope 清空(thumbs / converted / previews / faststart / transcode)。五个独立
   // mutation 实例让每个按钮的 isPending 互不干扰,UI 状态干净;公共逻辑
   // 收敛在 onSuccessScope 里。
   const onSuccessScope = (
     r: Awaited<ReturnType<typeof cacheApi.clearCache>>,
-    scope: "thumbs" | "converted" | "faststart" | "transcode",
+    scope: "thumbs" | "converted" | "previews" | "faststart" | "transcode",
   ) => {
     qc.invalidateQueries({ queryKey: ["cache-stats"] });
     const sub = r[scope];
@@ -107,7 +107,7 @@ export default function Settings() {
     });
   };
   const onErrorScope = (
-    scope: "thumbs" | "converted" | "faststart" | "transcode",
+    scope: "thumbs" | "converted" | "previews" | "faststart" | "transcode",
   ) =>
     pushToast({ kind: "error", message: `清空 ${scopeLabel(scope)} 缓存失败` });
 
@@ -121,6 +121,11 @@ export default function Settings() {
     onSuccess: (r) => onSuccessScope(r, "converted"),
     onError: () => onErrorScope("converted"),
   });
+  const clearPreviews = useMutation({
+    mutationFn: () => cacheApi.clearCache("previews"),
+    onSuccess: (r) => onSuccessScope(r, "previews"),
+    onError: () => onErrorScope("previews"),
+  });
   const clearFaststart = useMutation({
     mutationFn: () => cacheApi.clearCache("faststart"),
     onSuccess: (r) => onSuccessScope(r, "faststart"),
@@ -132,7 +137,7 @@ export default function Settings() {
     onError: () => onErrorScope("transcode"),
   });
 
-  // 一键全清:thumbs + converted + faststart + transcode 一起清。
+  // 一键全清:thumbs + converted + previews + faststart + transcode 一起清。
   // 解决「3 GB 缓存只点了一个缩略图清空按钮,数据纹丝不动」的痛点。
   const clearAll = useMutation({
     mutationFn: () => cacheApi.clearCache("all"),
@@ -412,16 +417,16 @@ export default function Settings() {
                 onClick={() => clearAll.mutate()}
                 disabled={clearAll.isPending}
                 className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-danger/40 text-danger hover:bg-danger/5 text-xs transition-colors disabled:opacity-50"
-                title="清空全部缓存（缩略图 + 转换图 + faststart + 转码）"
+                title="清空全部缓存（缩略图 + 转换图 + 预览图 + faststart + 转码）"
               >
                 <TrashIcon size={11} />
                 <span>{clearAll.isPending ? "清空中…" : "一键全清"}</span>
               </button>
             </div>
             {/* 按类型细分 — 大头一目了然,转码缓存过大时可单独清。
-                四类之和等于上面的总占用,少列一类用户就对不上账。 */}
+                五类之和等于上面的总占用,少列一类用户就对不上账。 */}
             {cacheStats.data && cacheStats.data.available && (
-              <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2 text-[10.5px]">
+              <div className="mt-2 grid grid-cols-2 sm:grid-cols-5 gap-2 text-[10.5px]">
                 <SubUsageBadge
                   label="缩略图"
                   sub={cacheStats.data.thumbs}
@@ -433,6 +438,12 @@ export default function Settings() {
                   sub={cacheStats.data.converted}
                   onClear={() => clearConverted.mutate()}
                   clearPending={clearConverted.isPending}
+                />
+                <SubUsageBadge
+                  label="预览图"
+                  sub={cacheStats.data.previews}
+                  onClear={() => clearPreviews.mutate()}
+                  clearPending={clearPreviews.isPending}
                 />
                 <SubUsageBadge
                   label="faststart"
@@ -703,13 +714,15 @@ function SubUsageBadge({
 
 // 缓存 scope 中文标签(toast 复用)。
 function scopeLabel(
-  s: "thumbs" | "converted" | "faststart" | "transcode",
+  s: "thumbs" | "converted" | "previews" | "faststart" | "transcode",
 ): string {
   switch (s) {
     case "thumbs":
       return "缩略图";
     case "converted":
       return "转换图";
+    case "previews":
+      return "预览图";
     case "faststart":
       return "faststart";
     case "transcode":

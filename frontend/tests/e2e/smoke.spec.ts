@@ -4583,3 +4583,22 @@ test("主页的视图筛选条紧贴在「全部图像」网格上方", async ({
     chipBeforeCard: true,
   });
 });
+
+test("阅读器连续模式按视口宽度请求预览图，不发原图", async ({ page }) => {
+  const nodes = await scannedNodes(page.request);
+  const album = nodes.find((node) => node.name === "sample-paged-images");
+  expect(album).toBeDefined();
+  await page.goto(`/gallery?path=${encodeURIComponent(album!.id)}&index=0`);
+
+  // 单张模式仍走原图（缩放 / 原始尺寸需要完整分辨率）。
+  await expect(
+    page.locator("[data-image-gallery] img").first(),
+  ).toHaveAttribute("src", /\/api\/media\//);
+
+  // 连续模式按视口宽度展示，必须换成服务端预览图：
+  // 原图动辄 5MB+，翻一本相册就是 GB 级流量。
+  await page.keyboard.press("2");
+  await expect(
+    page.locator("[data-image-gallery] img").first(),
+  ).toHaveAttribute("src", /\/api\/previews\/.*\?w=\d+/);
+});

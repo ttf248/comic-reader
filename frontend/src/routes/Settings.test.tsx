@@ -73,6 +73,7 @@ beforeEach(() => {
     cacheTtlSeconds: 0,
     thumbs: sub,
     converted: sub,
+    previews: sub,
     videoFaststart: sub,
     videoTranscode: sub,
   });
@@ -392,6 +393,7 @@ it("缓存占用列出转换图分类，并能单独清理", async () => {
       fileCount: 1,
       available: true,
     },
+    previews: empty,
     videoFaststart: empty,
     videoTranscode: empty,
   });
@@ -408,5 +410,46 @@ it("缓存占用列出转换图分类，并能单独清理", async () => {
   fireEvent.click(screen.getByRole("button", { name: "清空 转换图 缓存" }));
   await waitFor(() =>
     expect(cacheApi.clearCache).toHaveBeenCalledWith("converted"),
+  );
+});
+
+// 预览图（阅读器按宽度缩放的中间产物）必须单独列出并能单独清理。
+//
+// 它单张几百 KB，与缩略图混在一起时「缩略图」一栏会随翻页剧烈波动，
+// 用户既看不清大头在哪，也没法只清这一类。
+it("缓存占用列出预览图分类，并能单独清理", async () => {
+  const empty = { path: "cache", bytes: 0, fileCount: 0, available: false };
+  vi.mocked(cacheApi.stats).mockResolvedValue({
+    path: "cache",
+    totalBytes: 6000,
+    fileCount: 4,
+    scannedAt: "",
+    durationMs: 0,
+    available: true,
+    cacheTtlSeconds: 0,
+    thumbs: { path: "thumbs", bytes: 1000, fileCount: 2, available: true },
+    converted: empty,
+    previews: {
+      path: "previews",
+      bytes: 5000,
+      fileCount: 1,
+      available: true,
+    },
+    videoFaststart: empty,
+    videoTranscode: empty,
+  });
+  vi.mocked(cacheApi.clearCache).mockResolvedValue({
+    scope: "previews",
+    previews: { deleted: 1, freedBytes: 5000 },
+    totalDeleted: 1,
+    totalFreedBytes: 5000,
+  });
+
+  renderSettings();
+  expect(await screen.findByText("预览图")).toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "清空 预览图 缓存" }));
+  await waitFor(() =>
+    expect(cacheApi.clearCache).toHaveBeenCalledWith("previews"),
   );
 });

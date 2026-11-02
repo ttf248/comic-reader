@@ -32,24 +32,41 @@ vi.mock("react-virtuoso", async () => {
   const React = await import("react");
   interface MockVirtuosoProps {
     rangeChanged?: (range: { startIndex: number; endIndex: number }) => void;
+    data?: string[];
+    itemContent?: (index: number, item: string) => React.ReactNode;
   }
 
   return {
     Virtuoso: React.forwardRef<
       { scrollToIndex: typeof virtuosoMocks.scrollToIndex },
       MockVirtuosoProps
-    >(function MockVirtuoso({ rangeChanged }, ref) {
+    >(function MockVirtuoso({ rangeChanged, data, itemContent }, ref) {
       React.useImperativeHandle(ref, () => ({
         scrollToIndex: virtuosoMocks.scrollToIndex,
       }));
       return React.createElement(
-        "button",
-        {
-          type: "button",
-          "data-testid": "virtuoso-range",
-          onClick: () => rangeChanged?.({ startIndex: 2, endIndex: 3 }),
-        },
-        "更新可见范围",
+        "div",
+        null,
+        React.createElement(
+          "button",
+          {
+            type: "button",
+            "data-testid": "virtuoso-range",
+            onClick: () => rangeChanged?.({ startIndex: 2, endIndex: 3 }),
+          },
+          "更新可见范围",
+        ),
+        React.createElement(
+          "div",
+          { "data-testid": "virtuoso-items" },
+          (data ?? []).map((item, i) =>
+            React.createElement(
+              React.Fragment,
+              { key: i },
+              itemContent?.(i, item),
+            ),
+          ),
+        ),
       );
     }),
   };
@@ -85,6 +102,15 @@ describe("ImageGallery 连续模式", () => {
     expect(onVisibleRangeChange).toHaveBeenCalledWith(2, 3);
     expect(useGalleryStore.getState().index).toBe(2);
     expect(virtuosoMocks.scrollToIndex).not.toHaveBeenCalled();
+  });
+
+  // 连续模式按视口宽度展示图片，直接发原图的话手机照片动辄 5MB+，
+  // 翻一本相册就是 GB 级流量。必须走服务端预览图。
+  it("连续模式用服务端预览图而不是原图", () => {
+    render(<ImageGallery images={["f_aaa", "f_bbb"]} />);
+    const img = screen.getByAltText("第 1 张") as HTMLImageElement;
+    expect(img.getAttribute("src")).toContain("/api/previews/f_aaa");
+    expect(img.getAttribute("src")).toContain("?w=");
   });
 
   it("外部页码变化时驱动虚拟列表定位到目标图片", async () => {
@@ -181,7 +207,12 @@ describe("ImageGallery 单页触摸手势", () => {
 
 describe("ImageGallery 加载失败", () => {
   beforeEach(() => {
-    useGalleryStore.setState({ index: 0, mode: "single", zoom: 1, rotation: 0 });
+    useGalleryStore.setState({
+      index: 0,
+      mode: "single",
+      zoom: 1,
+      rotation: 0,
+    });
   });
 
   it("图片加载失败时显示提示，而不是浏览器的破图图标", () => {

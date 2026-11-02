@@ -8,7 +8,7 @@ import {
 } from "react";
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso";
 import { useGalleryStore } from "../../store/galleryStore";
-import { imageUrl } from "../../api/images";
+import { imageUrl, previewUrl } from "../../api/images";
 import { ImageIcon } from "../common/Icon";
 
 interface Props {
@@ -58,16 +58,26 @@ export default function ImageGallery({
   } | null>(null);
   const suppressClickRef = useRef(false);
 
+  // 连续模式用服务端预览图：图片按容器宽度展示，原图动辄 5MB+
+  // （手机照片），预取前后各 2 张就是 20MB，一本相册是 GB 级流量。
+  // 宽度取视口宽 × 设备像素比（上限 2x），服务端会再夹到 320~4096。
+  const previewWidth = useMemo(() => {
+    if (typeof window === "undefined") return 1600;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    return Math.round(window.innerWidth * dpr);
+  }, []);
+
   // 预加载前后各 2 张
   useEffect(() => {
     const ranges = [index - 2, index - 1, index + 1, index + 2];
+    const usePreview = mode === "continuous";
     for (const i of ranges) {
       const p = images[i];
       if (!p) continue;
       const img = new Image();
-      img.src = imageUrl(p);
+      img.src = usePreview ? previewUrl(p, previewWidth) : imageUrl(p);
     }
-  }, [index, images]);
+  }, [index, images, mode, previewWidth]);
 
   // 切页 / 切模式时复位 transform;切模式时复位容器滚动。
   // 关键:连续模式下切页(index 变)不再重置 scrollTop,
@@ -336,7 +346,12 @@ export default function ImageGallery({
           ref={virtuosoRef}
           style={{ height: "100%" }}
           data={images}
-          overscan={3}
+          // overscan 是像素不是「张数」：写 3 等于没有预渲染，
+          // 视口里永远只有当前这张图，滚动时每次都要等原图下载完才出图。
+          // minOverscanItemCount 兜底保证视口前后各挂一张，
+          // 下一张在滚动到位之前就已经加载好了。
+          overscan={720}
+          minOverscanItemCount={{ top: 1, bottom: 1 }}
           rangeChanged={(range) => {
             if (images.length === 0) return;
             const startIndex = Math.max(
@@ -353,6 +368,9 @@ export default function ImageGallery({
           itemContent={(i, src) => (
             <ContinuousImage
               src={src}
+              // 连续模式按容器宽度展示，用预览图而不是原图：
+              // 原图 5MB+ 时翻一本相册就是 GB 级流量。
+              previewWidth={previewWidth}
               index={i}
               aspect={aspect}
               nearIndex={Math.abs(i - index) <= 2}
@@ -453,6 +471,8 @@ function DoublePage({ images, index, aspect, direction, imgKey }: DoubleProps) {
 //   整体高度随之增加 → 容器自然出现纵向滚动条，用户可继续往下看。
 interface ContinuousImageProps {
   src: string;
+  /** 预览图宽度（像素）；给定时用服务端预览图而不是原图。 */
+  previewWidth?: number;
   index: number;
   aspect: Aspect;
   nearIndex: boolean;
@@ -466,6 +486,7 @@ interface ContinuousImageProps {
 // isRotated 变)会 re-render。
 const ContinuousImage = memo(function ContinuousImage({
   src,
+  previewWidth,
   index,
   aspect,
   nearIndex,
@@ -513,7 +534,7 @@ const ContinuousImage = memo(function ContinuousImage({
   return (
     <div className="w-full flex justify-center" data-image-index={index}>
       <GalleryImage
-        src={imageUrl(src)}
+        src={previewWidth ? previewUrl(src, previewWidth) : imageUrl(src)}
         alt={`第 ${index + 1} 张`}
         loading={nearIndex ? "eager" : "lazy"}
         decoding={nearIndex ? "sync" : "async"}
