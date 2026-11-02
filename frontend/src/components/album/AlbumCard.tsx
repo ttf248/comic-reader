@@ -367,7 +367,7 @@ function GridCard({
           {/* 多根来源 badge：与标签副标题独立，作为视觉小标签放在元数据行。
               单一媒体根下每张卡片都挂同一句来源是噪音，multiRoot 为 false 时隐藏。 */}
           {data.sourceName && multiRoot && (
-            <div className="text-[12px] text-fg-subtle mt-0.5 inline-flex items-center gap-1">
+            <div className="text-[12.5px] text-fg-subtle mt-0.5 inline-flex items-center gap-1">
               <FolderIcon size={10} className="shrink-0" />
               <span className="truncate">来自 {data.sourceName}</span>
             </div>
@@ -484,7 +484,7 @@ function ListCard({
             </span>
             {unread && (
               <span
-                className="inline-flex items-center gap-1 text-[12px] font-medium text-fg-muted shrink-0"
+                className="inline-flex items-center gap-1 text-[12.5px] font-medium text-fg-muted shrink-0"
                 title="未读"
               >
                 <span
@@ -495,7 +495,7 @@ function ListCard({
               </span>
             )}
             {isFinished && data.variant === "album" && (
-              <span className="inline-flex items-center gap-0.5 text-[12px] font-medium text-fg-muted shrink-0">
+              <span className="inline-flex items-center gap-0.5 text-[12.5px] font-medium text-fg-muted shrink-0">
                 <CheckIcon size={11} className="text-success" />
                 <span>已读</span>
               </span>

@@ -946,7 +946,7 @@ export default function Gallery() {
       // 否则浅色主题下会先闪一屏白底，再跳到黑色画布。
       <div className="flex flex-col h-full bg-neutral-950">
         {/* 顶部条：返回 / 名称（常驻） */}
-        <div className="px-4 h-9 text-xs text-white/60 border-b border-white/10 bg-neutral-900/60 flex items-center gap-3">
+        <div className="px-4 h-9 text-[12.5px] text-white/60 border-b border-white/10 bg-neutral-900/60 flex items-center gap-3">
           <button
             type="button"
             onClick={goBack}

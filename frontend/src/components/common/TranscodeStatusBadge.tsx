@@ -25,7 +25,7 @@ const TERMINAL_STATUS = new Set<TranscodeStatusValue>([
 
 const SIZE_CLASS = {
   sm: { box: "h-4 px-1 text-[9px] gap-0.5", icon: 8 },
-  lg: { box: "h-5 px-1.5 text-[10px] gap-1", icon: 10 },
+  lg: { box: "h-5 px-1.5 text-[11.5px] gap-1", icon: 10 },
 } as const;
 
 // 状态 → 用户可见的简短文本 + 颜色

@@ -124,14 +124,14 @@ export default function HoverPreview({ data, anchorRect, lastSeenAt, onPointerEn
           <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/35 to-transparent pointer-events-none" />
           {/* 视频角标：▶ + 数量 */}
           {data.coverKind === 'video' && (
-            <div className="absolute top-3 left-3 inline-flex items-center gap-1 bg-bg-elevated/90 backdrop-blur text-fg text-[11px] font-medium px-2 py-0.5 rounded-md shadow-sm">
+            <div className="absolute top-3 left-3 inline-flex items-center gap-1 bg-bg-elevated/90 backdrop-blur text-fg text-[11.5px] font-medium px-2 py-0.5 rounded-md shadow-sm">
               <PlayFilledIcon size={10} className="text-accent" />
               <span>视频</span>
             </div>
           )}
           {/* 底部渐变：放张数 / 标签 */}
           <div className="absolute inset-x-0 bottom-0 px-3 py-2.5 bg-gradient-to-t from-black/60 to-transparent">
-            <div className="flex items-center gap-1.5 text-white/90 text-[11px] tabular-nums">
+            <div className="flex items-center gap-1.5 text-white/90 text-[11.5px] tabular-nums">
               <ImageIcon size={11} />
               <span>
                 {data.count} {isCollection ? '卷' : '张'}
@@ -147,13 +147,13 @@ export default function HoverPreview({ data, anchorRect, lastSeenAt, onPointerEn
               {data.title}
             </div>
             {data.subtitle && (
-              <div className="text-[11px] text-fg-muted mt-1 truncate">{data.subtitle}</div>
+              <div className="text-[12.5px] text-fg-muted mt-1 truncate">{data.subtitle}</div>
             )}
           </div>
 
           {/* 上次阅读：仅在 album 类型有意义 */}
           {data.variant === 'album' && (
-            <div className="flex items-center gap-1.5 text-[11px] text-fg-muted">
+            <div className="flex items-center gap-1.5 text-[12.5px] text-fg-muted">
               <CalendarIcon size={11} className="text-fg-subtle shrink-0" />
               <span className="truncate">
                 {lastSeenAt ? `上次 ${timeAgo(lastSeenAt)}` : '尚未阅读'}
@@ -164,7 +164,7 @@ export default function HoverPreview({ data, anchorRect, lastSeenAt, onPointerEn
           {/* 进度条：仅 album 且有进度时显示 */}
           {data.variant === 'album' && data.progress && data.progress.total > 0 && (
             <div>
-              <div className="flex items-center justify-between text-[10px] text-fg-subtle mb-1">
+              <div className="flex items-center justify-between text-[11.5px] text-fg-subtle mb-1">
                 <span className="inline-flex items-center gap-1">
                   <ReaderIcon size={10} />
                   <span>阅读进度</span>

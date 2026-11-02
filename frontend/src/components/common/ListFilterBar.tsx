@@ -50,7 +50,7 @@ export function ListFilterBar({
                 className="chip"
               >
                 <span>{v.label}</span>
-                <span className="tabular-nums text-[12px] opacity-70">
+                <span className="tabular-nums text-[12.5px] opacity-70">
                   {v.count}
                 </span>
               </button>

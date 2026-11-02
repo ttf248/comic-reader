@@ -289,7 +289,7 @@ function Stat({
         {value}
       </div>
       {detail && (
-        <div className="text-[12px] text-fg-subtle mt-0.5">{detail}</div>
+        <div className="text-[12.5px] text-fg-subtle mt-0.5">{detail}</div>
       )}
     </div>
   );

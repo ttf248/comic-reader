@@ -281,7 +281,7 @@ export default function VideoPlayer({
             <div>{error}</div>
             <button
               type="button"
-              className="pointer-events-auto text-xs px-2 py-1 rounded border border-white/30 hover:bg-white/10"
+              className="pointer-events-auto text-[12.5px] px-2 py-1 rounded border border-white/30 hover:bg-white/10"
               onClick={() => {
                 setError(null);
                 setRetryKey((k) => k + 1);

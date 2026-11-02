@@ -411,7 +411,7 @@ export default function Home() {
             >
               <ShuffleIcon size={14} />
               随机一本
-              <span className="text-[12px] opacity-70">R</span>
+              <span className="text-[12.5px] opacity-70">R</span>
             </button>
             <QuickLink
               to="/unread"

@@ -107,7 +107,7 @@ export default function Unread() {
           {count > 0 && (
             <button
               onClick={onShuffleUnread}
-              className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-accent/40 text-accent hover:bg-accent/10 text-xs transition-colors"
+              className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-accent/40 text-accent hover:bg-accent/10 text-[12.5px] transition-colors"
               title="从未读里随机挑一本"
             >
               <ShuffleIcon size={11} />

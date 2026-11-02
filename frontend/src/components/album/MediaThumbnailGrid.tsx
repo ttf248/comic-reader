@@ -81,11 +81,11 @@ export default function MediaThumbnailGrid({
               className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
             />
             {isCurrent && (
-              <div className="absolute top-1.5 left-1.5 bg-accent text-accent-fg text-[10px] font-medium px-1.5 py-0.5 rounded">
+              <div className="absolute top-1.5 left-1.5 bg-accent text-accent-fg text-[11.5px] font-medium px-1.5 py-0.5 rounded">
                 当前
               </div>
             )}
-            <div className="absolute bottom-1.5 right-1.5 text-[10px] bg-bg-elevated/85 backdrop-blur px-1.5 py-0.5 rounded text-fg-muted tabular-nums">
+            <div className="absolute bottom-1.5 right-1.5 text-[11.5px] bg-bg-elevated/85 backdrop-blur px-1.5 py-0.5 rounded text-fg-muted tabular-nums">
               {index + 1}
             </div>
           </button>

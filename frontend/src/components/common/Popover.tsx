@@ -242,7 +242,7 @@ export function PopoverSeparator() {
 // 菜单分组标签（不可点击的灰色小标题）
 export function PopoverLabel({ children }: { children: ReactNode }) {
   return (
-    <div className="px-2.5 pt-2 pb-1.5 text-[12px] font-medium text-fg-subtle">
+    <div className="px-2.5 pt-2 pb-1.5 text-[12.5px] font-medium text-fg-subtle">
       {children}
     </div>
   );

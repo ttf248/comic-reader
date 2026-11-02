@@ -152,6 +152,11 @@ export default function Favorites() {
   const detailsLoading =
     (nodeIds.length > 0 && nodesQuery.isLoading) ||
     (smartNames.length > 0 && tagsQuery.isLoading);
+  // 收藏里指向已不存在资源的数量（改名 / 移动过的相册）。
+  // 详情还没查完时不能算：那时的 cards 为空只是"还没加载"，不是"找不到"。
+  const missingCount = detailsLoading
+    ? 0
+    : Math.max(0, favorites.length - cards.length);
   const retrying =
     favoritesQuery.isFetching ||
     (nodeIds.length > 0 && nodesQuery.isFetching) ||
@@ -175,7 +180,11 @@ export default function Favorites() {
             ? "正在加载收藏…"
             : favoritesFailed && favorites.length === 0
               ? "收藏暂不可用"
-              : `${favorites.length} 项`}
+              : missingCount > 0
+                ? // 收藏里有一部分指向已经不存在（改名 / 移动）的资源：
+                  // 标题里的数量要说清楚，否则会出现"1 项"配一张空网格。
+                  `${cards.length} 项可用 · ${missingCount} 项暂不可用`
+                : `${favorites.length} 项`}
         </p>
       </section>
 
@@ -226,8 +235,8 @@ export default function Favorites() {
         />
       ) : cards.length === 0 ? (
         <EmptyState
-          title="收藏的内容暂不可用"
-          description="内容可能已移动，或媒体库尚未完成扫描。"
+          title={`收藏的 ${favorites.length} 项内容暂时找不到`}
+          description="收藏记录的是相册的路径标识：相册被改名或移动后标识会变，旧收藏就找不到对应的内容了。回到主页重新点星标即可重新收藏。"
           action={
             <button
               onClick={() => navigate("/")}

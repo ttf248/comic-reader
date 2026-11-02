@@ -68,11 +68,11 @@ export default function VideoThumbnailGrid({
               <div className="absolute top-1.5 right-1.5 bg-bg-elevated/90 backdrop-blur rounded-md p-1 shadow-sm group-hover:scale-110 transition-transform">
                 <PlayFilledIcon size={10} className="text-accent" />
               </div>
-              <div className="absolute bottom-1.5 right-1.5 text-[10px] bg-bg-elevated/85 backdrop-blur px-1.5 py-0.5 rounded text-fg-muted tabular-nums">
+              <div className="absolute bottom-1.5 right-1.5 text-[11.5px] bg-bg-elevated/85 backdrop-blur px-1.5 py-0.5 rounded text-fg-muted tabular-nums">
                 {index + 1}
               </div>
               <div className="absolute bottom-0 inset-x-0 px-1.5 py-1 bg-gradient-to-t from-black/60 to-transparent">
-                <div className="text-[10px] text-white/90 truncate flex items-center gap-1.5">
+                <div className="text-[11.5px] text-white/90 truncate flex items-center gap-1.5">
                   <span className="truncate">{name}</span>
                   {duration && duration > 0 && (
                     <span className="shrink-0 text-white/70 tabular-nums">

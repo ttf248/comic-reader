@@ -401,7 +401,7 @@ export default function ServerConfigPanel() {
         {!localOnly && (
           <button
             type="button"
-            className="mt-3 h-8 px-3 rounded-md border border-border text-xs hover:bg-bg-hover"
+            className="mt-3 h-8 px-3 rounded-md border border-border text-[12.5px] hover:bg-bg-hover"
             onClick={() => void refetch()}
           >
             重试
@@ -444,11 +444,11 @@ export default function ServerConfigPanel() {
           <div className="flex flex-wrap items-center gap-2">
             {save.isReading ? (
               <>
-                <span className="text-xs text-fg-muted">正在重新读取配置…</span>
+                <span className="text-[12.5px] text-fg-muted">正在重新读取配置…</span>
                 <button
                   type="button"
                   onClick={save.cancelRead}
-                  className="h-8 px-3 rounded-md border border-border text-xs hover:bg-bg-hover"
+                  className="h-8 px-3 rounded-md border border-border text-[12.5px] hover:bg-bg-hover"
                 >
                   取消读取
                 </button>
@@ -459,7 +459,7 @@ export default function ServerConfigPanel() {
                   type="button"
                   disabled={!save.canRetry}
                   onClick={() => save.retryFailed()}
-                  className="h-8 px-3 rounded-md bg-accent text-accent-contrast text-xs disabled:opacity-50"
+                  className="h-8 px-3 rounded-md bg-accent text-accent-contrast text-[12.5px] disabled:opacity-50"
                 >
                   重试保存
                 </button>
@@ -467,7 +467,7 @@ export default function ServerConfigPanel() {
                   type="button"
                   disabled={save.hasPending}
                   onClick={() => void save.readCurrent()}
-                  className="h-8 px-3 rounded-md border border-border text-xs hover:bg-bg-hover disabled:opacity-50"
+                  className="h-8 px-3 rounded-md border border-border text-[12.5px] hover:bg-bg-hover disabled:opacity-50"
                 >
                   重新读取配置
                 </button>
@@ -479,7 +479,7 @@ export default function ServerConfigPanel() {
       <fieldset disabled={save.isReading} className="min-w-0 space-y-6">
         {/* 媒体库 — 多根(独立渲染) */}
         <div>
-          <div className="text-[11px] uppercase tracking-[0.18em] text-fg-muted font-medium mb-2 px-1">
+          <div className="text-[12.5px] text-fg-muted font-medium mb-2 px-1">
             媒体库
           </div>
           <div className="bg-bg-elevated border border-border-faint rounded-md overflow-hidden">
@@ -515,7 +515,7 @@ export default function ServerConfigPanel() {
 
         {/* 扫描 — 排除规则(独立渲染,行为与 MediaRootsField 类似但用 textarea) */}
         <div>
-          <div className="text-[11px] uppercase tracking-[0.18em] text-fg-muted font-medium mb-2 px-1">
+          <div className="text-[12.5px] text-fg-muted font-medium mb-2 px-1">
             扫描
           </div>
           <div className="bg-bg-elevated border border-border-faint rounded-md overflow-hidden">
@@ -576,7 +576,7 @@ export default function ServerConfigPanel() {
         </div>
 
         <div>
-          <div className="text-[11px] uppercase tracking-[0.18em] text-fg-muted font-medium mb-2 px-1">
+          <div className="text-[12.5px] text-fg-muted font-medium mb-2 px-1">
             访问控制
           </div>
           <div className="bg-bg-elevated border border-border-faint rounded-md px-4 py-4">
@@ -585,13 +585,13 @@ export default function ServerConfigPanel() {
                 <div className="text-sm text-fg">
                   {data.accessMode === "lan" ? "局域网令牌保护" : "仅本机访问"}
                 </div>
-                <p className="text-xs text-fg-subtle mt-1 leading-5 max-w-xl">
+                <p className="text-[12.5px] text-fg-subtle mt-1 leading-5 max-w-xl">
                   {data.accessMode === "lan"
                     ? "远程浏览器必须用令牌换取 8 小时会话；令牌不会回显。"
                     : "默认模式，所有 API 只允许运行服务的计算机访问。"}
                 </p>
               </div>
-              <span className="shrink-0 rounded-full border border-border px-2 py-1 text-[10px] uppercase tracking-wider text-fg-muted">
+              <span className="shrink-0 rounded-full border border-border px-2 py-1 text-[11.5px] text-fg-muted">
                 {data.accessMode === "lan" ? "LAN" : "LOCAL"}
               </span>
             </div>
@@ -623,7 +623,7 @@ export default function ServerConfigPanel() {
                   update.isPending || accessTokenDraft.trim().length < 32
                 }
                 onClick={() => void enableLANAccess()}
-                className="h-9 px-3 rounded-md bg-accent text-accent-contrast text-xs font-medium disabled:opacity-50"
+                className="h-9 px-3 rounded-md bg-accent text-accent-contrast text-[12.5px] font-medium disabled:opacity-50"
               >
                 {data.accessMode === "lan" ? "轮换令牌" : "开启 LAN 访问"}
               </button>
@@ -632,18 +632,18 @@ export default function ServerConfigPanel() {
                   type="button"
                   disabled={update.isPending}
                   onClick={() => void disableLANAccess()}
-                  className="h-9 px-3 rounded-md border border-border text-xs text-fg-muted hover:bg-bg-hover disabled:opacity-50"
+                  className="h-9 px-3 rounded-md border border-border text-[12.5px] text-fg-muted hover:bg-bg-hover disabled:opacity-50"
                 >
                   切换为仅本机
                 </button>
               )}
             </div>
             {accessError && (
-              <p role="alert" className="mt-2 text-xs text-danger">
+              <p role="alert" className="mt-2 text-[12.5px] text-danger">
                 {accessError}
               </p>
             )}
-            <p className="mt-2 text-[11px] text-fg-subtle">
+            <p className="mt-2 text-[12.5px] text-fg-subtle">
               对外访问还需将监听地址设为局域网 IP 或
               0.0.0.0；修改监听地址需重启。内置服务不提供
               TLS，请仅用于可信家庭网络。
@@ -653,7 +653,7 @@ export default function ServerConfigPanel() {
 
         {FIELDS.map((group) => (
           <div key={group.section}>
-            <div className="text-[11px] uppercase tracking-[0.18em] text-fg-muted font-medium mb-2 px-1">
+            <div className="text-[12.5px] text-fg-muted font-medium mb-2 px-1">
               {group.section}
             </div>
             <div className="bg-bg-elevated border border-border-faint rounded-md divide-y divide-border-faint overflow-hidden">
@@ -723,7 +723,7 @@ export default function ServerConfigPanel() {
                   pushToast({ kind: "error", message: "启动扫描失败" });
                 }
               }}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-accent/40 text-accent hover:bg-accent/10 text-xs transition-colors disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-accent/40 text-accent hover:bg-accent/10 text-[12.5px] transition-colors disabled:opacity-50"
             >
               <RefreshIcon size={11} />
               立即重新扫描
@@ -731,7 +731,7 @@ export default function ServerConfigPanel() {
           </div>
         )}
 
-        <div className="text-xs text-fg-subtle leading-relaxed px-1">
+        <div className="text-[12.5px] text-fg-subtle leading-relaxed px-1">
           配置文件路径:
           <code className="font-mono text-fg-muted">{data.configPath}</code>;
           改完自动写回 YAML,无需手动保存。
@@ -850,7 +850,7 @@ function MediaRootsField({
       <div className="flex items-start justify-between gap-4">
         <div className="flex flex-col">
           <span className="text-fg">图像根目录</span>
-          <span className="text-xs text-fg-subtle mt-0.5">
+          <span className="text-[12.5px] text-fg-subtle mt-0.5">
             多个目录都会扫描，相册按来源分组，徽标显示所属目录。按 Esc
             撤销整组编辑草稿。
           </span>
@@ -883,7 +883,7 @@ function MediaRootsField({
       <button
         type="button"
         onClick={addEmpty}
-        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-border-faint text-fg-muted hover:text-fg hover:border-border-strong text-xs transition-colors"
+        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-border-faint text-fg-muted hover:text-fg hover:border-border-strong text-[12.5px] transition-colors"
       >
         <PlusIcon size={12} />
         添加根目录
@@ -934,14 +934,14 @@ function ConfigRow({
         <span className="text-fg flex items-center gap-2">
           {def.label}
           {requiresRestart && (
-            <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-fg-subtle border border-border-faint px-1.5 py-0.5 rounded">
+            <span className="inline-flex items-center gap-1 text-[11.5px] text-fg-subtle border border-border-faint px-1.5 py-0.5 rounded">
               <RestartIcon size={10} />
               需重启
             </span>
           )}
         </span>
         {def.hint && (
-          <span className="text-xs text-fg-subtle mt-0.5">{def.hint}</span>
+          <span className="text-[12.5px] text-fg-subtle mt-0.5">{def.hint}</span>
         )}
       </div>
       <div className="flex items-center gap-2 min-w-0 sm:shrink-0">
@@ -1057,7 +1057,7 @@ function ExcludeRulesField({
         <div className="flex items-start justify-between gap-4">
           <div className="flex flex-col">
             <span className="text-fg">排除模式</span>
-            <span className="text-xs text-fg-subtle mt-0.5">
+            <span className="text-[12.5px] text-fg-subtle mt-0.5">
               一行一条,glob 匹配单个目录/文件名(任意深度)。例如
               <code className="font-mono mx-1 text-fg-muted">node_modules</code>
               <code className="font-mono mx-1 text-fg-muted">temp*</code>
@@ -1081,7 +1081,7 @@ function ExcludeRulesField({
       <div className="flex items-center justify-between">
         <div className="flex flex-col">
           <span className="text-fg">跳过隐藏目录</span>
-          <span className="text-xs text-fg-subtle mt-0.5">
+          <span className="text-[12.5px] text-fg-subtle mt-0.5">
             任何以 <code className="font-mono text-fg-muted">.</code>{" "}
             开头的子目录(. <code className="font-mono text-fg-muted">.git</code>{" "}
             / <code className="font-mono text-fg-muted">.cache</code> 等)
@@ -1102,7 +1102,7 @@ function ExcludeRulesField({
         <div className="flex items-start justify-between gap-4">
           <div className="flex flex-col">
             <span className="text-fg">额外的系统白名单</span>
-            <span className="text-xs text-fg-subtle mt-0.5">
+            <span className="text-[12.5px] text-fg-subtle mt-0.5">
               在内置 <code className="font-mono text-fg-muted">Thumbs.db</code>{" "}
               / <code className="font-mono text-fg-muted">desktop.ini</code> /{" "}
               <code className="font-mono text-fg-muted">.DS_Store</code>{" "}

@@ -177,7 +177,13 @@ it("收藏资源均失效时不引导清除筛选", async () => {
     refetch: vi.fn(),
   } as never);
   renderFavorites();
-  expect(await screen.findByText("收藏的内容暂不可用")).toBeInTheDocument();
+  // 文案带上失效条数，别再出现"1 项"配一张空网格的错觉。
+  expect(
+    await screen.findByText("收藏的 1 项内容暂时找不到"),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText("0 项可用 · 1 项暂不可用"),
+  ).toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "清除筛选" }),
   ).not.toBeInTheDocument();

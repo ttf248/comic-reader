@@ -100,7 +100,7 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
   return (
     <>
       {query.isLoading && (
-        <p role="status" className="text-fg-muted text-xs">
+        <p role="status" className="text-fg-muted text-[12.5px]">
           加载中…
         </p>
       )}
@@ -160,7 +160,7 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
               <Field label="标签" value={node.tags.join(" · ")} />
             )}
           </dl>
-          <p className="text-xs text-fg-subtle">根据最近一次扫描记录展示。</p>
+          <p className="text-[12.5px] text-fg-subtle">根据最近一次扫描记录展示。</p>
         </>
       )}
     </>
@@ -172,7 +172,7 @@ function ImageProperties({ fileId }: { fileId: string }) {
   return (
     <>
       {loading && (
-        <p role="status" className="text-fg-muted text-xs">
+        <p role="status" className="text-fg-muted text-[12.5px]">
           加载中…
         </p>
       )}

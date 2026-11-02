@@ -47,9 +47,9 @@ export default function ImageInfoPanel({ absPath, onClose }: Props) {
         </button>
       </div>
       <div className="flex-1 overflow-auto p-4 text-sm space-y-3 scroll-thin">
-        {loading && <div className="text-white/60 text-xs">加载中…</div>}
+        {loading && <div className="text-white/60 text-[12.5px]">加载中…</div>}
         {err !== null && (
-          <div className="text-red-300/90 text-xs">
+          <div className="text-red-300/90 text-[12.5px]">
             错误: {apiErrorMessage(err, '无法读取图片信息')}
           </div>
         )}
@@ -104,12 +104,12 @@ interface RowProps {
 function Row({ label, value, mono, copyable, copyValue }: RowProps) {
   return (
     <div>
-      <div className="text-[10px] uppercase tracking-[0.14em] text-white/45 mb-1 flex items-center gap-1.5">
+      <div className="text-[12.5px] text-white/60 mb-1 flex items-center gap-1.5">
         <span>{label}</span>
         {copyable && copyValue && <CopyButton value={copyValue} onDark />}
       </div>
       <div
-        className={`break-all ${mono ? 'font-mono text-[11px] text-white/70' : 'text-white/90'}`}
+        className={`break-all ${mono ? 'font-mono text-[11.5px] text-white/70' : 'text-white/90'}`}
       >
         {value}
       </div>

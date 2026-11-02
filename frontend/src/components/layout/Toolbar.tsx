@@ -221,7 +221,7 @@ function MoreMenu({
           >
             <ScanIcon size={12} />
             <span>{scanPending ? "扫描中…" : "重新扫描"}</span>
-            <span className="ml-auto text-[10px] text-fg-subtle font-mono">
+            <span className="ml-auto text-[11.5px] text-fg-subtle font-mono">
               Ctrl+S
             </span>
           </button>

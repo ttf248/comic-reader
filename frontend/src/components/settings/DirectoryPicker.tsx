@@ -79,7 +79,7 @@ export default function DirectoryPicker({
   }, [initialDirectory, browse]);
 
   const buttonClass =
-    "h-8 px-3 rounded-md border border-border-faint text-xs text-fg-muted hover:text-fg hover:bg-bg-subtle disabled:opacity-40";
+    "h-8 px-3 rounded-md border border-border-faint text-[12.5px] text-fg-muted hover:text-fg hover:bg-bg-subtle disabled:opacity-40";
   return (
     <dialog
       ref={dialogRef}
@@ -174,7 +174,7 @@ export default function DirectoryPicker({
               </button>
             ))}
           </nav>
-          <p className="text-xs text-fg-subtle">
+          <p className="text-[12.5px] text-fg-subtle">
             打开文件夹浏览，确认后使用当前目录。
           </p>
         </div>
@@ -211,19 +211,19 @@ export default function DirectoryPicker({
             </ul>
           )}
           {loading && (
-            <p role="status" className="p-4 text-xs text-fg-muted">
+            <p role="status" className="p-4 text-[12.5px] text-fg-muted">
               读取目录中…
             </p>
           )}
           {!loading && !error && page?.items.length === 0 && (
-            <p className="p-4 text-xs text-fg-muted">
+            <p className="p-4 text-[12.5px] text-fg-muted">
               没有子目录，可以使用当前目录。
             </p>
           )}
           {page?.nextAfter && !loading && !error && (
             <button
               type="button"
-              className="w-full p-3 text-xs text-accent hover:bg-bg-subtle"
+              className="w-full p-3 text-[12.5px] text-accent hover:bg-bg-subtle"
               onClick={() => void browse(page.directory, page.nextAfter)}
             >
               加载更多目录
@@ -238,7 +238,7 @@ export default function DirectoryPicker({
             type="button"
             disabled={loading || !page || address !== page.directory}
             onClick={() => page && onPick(page.directory)}
-            className="h-8 px-3 rounded-md bg-accent text-accent-contrast text-xs disabled:opacity-40"
+            className="h-8 px-3 rounded-md bg-accent text-accent-contrast text-[12.5px] disabled:opacity-40"
           >
             使用此目录
           </button>

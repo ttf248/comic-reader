@@ -270,7 +270,7 @@ export default function Settings() {
               <button
                 key={k}
                 onClick={() => setViewMode(k)}
-                className={`h-8 px-3 text-xs transition-colors ${
+                className={`h-8 px-3 text-[12.5px] transition-colors ${
                   viewMode === k
                     ? "bg-bg-subtle text-fg"
                     : "text-fg-muted hover:text-fg"
@@ -315,7 +315,7 @@ export default function Settings() {
         <Row label="图像库缓存">
           <div className="flex min-w-0 flex-1 flex-col items-end gap-2">
             <div className="flex flex-wrap items-center justify-end gap-3">
-              <span className="text-xs text-fg-muted">
+              <span className="text-[12.5px] text-fg-muted">
                 {manifest
                   ? `${manifest.statistics.albumCount} 本相册 · ${manifest.statistics.tagCount} 个标签${
                       manifest.scannedAt
@@ -328,7 +328,7 @@ export default function Settings() {
                 onClick={() =>
                   void qc.invalidateQueries({ queryKey: libraryQueryKeys.root })
                 }
-                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border-faint hover:bg-bg-subtle text-xs transition-colors"
+                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border-faint hover:bg-bg-subtle text-[12.5px] transition-colors"
               >
                 <RefreshIcon size={11} />
                 <span>刷新</span>
@@ -336,7 +336,7 @@ export default function Settings() {
               <button
                 onClick={() => startScan.mutate()}
                 disabled={startScan.isPending || sse.isRunning}
-                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border-faint hover:bg-bg-subtle text-xs transition-colors disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border-faint hover:bg-bg-subtle text-[12.5px] transition-colors disabled:opacity-50"
                 title="扫描 (Ctrl+S)"
               >
                 <RefreshIcon size={11} />
@@ -351,7 +351,7 @@ export default function Settings() {
               <button
                 onClick={() => clearScanCache.mutate()}
                 disabled={clearScanCache.isPending}
-                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-danger/40 text-danger hover:bg-danger/5 text-xs transition-colors disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-danger/40 text-danger hover:bg-danger/5 text-[12.5px] transition-colors disabled:opacity-50"
                 title="清空图像库缓存（不会立即重新扫描）"
               >
                 <TrashIcon size={11} />
@@ -370,7 +370,7 @@ export default function Settings() {
           {/* 统计行与细分徽章纵向排列：作为 Row 的两个并列子元素时，
               徽章会被排到统计行右边，把整行挤到换行。 */}
           <div className="flex min-w-0 flex-1 flex-col items-end gap-2">
-            <div className="flex flex-wrap items-center justify-end gap-3 text-xs text-fg-muted">
+            <div className="flex flex-wrap items-center justify-end gap-3 text-[12.5px] text-fg-muted">
               <span className="whitespace-nowrap">
                 {cacheStats.isLoading
                   ? "计算中…"
@@ -399,7 +399,7 @@ export default function Settings() {
               <button
                 onClick={refreshCacheStats}
                 disabled={cacheStats.isFetching}
-                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border-faint hover:bg-bg-subtle text-xs transition-colors disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border-faint hover:bg-bg-subtle text-[12.5px] transition-colors disabled:opacity-50"
                 title="重新扫描磁盘计算缓存占用"
               >
                 {cacheStats.isFetching ? (
@@ -412,7 +412,7 @@ export default function Settings() {
               <button
                 onClick={() => clearAll.mutate()}
                 disabled={clearAll.isPending}
-                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-danger/40 text-danger hover:bg-danger/5 text-xs transition-colors disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-danger/40 text-danger hover:bg-danger/5 text-[12.5px] transition-colors disabled:opacity-50"
                 title="清空全部缓存（缩略图 + 转换图 + 预览图 + faststart + 转码）"
               >
                 <TrashIcon size={11} />
@@ -422,7 +422,7 @@ export default function Settings() {
             {/* 按类型细分 — 大头一目了然,转码缓存过大时可单独清。
                 五类之和等于上面的总占用,少列一类用户就对不上账。 */}
             {cacheStats.data && cacheStats.data.available && (
-              <div className="mt-2 grid grid-cols-2 sm:grid-cols-5 gap-2 text-[10.5px]">
+              <div className="mt-2 grid grid-cols-2 sm:grid-cols-5 gap-2 text-[12.5px]">
                 <SubUsageBadge
                   label="缩略图"
                   sub={cacheStats.data.thumbs}
@@ -461,7 +461,7 @@ export default function Settings() {
           <button
             onClick={() => pruneFav.mutate()}
             disabled={pruneFav.isPending}
-            className="h-8 px-3 rounded-md border border-border-faint hover:bg-bg-subtle text-xs transition-colors disabled:opacity-50"
+            className="h-8 px-3 rounded-md border border-border-faint hover:bg-bg-subtle text-[12.5px] transition-colors disabled:opacity-50"
           >
             {pruneFav.isPending ? "清理中…" : "清理"}
           </button>
@@ -470,7 +470,7 @@ export default function Settings() {
           <button
             onClick={() => clearHist.mutate()}
             disabled={clearHist.isPending}
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-danger/40 text-danger hover:bg-danger/5 text-xs transition-colors disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-danger/40 text-danger hover:bg-danger/5 text-[12.5px] transition-colors disabled:opacity-50"
           >
             <TrashIcon size={11} />
             <span>{clearHist.isPending ? "清空中…" : "清空"}</span>
@@ -665,7 +665,7 @@ function SubUsageBadge({
   const inner = (
     <>
       <div className="flex items-center justify-between gap-1.5">
-        <span className="text-fg-muted text-[10px] uppercase tracking-wider">
+        <span className="text-fg-muted text-[11.5px]">
           {label}
         </span>
         {showClear && (

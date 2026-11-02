@@ -571,7 +571,7 @@ function AlbumView({
                 </h1>
                 {/* 散图视图：标题已是归属目录，这里标明它是「目录内散图」 */}
                 {detail.virtual && (
-                  <span className="inline-flex items-center gap-1 h-6 px-2 rounded-md bg-bg-subtle text-fg-muted text-[12px] shrink-0">
+                  <span className="inline-flex items-center gap-1 h-6 px-2 rounded-md bg-bg-subtle text-fg-muted text-[12.5px] shrink-0">
                     <FolderIcon size={11} />
                     本目录媒体
                   </span>
@@ -610,7 +610,7 @@ function AlbumView({
                 {isFinished && (
                   <>
                     <span className="text-fg-subtle">·</span>
-                    <span className="inline-flex items-center gap-1 text-success text-[12px]">
+                    <span className="inline-flex items-center gap-1 text-success text-[12.5px]">
                       <CheckIcon size={11} />
                       已读完
                     </span>
@@ -651,7 +651,7 @@ function AlbumView({
                       （播放三角会让人以为相册里是视频）。 */}
                   <ImageIcon size={14} />
                   <span>继续上次</span>
-                  <span className="text-[12px] opacity-70 tabular-nums">
+                  <span className="text-[12.5px] opacity-70 tabular-nums">
                     {Math.min(progress!.pageIndex + 1, currentPageCount)}/
                     {currentPageCount}
                   </span>
@@ -744,7 +744,7 @@ function AlbumView({
             ? `${detail.imageCount} 张 · ${videoCount} 个视频`
             : `${detail.imageCount} 张`}
         </span>
-        <div className="flex items-center border border-border-faint rounded-md overflow-hidden text-xs ml-auto">
+        <div className="flex items-center border border-border-faint rounded-md overflow-hidden text-[12.5px] ml-auto">
           {(["sm", "md", "lg"] as const).map((k) => (
             <button
               key={k}
@@ -1002,7 +1002,7 @@ function CollectionView({
           </div>
           <button
             onClick={onToggleFav}
-            className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs transition-colors ${
+            className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-[12.5px] transition-colors ${
               isFavorite
                 ? "bg-warning/10 text-warning hover:bg-warning/15"
                 : "border border-border-faint hover:bg-bg-subtle text-fg-muted"

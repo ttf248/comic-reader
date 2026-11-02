@@ -41,7 +41,7 @@ export default function ThemeSwitcher({
         <button
           key={o.value}
           onClick={() => setTheme(o.value as ThemePref)}
-          className={`flex items-center gap-1 px-2.5 h-7 text-xs transition-colors ${
+          className={`flex items-center gap-1 px-2.5 h-7 text-[12.5px] transition-colors ${
             theme === o.value
               ? "bg-bg-elevated text-fg shadow-xs"
               : "text-fg-muted hover:text-fg hover:bg-bg-subtle/60"
@@ -92,7 +92,7 @@ function CompactSwitch({
         </button>
       }
     >
-      <div className="text-[10px] uppercase tracking-[0.18em] text-fg-subtle px-2 py-1.5">
+      <div className="text-[12.5px] text-fg-subtle px-2 py-1.5">
         主题
       </div>
       <div
@@ -113,7 +113,7 @@ function CompactSwitch({
               role="menuitemradio"
               aria-checked={active}
               onClick={() => setTheme(o.v as ThemePref)}
-              className={`relative h-8 rounded text-xs transition-colors ${
+              className={`relative h-8 rounded text-[12.5px] transition-colors ${
                 active
                   ? "bg-accent text-accent-contrast"
                   : "text-fg-muted hover:bg-bg-subtle hover:text-fg"
@@ -127,7 +127,7 @@ function CompactSwitch({
           );
         })}
       </div>
-      <div className="text-[10px] uppercase tracking-[0.18em] text-fg-subtle px-2 pt-3 pb-1.5">
+      <div className="text-[12.5px] text-fg-subtle px-2 pt-3 pb-1.5">
         强调色
       </div>
       <div

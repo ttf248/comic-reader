@@ -109,12 +109,12 @@ export default function AccessGate({ children }: { children: ReactNode }) {
               这个媒体库已开启局域网访问保护。令牌只用于换取本浏览器的短期会话，不会保存在本地存储或
               URL 中。
             </p>
-            <p className="mt-2 text-xs text-fg-subtle leading-5">
+            <p className="mt-2 text-[12.5px] text-fg-subtle leading-5">
               请仅在可信家庭网络中使用；内置服务不提供 TLS，不适合互联网或不可信
               Wi-Fi。
             </p>
             <label
-              className="block mt-5 text-xs font-medium text-fg-muted"
+              className="block mt-5 text-[12.5px] font-medium text-fg-muted"
               htmlFor="access-token"
             >
               访问令牌
@@ -131,7 +131,7 @@ export default function AccessGate({ children }: { children: ReactNode }) {
               className="mt-2 w-full h-10 rounded-lg border border-border bg-bg px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
             />
             {error && (
-              <p role="alert" className="mt-2 text-xs text-danger">
+              <p role="alert" className="mt-2 text-[12.5px] text-danger">
                 {error}
               </p>
             )}
