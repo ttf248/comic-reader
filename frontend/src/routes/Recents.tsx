@@ -7,6 +7,7 @@ import { useHistory } from "../hooks/useHistory";
 import { useImageActivities } from "../hooks/useImageActivity";
 import { useGalleryContextSync } from "../hooks/useGalleryContextSync";
 import AlbumGrid, { type CardData } from "../components/album/AlbumGrid";
+import AlbumGridSkeleton from "../components/album/AlbumGridSkeleton";
 import { ListFilterBar } from "../components/common/ListFilterBar";
 import EmptyState from "../components/common/EmptyState";
 import { ClockIcon } from "../components/common/Icon";
@@ -169,13 +170,9 @@ export default function Recents() {
       {cards.length > 0 && <ListFilterBar totalCount={filtered.length} />}
 
       {historyQuery.isLoading ? (
-        <div role="status" className="page-shell text-[13px] text-fg-muted">
-          正在加载最近阅读…
-        </div>
+        <AlbumGridSkeleton variant={viewMode} label="正在加载最近阅读…" />
       ) : history.length > 0 && nodesQuery.isLoading && cards.length === 0 ? (
-        <div role="status" className="page-shell text-[13px] text-fg-muted">
-          正在解析最近浏览…
-        </div>
+        <AlbumGridSkeleton variant={viewMode} label="正在加载最近阅读…" />
       ) : loadFailed && cards.length === 0 ? null : history.length === 0 ? (
         <EmptyState
           title="还没有最近阅读"

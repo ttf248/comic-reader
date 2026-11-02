@@ -14,6 +14,7 @@ import { getVideoInfoBatch } from "../api/videos";
 import { useUIStore } from "../store/uiStore";
 import type { CardData } from "../components/album/AlbumGrid";
 import AlbumGrid from "../components/album/AlbumGrid";
+import AlbumGridSkeleton from "../components/album/AlbumGridSkeleton";
 import YearTimeline from "../components/home/YearTimeline";
 import { groupAlbumsAndCollectionsByYear } from "../utils/albumGrouping";
 import EmptyState from "../components/common/EmptyState";
@@ -242,12 +243,9 @@ export default function Album() {
   }, [historyAlbumId, historyAlbumName, historyImageCount, queryClient]);
 
   if (isDetailLoading) {
-    return (
-      <EmptyState
-        title="正在加载文件夹"
-        description="正在读取节点与媒体摘要…"
-      />
-    );
+    // 骨架而不是转圈：数据到达后卡片直接落在骨架的位置上，页面不会先
+    // 空一段再整块跳出来。
+    return <AlbumGridSkeleton variant={viewMode} label="正在加载文件夹" />;
   }
 
   if (!detail) {

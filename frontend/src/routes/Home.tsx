@@ -10,6 +10,7 @@ import { scanApi } from "../api/scan";
 import { useViewedSort } from "../hooks/useHistory";
 import { libraryApi } from "../api/library";
 import AlbumGrid, { type CardData } from "../components/album/AlbumGrid";
+import AlbumGridSkeleton from "../components/album/AlbumGridSkeleton";
 import { ListFilterBar } from "../components/common/ListFilterBar";
 import EmptyState from "../components/common/EmptyState";
 import ViewedSortNotice from "../components/common/ViewedSortNotice";
@@ -496,8 +497,11 @@ export default function Home() {
         </section>
       )}
 
-      {/* === 全部图像 === */}
-      {hasContent && (
+      {/* === 全部图像 ===
+          初次加载时也渲染这一段（内容换成骨架）：否则首屏只有标题和
+          四个动作按钮，数据到达后整页内容一次性长出来，视线要重新找
+          一次位置。骨架占住网格的位置，数据回来时是"填满"而不是"重排"。 */}
+      {(hasContent || isLoadingInitial) && (
         <section
           ref={gridRef}
           className="page-shell pt-10 pb-4 scroll-mt-6"
@@ -506,7 +510,9 @@ export default function Home() {
             <h2 className="section-title">
               {yearFilterActive ? "该年份的图像" : "全部图像"}
             </h2>
-            <span className="section-meta tabular-nums">{filtered.length}</span>
+            {!isLoadingInitial && (
+              <span className="section-meta tabular-nums">{filtered.length}</span>
+            )}
             {yearFilterActive && (
               <button
                 onClick={() => setYearFilter(null)}
@@ -532,27 +538,25 @@ export default function Home() {
               「全部图像」标题正下方贴着网格；不要提到未读 / 继续阅读 /
               时间线这些区块前面 —— 那里离网格有两千多像素，用户滚到
               网格时控件早已不在视野里。 */}
-          {needsHistory && <ViewedSortNotice query={historyQuery} />}
-          <ListFilterBar
-            viewChips={[
-              { key: "all", label: "全部", count: counts.all },
-              { key: "album", label: "文件夹", count: counts.album },
-              { key: "collection", label: "集合", count: counts.collection },
-              { key: "smart", label: "标签", count: counts.smart },
-            ]}
-            activeViewKey={view}
-            onChangeView={(k) => setView(k as typeof view)}
-            totalCount={filtered.length}
-          />
+          {!isLoadingInitial && needsHistory && (
+            <ViewedSortNotice query={historyQuery} />
+          )}
+          {!isLoadingInitial && (
+            <ListFilterBar
+              viewChips={[
+                { key: "all", label: "全部", count: counts.all },
+                { key: "album", label: "文件夹", count: counts.album },
+                { key: "collection", label: "集合", count: counts.collection },
+                { key: "smart", label: "标签", count: counts.smart },
+              ]}
+              activeViewKey={view}
+              onChangeView={(k) => setView(k as typeof view)}
+              totalCount={filtered.length}
+            />
+          )}
 
           {isLoadingInitial ? (
-            <EmptyState
-              title="正在加载图像库"
-              description="首次启动可能需要几秒钟。"
-              icon={
-                <div className="w-10 h-10 border-2 border-fg-subtle border-t-accent rounded-full animate-spin" />
-              }
-            />
+            <AlbumGridSkeleton variant={viewMode} bare label="正在加载图像库…" />
           ) : filtered.length === 0 ? (
             <EmptyState
               title={

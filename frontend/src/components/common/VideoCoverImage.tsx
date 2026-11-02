@@ -1,5 +1,5 @@
 import { useVideoCover } from "../../hooks/useVideoCover";
-import { FolderIcon } from "./Icon";
+import { FolderIcon, PlayFilledIcon } from "./Icon";
 
 interface Props {
   /** 视频文件资源 ID（也是 thumbUrl 要请求的标识） */
@@ -40,11 +40,14 @@ export default function VideoCoverImage({
     );
   }
 
-  // 抽帧中/检查中 → 占位
+  // 抽帧中/检查中 → 占位。
+  // 不用转圈：转圈既不告诉用户还要等多久，又在几十张卡片的网格里制造
+  // 一片闪烁的噪点。静态图标 + 文案就够了 —— 封面位置本来就是固定的，
+  // 预览出现时直接铺上去，不会跳动。
   if (status === "loading" || status === "missing" || status === "extracting") {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center bg-bg-subtle text-fg-muted gap-2">
-        <div className="w-5 h-5 border-2 border-fg-subtle/40 border-t-accent rounded-full animate-spin" />
+        <PlayFilledIcon size={20} className="text-fg-subtle" />
         {showExtractingHint && (
           <span className="text-[11.5px] tabular-nums">
             {status === "extracting" ? "正在生成预览…" : "正在加载…"}

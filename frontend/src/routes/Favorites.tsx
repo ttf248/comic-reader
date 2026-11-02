@@ -6,6 +6,7 @@ import { useFavorites } from "../hooks/useFavorites";
 import { useImageActivities } from "../hooks/useImageActivity";
 import { useGalleryContextSync } from "../hooks/useGalleryContextSync";
 import AlbumGrid, { type CardData } from "../components/album/AlbumGrid";
+import AlbumGridSkeleton from "../components/album/AlbumGridSkeleton";
 import { ListFilterBar } from "../components/common/ListFilterBar";
 import EmptyState from "../components/common/EmptyState";
 import { StarIcon } from "../components/common/Icon";
@@ -206,19 +207,9 @@ export default function Favorites() {
       {cards.length > 0 && <ListFilterBar totalCount={filtered.length} />}
 
       {favoritesQuery.isLoading ? (
-        <div
-          role="status"
-          className="page-shell text-[13px] text-fg-muted"
-        >
-          正在加载收藏…
-        </div>
+        <AlbumGridSkeleton variant={viewMode} label="正在加载收藏…" />
       ) : detailsLoading && cards.length === 0 ? (
-        <div
-          role="status"
-          className="page-shell text-[13px] text-fg-muted"
-        >
-          正在解析收藏…
-        </div>
+        <AlbumGridSkeleton variant={viewMode} label="正在加载收藏…" />
       ) : loadFailed && cards.length === 0 ? null : favorites.length === 0 ? (
         <EmptyState
           title="还没有收藏"

@@ -5,6 +5,7 @@ import { useUIStore } from "../store/uiStore";
 import { useUnreadAlbums } from "../hooks/useUnreadAlbums";
 import { useGalleryContextSync } from "../hooks/useGalleryContextSync";
 import AlbumGrid from "../components/album/AlbumGrid";
+import AlbumGridSkeleton from "../components/album/AlbumGridSkeleton";
 import { ListFilterBar } from "../components/common/ListFilterBar";
 import EmptyState from "../components/common/EmptyState";
 import { SparkleIcon, ShuffleIcon } from "../components/common/Icon";
@@ -93,11 +94,16 @@ export default function Unread() {
           未读相册
         </h1>
         <p className="text-[13px] text-fg-muted mt-2 tabular-nums flex items-center gap-3 flex-wrap">
-          <span>
-            还有 <span className="text-fg">{count}</span> 本没看
-            <span className="text-fg-subtle mx-1.5">·</span>
-            全库 <span className="text-fg">{total}</span> 本
-          </span>
+          {isLoading ? (
+            // 加载中不要报「0 本」：那是"还没数出来"，不是"没有未读"。
+            <span>正在统计未读相册…</span>
+          ) : (
+            <span>
+              还有 <span className="text-fg">{count}</span> 本没看
+              <span className="text-fg-subtle mx-1.5">·</span>
+              全库 <span className="text-fg">{total}</span> 本
+            </span>
+          )}
           {count > 0 && (
             <button
               onClick={onShuffleUnread}
@@ -115,9 +121,7 @@ export default function Unread() {
       {count > 0 && <ListFilterBar totalCount={filtered.length} />}
 
       {isLoading && count === 0 ? (
-        <div className="page-shell text-[13px] text-fg-muted">
-          加载中…
-        </div>
+        <AlbumGridSkeleton variant={viewMode} label="正在加载未读相册…" />
       ) : count === 0 ? (
         <EmptyState
           title={total === 0 ? "尚未加载图像库" : "全部看完啦 🎉"}
