@@ -4353,3 +4353,35 @@ test("卡片右上角的星标可以直接收藏，且不会跳转", async ({ pa
     })
     .toBe(false);
 });
+
+test("窄屏阅读器不再显示悬浮控件，显示设置收进顶栏弹层", async ({
+  page,
+  request,
+}) => {
+  const nodes = await scannedNodes(request);
+  const album = nodes.find((node) => (node.imageCount ?? 0) >= 2)!;
+  expect(album).toBeDefined();
+  const total = album.imageCount!;
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/gallery?path=${album.id}&index=0`);
+  await expect(page.getByText(new RegExp(`^1 / ${total}$`))).toBeVisible();
+
+  // 右侧悬浮控件在窄屏会盖住图片右缘，这里应当已经隐藏。
+  await expect(
+    page.getByRole("button", { name: "适应 (F 循环)" }),
+  ).toBeHidden();
+
+  // 显示设置改由顶栏弹层提供。
+  const menuButton = page.getByRole("button", { name: "阅读设置" });
+  await expect(menuButton).toBeVisible();
+  await menuButton.click();
+  await page.getByRole("menuitem", { name: /并排/ }).click();
+  await expect(page.getByText("1–2 /")).toBeVisible();
+
+  // 悬浮控件让开后，图片右三分之一可以正常翻到下一张。
+  await page.getByRole("button", { name: "阅读设置" }).click();
+  await page.getByRole("menuitem", { name: /单张/ }).click();
+  await expect(page.getByText(new RegExp(`^1 / ${total}$`))).toBeVisible();
+  await page.mouse.click(360, 400);
+  await expect(page.getByText(new RegExp(`^2 / ${total}$`))).toBeVisible();
+});

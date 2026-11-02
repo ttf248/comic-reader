@@ -86,9 +86,11 @@ export default function GalleryControls({
         </div>
       )}
 
-      {/* 右侧：阅读模式 + 适配 + 缩放 + 旋转 */}
+      {/* 右侧：阅读模式 + 适配 + 缩放 + 旋转
+          窄屏隐藏：这列控件会盖住图片右缘并挡住"点击右侧翻下一张"的热区，
+          小屏改用顶栏的「阅读设置」弹层（GalleryDisplayMenu）。 */}
       <div
-        className={`absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 z-10 flex flex-col items-stretch gap-2 transition-opacity duration-300 ${
+        className={`absolute right-2 sm:right-3 top-1/2 -translate-y-1/2 z-10 hidden md:flex flex-col items-stretch gap-2 transition-opacity duration-300 ${
           visible ? 'opacity-100' : 'opacity-0 pointer-events-none'
         }`}
       >

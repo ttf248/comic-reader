@@ -16,6 +16,7 @@ import Popover, {
   PopoverSeparator,
   PopoverLabel,
 } from "../common/Popover";
+import GalleryDisplayMenu from "./GalleryDisplayMenu";
 import { useGalleryStore } from "../../store/galleryStore";
 import { toggleFullscreen as toggleFullscreenImpl } from "../../utils/fullscreen";
 
@@ -175,6 +176,9 @@ export default function GalleryHeader({
       >
         <FullscreenIcon size={13} />
       </HeaderIconButton>
+
+      {/* 窄屏没有右侧悬浮控件，显示设置收进这个弹层。 */}
+      {!isVideo && <GalleryDisplayMenu />}
 
       <Popover
         align="end"
