@@ -12,6 +12,7 @@ const (
 	cacheTempDirName    = "temp"
 	thumbnailDirName    = "thumbnails"
 	convertedDirName    = "converted"
+	previewDirName      = "previews"
 )
 
 // CacheLayout 把不可随意删除的应用状态与可重建的派生资源隔离开。
@@ -23,6 +24,7 @@ type CacheLayout struct {
 	TempDir            string
 	ThumbnailDir       string
 	ConvertedDir       string
+	PreviewDir         string
 	ScanCachePath      string
 	PreferencesPath    string
 	ActivityPath       string
@@ -41,6 +43,7 @@ func ResolveCacheLayout(root string) CacheLayout {
 		TempDir:            filepath.Join(cleanRoot, cacheTempDirName),
 		ThumbnailDir:       filepath.Join(derivedDir, thumbnailDirName),
 		ConvertedDir:       filepath.Join(derivedDir, convertedDirName),
+		PreviewDir:         filepath.Join(derivedDir, previewDirName),
 		ScanCachePath:      filepath.Join(stateDir, "scan_cache.json"),
 		PreferencesPath:    filepath.Join(stateDir, "web_settings.json"),
 		ActivityPath:       filepath.Join(stateDir, "activity.json"),
@@ -57,7 +60,7 @@ func EnsureCacheLayout(root string) (CacheLayout, error) {
 		return CacheLayout{}, fmt.Errorf("cache root is required")
 	}
 	layout := ResolveCacheLayout(root)
-	for _, dir := range []string{layout.Root, layout.StateDir, layout.DerivedDir, layout.TempDir, layout.ThumbnailDir, layout.ConvertedDir} {
+	for _, dir := range []string{layout.Root, layout.StateDir, layout.DerivedDir, layout.TempDir, layout.ThumbnailDir, layout.ConvertedDir, layout.PreviewDir} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return CacheLayout{}, fmt.Errorf("create cache layout: %w", err)
 		}

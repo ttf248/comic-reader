@@ -2,9 +2,12 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -86,6 +89,76 @@ func MediaHandler(transcode *services.TranscodeService, faststart *services.Vide
 		}
 		return writeError(c, fiber.StatusUnsupportedMediaType, "unsupported_media", "resource is not a supported media file")
 	}
+}
+
+// defaultPreviewWidth 预览图默认宽度（像素）。
+//
+// 1440px 宽的桌面视口配 1600px 预览刚好够用；再窄的视口用同一份缓存，
+// 不必为每个视口宽度各生成一份。
+const defaultPreviewWidth = 1600
+
+// PreviewHandler 返回按宽度缩放的预览图。
+//
+//	GET /api/previews/:id?w=1600
+//
+// 阅读器连续模式按视口宽度展示图片。直接发原图的话，手机照片动辄
+// 12MP / 5MB，一屏就是几 MB，整本翻下来是 GB 级流量，浏览器还要为每张
+// 原图解码出几十 MB 位图。这里按 w 等比缩放并缓存到磁盘，
+// 1600px 宽的 q85 JPEG 约 200–400KB。
+//
+// w 会被夹到 320..4096；非数字或非正数返回 400。
+// 源图比 w 还窄时直接返回原图字节（不重新编码，零画质损失）。
+func PreviewHandler(thumbs *services.ThumbnailService) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		path := middleware.SafePath(c)
+		if path == "" {
+			return writeError(c, fiber.StatusBadRequest, "missing_path", "missing 'path' query parameter")
+		}
+		if !models.IsImageFile(filepath.Base(path)) {
+			return writeError(c, fiber.StatusUnsupportedMediaType, "unsupported_image_format", "image format cannot be displayed")
+		}
+		width, err := previewWidth(c)
+		if err != nil {
+			return writeError(c, fiber.StatusBadRequest, "invalid_preview_width", err.Error())
+		}
+		if thumbs == nil {
+			return writeError(c, fiber.StatusServiceUnavailable, "preview_unavailable", "preview service is not initialized")
+		}
+		preview, err := thumbs.GetOrCreatePreview(path, width)
+		if err != nil {
+			if errors.Is(err, services.ErrSourceMissing) {
+				return writeError(c, fiber.StatusNotFound, "media_not_found", "media resource was not found")
+			}
+			if errors.Is(err, services.ErrUnsupportedFormat) {
+				return writeError(c, fiber.StatusUnsupportedMediaType, "unsupported_image_format", "image format cannot be displayed")
+			}
+			return writeError(c, fiber.StatusInternalServerError, "preview_failed", "failed to generate preview image")
+		}
+		info, statErr := os.Stat(path)
+		if statErr == nil && mediaNotModified(c, preview.ETag, info.ModTime()) {
+			return c.SendStatus(fiber.StatusNotModified)
+		}
+		c.Set("Content-Type", preview.ContentType)
+		c.Set("Content-Length", strconv.Itoa(len(preview.Data)))
+		c.Set("ETag", preview.ETag)
+		c.Set("Cache-Control", "private, no-cache")
+		return c.Send(preview.Data)
+	}
+}
+
+// previewWidth 解析请求的预览图宽度（像素）。
+//
+// 缺省 1600；非数字或非正数返回错误，由调用方转成 400。
+func previewWidth(c *fiber.Ctx) (int, error) {
+	raw := strings.TrimSpace(c.Query("w"))
+	if raw == "" {
+		return defaultPreviewWidth, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return 0, fmt.Errorf("invalid 'w' query parameter: %q", raw)
+	}
+	return n, nil
 }
 
 // ImageInfoHandler 返回图片元数据（尺寸、格式、大小、修改时间、checksum）。

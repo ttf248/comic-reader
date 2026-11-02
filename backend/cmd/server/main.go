@@ -183,6 +183,7 @@ func main() {
 	thumbs, err := services.NewThumbnailService(services.ThumbnailOptions{
 		CacheDir:       cacheLayout.ThumbnailDir,
 		ConvertedDir:   cacheLayout.ConvertedDir,
+		PreviewDir:     cacheLayout.PreviewDir,
 		Width:          cfg.ThumbSizeW,
 		Height:         cfg.ThumbSizeH,
 		MaxAgeDays:     cfg.CacheMaxAgeDays,
@@ -328,6 +329,7 @@ func main() {
 	api.Post("/cache/clear", handlers.CacheClearHandler(thumbs, faststart, transcode, videoInfo.ClearCache, cacheStats))
 	api.Get("/cache/stats", handlers.CacheStatsHandler(mgr, cacheStats))
 	api.Get("/media/:id", resourceParam, handlers.MediaHandler(transcode, faststart, thumbs))
+	api.Get("/previews/:id", resourceParam, handlers.PreviewHandler(thumbs))
 	api.Get("/images/:id/info", resourceParam, handlers.ImageInfoHandler(resourceCatalog))
 	// 视频流 + 元信息（前端 <video> 元素 / HoverPreview / 时长显示使用）
 	api.Get("/videos/:id/info", resourceParam, handlers.VideoInfoHandler(videoInfo, transcode, resourceCatalog))

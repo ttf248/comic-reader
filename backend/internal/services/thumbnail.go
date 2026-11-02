@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
+	"image/draw"
 	"image/jpeg"
 	"os"
 	"path/filepath"
@@ -62,6 +64,17 @@ const (
 	convertedMaxDim = 2560
 	// convertedCacheSize 整图转换结果的内存缓存条数（每条约 1MB）。
 	convertedCacheSize = 8
+
+	// previewMinWidth 预览图允许的最小宽度：低于缩略图尺寸的请求没有意义，
+	// 却仍要付出一次全图解码的代价，直接夹到下限。
+	previewMinWidth = 320
+	// previewMaxWidth 预览图允许的最大宽度：防止一次请求生成超大缓存文件。
+	previewMaxWidth = 4096
+	// previewCacheSize 预览图内存 LRU 条数（每条几百 KB）。
+	previewCacheSize = 16
+	// previewJPEGQuality 预览图 JPEG 质量，与缩略图一致（85）：
+	// 1600px 宽的照片在 q85 下约 200–400KB，肉眼几乎无损。
+	previewJPEGQuality = 85
 )
 
 // ThumbnailService 缩略图服务：LRU 内存缓存 + 磁盘缓存。
@@ -76,12 +89,18 @@ type ThumbnailService struct {
 	// convertedDir 存放"浏览器可直接显示"的整图转换结果（HEIC/TIFF 等）。
 	// 与缩略图分开存放，避免同一目录里混两种用途的文件。
 	convertedDir string
+	// previewDir 存放阅读器用的预览图（按请求宽度缩放的 JPEG）。
+	// 单张几百 KB，与缩略图（十几 KB）混在一起会让缩略图 LRU 很快被冲掉，
+	// 所以单独一个目录和单独一个 LRU。
+	previewDir string
 
 	mu       sync.RWMutex
 	memCache *lru.Cache[string, []byte]
 	// convertedCache 单独缓存整图转换结果：一张 JPEG 动辄几 MB，
 	// 与缩略图共用一个 LRU 会把缩略图全部挤掉。
 	convertedCache *lru.Cache[string, []byte]
+	// previewCache 单独缓存预览图：单张几百 KB，混进缩略图 LRU 同样会挤掉缩略图。
+	previewCache *lru.Cache[string, []byte]
 
 	// singleflight 防缓存击穿：同一 key 并发请求时只跑一次生成，
 	// 其他协程等结果。冷启动 / 用户翻到未缓存的合集时（首页 20+ 张
@@ -120,6 +139,10 @@ type ThumbnailOptions struct {
 	// ConvertedDir 可选：整图转换结果的缓存目录。
 	// 留空时复用 CacheDir 下的 converted 子目录。
 	ConvertedDir string
+
+	// PreviewDir 可选：预览图（阅读器按宽度缩放图）的缓存目录。
+	// 留空时复用 CacheDir 下的 previews 子目录。
+	PreviewDir string
 
 	// VideoCover 可选:传入后,视频封面在服务端用 ffmpeg 抽帧;
 	// 不传则维持原"客户端抽帧 + 上传"流程。
@@ -160,6 +183,13 @@ func NewThumbnailService(opts ThumbnailOptions) (*ThumbnailService, error) {
 	if convertedDir == "" {
 		convertedDir = filepath.Join(opts.CacheDir, "converted")
 	}
+	previewDir := opts.PreviewDir
+	if previewDir == "" {
+		previewDir = filepath.Join(opts.CacheDir, "previews")
+	}
+	if err := os.MkdirAll(previewDir, 0o755); err != nil {
+		return nil, fmt.Errorf("create preview dir: %w", err)
+	}
 
 	cache, err := lru.New[string, []byte](lruSize)
 	if err != nil {
@@ -169,16 +199,22 @@ func NewThumbnailService(opts ThumbnailOptions) (*ThumbnailService, error) {
 	if err != nil {
 		return nil, fmt.Errorf("create converted lru: %w", err)
 	}
+	previewCache, err := lru.New[string, []byte](previewCacheSize)
+	if err != nil {
+		return nil, fmt.Errorf("create preview lru: %w", err)
+	}
 
 	return &ThumbnailService{
 		cacheDir:        opts.CacheDir,
 		convertedDir:    convertedDir,
+		previewDir:      previewDir,
 		width:           w,
 		height:          h,
 		maxAgeDays:      days,
 		lruSize:         lruSize,
 		memCache:        cache,
 		convertedCache:  convertedCache,
+		previewCache:    previewCache,
 		videoCover:      opts.VideoCover,
 		imageConverter:  opts.ImageConverter,
 		videoCoverSlots: make(chan struct{}, 2),
@@ -309,6 +345,187 @@ func (s *ThumbnailService) GetOrCreate(absPath string) ([]byte, error) {
 		return s.getVideoCover(absPath)
 	}
 	return s.getOrCreateImage(absPath)
+}
+
+// PreviewImage 预览图结果。
+//
+// ContentType 恒为 image/jpeg：预览图要么是缩放后重新编码的 JPEG，
+// 要么是原图本身就是 JPEG 且不宽于目标宽度时直接复用原图字节。
+type PreviewImage struct {
+	Data        []byte
+	ContentType string
+	// ETag 由源文件的 mtime + size + 目标宽度派生，
+	// 源文件变化或换了宽度都会让旧缓存失效。
+	ETag string
+}
+
+// GetOrCreatePreview 返回按 maxWidth 缩放的预览图。
+//
+// 阅读器连续模式按视口宽度展示图片，如果直接发原图，手机照片动辄
+// 12MP / 5MB，一屏就是几 MB，整本翻下来是 GB 级流量；浏览器还要为每张
+// 原图解码出几十 MB 的位图。这里按请求宽度等比缩放并缓存到磁盘，
+// 1600px 宽的 q85 JPEG 约 200–400KB，是原图的 1/10~1/30。
+//
+// maxWidth 会被夹到 [previewMinWidth, previewMaxWidth]。
+// 缓存键包含源文件版本与目标宽度，源文件改了或换了宽度都会重新生成。
+func (s *ThumbnailService) GetOrCreatePreview(absPath string, maxWidth int) (PreviewImage, error) {
+	if maxWidth < previewMinWidth {
+		maxWidth = previewMinWidth
+	}
+	if maxWidth > previewMaxWidth {
+		maxWidth = previewMaxWidth
+	}
+	fi, err := os.Stat(absPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return PreviewImage{}, ErrSourceMissing
+		}
+		return PreviewImage{}, err
+	}
+	if !fi.Mode().IsRegular() {
+		return PreviewImage{}, ErrSourceMissing
+	}
+
+	sourceKey := CacheKeyFromStat(absPath, fi)
+	key := previewCacheKey(sourceKey, maxWidth)
+	etag := fmt.Sprintf(`"%x-%x-%d"`, fi.ModTime().UnixNano(), fi.Size(), maxWidth)
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if data, ok := s.previewCache.Get(key); ok {
+		return PreviewImage{Data: data, ContentType: "image/jpeg", ETag: etag}, nil
+	}
+	diskPath := filepath.Join(s.previewDir, key+JPEGExt)
+	if data, err := os.ReadFile(diskPath); err == nil {
+		s.previewCache.Add(key, data)
+		return PreviewImage{Data: data, ContentType: "image/jpeg", ETag: etag}, nil
+	}
+
+	// 同 key 并发只生成一次，避免一屏多张图同时请求时重复解码原图。
+	v, err, _ := s.flight.Do(key, func() (interface{}, error) {
+		if data, ok := s.previewCache.Get(key); ok {
+			return data, nil
+		}
+		if data, err := os.ReadFile(diskPath); err == nil {
+			s.previewCache.Add(key, data)
+			return data, nil
+		}
+		data, err := s.generatePreview(absPath, maxWidth)
+		if err != nil {
+			return nil, err
+		}
+		if werr := os.WriteFile(diskPath, data, 0o644); werr != nil {
+			// 写失败不影响返回（仅缓存丢失，下次重新生成）
+			fmt.Fprintf(os.Stderr, "write preview cache key=%s: %v\n", key, werr)
+		}
+		s.previewCache.Add(key, data)
+		return data, nil
+	})
+	if err != nil {
+		return PreviewImage{}, err
+	}
+	return PreviewImage{Data: v.([]byte), ContentType: "image/jpeg", ETag: etag}, nil
+}
+
+// previewCacheKey 把目标宽度纳入缓存键。
+//
+// 同一张图按不同宽度请求会得到不同产物，键里必须带宽度；
+// 前缀 pv1 与缩略图 / 整图转换的键区分开，避免互相覆盖。
+func previewCacheKey(sourceKey string, maxWidth int) string {
+	sum := md5.Sum([]byte(fmt.Sprintf("pv1:%s|%d|jpeg-v1", sourceKey, maxWidth)))
+	return hex.EncodeToString(sum[:])
+}
+
+// generatePreview 解码 → 按宽度缩放 → 编码 JPEG。
+//
+// 源图本身是 JPEG 且不宽于目标宽度时直接复用原图字节：零编码开销、
+// 零画质损失（常见情况），缓存里存的仍是一份 .jpg。
+func (s *ThumbnailService) generatePreview(absPath string, maxWidth int) ([]byte, error) {
+	ext := strings.ToLower(filepath.Ext(absPath))
+	if (ext == ".jpg" || ext == ".jpeg") && !models.NeedsBrowserConversion(filepath.Base(absPath)) {
+		if width, _, err := imageDimensions(absPath); err == nil && width > 0 && width <= maxWidth {
+			return os.ReadFile(absPath)
+		}
+	}
+
+	// 与缩略图共用解码闸门：原图动辄几十 MB 解码缓冲，
+	// 不加预算的话一屏并发就能把内存顶高。
+	weight, err := decodePixelWeight(absPath)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.decodePixels.Acquire(context.Background(), weight); err != nil {
+		return nil, fmt.Errorf("acquire decode budget: %w", err)
+	}
+	defer s.decodePixels.Release(weight)
+
+	s.imageSlots <- struct{}{}
+	defer func() { <-s.imageSlots }()
+
+	img, err := decodeImage(absPath)
+	if err != nil {
+		if errors.Is(err, ErrUnsupportedFormat) {
+			// 纯 Go 解不了的格式（HEIC/HEIF）：交给 ffmpeg 转换后再缩放。
+			converted, cerr := s.convertUnsupported(absPath)
+			if cerr != nil {
+				return nil, ErrUnsupportedFormat
+			}
+			img = converted
+		} else {
+			return nil, fmt.Errorf("decode: %w", err)
+		}
+	}
+
+	resized := resizeToWidth(img, maxWidth)
+	// JPEG 没有 alpha 通道，PNG 的透明区域要先压到白底，
+	// 否则透明像素会变成黑块（漫画线稿常见）。
+	flat := flattenOnWhite(resized)
+	buf, err := encodeJPEG(flat, previewJPEGQuality)
+	if err != nil {
+		return nil, fmt.Errorf("encode preview: %w", err)
+	}
+	return buf, nil
+}
+
+// resizeToWidth 把图片等比缩放到不超过 maxWidth 宽（不放大）。
+//
+// 两步降采样：先用廉价的 Box 面积平均压到目标宽度的 2 倍以内，
+// 再用 Lanczos 收尾 —— 与缩略图同一套做法，避免大图直接跑 Lanczos
+// 时的几十毫秒开销。
+func resizeToWidth(img image.Image, maxWidth int) image.Image {
+	srcW := img.Bounds().Dx()
+	if srcW <= maxWidth {
+		return img
+	}
+	pre := imaging.Resize(img, maxWidth*2, 0, imaging.Box)
+	return imaging.Resize(pre, maxWidth, 0, imaging.Lanczos)
+}
+
+// flattenOnWhite 把带 alpha 的图压到白底。
+//
+// JPEG 不支持透明通道，直接编码会让透明区域变成黑色；
+// 漫画 / 透明 PNG 压到白底才是读者预期的样子。
+func flattenOnWhite(img image.Image) *image.NRGBA {
+	b := img.Bounds()
+	dst := image.NewNRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
+	draw.Draw(dst, dst.Bounds(), &image.Uniform{C: color.White}, image.Point{}, draw.Src)
+	draw.Draw(dst, dst.Bounds(), img, b.Min, draw.Over)
+	return dst
+}
+
+// imageDimensions 只读图片头，返回宽高。读不出来时返回错误。
+func imageDimensions(absPath string) (int, int, error) {
+	f, err := os.Open(absPath)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer f.Close()
+	cfg, _, err := image.DecodeConfig(f)
+	if err != nil {
+		return 0, 0, err
+	}
+	return cfg.Width, cfg.Height, nil
 }
 
 // renditionKey 把尺寸和编码版本纳入磁盘及内存缓存标识。
@@ -723,6 +940,22 @@ func (s *ThumbnailService) ClearConverted() (deleted int, freedBytes int64, err 
 		return deleted, freedBytes, err
 	}
 	s.convertedCache.Purge()
+	return deleted, freedBytes, nil
+}
+
+// ClearPreviews 删除预览图缓存并清空对应内存 LRU。
+//
+// 预览图是阅读器按宽度缩放出来的中间产物,删掉不影响任何原文件,
+// 下次访问会按需重新生成。
+func (s *ThumbnailService) ClearPreviews() (deleted int, freedBytes int64, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	deleted, freedBytes, err = clearCacheDir(s.previewDir)
+	if err != nil {
+		return deleted, freedBytes, err
+	}
+	s.previewCache.Purge()
 	return deleted, freedBytes, nil
 }
 

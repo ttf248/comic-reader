@@ -301,7 +301,42 @@ func TestCacheStatsService_ConvertedSubDir(t *testing.T) {
 		t.Errorf("Converted: got %+v want 1 file / 4096 bytes", u.Converted)
 	}
 	// 各细分之和必须等于总占用，否则设置页展示的细分对不上总数。
-	sum := u.Thumbs.Bytes + u.Converted.Bytes + u.VideoFaststart.Bytes + u.VideoTranscode.Bytes
+	sum := u.Thumbs.Bytes + u.Converted.Bytes + u.Previews.Bytes + u.VideoFaststart.Bytes + u.VideoTranscode.Bytes
+	if sum != u.TotalBytes {
+		t.Errorf("细分之和=%d, totalBytes=%d, want equal", sum, u.TotalBytes)
+	}
+}
+
+// 预览图缓存（阅读器按宽度缩放的中间产物）必须单独统计。
+//
+// 它和缩略图放在一起时，设置页的「缩略图」一栏会随翻页剧烈波动
+// （单张几百 KB vs 缩略图十几 KB），用户既看不清大头在哪，也没法只清这一类。
+func TestCacheStatsService_PreviewsSubDir(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := EnsureCacheLayout(dir); err != nil {
+		t.Fatal(err)
+	}
+	preview := filepath.Join(dir, "derived", "previews", "0123456789abcdef0123456789abcdef.jpg")
+	if err := os.WriteFile(preview, make([]byte, 2048), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	thumb := filepath.Join(dir, "derived", "thumbnails", "fedcba9876543210fedcba9876543210.jpg")
+	if err := os.WriteFile(thumb, make([]byte, 1000), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	svc := NewCacheStatsService(time.Second)
+	u, _, err := svc.Usage(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !u.Previews.Available {
+		t.Error("Previews.Available should be true")
+	}
+	if u.Previews.FileCount != 1 || u.Previews.Bytes != 2048 {
+		t.Errorf("Previews: got %+v want 1 file / 2048 bytes", u.Previews)
+	}
+	sum := u.Thumbs.Bytes + u.Converted.Bytes + u.Previews.Bytes + u.VideoFaststart.Bytes + u.VideoTranscode.Bytes
 	if sum != u.TotalBytes {
 		t.Errorf("细分之和=%d, totalBytes=%d, want equal", sum, u.TotalBytes)
 	}

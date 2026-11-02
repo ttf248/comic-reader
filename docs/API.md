@@ -182,6 +182,23 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 浏览器原生解不了的图片格式（HEIC/HEIF/TIFF）不按原文件发送：服务端用 ffmpeg 转成 JPEG（最长边 2560）后再返回，`Content-Type` 为 `image/jpeg`，ETag 仍取源文件的 mtime+size，因此条件请求照常协商 304。转换结果按源文件 mtime+size 派生的键缓存在 `derived/converted/`，第二次访问直接命中缓存。ffmpeg 不可用或转换失败时返回 `415 unsupported_image_format`，前端显示"该图片无法显示"，不再把浏览器解不了的原文件当图片发出去。
 
+### `GET /api/previews/:fileId?w=<像素宽度>`
+
+返回按宽度等比缩放的预览图（JPEG）。`w` 缺省 1600，非数字或非正数返回 `400 invalid_preview_width`；宽度会被夹到 320～4096。
+
+阅读器连续模式按视口宽度展示图片。直接发原图的话，手机照片动辄 12MP / 5MB，一屏就是几 MB，整本翻下来是 GB 级流量，浏览器还要为每张原图解码出几十 MB 位图。预览图按请求宽度缩放后约 200–400KB。
+
+源图比 `w` 还窄时直接返回原图字节（不重新编码，零画质损失）；需要缩放时输出 JPEG（q85），带 alpha 的 PNG 先压到白底再编码，避免透明区域变成黑块。HEIC/HEIF/TIFF 仍走 ffmpeg 转换路径。
+
+响应 `Content-Type: image/jpeg`，ETag 由源文件的 mtime+size+目标宽度派生；带 `If-None-Match` 命中时返回 `304`，不重复传图。预览图按源文件版本与宽度分别缓存在 `derived/previews/`，可在设置页单独清理。
+
+| 状态 | code                       | 含义                             |
+| ---- | -------------------------- | -------------------------------- |
+| 400  | `invalid_preview_width`    | `w` 不是正整数                   |
+| 404  | `media_not_found`          | 源路径不存在或不再是普通文件     |
+| 415  | `unsupported_image_format` | 不是受支持的图片，例如视频文件   |
+| 500  | `preview_failed`           | 无法生成预览图                   |
+
 ### `GET /api/thumbs/:fileId`
 
 返回 JPEG 缩略图。视频尚无封面时返回 `404` 和 `code: video_cover_missing`。
@@ -284,9 +301,9 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 ## 缓存与系统操作
 
-- `GET /api/cache/stats`：返回脱敏缓存名称、占用和文件数。除总占用 `totalBytes` / `fileCount` 外，按子目录给出 `thumbs`（缩略图）、`converted`（HEIC/HEIF/TIFF 的整图转换产物）、`videoFaststart`、`videoTranscode` 四项细分；各子目录的 `bytes` 之和等于 `totalBytes`。子目录尚不存在时该项 `available=false`、`bytes`/`fileCount` 为 0。
+- `GET /api/cache/stats`：返回脱敏缓存名称、占用和文件数。除总占用 `totalBytes` / `fileCount` 外，按子目录给出 `thumbs`（缩略图）、`converted`（HEIC/HEIF/TIFF 的整图转换产物）、`previews`（阅读器按宽度缩放的预览图）、`videoFaststart`、`videoTranscode` 五项细分；各子目录的 `bytes` 之和等于 `totalBytes`。子目录尚不存在时该项 `available=false`、`bytes`/`fileCount` 为 0。
 - `POST /api/thumbs/cleanup`
-- `POST /api/cache/clear?scope=thumbs|converted|faststart|transcode|all`：统一清空入口，按 scope 删 thumbs / converted / faststart / transcode 缓存中对应的一类；scope=all 同时清理四类派生缓存和视频元数据内存摘要。响应 `{ scope, thumbs?, converted?, faststart?, transcode?, totalDeleted, totalFreedBytes }`，未涉及的 scope 字段省略。删除数量与释放字节只统计磁盘文件，不包含内存摘要。
+- `POST /api/cache/clear?scope=thumbs|converted|previews|faststart|transcode|all`：统一清空入口，按 scope 删 thumbs / converted / previews / faststart / transcode 缓存中对应的一类；scope=all 同时清理五类派生缓存和视频元数据内存摘要。响应 `{ scope, thumbs?, converted?, previews?, faststart?, transcode?, totalDeleted, totalFreedBytes }`，未涉及的 scope 字段省略。删除数量与释放字节只统计磁盘文件，不包含内存摘要。
 - `POST /api/fs/open`：本机接口，body 为 `{ "id": "<resourceId>" }`。执行前按当前媒体根重新校验路径；根、集合和相册必须仍为目录，文件必须仍为普通文件。
 - `GET /api/admin/fs/open?path=<configuredPath>&allowConfig=1`：设置页专用，仅允许打开已配置路径且只接受回环请求。
 

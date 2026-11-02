@@ -28,8 +28,13 @@ type CacheUsage struct {
 	// Converted 是 HEIC/HEIF/TIFF 的整图转换产物(浏览器解不了的格式),
 	// 单张可达 MB 级,必须单独列出来——否则细分之和与 totalBytes 对不上,
 	// 用户既看不到大头在哪,也没法只清这一类。
+	//
+	// Previews 是阅读器按宽度缩放出来的预览图,单张几百 KB。
+	// 它和缩略图放在一起会让「缩略图」这一栏随翻页剧烈波动,
+	// 单独列出用户才能知道是哪一类占了空间。
 	Thumbs         SubUsage `json:"thumbs"`
 	Converted      SubUsage `json:"converted"`
+	Previews       SubUsage `json:"previews"`
 	VideoFaststart SubUsage `json:"videoFaststart"`
 	VideoTranscode SubUsage `json:"videoTranscode"`
 }
@@ -150,6 +155,7 @@ func (s *CacheStatsService) Usage(cacheDir string) (*CacheUsage, *time.Time, err
 		Available:      walkErr == nil,
 		Thumbs:         scanCacheDir(layout.ThumbnailDir),
 		Converted:      scanCacheDir(layout.ConvertedDir),
+		Previews:       scanCacheDir(layout.PreviewDir),
 		VideoFaststart: scanSubDir(filepath.Join(layout.DerivedDir, "video-faststart")),
 		VideoTranscode: scanSubDir(filepath.Join(layout.DerivedDir, "video-transcode")),
 	}

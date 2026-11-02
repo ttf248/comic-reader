@@ -93,12 +93,17 @@ func makeTestImage(t *testing.T, dir, name string, w, h int) string {
 
 func newTestService(t *testing.T) *ThumbnailService {
 	t.Helper()
+	// 三类缓存各占一个子目录，和生产环境的 derived 布局一致：
+	// 否则预览图目录会落在缩略图目录里，统计磁盘文件数时多出一条。
+	root := t.TempDir()
 	svc, err := NewThumbnailService(ThumbnailOptions{
-		CacheDir:   t.TempDir(),
-		Width:      320,
-		Height:     350,
-		MaxAgeDays: 30,
-		LRUSize:    100,
+		CacheDir:     filepath.Join(root, "thumbnails"),
+		ConvertedDir: filepath.Join(root, "converted"),
+		PreviewDir:   filepath.Join(root, "previews"),
+		Width:        320,
+		Height:       350,
+		MaxAgeDays:   30,
+		LRUSize:      100,
 	})
 	if err != nil {
 		t.Fatalf("NewThumbnailService: %v", err)
