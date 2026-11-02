@@ -94,7 +94,10 @@ vi.mock("../components/gallery/PageSlider", () => ({
 vi.mock("../components/gallery/GalleryHeader", () => ({
   default: ({ name }: { name: string }) => <h1>{name}</h1>,
 }));
-vi.mock("../components/gallery/GalleryControls", () => ({
+vi.mock("../components/gallery/GalleryAlbumNav", () => ({
+  default: () => null,
+}));
+vi.mock("../components/gallery/GalleryToolbar", () => ({
   default: () => null,
 }));
 vi.mock("../components/gallery/ImageInfoPanel", () => ({

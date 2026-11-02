@@ -22,7 +22,8 @@ import PageSlider from "../components/gallery/PageSlider";
 import ImageInfoPanel from "../components/gallery/ImageInfoPanel";
 import HelpOverlay from "../components/common/HelpOverlay";
 import GalleryHeader from "../components/gallery/GalleryHeader";
-import GalleryControls from "../components/gallery/GalleryControls";
+import GalleryToolbar from "../components/gallery/GalleryToolbar";
+import GalleryAlbumNav from "../components/gallery/GalleryAlbumNav";
 import ContextMenu, { type AnyMenuItem } from "../components/album/ContextMenu";
 import {
   ImageIcon,
@@ -1132,25 +1133,34 @@ export default function Gallery() {
           }
         />
 
-        {/* 浮层控件：右侧（模式 / 适配 / 缩放 / 旋转 / 方向）+ 左下（上一本/下一本）
-          视频模式不显示（视频有原生 controls） */}
+        {/* 阅读控制：底部浮动工具条（翻页 / 模式 / 适配 / 缩放 / 旋转）
+            常驻显示 —— 淡出等于把功能藏起来。
+            视频模式不显示（视频有原生 controls）。 */}
         {!isVideo && (
-          <GalleryControls
-            visible={chromeVisible}
+          <GalleryToolbar
             onPrev={prev}
             onNext={next}
+            atStart={index <= 0}
+            atEnd={index >= images.length - 1}
+          />
+        )}
+
+        {/* 跨卷导航：画面左侧竖排，低频但需要常驻可见 */}
+        {!isVideo && (
+          <GalleryAlbumNav
+            visible={chromeVisible}
             onPrevAlbum={() => goAdjacent(-1, { notify: showSwitchNotif })}
             onNextAlbum={() => goAdjacent(1, { notify: showSwitchNotif })}
           />
         )}
 
-        {/* 底部进度条 + 跳转：浮在图上，chromeVisible 联动。视频模式下隐藏（<video> 自带 controls） */}
+        {/* 底部进度条 + 跳转：常驻显示。
+            它是被动信息（当前在第几张）+ 长相册的主要导航手段（拖拽刮擦 +
+            浮出缩略图条），按 idle 淡出会让用户在一本 300 张的漫画里
+            彻底失去位置感 —— 而它本身只占 44px。
+            视频模式下隐藏（<video> 自带 controls）。 */}
         {!isVideo && (
-          <div
-            className={`absolute bottom-0 inset-x-0 z-10 transition-opacity duration-300 ${
-              chromeVisible ? "opacity-100" : "opacity-0 pointer-events-none"
-            }`}
-          >
+          <div className="absolute bottom-0 inset-x-0 z-10">
             <PageSlider
               total={images.length}
               index={index}

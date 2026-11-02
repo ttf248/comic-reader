@@ -131,7 +131,7 @@ export default function PageSlider({ total, index, onJump, images }: Props) {
     <div
       className="relative h-11 flex items-center gap-3 px-3 sm:px-5 text-white/85 select-none"
       style={{
-        background: "linear-gradient(to top, rgba(0,0,0,0.55), rgba(0,0,0,0))",
+        background: "linear-gradient(to top, rgba(0,0,0,0.72), rgba(0,0,0,0.25) 60%, rgba(0,0,0,0))",
       }}
     >
       {/* 缩略图条：拖拽时浮现 */}
@@ -165,7 +165,7 @@ export default function PageSlider({ total, index, onJump, images }: Props) {
               </div>
             );
           })}
-          <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[11px] text-white/70 tabular-nums">
+          <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[12.5px] text-white/75 tabular-nums">
             第 {scrubIndex + 1} / {total} 张
           </div>
         </div>
@@ -189,19 +189,19 @@ export default function PageSlider({ total, index, onJump, images }: Props) {
           }}
           onBlur={commit}
           autoFocus
-          className="w-12 h-7 px-1.5 text-center text-[12px] tabular-nums bg-neutral-900/80 text-white rounded border border-white/30 outline-none"
+          className="w-12 h-7 px-1.5 text-center text-[12.5px] tabular-nums bg-neutral-900/80 text-white rounded border border-white/30 outline-none"
           inputMode="numeric"
         />
       ) : (
         <button
           onClick={startEditing}
-          className="min-w-[44px] h-7 px-1.5 rounded text-[12px] tabular-nums text-white/85 hover:bg-white/10 transition-colors"
+          className="min-w-[44px] h-7 px-1.5 rounded text-[12.5px] tabular-nums text-white/85 hover:bg-white/10 transition-colors"
           title="跳转到指定张 (G)"
         >
           {safeIndex + 1}
         </button>
       )}
-      <span className="text-white/55 text-[11px] tabular-nums">/ {total}</span>
+      <span className="text-white/60 text-[12.5px] tabular-nums">/ {total}</span>
 
       {/* 进度条 */}
       <div className="flex-1 relative h-9 flex items-center group">
@@ -229,7 +229,7 @@ export default function PageSlider({ total, index, onJump, images }: Props) {
       </div>
 
       {/* 快捷键提示 */}
-      <span className="text-[10px] text-white/40 hidden md:inline">
+      <span className="text-[12.5px] text-white/45 hidden md:inline">
         <kbd className="kbd-light">G</kbd> 跳转
       </span>
     </div>

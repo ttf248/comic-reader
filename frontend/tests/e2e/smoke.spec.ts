@@ -4479,7 +4479,7 @@ test("卡片右上角的星标可以直接收藏，且不会跳转", async ({ pa
     .toBe(false);
 });
 
-test("窄屏阅读器不再显示悬浮控件，显示设置收进顶栏弹层", async ({
+test("窄屏阅读器不再显示右侧悬浮控件，阅读设置收进底部工具条", async ({
   page,
   request,
 }) => {
@@ -4491,23 +4491,21 @@ test("窄屏阅读器不再显示悬浮控件，显示设置收进顶栏弹层",
   await page.goto(`/gallery?path=${album.id}&index=0`);
   await expect(page.getByText(new RegExp(`^1 / ${total}$`))).toBeVisible();
 
-  // 右侧悬浮控件在窄屏会盖住图片右缘，这里应当已经隐藏。
-  await expect(
-    page.getByRole("button", { name: "适应 (F 循环)" }),
-  ).toBeHidden();
+  // 右侧竖排浮层已经整体取消：它会盖住图片右缘。
+  await expect(page.getByRole("button", { name: "适应 (F 循环)" })).toHaveCount(
+    0,
+  );
 
-  // 显示设置改由顶栏弹层提供。
-  const menuButton = page.getByRole("button", { name: "阅读设置" });
-  await expect(menuButton).toBeVisible();
-  await menuButton.click();
-  await page.getByRole("menuitem", { name: /并排/ }).click();
+  // 阅读设置改由底部浮动工具条提供（窄屏也直接可点，不需要再开菜单）。
+  const toolbar = page.getByRole("toolbar", { name: "阅读控制" });
+  await expect(toolbar).toBeVisible();
+  await toolbar.getByRole("button", { name: "并排" }).click();
   await expect(page.getByText("1–2 /")).toBeVisible();
 
-  // 悬浮控件让开后，图片右三分之一可以正常翻到下一张。
-  await page.getByRole("button", { name: "阅读设置" }).click();
-  await page.getByRole("menuitem", { name: /单张/ }).click();
+  // 工具条让开后，图片右三分之一可以正常翻到下一张。
+  await toolbar.getByRole("button", { name: "单张" }).click();
   await expect(page.getByText(new RegExp(`^1 / ${total}$`))).toBeVisible();
-  await page.mouse.click(360, 400);
+  await page.mouse.click(360, 300);
   await expect(page.getByText(new RegExp(`^2 / ${total}$`))).toBeVisible();
 });
 
@@ -4611,17 +4609,18 @@ test("阅读器连续模式按视口宽度请求预览图，不发原图", async
 // 并给首页重排了信息架构。下面几条用例把这些新契约固定下来，避免后续
 // 迭代时把可发现性改回去。
 
-test("阅读器顶栏常驻阅读模式与适配方式，切换后写入本地偏好", async ({
+test("阅读器底部工具条常驻阅读模式与适配方式，切换后写入本地偏好", async ({
   page,
 }) => {
   const nodes = await scannedNodes(page.request);
   const album = nodes.find((node) => node.name === "sample-album")!;
   expect(album).toBeDefined();
   await page.goto(`/gallery?path=${encodeURIComponent(album.id)}&type=image`);
-  const group = page.getByRole("group", { name: "阅读模式与适配" });
-  await expect(group).toBeVisible();
+  const toolbar = page.getByRole("toolbar", { name: "阅读控制" });
+  await expect(toolbar).toBeVisible();
+  const group = toolbar.getByRole("group", { name: "阅读模式" });
 
-  // 阅读模式：分段控件直接可点，不必先打开"…"菜单。
+  // 阅读模式：分段控件直接可点，不必先打开任何菜单。
   await group.getByRole("button", { name: "连续", exact: true }).click();
   await expect(
     group.getByRole("button", { name: "连续", exact: true }),
@@ -4637,14 +4636,12 @@ test("阅读器顶栏常驻阅读模式与适配方式，切换后写入本地�
     .toBe("continuous");
 
   // 适配方式：一个按钮循环 适应 → 按宽 → 按高 → 原始。
-  // 可访问名用「适配方式：xx」，与右侧悬浮控件的「适应 (F 循环)」区分开，
-  // 窄屏用例才能分别定位这两个入口。
-  const fit = group.getByRole("button", { name: /^适配方式：/ });
+  const fit = toolbar.getByRole("button", { name: /^适配方式：/ });
   await expect(fit).toHaveAttribute("aria-label", "适配方式：适应");
   await fit.click();
   await expect(fit).toHaveAttribute("aria-label", "适配方式：按宽");
 
-  // 键盘路径依旧可用：1 / 2 / 3 切模式，F 循环适配。
+  // 键盘路径依旧可用：1 / 2 / 3 切模式。
   await page.keyboard.press("1");
   await expect(
     group.getByRole("button", { name: "单张", exact: true }),
