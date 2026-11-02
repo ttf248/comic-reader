@@ -8,32 +8,35 @@ const virtuoso = vi.hoisted(() => ({
   list: vi.fn(),
 }));
 
+// Virtuoso 的泛型在 mock 里退化成 unknown：列表视图的数据是"行"，
+// 网格视图的数据是单张卡片，两者的形状由被测代码决定。
 interface VirtualizedProps {
-  data: readonly CardData[];
-  itemContent: (index: number, item: CardData) => ReactNode;
+  data: readonly unknown[];
+  itemContent: (index: number, item: never) => ReactNode;
   useWindowScroll?: boolean;
   customScrollParent?: HTMLElement;
-  computeItemKey?: (index: number, item: CardData) => string;
+  computeItemKey?: (index: number, item: never) => string;
   [key: string]: unknown;
 }
 
 vi.mock("react-virtuoso", () => ({
+  // 列表视图的数据是"行"：单列时一行一张卡，超宽屏时一行两张并排。
   Virtuoso: ({ data, itemContent, ...props }: VirtualizedProps) => {
-    virtuoso.list(props);
+    virtuoso.list({ ...props, data });
     return (
       <div data-testid="virtual-list">
-        {data.map((item: CardData, index: number) => (
-          <div key={item.id}>{itemContent(index, item)}</div>
+        {data.map((row: unknown, index: number) => (
+          <div key={index}>{itemContent(index, row as never)}</div>
         ))}
       </div>
     );
   },
   VirtuosoGrid: ({ data, itemContent, ...props }: VirtualizedProps) => {
-    virtuoso.grid(props);
+    virtuoso.grid({ ...props, data });
     return (
       <div data-testid="virtual-grid">
-        {data.map((item: CardData, index: number) => (
-          <div key={item.id}>{itemContent(index, item)}</div>
+        {data.map((item: unknown, index: number) => (
+          <div key={index}>{itemContent(index, item as never)}</div>
         ))}
       </div>
     );
@@ -47,6 +50,11 @@ vi.mock("../../hooks/useFavorites", () => ({
   useFavorites: () => ({ favorites: [], toggle: vi.fn() }),
 }));
 vi.mock("../common/PropertiesDialog", () => ({ default: () => null }));
+
+const mediaQuery = vi.hoisted(() => ({ matches: false }));
+vi.mock("../../hooks/useMediaQuery", () => ({
+  useMediaQuery: () => mediaQuery.matches,
+}));
 
 const cards: CardData[] = [
   {
@@ -71,6 +79,7 @@ const cards: CardData[] = [
 
 describe("AlbumGrid", () => {
   beforeEach(() => {
+    mediaQuery.matches = false;
     virtuoso.grid.mockClear();
     virtuoso.list.mockClear();
   });
@@ -94,10 +103,26 @@ describe("AlbumGrid", () => {
     expect(screen.getByTestId("virtual-list")).toBeInTheDocument();
     const props = virtuoso.list.mock.calls[0]?.[0] as {
       useWindowScroll: boolean;
-      computeItemKey: (index: number, item: CardData) => string;
+      data: CardData[][];
+      computeItemKey: (index: number, row: CardData[]) => string;
     };
     expect(props.useWindowScroll).toBe(true);
-    expect(props.computeItemKey(0, cards[0])).toBe("a_1");
+    expect(props.computeItemKey(0, [cards[0]])).toBe("a_1");
+  });
+
+  it("窄屏列表一行一张卡，超宽屏列表一行两张并排", () => {
+    mediaQuery.matches = false;
+    render(<AlbumGrid items={cards} variant="list" />);
+    let props = virtuoso.list.mock.calls[0]?.[0] as { data: CardData[][] };
+    expect(props.data).toHaveLength(2);
+    expect(props.data[0]).toHaveLength(1);
+
+    virtuoso.list.mockClear();
+    mediaQuery.matches = true;
+    render(<AlbumGrid items={cards} variant="list" />);
+    props = virtuoso.list.mock.calls[0]?.[0] as { data: CardData[][] };
+    expect(props.data).toHaveLength(1);
+    expect(props.data[0].map((c) => c.id)).toEqual(["a_1", "a_2"]);
   });
 
   it.each(["grid", "list"] as const)("%s 模式使用主内容区域滚动", (mode) => {

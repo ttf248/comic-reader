@@ -451,10 +451,12 @@ function ListCard({
   const multiRoot = useUIStore((s) => s.multiRoot);
 
   return (
-    // 列表行：缩略图压到 56px，行高降到 ~76px —— 一屏能扫到更多条目。
+    // 列表行：缩略图压到 56px，行高固定 86px —— 一屏能扫到更多条目。
+    // 行高必须固定：超宽屏下同一行的两张卡并排，行高不一致时下面那张
+    // 卡片底部的分隔线会错位，看起来像两张卡片没对齐。
     // 行底加分隔线：整行铺满内容宽度时，没有分隔线的话标题与右侧数字之间
     // 会变成一大片空白，分隔线把它读成一张表。
-    <div className="relative group flex items-center border-b border-border-faint">
+    <div className="relative group flex items-center border-b border-border-faint h-[86px]">
       <Link
         to={data.to}
         aria-label={`打开${data.variant === "album" ? "相册" : data.variant === "collection" ? "集合" : "智能视图"}“${data.displayTitle ?? data.title}”`}
@@ -475,7 +477,7 @@ function ListCard({
               56px 的缩略图上塞不下标记，且标题行的文字更易扫读。 */}
         </div>
 
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 flex flex-col justify-center">
           <div className="text-[14px] font-medium text-fg truncate flex items-center gap-1.5">
             <span className="truncate" title={data.displayTitle ?? data.title}>
               {data.displayTitle ?? data.title}

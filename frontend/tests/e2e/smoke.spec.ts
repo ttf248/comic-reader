@@ -4717,3 +4717,29 @@ for (const width of [1920, 1440, 1024, 768, 390]) {
     expect(galleryOverflow).toBeLessThanOrEqual(1);
   });
 }
+
+test("列表视图在超宽屏切成双列，普通宽度仍是单列", async ({ page }) => {
+  await page.goto("/unread");
+  await page
+    .getByRole("button", { name: "列表视图", exact: true })
+    .click();
+  const cards = page.locator('main [data-virtuoso-scroller] a[href^="/albums/"]');
+  await expect(cards.first()).toBeVisible();
+
+  // 1280（Playwright 默认视口）：第二张卡换行。
+  let boxes = [];
+  for (let i = 0; i < 2; i++) boxes.push(await cards.nth(i).boundingBox());
+  expect(boxes[1]!.y).toBeGreaterThan(boxes[0]!.y + 10);
+
+  // 1920（超宽）：第二张卡与第一张卡同一行、左右并排。
+  await page.setViewportSize({ width: 1920, height: 900 });
+  await page.waitForTimeout(500);
+  boxes = [];
+  for (let i = 0; i < 2; i++) boxes.push(await cards.nth(i).boundingBox());
+  expect(Math.abs(boxes[1]!.y - boxes[0]!.y)).toBeLessThan(4);
+  expect(boxes[1]!.x).toBeGreaterThan(boxes[0]!.x + 100);
+
+  // 两列下仍然能点开相册（列表项仍是可点的链接）。
+  await cards.first().click();
+  await expect(page).toHaveURL(/\/albums\//);
+});
