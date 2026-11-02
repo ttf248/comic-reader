@@ -1,8 +1,5 @@
-import { useGalleryStore, type FitMode, type ReaderMode } from '../../store/galleryStore'
+import { useGalleryStore, type FitMode } from '../../store/galleryStore'
 import {
-  SinglePageIcon,
-  ScrollPageIcon,
-  DoublePageIcon,
   FitIcon,
   FitWidthIcon,
   FitHeightIcon,
@@ -25,12 +22,6 @@ interface Props {
   onPrevAlbum?: () => void
   onNextAlbum?: () => void
 }
-
-const MODE_OPTIONS: { value: ReaderMode; label: string; icon: typeof SinglePageIcon }[] = [
-  { value: 'single', label: '单张', icon: SinglePageIcon },
-  { value: 'continuous', label: '连续', icon: ScrollPageIcon },
-  { value: 'double', label: '并排', icon: DoublePageIcon },
-]
 
 const FIT_OPTIONS: { value: FitMode; label: string; icon: typeof FitIcon }[] = [
   { value: 'fit', label: '适应', icon: FitIcon },
@@ -55,7 +46,6 @@ export default function GalleryControls({
   const zoom = useGalleryStore((s) => s.zoom)
   const rotation = useGalleryStore((s) => s.rotation)
   const direction = useGalleryStore((s) => s.direction)
-  const setMode = useGalleryStore((s) => s.setMode)
   const setFit = useGalleryStore((s) => s.setFit)
   const setDirection = useGalleryStore((s) => s.setDirection)
   const zoomIn = useGalleryStore((s) => s.zoomIn)
@@ -111,19 +101,6 @@ export default function GalleryControls({
           </SideIconButton>
         </ControlGroup>
 
-        <ControlGroup label="模式">
-          {MODE_OPTIONS.map((o) => (
-            <SideIconButton
-              key={o.value}
-              onClick={() => setMode(o.value)}
-              title={`${o.label} (${o.value === 'single' ? '1' : o.value === 'continuous' ? '2' : '3'})`}
-              active={mode === o.value}
-            >
-              <o.icon size={16} />
-            </SideIconButton>
-          ))}
-        </ControlGroup>
-
         <ControlGroup label="适配">
           {FIT_OPTIONS.map((o) => (
             <SideIconButton
@@ -144,7 +121,7 @@ export default function GalleryControls({
           <button
             onClick={zoomReset}
             title="重置 (0)"
-            className="h-11 px-1.5 rounded text-[12px] tabular-nums text-white/85 hover:bg-white/10 hover:text-white transition-colors"
+            className="h-11 px-1.5 rounded text-[12.5px] tabular-nums text-white/85 hover:bg-white/10 hover:text-white transition-colors"
           >
             {Math.round(zoom * 100)}%
           </button>
@@ -155,7 +132,7 @@ export default function GalleryControls({
 
         <ControlGroup label="旋转">
           <SideIconButton onClick={() => rotate(90)} title="旋转 90° (R)">
-            <span className="inline-flex items-center gap-0.5 text-[11px]">
+            <span className="inline-flex items-center gap-0.5 text-[12px]">
               <RotateIcon size={14} />
               <span className="tabular-nums">{rotation}°</span>
             </span>
@@ -185,7 +162,7 @@ function ControlGroup({ label, children }: { label: string; children: React.Reac
   return (
     <div className="flex flex-col items-center">
       <div className={`flex flex-col items-stretch rounded-lg p-1 gap-0.5 ${DARK_GLASS}`}>{children}</div>
-      <span className="mt-1 text-[9px] uppercase tracking-[0.18em] text-white/45">{label}</span>
+      <span className="mt-1 text-[12px] text-white/50">{label}</span>
     </div>
   )
 }

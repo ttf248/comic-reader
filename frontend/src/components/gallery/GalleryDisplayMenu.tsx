@@ -72,7 +72,7 @@ export default function GalleryDisplayMenu() {
       trigger={
         <button
           type="button"
-          className="inline-flex items-center justify-center h-7 w-7 rounded text-white/75 hover:text-white hover:bg-white/10 transition-colors md:hidden"
+          className="inline-flex items-center justify-center h-8 w-8 rounded-md text-white/80 hover:text-white hover:bg-white/10 transition-colors"
           title="阅读设置"
           aria-label="阅读设置"
         >
@@ -89,7 +89,7 @@ export default function GalleryDisplayMenu() {
         >
           <o.icon size={12} />
           <span>{o.label}</span>
-          <span className="ml-auto text-[10px] text-fg-subtle">{o.key}</span>
+          <span className="ml-auto text-[11.5px] text-fg-subtle">{o.key}</span>
         </PopoverItem>
       ))}
       <PopoverSeparator />
@@ -109,24 +109,24 @@ export default function GalleryDisplayMenu() {
       <PopoverItem onClick={zoomOut}>
         <MinusIcon size={12} />
         <span>缩小</span>
-        <span className="ml-auto text-[10px] text-fg-subtle">-</span>
+        <span className="ml-auto text-[11.5px] text-fg-subtle">-</span>
       </PopoverItem>
       <PopoverItem onClick={zoomReset}>
         <span className="w-3" aria-hidden />
         <span>实际大小</span>
-        <span className="ml-auto text-[10px] text-fg-subtle tabular-nums">
+        <span className="ml-auto text-[11.5px] text-fg-subtle tabular-nums">
           {Math.round(zoom * 100)}%
         </span>
       </PopoverItem>
       <PopoverItem onClick={zoomIn}>
         <PlusIcon size={12} />
         <span>放大</span>
-        <span className="ml-auto text-[10px] text-fg-subtle">+</span>
+        <span className="ml-auto text-[11.5px] text-fg-subtle">+</span>
       </PopoverItem>
       <PopoverItem onClick={() => rotate(90)}>
         <RotateIcon size={12} />
         <span>旋转 90°（当前 {rotation}°）</span>
-        <span className="ml-auto text-[10px] text-fg-subtle">R</span>
+        <span className="ml-auto text-[11.5px] text-fg-subtle">R</span>
       </PopoverItem>
       {mode === "double" && (
         <PopoverItem
@@ -138,7 +138,7 @@ export default function GalleryDisplayMenu() {
             <ArrowLeftLineIcon size={12} />
           )}
           <span>阅读方向：{direction === "ltr" ? "左→右" : "右→左"}</span>
-          <span className="ml-auto text-[10px] text-fg-subtle">L</span>
+          <span className="ml-auto text-[11.5px] text-fg-subtle">L</span>
         </PopoverItem>
       )}
     </Popover>

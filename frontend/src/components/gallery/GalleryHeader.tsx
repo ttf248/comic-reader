@@ -10,6 +10,13 @@ import {
   ArrowDownIcon,
   ImageIcon,
   RefreshIcon,
+  SinglePageIcon,
+  ScrollPageIcon,
+  DoublePageIcon,
+  FitIcon,
+  FitWidthIcon,
+  FitHeightIcon,
+  OriginalSizeIcon,
 } from "../common/Icon";
 import Popover, {
   PopoverItem,
@@ -17,7 +24,11 @@ import Popover, {
   PopoverLabel,
 } from "../common/Popover";
 import GalleryDisplayMenu from "./GalleryDisplayMenu";
-import { useGalleryStore } from "../../store/galleryStore";
+import {
+  useGalleryStore,
+  type ReaderMode,
+  type FitMode,
+} from "../../store/galleryStore";
 import { toggleFullscreen as toggleFullscreenImpl } from "../../utils/fullscreen";
 
 interface Props {
@@ -54,12 +65,13 @@ interface Props {
   hasCustomCover?: boolean;
 }
 
-// 画廊顶部常驻条：极简 — 返回 / 名称 / 页码 / 收藏 / 全屏 / 菜单
+// 画廊顶部常驻条：返回 / 名称 / 页码 / 阅读模式 / 收藏 / 全屏 / 菜单
 //
 // 设计要点：
 // - 始终可见（不被 chromeVisible 影响）
-// - glass 半透明，沉浸但不抢戏
-// - 暗色背景下用浅色文字；hover 用白色
+// - 顶部加渐变遮罩 + 背景模糊：明亮照片上按钮依然可读
+// - 阅读模式（单张 / 连续 / 并排）直接摆在顶栏，不再只藏在"…"里；
+//   缩放、旋转、方向等低频操作留在右侧悬浮控件与"…"菜单
 // - 菜单里收纳：图片信息 / 快捷键帮助 / 上一本/下一本 / 第一张/最后张
 //   （视频模式下不显示图片信息面板，跳转项也改用"视频"的说法）
 export default function GalleryHeader({
@@ -83,6 +95,9 @@ export default function GalleryHeader({
   onJumpToLast,
 }: Props) {
   const mode = useGalleryStore((s) => s.mode);
+  const setMode = useGalleryStore((s) => s.setMode);
+  const fit = useGalleryStore((s) => s.fit);
+  const cycleFit = useGalleryStore((s) => s.cycleFit);
   const setIndex = useGalleryStore((s) => s.setIndex);
   // 全屏走 utils/fullscreen.toggFullscreen() 直接调浏览器 API,不再
   // 走 store(老 store.toggleFullscreen 是空 set action,已删除)。
@@ -111,30 +126,21 @@ export default function GalleryHeader({
   const hasAlbumNav = !!(onPrevAlbum || onNextAlbum);
 
   return (
-    <header
-      className="absolute top-0 inset-x-0 z-20 h-11 flex items-center gap-1.5 px-2 sm:px-3 text-white/85"
-      style={{
-        background:
-          "linear-gradient(to bottom, rgba(0,0,0,0.55), rgba(0,0,0,0))",
-      }}
-    >
+    <header className="absolute top-0 inset-x-0 z-20 h-12 flex items-center gap-1.5 px-2 sm:px-3 text-white/85 bg-gradient-to-b from-black/75 via-black/35 to-transparent backdrop-blur-[2px]">
       <button
         onClick={onBack}
         title="返回 (Esc)"
-        className="inline-flex items-center gap-1 h-7 px-2 rounded text-[12px] hover:bg-white/10 transition-colors"
+        className="inline-flex items-center gap-1 h-8 px-2 rounded-md text-[13px] hover:bg-white/10 transition-colors"
       >
-        <ChevronLeftIcon size={13} />
+        <ChevronLeftIcon size={14} />
         <span className="hidden sm:inline">返回</span>
       </button>
 
-      <h1 className="min-w-0 flex-1 flex items-center gap-2 sm:gap-3 ml-1">
-        <span className="truncate text-[13px] font-medium text-white">
+      <h1 className="min-w-0 flex-1 flex items-baseline gap-2.5 sm:gap-3 ml-1">
+        <span className="truncate text-[14px] font-medium text-white">
           {name}
         </span>
-        <span className="hidden sm:inline text-[10px] uppercase tracking-[0.18em] text-white/45 shrink-0">
-          ·
-        </span>
-        <span className="text-[11px] tabular-nums text-white/65 shrink-0">
+        <span className="text-[12.5px] tabular-nums text-white/70 shrink-0">
           {counterText}
         </span>
       </h1>
@@ -146,16 +152,59 @@ export default function GalleryHeader({
           disabled={displayIndex <= 0}
           title={isVideo ? "上一个视频 (PageUp)" : "上一张 (←)"}
         >
-          <ChevronLeftIcon size={13} />
+          <ChevronLeftIcon size={14} />
         </HeaderIconButton>
         <HeaderIconButton
           onClick={onNext}
           disabled={displayIndex >= total - 1}
           title={isVideo ? "下一个视频 (PageDown)" : "下一张 (→)"}
         >
-          <ChevronRightIcon size={13} />
+          <ChevronRightIcon size={14} />
         </HeaderIconButton>
       </div>
+
+      {/* 阅读模式：直接在顶栏切换，不再只藏在"…"菜单里 */}
+      {!isVideo && (
+        <div
+          className="hidden md:flex items-center gap-0.5 p-0.5 rounded-lg bg-white/10 ring-1 ring-white/10"
+          role="group"
+          aria-label="阅读模式"
+        >
+          {(
+            [
+              { value: "single", label: "单张", Icon: SinglePageIcon, key: "1" },
+              { value: "continuous", label: "连续", Icon: ScrollPageIcon, key: "2" },
+              { value: "double", label: "并排", Icon: DoublePageIcon, key: "3" },
+            ] as { value: ReaderMode; label: string; Icon: typeof SinglePageIcon; key: string }[]
+          ).map((o) => (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => setMode(o.value)}
+              title={`${o.label} (${o.key})`}
+              aria-label={o.label}
+              aria-pressed={mode === o.value}
+              className={`inline-flex items-center justify-center h-7 w-8 rounded-md transition-colors ${
+                mode === o.value
+                  ? "bg-white/20 text-white"
+                  : "text-white/70 hover:text-white hover:bg-white/10"
+              }`}
+            >
+              <o.Icon size={14} />
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* 适配方式：常驻一个按钮，点击按 适应 → 按宽 → 按高 → 原始 循环 */}
+      {!isVideo && (
+        <HeaderIconButton
+          onClick={cycleFit}
+          title={`适配：${FIT_LABEL[fit]} (F 循环)`}
+        >
+          {FIT_ICON[fit]}
+        </HeaderIconButton>
+      )}
 
       <HeaderIconButton
         onClick={onToggleFavorite}
@@ -163,7 +212,7 @@ export default function GalleryHeader({
         title={isFavorite ? "取消收藏 (S)" : "加入收藏 (S)"}
       >
         <StarIcon
-          size={13}
+          size={14}
           filled={isFavorite}
           className={isFavorite ? "text-amber-300" : ""}
         />
@@ -174,77 +223,91 @@ export default function GalleryHeader({
         title="全屏 (F11)"
         hideOnMobile
       >
-        <FullscreenIcon size={13} />
+        <FullscreenIcon size={14} />
       </HeaderIconButton>
 
-      {/* 窄屏没有右侧悬浮控件，显示设置收进这个弹层。 */}
+      {/* 阅读设置（模式 / 适配 / 缩放 / 旋转 / 方向）：全尺寸可用 */}
       {!isVideo && <GalleryDisplayMenu />}
 
       <Popover
         align="end"
         trigger={
           <HeaderIconButton title="更多">
-            <MoreHorizontalIcon size={14} />
+            <MoreHorizontalIcon size={15} />
           </HeaderIconButton>
         }
       >
         <PopoverLabel>阅读</PopoverLabel>
         {!isVideo && (
           <PopoverItem onClick={onToggleInfo}>
-            <InfoIcon size={12} />
+            <InfoIcon size={13} />
             <span>图片信息</span>
-            <span className="ml-auto text-[10px] text-fg-subtle">I</span>
+            <span className="ml-auto text-[11.5px] text-fg-subtle">I</span>
           </PopoverItem>
         )}
         <PopoverItem onClick={onToggleHelp}>
-          <KeyboardIcon size={12} />
+          <KeyboardIcon size={13} />
           <span>快捷键</span>
-          <span className="ml-auto text-[10px] text-fg-subtle">?</span>
+          <span className="ml-auto text-[11.5px] text-fg-subtle">?</span>
         </PopoverItem>
         {onSetCover && (
           <PopoverItem onClick={onSetCover}>
-            <ImageIcon size={12} />
+            <ImageIcon size={13} />
             <span>设为封面</span>
-            <span className="ml-auto text-[10px] text-fg-subtle">U</span>
+            <span className="ml-auto text-[11.5px] text-fg-subtle">U</span>
           </PopoverItem>
         )}
         {onClearCover && hasCustomCover && (
           <PopoverItem onClick={onClearCover}>
-            <RefreshIcon size={12} />
+            <RefreshIcon size={13} />
             <span>清除自定义封面</span>
-            <span className="ml-auto text-[10px] text-fg-subtle">⇧U</span>
+            <span className="ml-auto text-[11.5px] text-fg-subtle">⇧U</span>
           </PopoverItem>
         )}
         {hasAlbumNav && <PopoverSeparator />}
         {hasAlbumNav && <PopoverLabel>列表</PopoverLabel>}
         {onPrevAlbum && (
           <PopoverItem onClick={onPrevAlbum}>
-            <ArrowUpIcon size={12} />
+            <ArrowUpIcon size={13} />
             <span>上一本</span>
-            <span className="ml-auto text-[10px] text-fg-subtle">P</span>
+            <span className="ml-auto text-[11.5px] text-fg-subtle">P</span>
           </PopoverItem>
         )}
         {onNextAlbum && (
           <PopoverItem onClick={onNextAlbum}>
-            <ArrowDownIcon size={12} />
+            <ArrowDownIcon size={13} />
             <span>下一本</span>
-            <span className="ml-auto text-[10px] text-fg-subtle">N</span>
+            <span className="ml-auto text-[11.5px] text-fg-subtle">N</span>
           </PopoverItem>
         )}
         <PopoverSeparator />
         <PopoverLabel>跳转</PopoverLabel>
         <PopoverItem onClick={jumpToFirst}>
           <span>{isVideo ? "第一个视频" : "第一张"}</span>
-          <span className="ml-auto text-[10px] text-fg-subtle">Home</span>
+          <span className="ml-auto text-[11.5px] text-fg-subtle">Home</span>
         </PopoverItem>
         <PopoverItem onClick={jumpToLast}>
           <span>{isVideo ? "最后一个视频" : "最后张"}</span>
-          <span className="ml-auto text-[10px] text-fg-subtle">End</span>
+          <span className="ml-auto text-[11.5px] text-fg-subtle">End</span>
         </PopoverItem>
       </Popover>
     </header>
   );
 }
+
+// 适配方式：按钮图标 + 中文标题，顺序与 store 的循环顺序一致。
+const FIT_LABEL: Record<FitMode, string> = {
+  fit: "适应",
+  width: "按宽",
+  height: "按高",
+  original: "原始",
+};
+const FIT_ICON: Record<FitMode, React.ReactNode> = {
+  fit: <FitIcon size={14} />,
+  width: <FitWidthIcon size={14} />,
+  height: <FitHeightIcon size={14} />,
+  original: <OriginalSizeIcon size={14} />,
+};
 
 function HeaderIconButton({
   children,
@@ -267,12 +330,12 @@ function HeaderIconButton({
       disabled={disabled}
       title={title}
       aria-label={title}
-      className={`inline-flex items-center justify-center h-7 w-7 rounded transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
+      className={`inline-flex items-center justify-center h-8 w-8 rounded-md transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
         hideOnMobile ? "hidden sm:inline-flex" : ""
       } ${
         active
           ? "bg-white/15 text-white"
-          : "text-white/75 hover:text-white hover:bg-white/10"
+          : "text-white/80 hover:text-white hover:bg-white/10"
       }`}
     >
       {children}
