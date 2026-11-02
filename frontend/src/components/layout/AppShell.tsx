@@ -22,7 +22,6 @@ export default function AppShell() {
   const navigate = useNavigate();
   const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
-  const setBreadcrumbs = useUIStore((s) => s.setBreadcrumbs);
   const pushToast = useUIStore((s) => s.pushToast);
   const [helpOpen, setHelpOpen] = useState(false);
   const [isCancellingScan, setIsCancellingScan] = useState(false);
@@ -73,27 +72,7 @@ export default function AppShell() {
       }
     }
     document.title = `${base} · Local Gallery`;
-
-    if (path === "/") setBreadcrumbs([]);
-    else if (path.startsWith("/recents"))
-      setBreadcrumbs([{ label: "主页", to: "/" }, { label: "最近" }]);
-    else if (path.startsWith("/favorites"))
-      setBreadcrumbs([{ label: "主页", to: "/" }, { label: "收藏" }]);
-    else if (path.startsWith("/unread"))
-      setBreadcrumbs([{ label: "主页", to: "/" }, { label: "未读" }]);
-    else if (path.startsWith("/settings"))
-      setBreadcrumbs([{ label: "主页", to: "/" }, { label: "设置" }]);
-    else if (path.startsWith("/albums"))
-      setBreadcrumbs([{ label: "主页", to: "/" }, { label: "文件夹" }]);
-    else if (path.startsWith("/tags/")) {
-      const raw = decodeURIComponent(path.slice("/tags/".length));
-      setBreadcrumbs([
-        { label: "主页", to: "/" },
-        { label: "标签", to: "/" },
-        { label: raw },
-      ]);
-    }
-  }, [location.pathname, setBreadcrumbs]);
+  }, [location.pathname]);
 
   useEffect(() => {
     const fn = () => setHelpOpen(true);

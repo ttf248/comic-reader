@@ -76,36 +76,26 @@ export default function Toolbar({
   }, [queryClient, sse.isComplete, sse.scanId, pushToast]);
 
   return (
-    <header className="h-14 flex items-center gap-2 sm:gap-4 px-3 sm:px-5 lg:px-7 border-b border-border-faint glass">
-      {/* 左侧：极简字标（窄屏隐藏） */}
-      <div className="hidden lg:flex items-center gap-2 min-w-0">
-        <span className="font-display text-sm text-fg-muted">
-          Local Gallery
-        </span>
-        <span className="text-fg-subtle/50">/</span>
-        <span className="text-sm font-medium truncate">
-          {titleOf(location.pathname)}
-        </span>
-      </div>
-      {/* 窄屏：返回按钮 */}
+    <header className="h-14 flex items-center gap-2 sm:gap-3 px-3 sm:px-5 lg:px-7 border-b border-border-faint bg-bg-elevated/70 backdrop-blur-xl">
+      {/* 窄屏：导航 / 返回 */}
       <div className="flex items-center gap-1 lg:hidden shrink-0">
         {onOpenMobileNav && (
           <button
             type="button"
             ref={mobileMenuButtonRef}
             onClick={onOpenMobileNav}
-            className="inline-flex items-center justify-center w-8 h-8 rounded-md text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors"
+            className="inline-flex items-center justify-center w-9 h-9 rounded-md text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors"
             title="打开导航"
             aria-label="打开导航"
           >
-            <MenuIcon size={15} />
+            <MenuIcon size={16} />
           </button>
         )}
         {onGallery && (
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="text-xs h-8 px-2.5 rounded-md text-fg-muted hover:bg-bg-subtle"
+            className="inline-flex items-center h-9 px-3 rounded-md text-[13px] text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors"
           >
             返回
           </button>
@@ -124,11 +114,11 @@ export default function Toolbar({
           onClick={() =>
             window.dispatchEvent(new CustomEvent("comic:open-help"))
           }
-          className="inline-flex items-center justify-center w-8 h-8 rounded-md text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors"
+          className="inline-flex items-center justify-center w-9 h-9 rounded-md text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors"
           title="快捷键帮助 (?)"
           aria-label="快捷键帮助"
         >
-          <HelpIcon size={14} />
+          <HelpIcon size={15} />
         </button>
         <ThemeSwitcher compact />
         {!onGallery && (
@@ -147,17 +137,8 @@ export default function Toolbar({
   );
 }
 
-function titleOf(pathname: string): string {
-  if (pathname === "/" || pathname === "") return "图像库";
-  if (pathname.startsWith("/recents")) return "最近";
-  if (pathname.startsWith("/favorites")) return "收藏";
-  if (pathname.startsWith("/settings")) return "设置";
-  if (pathname.startsWith("/albums")) return "文件夹";
-  if (pathname.startsWith("/gallery")) return "浏览";
-  if (pathname.startsWith("/tags")) return "标签";
-  if (pathname.startsWith("/unread")) return "未读";
-  return "图像";
-}
+// 说明：页面标题由各路由自己渲染（page-title 样式），顶栏不再重复展示
+// 面包屑，避免同一信息出现两次、顶部白白占掉一块高度。
 
 // kebab 菜单: 扫描 + 刷新缓存
 // 收纳了原来 toolbar 上两个独立的次级按钮,让 toolbar 更克制。
@@ -213,7 +194,7 @@ function MoreMenu({
       <button
         onClick={() => setOpen((v) => !v)}
         type="button"
-        className="inline-flex items-center justify-center w-8 h-8 rounded-md text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors"
+        className="inline-flex items-center justify-center w-9 h-9 rounded-md text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors"
         title="更多"
         aria-label="更多"
         aria-haspopup="menu"

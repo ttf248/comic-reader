@@ -13,8 +13,6 @@ export default function StatusBar() {
   const manifest = useLibraryManifest().data?.manifest;
   const sse = useScanSSE();
   const query = useSearchStore((s) => s.query);
-  const sortBy = useSearchStore((s) => s.sortBy);
-  const view = useSearchStore((s) => s.view);
 
   // 进度详情（百分比 + 本数 + 阶段）已搬到顶部 ScanProgress 条；
   // 状态栏只在「正在扫描」时给一个极简提示，方便用户瞥一眼。
@@ -34,25 +32,8 @@ export default function StatusBar() {
     leftLabel = `${manifest.statistics.albumCount} 本相册 · ${manifest.statistics.tagCount} 个标签`;
   }
 
-  const sortLabel =
-    sortBy === "name"
-      ? "名称"
-      : sortBy === "count"
-        ? "张数"
-        : sortBy === "viewed"
-          ? "最近看"
-          : "最近改";
-  const viewLabel =
-    view === "all"
-      ? "全部"
-      : view === "album"
-        ? "文件夹"
-        : view === "collection"
-          ? "集合"
-          : "标签";
-
   return (
-    <footer className="h-7 px-4 flex items-center justify-between text-[11px] text-fg-subtle border-t border-border-faint glass">
+    <footer className="h-8 px-4 lg:px-7 flex items-center justify-between text-[12px] text-fg-subtle border-t border-border-faint bg-bg-elevated/60 backdrop-blur-xl">
       <div className="flex items-center gap-3 truncate">
         <span>{leftLabel}</span>
         {manifest && manifest.statistics.warningCount > 0 && (
@@ -68,8 +49,6 @@ export default function StatusBar() {
             搜索: {query}
           </span>
         )}
-        <span className="hidden md:inline">视图: {viewLabel}</span>
-        <span className="hidden md:inline">排序: {sortLabel}</span>
       </div>
       <div className="flex items-center gap-3">
         {manifest?.scannedAt && (

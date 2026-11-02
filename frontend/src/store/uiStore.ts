@@ -30,9 +30,6 @@ interface UIState {
   viewMode: ViewMode
   setViewMode: (v: ViewMode) => void
 
-  breadcrumbs: { label: string; to?: string }[]
-  setBreadcrumbs: (bc: { label: string; to?: string }[]) => void
-
   /**
    * 是否配置了多个媒体根。只有多根时卡片才显示「来自 X」来源标记——
    * 单一根下每张卡片都挂同一句来源纯属噪音。
@@ -60,9 +57,6 @@ export const useUIStore = create<UIState>()(
 
       viewMode: 'grid',
       setViewMode: (v) => set({ viewMode: v }),
-
-      breadcrumbs: [],
-      setBreadcrumbs: (bc) => set({ breadcrumbs: bc }),
 
       multiRoot: false,
       setMultiRoot: (v) => set({ multiRoot: v }),
