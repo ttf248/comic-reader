@@ -13,6 +13,7 @@
     "test": "vitest run",
     "test:e2e": "pwsh -NoProfile -File ../scripts/test-e2e.ps1",
     "lint": "eslint . --ext .ts,.tsx",
+    "audit:contrast": "node scripts/contrast-audit.mjs",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\""
   },
   "dependencies": {

@@ -279,12 +279,11 @@ export default function Sidebar({
 
 // 品牌方块：纯几何 + 字形，使用 accent 颜色
 function Logo() {
+  // 字母直接放在底板上（不再用一层绝对定位的兄弟节点盖上去）：
+  // 兄弟节点的方式会让对比度检查工具读不到深色底板，把白字判成白底白字。
   return (
-    <div className="relative w-7 h-7 shrink-0">
-      <div className="absolute inset-0 rounded-lg bg-accent" />
-      <div className="absolute inset-0 flex items-center justify-center text-accent-contrast font-display font-semibold text-[13px] tracking-tighter">
-        L
-      </div>
+    <div className="relative w-7 h-7 shrink-0 rounded-lg bg-accent flex items-center justify-center text-accent-contrast font-display font-semibold text-[13px] tracking-tighter">
+      L
     </div>
   );
 }

@@ -128,12 +128,7 @@ export default function PageSlider({ total, index, onJump, images }: Props) {
       );
 
   return (
-    <div
-      className="relative h-11 flex items-center gap-3 px-3 sm:px-5 text-white/85 select-none"
-      style={{
-        background: "linear-gradient(to top, rgba(0,0,0,0.72), rgba(0,0,0,0.25) 60%, rgba(0,0,0,0))",
-      }}
-    >
+    <div className="relative h-11 flex items-center gap-3 px-3 sm:px-5 text-white/85 select-none scrim-bottom">
       {/* 缩略图条：拖拽时浮现 */}
       {showStrip && (
         <div

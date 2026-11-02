@@ -334,7 +334,7 @@ export default function ScanProgress({
                 className="truncate text-fg-subtle font-mono"
                 title={progress.currentPath}
               >
-                <span className="text-fg-subtle/70 mr-1">↳</span>
+                <span className="text-fg-subtle mr-1">↳</span>
                 {progress.currentPath}
               </div>
             )}

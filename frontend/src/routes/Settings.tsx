@@ -384,7 +384,7 @@ export default function Settings() {
               </span>
               {cacheStats.data && (
                 <span
-                  className="whitespace-nowrap text-fg-subtle/70 tabular-nums"
+                  className="whitespace-nowrap text-fg-subtle tabular-nums"
                   title={
                     cacheStats.data.scannedAt
                       ? `扫描于 ${new Date(cacheStats.data.scannedAt).toLocaleString("zh-CN", { hour12: false })}`
@@ -499,7 +499,7 @@ export default function Settings() {
           <div className="mt-1">Web 版 · v{__APP_VERSION__}</div>
           <div className="mt-4 text-[12.5px] text-fg-subtle flex items-center gap-2">
             <span>按</span>
-            <kbd className="font-mono px-1.5 py-0.5 rounded border border-border-faint bg-bg-subtle">
+            <kbd className="font-mono px-1.5 py-0.5 rounded border border-border-faint bg-bg-subtle text-fg-muted">
               ?
             </kbd>
             <span>查看所有快捷键</span>
@@ -649,10 +649,10 @@ function SubUsageBadge({
       <span className="text-fg tabular-nums font-medium">
         {formatBytes(sub.bytes)}
       </span>
-      <span className="text-fg-subtle/70 tabular-nums">{sub.fileCount} 个</span>
+      <span className="text-fg-subtle tabular-nums">{sub.fileCount} 个</span>
     </div>
   ) : (
-    <span className="text-fg-subtle/60">—</span>
+    <span className="text-fg-subtle">—</span>
   );
   // 只有"可用 + 有数据 + 提供 onClear"时显示清空按钮;0 字节的子项
   // 没必要再点一次(后端也是 no-op)。

@@ -127,7 +127,7 @@ export default function Recents() {
           {history.length > 0 ? (
             <>
               <span className="text-fg font-medium">{history.length}</span> 个
-              <span className="text-fg-subtle/60 mx-1.5">·</span>
+              <span className="text-fg-subtle mx-1.5">·</span>
               最近打开{" "}
               <span className="text-fg">
                 {formatRelative(history[0]?.openedAt)}

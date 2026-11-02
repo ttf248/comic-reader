@@ -583,7 +583,7 @@ function AlbumView({
                 {detail.tags.length > 0 && (
                   <>
                     <span className="text-fg">{detail.tags.join(" · ")}</span>
-                    <span className="text-fg-subtle/50">·</span>
+                    <span className="text-fg-subtle">·</span>
                   </>
                 )}
                 <span className="tabular-nums">
@@ -594,7 +594,7 @@ function AlbumView({
                 </span>
                 {detail.folderSize > 0 && (
                   <>
-                    <span className="text-fg-subtle/50">·</span>
+                    <span className="text-fg-subtle">·</span>
                     <span className="tabular-nums">
                       {formatSize(detail.folderSize)}
                     </span>
@@ -602,7 +602,7 @@ function AlbumView({
                 )}
                 {detail.modTime && (
                   <>
-                    <span className="text-fg-subtle/50">·</span>
+                    <span className="text-fg-subtle">·</span>
                     <span className="text-fg-subtle inline-flex items-center gap-1">
                       <ClockIcon size={11} />
                       {formatRelative(detail.modTime)}
@@ -611,7 +611,7 @@ function AlbumView({
                 )}
                 {isFinished && (
                   <>
-                    <span className="text-fg-subtle/50">·</span>
+                    <span className="text-fg-subtle">·</span>
                     <span className="inline-flex items-center gap-1 text-success text-[12px]">
                       <CheckIcon size={11} />
                       已读完
@@ -1143,7 +1143,7 @@ function VideoAlbumView({
                 {detail.tags.length > 0 && (
                   <>
                     <span className="text-fg">{detail.tags.join(" · ")}</span>
-                    <span className="text-fg-subtle/50">·</span>
+                    <span className="text-fg-subtle">·</span>
                   </>
                 )}
                 <span className="tabular-nums">
@@ -1151,7 +1151,7 @@ function VideoAlbumView({
                 </span>
                 {detail.folderSize > 0 && (
                   <>
-                    <span className="text-fg-subtle/50">·</span>
+                    <span className="text-fg-subtle">·</span>
                     <span className="tabular-nums">
                       {formatSize(detail.folderSize)}
                     </span>
@@ -1159,7 +1159,7 @@ function VideoAlbumView({
                 )}
                 {detail.modTime && (
                   <>
-                    <span className="text-fg-subtle/50">·</span>
+                    <span className="text-fg-subtle">·</span>
                     <span className="text-fg-subtle inline-flex items-center gap-1">
                       <ClockIcon size={11} />
                       {formatRelative(detail.modTime)}

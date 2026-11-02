@@ -16,10 +16,14 @@
   /* 卡片内部的次级底色（比 bg-subtle 更浅一档，用于"框内"的浅层分区） */
   --bg-inset: #f7f7f8;
 
-  /* Foreground — 石墨近黑 */
+  /* Foreground — 石墨近黑
+     三级文字都按 WCAG AA（正文 4.5:1）取值：
+     fg 19.9:1 / fg-muted 7.5:1 / fg-subtle 4.7:1（都落在 #fafafa 底上）。
+     以前 fg-subtle 用 #a1a1aa 只有 2.5:1，设置页提示、状态栏、脚注这些
+     真正承载信息的次级文字全部不达标。 */
   --fg: #09090b;
-  --fg-muted: #71717a;
-  --fg-subtle: #a1a1aa;
+  --fg-muted: #52525b;
+  --fg-subtle: #71717a;
   /* 禁用态文字 */
   --fg-disabled: #b4b4bc;
 
@@ -30,10 +34,11 @@
   --accent-fg: #fafafa;
   --accent-contrast: #fafafa;
 
-  /* Semantic */
+  /* Semantic — 也按 AA 取值：success 5.0:1 / warning 4.8:1 / danger 4.9:1
+     （浅色底上的文字色；实心底上配白字同样更稳）。 */
   --danger: #dc2626;
-  --success: #16a34a;
-  --warning: #d97706;
+  --success: #15803d;
+  --warning: #b45309;
 
   /* Borders — 极细，低对比 */
   --border: #e4e4e7;
@@ -91,10 +96,11 @@
   --bg-strong: #2a2a2f;
   --bg-inset: #131316;
 
-  /* Foreground */
+  /* Foreground — 深色底上的三级文字，同样满足 AA：
+     fg 18.9:1 / fg-muted 7.3:1 / fg-subtle 5.5:1（底色 #09090b）。 */
   --fg: #fafafa;
   --fg-muted: #a1a1aa;
-  --fg-subtle: #71717a;
+  --fg-subtle: #8a8a93;
   --fg-disabled: #52525b;
 
   /* Accent — 暗色下走近白 */

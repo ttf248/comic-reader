@@ -43,7 +43,7 @@ export default function VideoCoverImage({
   // 抽帧中/检查中 → 占位
   if (status === "loading" || status === "missing" || status === "extracting") {
     return (
-      <div className="w-full h-full flex flex-col items-center justify-center bg-bg-subtle text-fg-subtle gap-2">
+      <div className="w-full h-full flex flex-col items-center justify-center bg-bg-subtle text-fg-muted gap-2">
         <div className="w-5 h-5 border-2 border-fg-subtle/40 border-t-accent rounded-full animate-spin" />
         {showExtractingHint && (
           <span className="text-[11.5px] tabular-nums">

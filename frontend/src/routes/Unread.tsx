@@ -95,7 +95,7 @@ export default function Unread() {
         <p className="text-[13px] text-fg-muted mt-2 tabular-nums flex items-center gap-3 flex-wrap">
           <span>
             还有 <span className="text-fg">{count}</span> 本没看
-            <span className="text-fg-subtle/60 mx-1.5">·</span>
+            <span className="text-fg-subtle mx-1.5">·</span>
             全库 <span className="text-fg">{total}</span> 本
           </span>
           {count > 0 && (
