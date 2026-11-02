@@ -39,6 +39,13 @@ describe("GlobalSearch", () => {
     useSearchStore.getState().reset();
   });
 
+  it("搜索框有可访问名称", () => {
+    renderSearch();
+    expect(
+      screen.getByRole("combobox", { name: "搜索文件夹或标签" }),
+    ).toBeInTheDocument();
+  });
+
   it("在请求完成后显示建议，并可用键盘选择标签页", async () => {
     vi.mocked(albumsApi.search).mockResolvedValue({
       ok: true,

@@ -863,6 +863,7 @@ function MediaRootsField({
             key={i}
             value={v}
             placeholder="E:\照片 或 /home/user/pics"
+            label={`媒体根目录 ${i + 1}`}
             // 只在已存在的根上提供"打开资源管理器"(空槽位不算)
             onOpenInExplorer={
               i < roots.length && v && allowOsOpen
@@ -961,11 +962,13 @@ function ConfigRow({
             compact
             withStatus
             status={status}
+            label={def.label}
           />
         ) : def.kind === "text" ? (
           <input
             type="text"
             value={String(value)}
+            aria-label={def.label}
             onChange={(e) => onChange(e.target.value)}
             onCompositionStart={composition.start}
             onCompositionEnd={(e) => composition.finish(e.currentTarget.value)}
@@ -976,6 +979,7 @@ function ConfigRow({
           <input
             type="number"
             value={Number(value)}
+            aria-label={def.label}
             min={def.min}
             max={def.max}
             onChange={(e) => {
@@ -1063,6 +1067,7 @@ function ExcludeRulesField({
         </div>
         <textarea
           value={listToLines(patterns)}
+          aria-label="排除模式"
           spellCheck={false}
           rows={Math.max(3, Math.min(8, patterns.length + 1))}
           placeholder="node_modules&#10;temp*&#10;~$*"
@@ -1107,6 +1112,7 @@ function ExcludeRulesField({
         </div>
         <textarea
           value={listToLines(systemFiles)}
+          aria-label="额外的系统白名单"
           spellCheck={false}
           rows={Math.max(2, Math.min(4, systemFiles.length + 1))}
           placeholder=".Spotlight-V100&#10;~$*"
@@ -1141,6 +1147,8 @@ interface PathFieldProps {
   status?: FieldStatus;
   removable?: boolean;
   onRemove?: () => void;
+  /** 输入框的可访问名称：可见标签是普通文本，这里补一个等价的名称。 */
+  label?: string;
 }
 
 function PathField({
@@ -1158,6 +1166,7 @@ function PathField({
   status = "idle",
   removable,
   onRemove,
+  label,
 }: PathFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [picking, setPicking] = useState(false);
@@ -1175,6 +1184,7 @@ function PathField({
         ref={inputRef}
         type="text"
         value={value}
+        aria-label={label}
         onChange={(e) => onChange(e.target.value)}
         onCompositionStart={composition.start}
         onCompositionEnd={(e) => composition.finish(e.currentTarget.value)}

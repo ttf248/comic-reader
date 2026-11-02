@@ -173,6 +173,7 @@ export default function PageSlider({ total, index, onJump, images }: Props) {
         <input
           ref={inputRef}
           value={draft}
+          aria-label="页码"
           onChange={(e) => setDraft(e.target.value.replace(/[^\d]/g, ""))}
           onKeyDown={(e) => {
             if (e.key === "Enter") {

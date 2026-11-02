@@ -59,6 +59,7 @@ export default function GlobalSearch() {
         <SearchIcon size={14} className="text-fg-subtle shrink-0" />
         <input
           value={query}
+          aria-label="搜索文件夹或标签"
           onChange={(e) => {
             setQuery(e.target.value);
             setOpen(true);

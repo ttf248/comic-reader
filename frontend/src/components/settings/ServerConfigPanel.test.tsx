@@ -147,6 +147,28 @@ describe("ServerConfigPanel", () => {
     expect(screen.getByDisplayValue("8080")).toBeInTheDocument();
   });
 
+  it("配置字段都有可访问名称，屏幕阅读器能读出字段含义", async () => {
+    renderPanel();
+    await screen.findByDisplayValue("E:\\漫画");
+    // 可见标签只是普通文本，屏幕阅读器读不到；输入框必须自带名称。
+    for (const label of [
+      "缓存目录",
+      "缩略图宽度",
+      "缩略图高度",
+      "LRU 缓存项数",
+      "缓存保留天数",
+      "派生缓存容量（MiB）",
+      "监听地址",
+      "监听端口",
+      "前端构建目录",
+      "媒体根目录 1",
+      "排除模式",
+      "额外的系统白名单",
+    ]) {
+      expect(screen.getByLabelText(label)).toBeInTheDocument();
+    }
+  });
+
   it("浏览或取消目录选择不改配置，确认后自动保存完整媒体根路径", async () => {
     renderPanel();
     const input = await screen.findByPlaceholderText(

@@ -43,3 +43,9 @@ it("进入跳页编辑态后预填当前页并全选，输入直接覆盖而不�
   fireEvent.keyDown(input, { key: "Enter" });
   expect(jump).toHaveBeenCalledWith(99);
 });
+
+it("跳页输入框有可访问名称", () => {
+  render(<PageSlider total={3} index={0} onJump={vi.fn()} />);
+  fireEvent.keyDown(window, { key: "g" });
+  expect(screen.getByRole("textbox", { name: "页码" })).toBeInTheDocument();
+});
