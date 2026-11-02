@@ -354,11 +354,19 @@ local-gallery/
 | 前端单测 | `cd frontend && npm run test`                               |
 | 集成测试 | `cd backend && go test ./tests/integration -v`              |
 | e2e      | `cd frontend && npm run test:e2e` 或 `scripts/test-e2e.ps1` |
+| 设计审计（布局 / 字号） | `cd frontend && npm run audit:layout`            |
+| 设计审计（对比度 AA） | `cd frontend && npm run audit:contrast`      |
+| 多断点截图 | `cd frontend && npm run shot -- --out .smoke/xxx` |
 | 全栈启动 | VSCode → "全栈复合调试"                         |
 | 全栈构建 | `scripts/build.ps1` 或 VSCode 任务 `build: all`             |
 | 提交已暂存文件并推送 | `pwsh -File scripts/publish.ps1 -Message "feat: ..."`      |
 
 端到端脚本使用独立的系统临时目录保存前后端产物和测试数据，结束后统一清理，支持与本地运行实例并行验证。
+
+`audit:layout` / `audit:contrast` / `shot` 需要先起前端 dev server（`npm run dev`）。
+前两个把"内容宽度、控件字号、溢出、对比度"量化成可复核的数据，截图产物统一写在
+`frontend/.smoke/`（已被 `.gitignore` 忽略）。设计口径见
+[docs/DESIGN_NORTH_STAR.md](./docs/DESIGN_NORTH_STAR.md)。
 
 faststart 集成测试优先使用测试进程的 `FFMPEG_PATH`，未指定时查找仓库默认位置及 `PATH` 中可执行的 ffmpeg；工具不可用时跳过该用例。此变量只供测试选择工具，不覆盖应用的 `config.yaml`。
 
