@@ -36,7 +36,7 @@ export default function YearTimeline({ groups, gridRef }: Props) {
   if (groups.length === 0) return null
 
   return (
-    <div className="page-shell">
+    <div className="page-shell" data-testid="year-timeline">
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 lg:gap-4">
         {groups.map((g) => (
           <YearCard key={g.year ?? 'other'} group={g} gridRef={gridRef} />
@@ -165,11 +165,15 @@ function YearCard({
           </div>
         )}
 
-        {/* === 顶部渐变 + 年份大字（左上）=== */}
+        {/* === 顶部渐变 + 年份大字（左上）===
+             年份数字压在任意封面之上：封面可能是白底文档（2020 那一格）、
+             也可能是雪景。除了压一层更实的顶部渐变，还给文字加一圈深色
+             光晕（text-shadow），保证白字在任何封面亮度下都读得出来 ——
+             只靠渐变的话，数字下缘正好落在渐变最弱处。 */}
         {validCovers.length > 0 && (
-          <div className="absolute top-0 left-0 right-0 p-3.5 sm:p-4 bg-gradient-to-b from-black/70 via-black/35 to-transparent pointer-events-none">
+          <div className="absolute top-0 left-0 right-0 p-3.5 sm:p-4 bg-gradient-to-b from-black/85 via-black/55 to-transparent pointer-events-none">
             <div
-              className={`font-display leading-none tracking-[-0.03em] tabular-nums text-white ${
+              className={`font-display leading-none tracking-[-0.03em] tabular-nums text-white [text-shadow:0_1px_2px_rgba(0,0,0,0.85),0_2px_14px_rgba(0,0,0,0.75)] ${
                 isOther
                   ? 'text-xl sm:text-2xl font-semibold'
                   : 'text-[28px] sm:text-[32px] font-semibold'
@@ -181,8 +185,8 @@ function YearCard({
         )}
 
         {/* === 底部渐变 + 统计（左下）=== */}
-        <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-3.5 bg-gradient-to-t from-black/70 via-black/30 to-transparent">
-          <div className="flex items-center gap-2.5 text-[12.5px] text-white/90 tabular-nums">
+        <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-3.5 bg-gradient-to-t from-black/85 via-black/45 to-transparent">
+          <div className="flex items-center gap-2.5 text-[12.5px] text-white/95 tabular-nums [text-shadow:0_1px_2px_rgba(0,0,0,0.8)]">
             <span className="inline-flex items-center gap-1">
               <ImageIcon size={10} className="text-white/70" />
               <span>{formatNum(group.imageTotal)}</span>
