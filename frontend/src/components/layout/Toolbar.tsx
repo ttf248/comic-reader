@@ -76,62 +76,70 @@ export default function Toolbar({
   }, [queryClient, sse.isComplete, sse.scanId, pushToast]);
 
   return (
-    <header className="h-14 flex items-center gap-2 sm:gap-3 px-3 sm:px-5 lg:px-7 border-b border-border-faint bg-bg-elevated/70 backdrop-blur-xl">
-      {/* 窄屏：导航 / 返回 */}
-      <div className="flex items-center gap-1 lg:hidden shrink-0">
-        {onOpenMobileNav && (
-          <button
-            type="button"
-            ref={mobileMenuButtonRef}
-            onClick={onOpenMobileNav}
-            className="inline-flex items-center justify-center w-9 h-9 rounded-md text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors"
-            title="打开导航"
-            aria-label="打开导航"
-          >
-            <MenuIcon size={16} />
-          </button>
-        )}
-        {onGallery && (
-          <button
-            type="button"
-            onClick={() => navigate(-1)}
-            className="inline-flex items-center h-9 px-3 rounded-md text-[13px] text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors"
-          >
-            返回
-          </button>
-        )}
-      </div>
-
-      {!onGallery && (
-        <div className="flex-1 min-w-0 max-w-[560px]">
-          <GlobalSearch />
+    // 顶栏背景铺满，但内容必须和正文共用同一条左基线：
+    // 内层复用 .page-shell（同样的 max-width / padding / 居中规则），
+    // 否则 1920px 下顶栏起点在 x=248、正文起点在 x=302，一屏两套基准。
+    <header className="h-14 border-b border-border-faint bg-bg-elevated/70 backdrop-blur-xl">
+      <div className="page-shell h-full flex items-center gap-2 sm:gap-3">
+        {/* 窄屏：导航 / 返回 */}
+        <div className="flex items-center gap-1 lg:hidden shrink-0">
+          {onOpenMobileNav && (
+            <button
+              type="button"
+              ref={mobileMenuButtonRef}
+              onClick={onOpenMobileNav}
+              className="inline-flex items-center justify-center w-9 h-9 rounded-md text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors"
+              title="打开导航"
+              aria-label="打开导航"
+            >
+              <MenuIcon size={16} />
+            </button>
+          )}
+          {onGallery && (
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              className="inline-flex items-center h-9 px-3 rounded-md text-[13px] text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors"
+            >
+              返回
+            </button>
+          )}
         </div>
-      )}
-      {onGallery && <div className="flex-1 min-w-0" />}
 
-      <div className="flex items-center gap-1 shrink-0">
-        <button
-          onClick={() =>
-            window.dispatchEvent(new CustomEvent("comic:open-help"))
-          }
-          className="inline-flex items-center justify-center w-9 h-9 rounded-md text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors"
-          title="快捷键帮助 (?)"
-          aria-label="快捷键帮助"
-        >
-          <HelpIcon size={15} />
-        </button>
-        <ThemeSwitcher compact />
         {!onGallery && (
-          <MoreMenu
-            onScan={() => startScan.mutate()}
-            onRefresh={() =>
-              void queryClient.invalidateQueries({
-                queryKey: libraryQueryKeys.root,
-              })
-            }
-            scanPending={startScan.isPending || sse.isRunning}
-          />
+          /* 搜索容器不设 max-width：它要占满剩余空间，把右侧的全局动作
+             推到视口右缘。旧版 max-w-[560px] 让图标组停在 x=850，
+             1920px 下右边空出约 1000px，看起来像被遗弃的控件。 */
+          <div className="flex-1 min-w-0">
+            <GlobalSearch />
+          </div>
         )}
+        {onGallery && <div className="flex-1 min-w-0" />}
+
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={() =>
+              window.dispatchEvent(new CustomEvent("comic:open-help"))
+            }
+            className="inline-flex items-center justify-center w-9 h-9 rounded-md text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors"
+            title="快捷键帮助 (?)"
+            aria-label="快捷键帮助"
+          >
+            <HelpIcon size={15} />
+          </button>
+          <ThemeSwitcher compact />
+          {!onGallery && (
+            <MoreMenu
+              onScan={() => startScan.mutate()}
+              onRefresh={() =>
+                void queryClient.invalidateQueries({
+                  queryKey: libraryQueryKeys.root,
+                })
+              }
+              scanPending={startScan.isPending || sse.isRunning}
+            />
+          )}
+        </div>
       </div>
     </header>
   );

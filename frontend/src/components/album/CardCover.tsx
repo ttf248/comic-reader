@@ -31,14 +31,18 @@ export default function CardCover({ data, loading = "lazy", compact }: Props) {
   if (data.variant === "album") {
     if (data.coverKind === "video") {
       return (
-        <VideoCoverImage
-          key={paths[0]}
-          videoPath={paths[0]}
-          loading={loading}
-          alt={data.title}
-          showRetryAction={false}
-          showExtractingHint={!compact}
-        />
+        // 视频画幅固定 16:9，容器可能是 4:5 —— 深色画布让上下留边
+        // 读成"宽银幕"而不是"缺图"。
+        <div className="w-full h-full bg-bg-media">
+          <VideoCoverImage
+            key={paths[0]}
+            videoPath={paths[0]}
+            loading={loading}
+            alt={data.title}
+            showRetryAction={false}
+            showExtractingHint={!compact}
+          />
+        </div>
       );
     }
 

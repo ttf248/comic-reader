@@ -87,7 +87,23 @@ interface Props {
    * 每张卡都挂同一个标记只是噪音，直接关掉。
    */
   showUnreadBadge?: boolean;
+  /**
+   * 封面画幅比例。
+   * - "4/5"（默认）：全量网格用，密度优先，一屏能扫更多条目；
+   * - "2/3"：首页的"封面货架"用，海报比例，封面更像主角；
+   * - "16/9"：纯视频相册，横画幅。
+   * 不同场景用不同比例是有意为之：货架负责"展示"，网格负责"扫描"。
+   */
+  coverRatio?: CoverRatio;
 }
+
+export type CoverRatio = "4/5" | "2/3" | "16/9";
+
+const COVER_RATIO_CLASS: Record<CoverRatio, string> = {
+  "4/5": "aspect-[4/5]",
+  "2/3": "aspect-[2/3]",
+  "16/9": "aspect-video",
+};
 
 // 通用卡片：网格（统一 4:5 封面）/ 列表（横向缩略图 + 元数据）。
 // 设计：
@@ -103,6 +119,7 @@ export default function AlbumCard({
   onContextMenu,
   overlayAction,
   showUnreadBadge = true,
+  coverRatio = "4/5",
 }: Props) {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [propertiesId, setPropertiesId] = useState<string | null>(null);
@@ -152,6 +169,7 @@ export default function AlbumCard({
           onToggleFavorite={onToggleFavorite}
           overlayAction={overlayAction}
           showUnreadBadge={showUnreadBadge}
+          coverRatio={coverRatio}
         />
       )}
       {menu && (
@@ -201,12 +219,14 @@ function GridCard({
   onToggleFavorite,
   overlayAction,
   showUnreadBadge,
+  coverRatio,
 }: {
   data: CardData;
   showLastSeen?: boolean;
   onToggleFavorite: () => void;
   overlayAction?: ReactNode;
   showUnreadBadge: boolean;
+  coverRatio: CoverRatio;
 }) {
   // 直接渲染 <img loading="lazy">：浏览器原生懒加载比我们自写的 IO 简单且更可靠
   // （自写 IO 在 React 18 StrictMode dev mount-twice + 卡片树整体重渲染时容易
@@ -272,7 +292,7 @@ function GridCard({
         className="group block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
       >
         <div
-          className="relative aspect-[4/5] bg-bg-subtle rounded-lg overflow-hidden border border-border lift-card shadow-xs group-hover:shadow-lg group-hover:border-border-strong"
+          className={`relative ${COVER_RATIO_CLASS[coverRatio]} bg-bg-subtle rounded-lg overflow-hidden border border-border lift-card shadow-xs group-hover:shadow-lg group-hover:border-border-strong`}
           data-testid="card-cover"
         >
           <CardCover data={data} />
@@ -326,7 +346,7 @@ function GridCard({
 
         <div className="pt-3 pb-1 min-w-0">
           <div
-            className="text-[13.5px] font-medium text-fg truncate-2 leading-snug transition-colors group-hover:text-accent"
+            className="text-[14px] font-medium text-fg truncate-2 leading-snug transition-colors group-hover:text-accent"
             title={data.displayTitle ?? data.title}
           >
             {data.displayTitle ?? data.title}

@@ -36,8 +36,10 @@ export default function YearTimeline({ groups, gridRef }: Props) {
   if (groups.length === 0) return null
 
   return (
-    <div className="page-shell" data-testid="year-timeline">
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 lg:gap-4">
+    // 注意：不要再套一层 .page-shell —— 调用方（Home.tsx）的 section 已经是
+    // page-shell，嵌套会让整块凭空多出左右各 32px 内边距，与上下区块错位。
+    <div data-testid="year-timeline">
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(196px,1fr))] gap-3 lg:gap-4">
         {groups.map((g) => (
           <YearCard key={g.year ?? 'other'} group={g} gridRef={gridRef} />
         ))}
@@ -213,15 +215,15 @@ function YearCard({
         onClick={() => triggerFilter()}
         title={isActive ? '取消筛选' : '只筛选该年份'}
         aria-label={isActive ? '取消年份筛选' : '筛选该年份'}
-        className={`absolute top-2 right-2 z-10 inline-flex items-center justify-center w-6 h-6 rounded-md backdrop-blur transition-colors ${
+        className={`absolute top-2 right-2 z-10 inline-flex items-center justify-center w-7 h-7 rounded-md backdrop-blur transition-colors ${
           isActive
             ? 'bg-accent text-accent-contrast'
-            : 'bg-black/40 text-white/85 hover:bg-black/55 hover:text-white'
+            : 'bg-black/45 text-white/90 hover:bg-black/65 hover:text-white'
         }`}
       >
         <svg
-          width="11"
-          height="11"
+          width="12"
+          height="12"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"

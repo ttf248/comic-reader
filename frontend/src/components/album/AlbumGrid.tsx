@@ -145,7 +145,10 @@ export default function AlbumGrid({
           data={items}
           computeItemKey={(_index, item) => item.id}
           increaseViewportBy={{ top: 720, bottom: 1080 }}
-          listClassName="pt-2 pb-10 grid gap-x-5 gap-y-8 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+          /* 列数由容器宽度决定（auto-fill + minmax），不用固定的
+             grid-cols-6：固定列数在宽屏上只填 6 列、右侧留一整块空白，
+             而条目数不足 6 时最后一列又空着。 */
+          listClassName="pt-2 pb-10 grid gap-x-5 gap-y-8 grid-cols-[repeat(auto-fill,minmax(164px,1fr))]"
           itemClassName="min-w-0"
           itemContent={(_index, item) => renderCard(item)}
         />

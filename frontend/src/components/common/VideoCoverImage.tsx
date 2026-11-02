@@ -34,7 +34,7 @@ export default function VideoCoverImage({
 
   if (!enabled) {
     return (
-      <div className="w-full h-full flex items-center justify-center bg-bg-subtle text-fg-subtle">
+      <div className="w-full h-full flex items-center justify-center bg-bg-media text-white/45">
         <FolderIcon size={28} />
       </div>
     );
@@ -44,13 +44,20 @@ export default function VideoCoverImage({
   // 不用转圈：转圈既不告诉用户还要等多久，又在几十张卡片的网格里制造
   // 一片闪烁的噪点。静态图标 + 文案就够了 —— 封面位置本来就是固定的，
   // 预览出现时直接铺上去，不会跳动。
+  //
+  // 底色用深色画布（--bg-media 令牌，工具类名是 bg-bg-media）：视频封面是
+  // 16:9，塞进 4:5 的卡片必然
+  // 上下留边。留边如果落在浅灰底上会被读成"图片缺了一块"，落在深色画布上
+  // 才是宽银幕的常规观感。
   if (status === "loading" || status === "missing" || status === "extracting") {
     return (
-      <div className="w-full h-full flex flex-col items-center justify-center bg-bg-subtle text-fg-muted gap-2">
-        <PlayFilledIcon size={20} className="text-fg-subtle" />
+      <div className="w-full h-full flex flex-col items-center justify-center bg-bg-media gap-2.5">
+        <span className="w-11 h-11 rounded-full border border-white/25 bg-white/10 flex items-center justify-center">
+          <PlayFilledIcon size={18} className="text-white/85" />
+        </span>
         {showExtractingHint && (
-          <span className="text-[11.5px] tabular-nums">
-            {status === "extracting" ? "正在生成预览…" : "正在加载…"}
+          <span className="text-[12px] text-white/60 tabular-nums">
+            {status === "extracting" ? "正在生成封面…" : "正在加载…"}
           </span>
         )}
       </div>
@@ -60,9 +67,11 @@ export default function VideoCoverImage({
   // 抽帧失败 → 占位 + 可选重试
   if (status === "error") {
     return (
-      <div className="w-full h-full flex flex-col items-center justify-center bg-bg-subtle text-fg-subtle gap-1.5">
-        <FolderIcon size={22} />
-        <span className="text-[11.5px]">封面生成失败</span>
+      <div className="w-full h-full flex flex-col items-center justify-center bg-bg-media gap-2">
+        <span className="w-11 h-11 rounded-full border border-white/20 bg-white/8 flex items-center justify-center">
+          <FolderIcon size={20} className="text-white/70" />
+        </span>
+        <span className="text-[12px] text-white/60">封面生成失败</span>
         {showRetryAction ? (
           <button
             type="button"
@@ -71,7 +80,7 @@ export default function VideoCoverImage({
               if (onRetry) onRetry();
               else retry();
             }}
-            className="relative z-10 text-[11.5px] text-accent hover:underline"
+            className="relative z-10 text-[12px] text-white/85 hover:underline"
           >
             重试
           </button>

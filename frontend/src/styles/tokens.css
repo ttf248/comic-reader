@@ -15,6 +15,10 @@
   --bg-strong: #e4e4e7;
   /* 卡片内部的次级底色（比 bg-subtle 更浅一档，用于"框内"的浅层分区） */
   --bg-inset: #f7f7f8;
+  /* 媒体画布：视频封面 / 宽幅照片做 letterbox 时的底色。
+     恒为深色 —— 亮底上的一条黑边会被读成"缺图"，深底上则是
+     电影宽银幕的常规观感。 */
+  --bg-media: #16161a;
 
   /* Foreground — 石墨近黑
      三级文字都按 WCAG AA（正文 4.5:1）取值：
@@ -95,6 +99,7 @@
   --bg-subtle: #1f1f23;
   --bg-strong: #2a2a2f;
   --bg-inset: #131316;
+  --bg-media: #000000;
 
   /* Foreground — 深色底上的三级文字，同样满足 AA：
      fg 18.9:1 / fg-muted 7.3:1 / fg-subtle 5.5:1（底色 #09090b）。 */

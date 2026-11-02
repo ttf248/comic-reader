@@ -15,6 +15,7 @@ export default {
         "bg-subtle": tokenColor("bg-subtle"),
         "bg-strong": tokenColor("bg-strong"),
         "bg-inset": tokenColor("bg-inset"),
+        "bg-media": tokenColor("bg-media"),
         fg: tokenColor("fg"),
         "fg-muted": tokenColor("fg-muted"),
         "fg-subtle": tokenColor("fg-subtle"),

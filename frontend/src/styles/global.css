@@ -205,17 +205,21 @@ button:not(:disabled):active {
       0 0 6px rgba(0, 0, 0, 0.7);
   }
 
-  /* --- 页面容器：统一左右留白与最大宽度 --- */
+  /* --- 页面容器：统一左右留白与最大宽度 ---
+     上限从 1440px 放宽到 1600px：1920 视口下侧栏占 208px，主区约 1712px，
+     旧上限会让内容只占 75%，两侧各留 136px 死白（见 UX_BACKLOG B2）。
+     左右 padding 改成流体 clamp：窄屏不至于挤，宽屏不至于飘。 */
   .page-shell {
     width: 100%;
-    max-width: 1440px;
+    max-width: 1600px;
     margin-inline: auto;
-    padding-inline: 32px;
+    padding-inline: clamp(16px, 2vw, 40px);
   }
-  @media (max-width: 640px) {
-    .page-shell {
-      padding-inline: 16px;
-    }
+  /* 防御：组件内部若再套一层 .page-shell，会凭空多出左右内边距
+     （历史上 YearTimeline 就踩过这个坑，整块右移 32px）。 */
+  .page-shell .page-shell {
+    max-width: none;
+    padding-inline: 0;
   }
 
   /* --- 页面主标题 --- */
@@ -233,9 +237,26 @@ button:not(:disabled):active {
     }
   }
 
+  /* --- 主角标题：首页"继续阅读"那一本 ---
+     层级必须高于区块标题（17px），否则界面框架又会比内容大。
+     只在一个地方出现，全站唯一。 */
+  .hero-title {
+    font-family: var(--font-display);
+    font-size: 26px;
+    line-height: 1.25;
+    font-weight: 650;
+    letter-spacing: -0.02em;
+    color: var(--fg);
+  }
+  @media (max-width: 640px) {
+    .hero-title {
+      font-size: 21px;
+    }
+  }
+
   /* --- 区块标题：中文优先，不用 uppercase / 大字距 --- */
   .section-title {
-    font-size: 15px;
+    font-size: 17px;
     line-height: 1.4;
     font-weight: 600;
     color: var(--fg);
@@ -271,9 +292,9 @@ button:not(:disabled):active {
     cursor: not-allowed;
   }
   .btn-sm {
-    height: 30px;
-    padding-inline: 10px;
-    font-size: 12.5px;
+    height: 32px;
+    padding-inline: 11px;
+    font-size: 13px;
     border-radius: var(--radius-sm);
   }
 
@@ -351,6 +372,39 @@ button:not(:disabled):active {
     background: var(--bg-elevated);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
+  }
+
+  /* --- 封面货架：横向排开的海报带 ---
+     首页"继续阅读 / 未读"用这个：内容横向铺满，视觉重量落在封面上，
+     不再出现"横幅右侧一大片空白"。窄屏可横向滑动。 */
+  .shelf {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    padding-bottom: 6px;
+  }
+  .shelf > * {
+    scroll-snap-align: start;
+    flex: 0 0 auto;
+  }
+  /* 货架右端的渐隐提示：内容被截断时给出"还有更多"的暗示。
+     只淡右端 —— 左端是货架起点，淡左端会把第一张卡切掉一块。 */
+  .shelf-fade {
+    -webkit-mask-image: linear-gradient(
+      to right,
+      #000 0,
+      #000 calc(100% - 28px),
+      transparent 100%
+    );
+    mask-image: linear-gradient(
+      to right,
+      #000 0,
+      #000 calc(100% - 28px),
+      transparent 100%
+    );
   }
 }
 
