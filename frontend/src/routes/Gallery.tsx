@@ -14,6 +14,7 @@ import { libraryQueryKeys, useLibraryNodes } from "../hooks/useLibrary";
 import { fsApi } from "../api/fs";
 import { useFsCapabilities } from "../hooks/useFsCapabilities";
 import { fileManagerErrorMessage } from "../utils/fileManager";
+import { apiErrorMessage } from "../utils/apiError";
 import { toggleFullscreen as toggleFullscreenImpl } from "../utils/fullscreen";
 import ImageGallery from "../components/gallery/ImageGallery";
 import VideoPlayer from "../components/gallery/VideoPlayer";
@@ -311,8 +312,8 @@ export default function Gallery() {
       })
       .catch((e) => {
         if (cancelled) return;
-        const msg = (e as Error)?.message || "无法读取媒体（网络或服务异常）";
-        setLoadError(msg);
+        // 后端 message 是英文机器文案：按错误码翻成中文，未知错误用兜底文案。
+        setLoadError(apiErrorMessage(e, "无法读取媒体（网络或服务异常）"));
       });
     return () => {
       cancelled = true;
@@ -952,9 +953,10 @@ export default function Gallery() {
         pushToast({ kind: "success", message: "已设为封面", ttl: 1200 });
       })
       .catch((e) => {
-        const msg =
-          (e as { body?: { error?: string } })?.body?.error || "设置封面失败";
-        pushToast({ kind: "error", message: msg });
+        pushToast({
+          kind: "error",
+          message: apiErrorMessage(e, "设置封面失败"),
+        });
       });
   }, [pathParam, queryClient, pushToast]);
 
@@ -969,9 +971,10 @@ export default function Gallery() {
         pushToast({ kind: "success", message: "已恢复默认封面", ttl: 1200 });
       })
       .catch((e) => {
-        const msg =
-          (e as { body?: { error?: string } })?.body?.error || "清除封面失败";
-        pushToast({ kind: "error", message: msg });
+        pushToast({
+          kind: "error",
+          message: apiErrorMessage(e, "清除封面失败"),
+        });
       });
   }, [pathParam, queryClient, pushToast]);
 
@@ -1060,11 +1063,17 @@ export default function Gallery() {
           ) : loadError ? (
             <div className="text-center max-w-sm">
               <div className="text-base font-medium text-fg mb-1">
-                {loadError === "EMPTY" ? "这个文件夹没有图片" : "加载失败"}
+                {loadError === "EMPTY"
+                  ? isVideo
+                    ? "这个文件夹没有视频"
+                    : "这个文件夹没有图片"
+                  : "加载失败"}
               </div>
               <div className="text-fg-muted text-sm mb-5">
                 {loadError === "EMPTY"
-                  ? "可以换个文件夹，或检查文件是否已被移动/删除。"
+                  ? isVideo
+                    ? "可以换个文件夹，或检查视频是否已被移动/删除。"
+                    : "可以换个文件夹，或检查文件是否已被移动/删除。"
                   : loadError}
               </div>
               <div className="flex items-center justify-center gap-2">

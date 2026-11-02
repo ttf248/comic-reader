@@ -43,7 +43,10 @@ it("失败后可以重新请求当前文件", async () => {
     .mockRejectedValueOnce(new Error("offline"))
     .mockResolvedValueOnce(first);
   const { result } = renderHook(() => useImageInfo(first.path));
-  await waitFor(() => expect(result.current.err).toBe("offline"));
+  // err 保留原始异常对象：界面要按错误码翻成中文，不能只留 message。
+  await waitFor(() =>
+    expect((result.current.err as Error | null)?.message).toBe("offline"),
+  );
   act(() => result.current.refetch());
   await waitFor(() => expect(result.current.info).toEqual(first));
   expect(result.current.err).toBeNull();

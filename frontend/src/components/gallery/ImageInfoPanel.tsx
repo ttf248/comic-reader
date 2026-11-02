@@ -3,6 +3,7 @@ import CopyButton from '../common/CopyButton'
 import { useImageInfo } from '../../hooks/useImageInfo'
 import { formatSize } from '../../utils/format'
 import { formatDateTime } from '../../utils/date'
+import { apiErrorMessage } from '../../utils/apiError'
 
 interface Props {
   absPath: string | null
@@ -29,7 +30,11 @@ export default function ImageInfoPanel({ absPath, onClose }: Props) {
       </div>
       <div className="flex-1 overflow-auto p-4 text-sm space-y-3 scroll-thin">
         {loading && <div className="text-fg-muted text-xs">加载中…</div>}
-        {err && <div className="text-danger text-xs">错误: {err}</div>}
+        {err !== null && (
+          <div className="text-danger text-xs">
+            错误: {apiErrorMessage(err, '无法读取图片信息')}
+          </div>
+        )}
         {info && (
           <>
             <Row
