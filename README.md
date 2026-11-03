@@ -372,20 +372,23 @@ local-gallery/
 
 | 开关 | 取值 | 作用 |
 |------|------|------|
-| `LG_PAGES` | 路由，逗号分隔；`reader` / `album` 是伪路由 | 指定要审计的页面。`reader` 会取仪表盘里一本图多的图片相册直接进阅读器，审计压在图片上的浮层与图标；`album` 取仪表盘里一本图多的相册进详情页，审计 hero 与媒体网格 |
+| `LG_PAGES` | 路由，逗号分隔；`reader` / `album` / `tag` 是伪路由 | 指定要审计的页面。`reader` 会取仪表盘里一本图多的图片相册直接进阅读器，审计压在图片上的浮层与图标；`album` 取仪表盘里一本图多的相册进详情页，审计 hero 与媒体网格；`tag` 用仪表盘里的真实相册伪造标签页数据（真实库里往往没有标签），审计标签页的 hero 与数据条 |
 | `LG_VIEWMODE` | `grid`（默认）/ `list` | 审计网格视图或列表视图（两套字号与排版） |
 | `LG_VIEWPORTS` | `390x844,1440x900` | 指定断点 |
 | `LG_THEMES` | `light` / `dark` | 指定主题 |
 
-两个脚本的默认页面清单为 `/`、`/recents`、`/favorites`、`/unread`、`/settings` 与伪路由 `album`、`reader`。
+两个脚本的默认页面清单为 `/`、`/recents`、`/favorites`、`/unread`、`/settings` 与伪路由 `album`、`reader`、`tag`。
 
 `audit:contrast` 有三条判定通道：文字的 DOM 判定（AA 4.5:1）、压在图片上的文字的像素判定
 （按文字包围盒外一圈的真实像素算），以及**图标**的像素判定（非文本内容 3:1，WCAG 1.4.11 ——
-图标是 SVG，没有文字节点，必须单独开通道）。加 `-- --self-test` 会注入"已知好坏"的样本，
-验证这三条通道自己分得清好坏。
+图标是 SVG，没有文字节点，必须单独开通道）。文字压在图上的判定**按绘制顺序**找背板
+（既认"文字在图片的 DOM 子树里"，也认"文字靠负边距压在兄弟层的照片上"），
+取样落在背板那一层之内。加 `-- --self-test` 会注入"已知好坏"的样本
+（白字压白底、兄弟层白字压白图、半透明角标等），验证这三条通道自己分得清好坏。
 
 例：`LG_PAGES=reader npm run audit:contrast`（阅读器浮层与图标对比度）、
 `LG_PAGES=album npm run audit:layout`（相册详情页的字号与溢出）、
+`LG_PAGES=tag npm run audit:contrast`（标签页 hero 的对比度）、
 `LG_VIEWMODE=list npm run audit:layout`（列表视图的字号与溢出）。
 
 faststart 集成测试优先使用测试进程的 `FFMPEG_PATH`，未指定时查找仓库默认位置及 `PATH` 中可执行的 ffmpeg；工具不可用时跳过该用例。此变量只供测试选择工具，不覆盖应用的 `config.yaml`。
