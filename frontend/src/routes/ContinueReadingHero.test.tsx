@@ -67,15 +67,15 @@ describe('ContinueReadingHero', () => {
     expect(onContinue.mock.calls[0][0].progress?.index).toBe(12)
   })
 
-  it('cards 超过 11 张时只显示 1 张主封面 + 10 张货架', () => {
-    const many = Array.from({ length: 14 }, (_, i) =>
+  it('cards 超过上限时只显示 1 张主封面 + 12 张封面墙', () => {
+    const many = Array.from({ length: 20 }, (_, i) =>
       makeCard(`/p${i}`, `P${i}`, i, 30),
     )
     const { container } = renderHero(many)
     const cardButtons = container.querySelectorAll('button[aria-label^="将"][aria-label$="标记为已读"]')
-    // 1 张主封面（"标记为已读"文字按钮）+ 10 张货架海报（X 按钮）= 11 个。
+    // 1 张主封面（"标记为已读"文字按钮）+ 12 张封面墙海报（X 按钮）= 13 个。
     // 上限存在的意义是"首页不铺满 32 本在读"，而不是"只给 6 本"。
-    expect(cardButtons.length).toBe(11)
+    expect(cardButtons.length).toBe(13)
   })
 
   it('空 cards 仍渲染(由 Home 条件决定是否显示)', () => {

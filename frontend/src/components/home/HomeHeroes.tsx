@@ -16,8 +16,9 @@ import {
 
 // 首页的两种内容呈现：
 //
-//   1. 「封面台」ContinueStage —— 一本在读的主封面 + 紧贴它的信息 + 其余在读的货架；
-//   2. 「封面货架」Shelf —— 横向排开的一排海报，横向可滚。
+//   1. 「封面台 + 封面墙」ContinueReadingHero —— 一本在读的主封面 + 贴在它
+//      下方的进度与操作 + 右侧整栏的其余在读网格；
+//   2. 「封面货架」UnreadHero —— 横向排开的一排海报，横向可滚。
 //
 // 上一版首页用的是"横幅卡"：一张 1340×200 的浅灰盒子，封面只有 140×176，
 // CTA 按钮被推到 1000px 之外，右侧整片空白。视觉重量落在空白上而不是内容上，
@@ -27,13 +28,35 @@ import {
 // "主角 / 次要 / 其它"三档拉开。
 
 /**
- * 「其余在读」货架的固定宽度。
+ * 「其余在读」网格的条目上限。
  *
- * 这里**必须固定**：主封面是 300px（货架海报的 1.67 倍）。如果货架也跟着
- * flex-1 撑开，条目少时（比如只剩 1 本）单张会涨到 240px，和主封面几乎
- * 一样大，"主角 / 次要"的分级就没了。
+ * 12 是刻意选的：能同时被 2 / 3 / 4 / 6 列整除，各断点都不会出现半行
+ * （半行会让网格右边缘留一截空位，读起来像没排完）。
  */
-const RAIL_WIDTH = "w-[148px] sm:w-[164px] lg:w-[180px]";
+const GRID_ITEMS = 12;
+
+/**
+ * 窄屏隐藏多余条目。
+ *
+ * 网格条目数必须跟着列数走：条目数固定而列数变少时，行数会线性膨胀
+ * （12 条在 2 列下是 6 行 ≈ 1500px 高，页面被拉成长条）。用 nth-child
+ * 规则按断点裁掉多余条目，比在 JS 里按列数算更可靠 —— 列数是 CSS 决定的。
+ *
+ * 各断点实际行数：手机 2 行 / 平板 2~3 行 / 桌面 2 行 / 超宽 2 行。
+ */
+const GRID_HIDE_SM =
+  "max-sm:[&>*:nth-child(n+5)]:hidden max-[1800px]:[&>*:nth-child(n+9)]:hidden";
+
+/**
+ * 「其余在读」网格的列数。
+ *
+ * 列数刻意写死而不是用 auto-fill：右栏宽度 = 视口 - 侧栏 - 左栏，
+ * 在 1280~1800 之间被 auto-fill 切出的列宽会忽大忽小（150px ↔ 246px），
+ * 写死列数后每档的封面宽度虽然也不完全单调，但变化都在 ±30% 以内，
+ * 不会在同一屏里出现"忽大忽小"的墙。
+ */
+const GRID_COLS =
+  "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-4 min-[1800px]:grid-cols-6";
 
 /**
  * 「未读」货架的宽度：条目少时撑开把整行铺满，条目多时保持最小宽度并横向滚动。
@@ -129,16 +152,20 @@ interface ContinueReadingHeroProps {
 
 // 首页继续阅读入口：点击卡片直接进入上次阅读位置。
 //
-// 版式：「封面台」。
-//   ┌──────────┐   看到 5 / 262
-//   │  主封面   │   ▓▓░░░░░░░░░  2%
-//   │  2:3     │   [继续阅读 →]  [标记为已读]
-//   └──────────┘   ┌──┐┌──┐┌──┐┌──┐   ← 其余在读（横向货架）
-//    标题（墙签）  └──┘└──┘└──┘└──┘
+// 版式：「封面台 + 封面墙」。
+//   ┌──────────┐   其余在读
+//   │  主封面   │   ┌──┐┌──┐┌──┐┌──┐┌──┐┌──┐
+//   │  2:3     │   └──┘└──┘└──┘└──┘└──┘└──┘
+//   └──────────┘   ┌──┐┌──┐┌──┐┌──┐┌──┐┌──┐
+//   AIGC活动选图    └──┘└──┘└──┘└──┘└──┘└──┘
+//   看到 5 / 262
+//   ▓▓░░░░░░░░░
+//   [继续阅读 →] [标记为已读]
 //
 // 关键约束：
-//   - 主封面高度 ≥ 货架海报 1.6 倍（"主角 / 次要"必须一眼可分）；
-//   - 主按钮与标题/封面的视觉距离 < 1 屏（旧版相距 ~1000px）；
+//   - 主封面高度 ≥ 其余在读海报 1.6 倍（"主角 / 次要"必须一眼可分）；
+//   - 主按钮与封面紧挨着（同在左栏），旧版相距 ~1000px；
+//   - 右栏整栏都是图像，不留"信息栏只占 520px、右侧空 620px"的空洞；
 //   - 进度同时用"数字 + 条"两处表达，不只靠一条 3px 细线。
 export function ContinueReadingHero({
   cards,
@@ -147,10 +174,10 @@ export function ContinueReadingHero({
   onClearAll,
 }: ContinueReadingHeroProps) {
   const featured = cards[0];
-  // 货架展示 10 本（而不是 6 本）：货架是"还有更多"的可视化 ——
-  // 6 本在宽屏上只占半行，右侧留一大块空白，看起来像排版没做完；
-  // 10 本刚好把一整行铺满并溢出，渐隐 + 横向滚动明确表达"还有"。
-  const rest = cards.slice(1, 11);
+  // 其余在读最多铺 12 条（见 GRID_ITEMS）。剩下的本子不再往首页堆：
+  // 侧栏的「继续阅读」已经列了最近 6 本 + "还有 N 本没看完"，两处都铺满
+  // 只会让首页变成索引页，看不到任何一张图的细节。
+  const rest = cards.slice(1, 1 + GRID_ITEMS);
 
   return (
     <section className="page-shell pt-2 pb-10" data-testid="continue-hero">
@@ -170,51 +197,53 @@ export function ContinueReadingHero({
         </button>
       </div>
 
-      <div className="flex flex-col gap-6 lg:flex-row lg:gap-9">
+      <div className="flex flex-col gap-8 xl:flex-row xl:gap-9">
         {featured && (
-          /* 窄屏：封面 + 墙签并排（112px 封面），保证标题 / 进度 / 按钮
-             都在第一屏内；宽屏：封面独占一列（300px），下方挂墙签标题。 */
-          <div className="flex gap-4 items-end lg:flex-col lg:items-stretch lg:gap-4 lg:w-[300px] xl:w-[320px] shrink-0">
-            <div className="w-[112px] lg:w-full shrink-0">
-              <StagePoster
-                card={featured}
-                onClick={() => onContinue(featured)}
-              />
+          /* 窄屏 / 平板：封面 + 墙签并排，进度与操作落在它们下方；
+             宽屏（xl+）：封面独占一列（320px），标题与进度贴在其下。
+             平板档用 flex-wrap 让"标题 + 进度"整块换行到封面右侧，
+             否则标题右边会拖出一大片空白。 */
+          <div className="shrink-0 xl:w-[320px] 2xl:w-[352px]">
+            <div className="flex flex-wrap gap-4 items-end xl:flex-col xl:items-stretch xl:gap-4">
+              <div className="w-[112px] md:w-[200px] xl:w-full shrink-0">
+                <StagePoster
+                  card={featured}
+                  onClick={() => onContinue(featured)}
+                />
+              </div>
+              {/* 墙签：标题贴在封面下方，像展厅里的作品说明 */}
+              <div className="w-full md:w-auto md:flex-1 min-w-0 xl:flex-none xl:w-full">
+                <h3 className="hero-title xl:mt-4 line-clamp-2">
+                  {featured.title}
+                </h3>
+                <div className="mt-3 xl:mt-6">
+                  <StageInfo
+                    card={featured}
+                    onContinue={() => onContinue(featured)}
+                    onRemove={() => onRemove(featured)}
+                  />
+                </div>
+              </div>
             </div>
-            {/* 墙签：标题贴在封面下方，像展厅里的作品说明 */}
-            <h3 className="hero-title lg:mt-4 line-clamp-2">
-              {featured.title}
-            </h3>
           </div>
         )}
 
-        {/* 信息 + 其余在读的货架：占据剩余宽度，横向铺满，不再留空洞 */}
-        <div className="flex-1 min-w-0">
-          {featured && (
-            <StageInfo
-              card={featured}
-              onContinue={() => onContinue(featured)}
-              onRemove={() => onRemove(featured)}
-            />
-          )}
-
-          {rest.length > 0 && (
-            <div className="mt-7 lg:mt-9">
-              <div className="section-meta mb-3">其余在读</div>
-              <div className="shelf shelf-fade">
-                {rest.map((card) => (
-                  <div key={card.id} className={RAIL_WIDTH}>
-                    <ShelfPoster
-                      card={card}
-                      onClick={() => onContinue(card)}
-                      onRemove={() => onRemove(card)}
-                    />
-                  </div>
-                ))}
-              </div>
+        {/* 其余在读：整栏都是封面，填掉旧版信息栏右侧那块空洞 */}
+        {rest.length > 0 && (
+          <div className="flex-1 min-w-0">
+            <div className="section-meta mb-4">其余在读</div>
+            <div className={`grid ${GRID_COLS} gap-x-3.5 gap-y-7 ${GRID_HIDE_SM}`}>
+              {rest.map((card) => (
+                <MiniPoster
+                  key={card.id}
+                  card={card}
+                  onClick={() => onContinue(card)}
+                  onRemove={() => onRemove(card)}
+                />
+              ))}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </section>
   );
@@ -294,8 +323,9 @@ function StagePoster({
 
 // 舞台信息栏：进度读数 + 进度条 + 主操作。
 //
-// 与封面同处一行右侧，距离在几百像素内 —— 旧版把按钮推到横幅最右端
-// （相距约 1000px），用户要横跨整个屏幕才能把按钮和封面联系起来。
+// 位置在主封面正下方（不是横跨整个右栏）：旧版把信息栏推到右栏最左侧、
+// 主按钮推到横幅最右端（与封面相距约 1000px），用户要横跨整屏才能把
+// 按钮和封面联系起来。现在按钮离封面不到 100px。
 function StageInfo({
   card,
   onContinue,
@@ -314,7 +344,7 @@ function StageInfo({
       : 0;
 
   return (
-    <div className="max-w-[520px]">
+    <div>
       <div className="flex items-baseline gap-x-3 gap-y-1 flex-wrap">
         <span className="text-[15px] text-fg font-medium tabular-nums">
           看到 {index + 1} / {total}
@@ -364,11 +394,11 @@ function StageInfo({
   );
 }
 
-// 货架上的次级海报：与主封面同族的卡片，但更小。
+// 网格里的次级海报：与主封面同族的卡片，但更小。
 //
 // 结构与旧版一致（role=button 包住内容，X 按钮是兄弟节点），
 // 这样既保留键盘 / 可访问名行为，也让封面成为这一行的视觉主体。
-function ShelfPoster({
+function MiniPoster({
   card,
   onClick,
   onRemove,
