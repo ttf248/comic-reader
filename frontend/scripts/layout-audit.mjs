@@ -21,7 +21,9 @@ import { chromium } from "@playwright/test";
 
 const BASE = process.env.LG_BASE ?? "http://127.0.0.1:5173";
 const THEMES = (process.env.LG_THEMES ?? "light,dark").split(",").filter(Boolean);
-const PAGES = (process.env.LG_PAGES ?? "/,/recents,/favorites,/unread")
+// 页面清单里可以写伪路由：
+//   album —— 相册详情页（id 每次运行不同，从仪表盘现取一本图多的相册）
+const PAGES = (process.env.LG_PAGES ?? "/,/recents,/favorites,/unread,/settings,album")
   .split(",")
   .map((p) => p.trim())
   .filter(Boolean);
@@ -152,6 +154,24 @@ async function setTheme(page, theme) {
   }, { t: theme, vm: VIEWMODE });
 }
 
+// 相册详情页的 id 每次运行都不同：现从仪表盘取一本图多的相册。
+async function resolveAlbumRoute(page) {
+  const id = await page.evaluate(async () => {
+    const r = await fetch("/api/library/dashboard");
+    if (!r.ok) return null;
+    const j = await r.json();
+    const all = [
+      ...(j.dashboard?.unread ?? []),
+      ...(j.dashboard?.inProgress ?? []).map((p) => p.album),
+    ];
+    const hit =
+      all.find((a) => (a.imageCount ?? 0) > 3 && !(a.videoCount > 0)) ??
+      all[0];
+    return hit?.id ?? null;
+  });
+  return id ? `/albums/${encodeURIComponent(id)}` : null;
+}
+
 async function main() {
   const browser = await chromium.launch();
   const report = [];
@@ -170,9 +190,16 @@ async function main() {
       await setTheme(page, theme);
 
       for (const route of PAGES) {
+        // 伪路由 album：相册详情页的 id 运行时现取。
+        const target =
+          route === "album" ? await resolveAlbumRoute(page) : route;
+        if (!target) {
+          console.log(`  · 跳过 ${theme} ${route}：库里没有可打开的相册`);
+          continue;
+        }
         // 不用 networkidle：页面含 SSE 长连接，且 /api/previews 首次生成
         // 预览图可能耗时数秒，networkidle 会一直等不到而超时。
-        await page.goto(BASE + route, {
+        await page.goto(BASE + target, {
           waitUntil: "domcontentloaded",
           timeout: 60000,
         });
