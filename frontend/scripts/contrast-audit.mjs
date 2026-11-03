@@ -4,6 +4,7 @@
 //   npm run audit:contrast                                  # 需要先起 dev server（默认 5173）
 //   LG_BASE=http://127.0.0.1:8080 npm run audit:contrast
 //   LG_PAGES=/,/unread npm run audit:contrast              # 自定义页面
+//   LG_PAGES=reader npm run audit:contrast                # 只审计阅读器
 //   LG_THEMES=dark npm run audit:contrast                  # 自定义主题
 //
 // 两遍检查：
@@ -23,6 +24,8 @@ const PAGES = (process.env.LG_PAGES ?? "/,/unread,/recents,/favorites,/settings"
   .split(",")
   .map((p) => p.trim())
   .filter(Boolean);
+// 视图模式：grid（默认）/ list。列表视图用另一套字号与配色。
+const VIEWMODE = process.env.LG_VIEWMODE ?? "grid";
 
 // 在页面里跑的取色 / 判定逻辑。
 const AUDIT = () => {
@@ -267,6 +270,35 @@ async function waitForStable(page, timeout = 15000) {
   }
 }
 
+// 进入阅读器：阅读器的浮层（顶栏、底栏、药丸工具条）全部是"压在图片上的
+// 白字"，静态算不出背景，只能靠像素判定那一遍。
+//
+// 取仪表盘里的第一本相册直接开读，避免依赖首页网格的渲染时机；
+// 用 domcontentloaded 而不是 networkidle —— 阅读器里有 SSE 与预览图请求，
+// networkidle 会一直等不到。
+async function openReader(page) {
+  const albumId = await page.evaluate(async () => {
+    const r = await fetch("/api/library/dashboard");
+    if (!r.ok) return null;
+    const j = await r.json();
+    const all = [
+      ...(j.dashboard?.unread ?? []),
+      ...(j.dashboard?.inProgress ?? []).map((p) => p.album),
+    ];
+    return all[0]?.id ?? null;
+  });
+  if (!albumId) return false;
+  await page.goto(`${BASE}/albums/${encodeURIComponent(albumId)}`, {
+    waitUntil: "domcontentloaded",
+  });
+  await waitForStable(page);
+  const start = page.getByRole("button", { name: /开始浏览/ }).first();
+  if ((await start.count()) > 0) await start.click();
+  await page.waitForTimeout(1500);
+  await waitForStable(page);
+  return true;
+}
+
 const SELF_TEST_ONLY = process.argv.includes("--self-test");
 const browser = await chromium.launch();
 const violations = [];
@@ -283,16 +315,23 @@ for (const theme of THEMES) {
   });
   const page = await ctx.newPage();
   await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
-  await page.evaluate((t) => {
+  await page.evaluate(({ t, vm }) => {
     const raw = localStorage.getItem("local-gallery-ui");
     const parsed = raw ? JSON.parse(raw) : { state: {} };
-    parsed.state = { ...(parsed.state ?? {}), theme: t };
+    parsed.state = { ...(parsed.state ?? {}), theme: t, viewMode: vm };
     localStorage.setItem("local-gallery-ui", JSON.stringify(parsed));
-  }, theme);
+  }, { t: theme, vm: VIEWMODE });
 
   for (const route of PAGES) {
-    await page.goto(BASE + route, { waitUntil: "networkidle" });
-    await waitForStable(page);
+    if (route === "reader") {
+      if (!(await openReader(page))) {
+        console.log(`  · 跳过 ${theme} reader：仪表盘里没有可打开的相册`);
+        continue;
+      }
+    } else {
+      await page.goto(BASE + route, { waitUntil: "networkidle" });
+      await waitForStable(page);
+    }
     if (SELF_TEST_ONLY) await page.evaluate(SELF_TEST);
     const items = await page.evaluate(AUDIT);
     const overImage = items.filter((i) => i.onImage);

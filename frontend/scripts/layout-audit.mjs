@@ -6,6 +6,7 @@
 //   LG_PAGES=/,/unread npm run audit:layout
 //   LG_VIEWPORTS=390x844,1440x900 npm run audit:layout
 //   LG_THEMES=dark npm run audit:layout
+//   LG_VIEWMODE=list npm run audit:layout                  # 审计列表视图
 //   npm run audit:layout -- --json                          # 输出机器可读 JSON
 //
 // 输出的核心指标：
@@ -24,6 +25,9 @@ const PAGES = (process.env.LG_PAGES ?? "/,/recents,/favorites,/unread")
   .split(",")
   .map((p) => p.trim())
   .filter(Boolean);
+// 视图模式：grid（默认）/ list。列表视图是另一套排版（行式），
+// 字号与控件尺寸都要单独量一遍，不能拿网格视图的数据代替。
+const VIEWMODE = process.env.LG_VIEWMODE ?? "grid";
 const VIEWPORTS = (process.env.LG_VIEWPORTS ?? "390x844,768x1024,1024x768,1440x900,1920x1080")
   .split(",")
   .map((v) => {
@@ -140,12 +144,12 @@ const MEASURE = ({ minFontPx, minControlPx }) => {
 };
 
 async function setTheme(page, theme) {
-  await page.evaluate((t) => {
+  await page.evaluate(({ t, vm }) => {
     const raw = localStorage.getItem("local-gallery-ui");
     const parsed = raw ? JSON.parse(raw) : { state: {} };
-    parsed.state = { ...(parsed.state ?? {}), theme: t };
+    parsed.state = { ...(parsed.state ?? {}), theme: t, viewMode: vm };
     localStorage.setItem("local-gallery-ui", JSON.stringify(parsed));
-  }, theme);
+  }, { t: theme, vm: VIEWMODE });
 }
 
 async function main() {
