@@ -1,5 +1,14 @@
 # scripts/test-e2e.ps1
 # 使用临时媒体、独立前端产物与临时二进制运行真实全栈 Playwright 测试。
+#
+# 参数：
+#   -Audit   Playwright 跑完后，再对同一个临时服务跑一遍布局 / 对比度审计。
+#            临时媒体库里带真实标签（测试 / 空 格 / C++ …），所以这一次
+#            审计量的是**真实标签页**，而不是开发库里那种伪造数据。
+
+param(
+  [switch]$Audit
+)
 
 $ErrorActionPreference = "Stop"
 
@@ -160,6 +169,23 @@ staticDir: "$staticPathYaml"
       throw "Playwright 测试失败，退出码 $LASTEXITCODE"
     }
   } finally { Pop-Location }
+
+  if ($Audit) {
+    # 同一个临时服务上再跑一遍审计：临时媒体库里有真实标签，
+    # 这一次量到的是真实标签页（开发库的 /api/tags 是空的）。
+    Write-Host "[3.5/4] 对临时服务跑布局 / 对比度审计..." -ForegroundColor Cyan
+    Push-Location $frontendRoot
+    try {
+      $env:LG_BASE = $env:PLAYWRIGHT_BASE_URL
+      node scripts/layout-audit.mjs
+      if ($LASTEXITCODE -ne 0) { throw "布局审计失败，退出码 $LASTEXITCODE" }
+      node scripts/contrast-audit.mjs
+      if ($LASTEXITCODE -ne 0) { throw "对比度审计失败，退出码 $LASTEXITCODE" }
+    } finally {
+      Pop-Location
+      Remove-Item Env:\LG_BASE -ErrorAction SilentlyContinue
+    }
+  }
 } finally {
   Write-Host "[4/4] 清理临时进程与测试目录..." -ForegroundColor Cyan
   if ($null -ne $backendProcess -and -not $backendProcess.HasExited) {

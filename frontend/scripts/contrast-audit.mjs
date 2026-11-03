@@ -325,6 +325,10 @@ const AUDIT = () => {
   return items;
 };
 
+// 页面是否掉进了错误边界（React 渲染期异常）。
+// 崩掉的页面几乎没有文字可比，报告"全部通过"是假象 —— 必须单独报出来。
+const ROUTE_ERROR = () => !!document.querySelector('[role="alert"]');
+
 // 图标（非文本内容）对比度通道。
 //
 // 为什么单独一条通道：图标是 SVG，**没有文字节点** —— 上面的文本通道
@@ -727,7 +731,29 @@ async function openReader(page) {
 // 标签页：真实库里可能一个标签都没有（/api/tags 返回空数组），
 // 那这一页永远不会被量到。用仪表盘里的真实相册伪造一份标签页数据 ——
 // 封面走的是真实缩略图，版式与配色是真的，只是"标签"是假的。
+// 标签页的审计数据。
+//
+// 真实库里**有**标签时就用真的（e2e 造的临时库就有：测试 / 空 格 / C++ …），
+// 只有库里一个标签都没有时才用仪表盘里的真实相册伪造一份 —— 伪造数据
+// 只能验证版式，验证不了"标签名很长 / 带特殊字符"时的真实表现。
+// 用了哪种数据会在输出里写明，免得把伪造结果当成真实结果。
+let tagAuditState = { tag: null, faked: false };
+
+async function resolveTagName(page) {
+  const res = await page.request.get(`${BASE}/api/tags`);
+  if (res.ok()) {
+    const body = await res.json();
+    const items = body?.page?.items ?? [];
+    const hit = items.find((t) => t && t.tag && (t.count ?? 0) > 0) ?? items[0];
+    if (hit?.tag) return { tag: hit.tag, faked: false };
+  }
+  return { tag: "审计用标签", faked: true };
+}
+
 async function prepareTagRoute(page) {
+  const state = await resolveTagName(page);
+  tagAuditState = state;
+  if (!state.faked) return; // 真实数据：不用拦截
   await page.route(
     (url) => url.pathname.includes("/api/tags/") && url.pathname.endsWith("/albums"),
     async (route) => {
@@ -754,6 +780,7 @@ const pixelResults = [];
 const iconViolations = [];
 const iconResults = [];
 const coverage = [];
+const routeErrors = [];
 
 for (const theme of THEMES) {
   const ctx = await browser.newContext({
@@ -785,7 +812,7 @@ for (const theme of THEMES) {
         route === "album"
           ? await resolveAlbumRoute(page)
           : route === "tag"
-            ? `/tags/${encodeURIComponent("审计用标签")}`
+            ? `/tags/${encodeURIComponent(tagAuditState.tag)}`
             : route;
       if (!target) {
         console.log(`  · 跳过 ${theme} ${route}：库里没有可打开的相册`);
@@ -795,7 +822,13 @@ for (const theme of THEMES) {
       await waitForStable(page);
     }
     if (SELF_TEST_ONLY) await page.evaluate(SELF_TEST);
-    const items = await page.evaluate(AUDIT);
+    let items = await page.evaluate(AUDIT);
+    // 偶发的渲染异常（相册页的虚拟列表爆栈）重试一次再判。
+    if (await page.evaluate(ROUTE_ERROR)) {
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await waitForStable(page);
+      items = await page.evaluate(AUDIT);
+    }
     const overImage = items.filter((i) => i.onImage);
     const icons = await page.evaluate(ICONS);
 
@@ -830,11 +863,14 @@ for (const theme of THEMES) {
       }
     }
 
+    const routeError = await page.evaluate(ROUTE_ERROR);
+    if (routeError) routeErrors.push({ theme, route });
     coverage.push({
       theme,
       route,
       count: items.length,
       overImage: overImage.length,
+      routeError,
     });
     for (const item of items) {
       if (item.onImage) continue;
@@ -903,6 +939,17 @@ if (worstPixels.length) {
   console.log();
 }
 
+if (routeErrors.length === 0) {
+  console.log("✓ 页面加载：所有路由都正常渲染。");
+} else {
+  console.log(
+    `✗ 页面加载失败：${routeErrors.length} 处（重试后仍掉进错误边界）`,
+  );
+  for (const e of routeErrors) {
+    console.log(`  · ${e.theme} ${e.route}`);
+  }
+}
+console.log("");
 // 图标通道：WCAG 1.4.11（非文本内容）阈值 3:1。
 const badIcons = uniq(iconViolations);
 if (badIcons.length === 0)
@@ -970,6 +1017,10 @@ if (SELF_TEST_ONLY) {
   );
   console.log();
   process.exit(ok ? 0 : 1);
+}
+if (routeErrors.length > 0) {
+  console.error("\n存在加载失败的页面。");
+  process.exit(1);
 }
 
 process.exit(bad.length || badPixels.length || badIcons.length ? 1 : 0);
