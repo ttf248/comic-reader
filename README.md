@@ -88,7 +88,7 @@ pwsh -File scripts/install-ffmpeg.ps1
 
 首次跑 E2E 需在 `frontend/` 执行 `npx playwright install chromium`。E2E 自动选择端口、生成媒体与构建产物，结束清理临时服务，不读取个人媒体库。业务改动按协作规则同步相应测试；纯文档改动检查链接、引用与格式。
 
-布局/对比度审计、截图和相册崩溃探针统一见 [界面验证方法](./docs/DESIGN.md#验证方法)；性能基准只在显式优化任务运行，方法见架构文档。
+前端重设计可调整现有布局、组件与视觉 token，设计权限、质量要求及审计/截图/崩溃探针统一见 [设计文档](./docs/DESIGN.md)；现有尺寸、列数和布局测试随方案演进。性能基准只在显式优化任务运行，方法见架构文档。
 
 ## 项目结构与文档
 
@@ -106,7 +106,7 @@ scripts/              开发、构建、E2E、ffmpeg 安装与手动发布工具
 .github/workflows/    仅手动触发的 CI 与 Release
 ```
 
-后续 AI 默认只需阅读 `AGENTS.md` 与本页，再按任务选读下表；无需逐份加载。依赖版本看 `backend/go.mod` 与 `frontend/package.json`，配置字段看 YAML 样例，具体行为与测试以当前代码为准。
+后续 AI 默认只需阅读 `AGENTS.md` 与本页，再按任务选读下表；无需逐份加载。依赖版本看 `backend/go.mod` 与 `frontend/package.json`，配置字段看 YAML 样例。代码与测试用于确认当前行为，现有视觉方案可以按设计目标重做。
 
 | 文档                                           | 何时阅读                                             |
 | ---------------------------------------------- | ---------------------------------------------------- |
@@ -114,7 +114,7 @@ scripts/              开发、构建、E2E、ffmpeg 安装与手动发布工具
 | [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | 定位模块，修改扫描、资源索引、媒体管线、状态或持久化 |
 | [docs/API.md](./docs/API.md)                   | 修改或对接 HTTP/SSE 契约、字段和错误码               |
 | [docs/SHORTCUTS.md](./docs/SHORTCUTS.md)       | 修改快捷键、菜单、弹窗和输入控件的键盘行为           |
-| [docs/DESIGN.md](./docs/DESIGN.md)             | 修改界面：当前规范、审计方法与未完成事项             |
+| [docs/DESIGN.md](./docs/DESIGN.md)             | 修改界面：设计自主权、质量要求、验证与未完成事项     |
 | [docs/RELEASE.md](./docs/RELEASE.md)           | 构建、推送、手动验证与正式发布                       |
 | [docs/release-notes/](./docs/release-notes/)   | 查询对应版本的发布/迁移记录；不作为当前规则或待办    |
 
