@@ -44,6 +44,14 @@ interface Props {
 // 222px）就会截断，所以阈值留在 1280。
 const ULTRA_WIDE_QUERY = "(min-width: 1280px)";
 
+// 超宽屏（≥1600px）列表改三列：两列时每列仍有 700 多，标题与计数之间
+// 还是隔着 480px，比 1440 档还远。
+//
+// 同样按内容宽度推：三列要每列都不小于 ~400px（缩略图 56 + 标题 200 +
+// 计数 50 + 箭头 30 + 行内留白），也就是内容宽 ≥ 3×400 + 2×40 = 1280
+// → 视口 ≥ 1600。1600 档每列 410，1920 档每列 480。
+const VERY_WIDE_QUERY = "(min-width: 1600px)";
+
 const VirtualList = forwardRef<HTMLDivElement, ListProps>(function VirtualList(
   { children, style },
   ref,
@@ -98,6 +106,7 @@ export default function AlbumGrid({
   const mode = variant ?? viewMode;
   // 列表视图在超宽屏切成双列。
   const ultraWide = useMediaQuery(ULTRA_WIDE_QUERY);
+  const veryWide = useMediaQuery(VERY_WIDE_QUERY);
 
   const { favorites } = useFavorites();
 
@@ -114,14 +123,14 @@ export default function AlbumGrid({
   // 虚拟滚动的行高计算才不会出错。
   const listRows = useMemo(() => {
     if (mode !== "list") return [];
-    const columns = ultraWide ? 2 : 1;
+    const columns = veryWide ? 3 : ultraWide ? 2 : 1;
     if (columns === 1) return items.map((item) => [item]);
     const rows: CardData[][] = [];
     for (let i = 0; i < items.length; i += columns) {
       rows.push(items.slice(i, i + columns));
     }
     return rows;
-  }, [items, mode, ultraWide]);
+  }, [items, mode, ultraWide, veryWide]);
 
   if (items.length === 0) return <>{empty}</>;
 
@@ -154,7 +163,13 @@ export default function AlbumGrid({
           increaseViewportBy={{ top: 720, bottom: 1080 }}
           itemContent={(_index, row) => (
             <div
-              className={`grid gap-x-10 ${ultraWide ? "grid-cols-2" : "grid-cols-1"}`}
+              className={`grid gap-x-10 ${
+                veryWide
+                  ? "grid-cols-3"
+                  : ultraWide
+                    ? "grid-cols-2"
+                    : "grid-cols-1"
+              }`}
             >
               {row.map((card) => (
                 <Fragment key={card.id}>{renderCard(card)}</Fragment>

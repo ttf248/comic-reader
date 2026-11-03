@@ -4751,7 +4751,7 @@ for (const width of [1920, 1440, 1024, 768, 390]) {
   });
 }
 
-test("列表视图在内容宽度足够时切成双列，窄屏仍是单列", async ({ page }) => {
+test("列表视图按内容宽度切双列 / 三列，窄屏仍是单列", async ({ page }) => {
   await page.goto("/unread");
   await page
     .getByRole("button", { name: "列表视图", exact: true })
@@ -4776,15 +4776,16 @@ test("列表视图在内容宽度足够时切成双列，窄屏仍是单列", as
   expect(Math.abs(boxes[1]!.y - boxes[0]!.y)).toBeLessThan(4);
   expect(boxes[1]!.x).toBeGreaterThan(boxes[0]!.x + 100);
 
-  // 1920（超宽）：仍然是双列。
+  // 1920（超宽）：改三列 —— 两列时每列 730px，标题与计数仍隔 484px。
   await page.setViewportSize({ width: 1920, height: 900 });
   await page.waitForTimeout(500);
   boxes = [];
-  for (let i = 0; i < 2; i++) boxes.push(await cards.nth(i).boundingBox());
+  for (let i = 0; i < 3; i++) boxes.push(await cards.nth(i).boundingBox());
   expect(Math.abs(boxes[1]!.y - boxes[0]!.y)).toBeLessThan(4);
-  expect(boxes[1]!.x).toBeGreaterThan(boxes[0]!.x + 100);
+  expect(Math.abs(boxes[2]!.y - boxes[0]!.y)).toBeLessThan(4);
+  expect(boxes[2]!.x).toBeGreaterThan(boxes[1]!.x + 100);
 
-  // 两列下仍然能点开相册（列表项仍是可点的链接）。
+  // 多列下仍然能点开相册（列表项仍是可点的链接）。
   await cards.first().click();
   await expect(page).toHaveURL(/\/albums\//);
 });
