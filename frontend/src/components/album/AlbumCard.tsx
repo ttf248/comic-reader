@@ -95,6 +95,14 @@ interface Props {
    * 不同场景用不同比例是有意为之：货架负责"展示"，网格负责"扫描"。
    */
   coverRatio?: CoverRatio;
+  /**
+   * 收藏星标常驻显示。
+   *
+   * 默认桌面端要 hover 才露出星标（界面退到背景）。但收藏页空态的
+   * "从这里挑一个收藏"必须让星标一眼可见 —— 那条文案就是在教用户
+   * 点星标，指着一个 hover 才出现的东西等于没说。
+   */
+  alwaysShowFavorite?: boolean;
 }
 
 export type CoverRatio = "4/5" | "2/3" | "16/9";
@@ -120,6 +128,7 @@ export default function AlbumCard({
   overlayAction,
   showUnreadBadge = true,
   coverRatio = "4/5",
+  alwaysShowFavorite = false,
 }: Props) {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [propertiesId, setPropertiesId] = useState<string | null>(null);
@@ -170,6 +179,7 @@ export default function AlbumCard({
           overlayAction={overlayAction}
           showUnreadBadge={showUnreadBadge}
           coverRatio={coverRatio}
+          alwaysShowFavorite={alwaysShowFavorite}
         />
       )}
       {menu && (
@@ -220,6 +230,7 @@ function GridCard({
   overlayAction,
   showUnreadBadge,
   coverRatio,
+  alwaysShowFavorite,
 }: {
   data: CardData;
   showLastSeen?: boolean;
@@ -227,6 +238,7 @@ function GridCard({
   overlayAction?: ReactNode;
   showUnreadBadge: boolean;
   coverRatio: CoverRatio;
+  alwaysShowFavorite: boolean;
 }) {
   // 直接渲染 <img loading="lazy">：浏览器原生懒加载比我们自写的 IO 简单且更可靠
   // （自写 IO 在 React 18 StrictMode dev mount-twice + 卡片树整体重渲染时容易
@@ -438,6 +450,7 @@ function GridCard({
           fav={Boolean(data.isFavorite)}
           label={data.displayTitle ?? data.title}
           onToggle={onToggleFavorite}
+          alwaysVisible={alwaysShowFavorite}
         />
       </div>
 
@@ -491,6 +504,10 @@ function ListCard({
     // 卡片底部的分隔线会错位，看起来像两张卡片没对齐。
     // 行底加分隔线：整行铺满内容宽度时，没有分隔线的话标题与右侧数字之间
     // 会变成一大片空白，分隔线把它读成一张表。
+    //
+    // 字号：标题 14px，其余（类型 / 副标题 / 计数 / 进度）统一 13px ——
+    // 与网格卡同一套层级。旧版列表用 12.5px，比网格卡低一档，两种视图
+    // 放在一起看会像两套产品。
     <div className="relative group flex items-center border-b border-border-faint h-[86px]">
       <Link
         to={data.to}
@@ -520,7 +537,7 @@ function ListCard({
             </span>
             {unread && (
               <span
-                className="inline-flex items-center gap-1 text-[12.5px] font-medium text-fg-muted shrink-0"
+                className="inline-flex items-center gap-1 text-[13px] font-medium text-fg-muted shrink-0"
                 title="未读"
               >
                 <span
@@ -531,13 +548,13 @@ function ListCard({
               </span>
             )}
             {isFinished && data.variant === "album" && (
-              <span className="inline-flex items-center gap-0.5 text-[12.5px] font-medium text-fg-muted shrink-0">
+              <span className="inline-flex items-center gap-0.5 text-[13px] font-medium text-fg-muted shrink-0">
                 <CheckIcon size={11} className="text-success" />
                 <span>已读</span>
               </span>
             )}
           </div>
-          <div className="text-[12.5px] text-fg-subtle mt-1 flex items-center gap-2">
+          <div className="text-[13px] text-fg-subtle mt-1 flex items-center gap-2">
             <TypeChip variant={data.variant} />
             {data.subtitle && <span className="truncate">{data.subtitle}</span>}
             {data.sourceName && multiRoot && (
@@ -555,7 +572,7 @@ function ListCard({
                   style={{ width: `${progressPct}%` }}
                 />
               </div>
-              <span className="text-[12.5px] text-fg-subtle tabular-nums shrink-0">
+              <span className="text-[13px] text-fg-subtle tabular-nums shrink-0">
                 {data.progress!.index + 1} / {data.progress!.total}
               </span>
             </div>
@@ -564,7 +581,7 @@ function ListCard({
 
         {/* 右侧信息列：张数 / 最近查看固定右对齐，逐行对齐便于扫读。 */}
         <div className="shrink-0 w-24 sm:w-32 text-right flex flex-col items-end gap-1">
-          <span className="text-[12.5px] text-fg-muted tabular-nums">
+          <span className="text-[13px] text-fg-muted tabular-nums">
             {(() => {
               const media = formatMediaCount(data);
               if (media) {
@@ -585,7 +602,7 @@ function ListCard({
             })()}
           </span>
           {showLastSeen && data.lastSeenAt && (
-            <span className="text-[12.5px] text-fg-subtle inline-flex items-center gap-1">
+            <span className="text-[13px] text-fg-subtle inline-flex items-center gap-1">
               <ClockIcon size={11} className="shrink-0 text-fg-subtle" />
               <span>上次 {timeAgo(data.lastSeenAt)}</span>
             </span>
@@ -684,15 +701,18 @@ function FavoriteStar({
   label,
   onToggle,
   className = "",
+  alwaysVisible = false,
 }: {
   fav: boolean;
   label: string;
   onToggle: () => void;
   className?: string;
+  alwaysVisible?: boolean;
 }) {
-  const visibility = fav
-    ? "opacity-100"
-    : "opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100";
+  const visibility =
+    fav || alwaysVisible
+      ? "opacity-100"
+      : "opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100";
   return (
     <button
       type="button"
