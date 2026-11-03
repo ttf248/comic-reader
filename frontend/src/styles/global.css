@@ -2,6 +2,75 @@
 @tailwind components;
 @tailwind utilities;
 
+/* === 舞台主封面的尺寸（版式度量，不是主题 token） ===
+ *
+ * 首页「继续阅读」舞台 = 主封面（2:3）+ 墙签标题 + 进度 + 主操作。
+ *
+ * 为什么按视口高度收缩：1440×900 这类常见笔记本高度上，320×480 的主封面
+ * 加上墙签与操作一共 670px，超过主区可用高度 —— 主操作「继续阅读」被
+ * 滚动容器裁掉（实测 CTA 底边超出主区下沿，箭头图标整个不可见）。
+ * 舞台必须整体落在首屏里，所以封面随视口高度一起缩。
+ *
+ * 高度写成连续函数而不是分档：分档会在断点附近出现"差 1px 就放不下"
+ * 的临界翻转（1440×900 实测正好超出 1px）。可用高度 = 视口高 − 440，
+ * 封面上限按断点取 480（xl）/ 528（2xl），下限 240。
+ *
+ * 只收缩封面，不动两栏的比例：右栏「其余在读」的网格宽度由剩余空间决定，
+ * 左栏一变窄，右栏的封面就会变大，主角与次级的比例会被稀释
+ * （1.68 → 1.28）。左栏宽度固定，只让封面在栏内收窄。
+ */
+:root {
+  --stage-cover-max: 480px;
+  --stage-cover-h: clamp(240px, calc(100dvh - 440px), var(--stage-cover-max));
+  --stage-cover-w: calc(var(--stage-cover-h) * 2 / 3);
+}
+/* 超宽屏：封面更大（与 2xl 的历史尺寸一致） */
+@media (min-width: 1536px) {
+  :root {
+    --stage-cover-max: 528px;
+  }
+}
+
+/* === 舞台右栏「其余在读」的封面网格 ===
+ *
+ * 列数写死，不用 auto-fill：auto-fill 在 1280~1800 之间会切出忽大忽小的
+ * 列宽（150px ↔ 246px）。
+ *
+ * 短屏时改成 5 列：主封面按可用高度收缩后，右栏若还是 4 列，次级封面
+ * 就会相对变大，主角与次级的比例被稀释（1.24:1，实测 1366×768）。
+ * 5 列配 10 条（正好两行，不留半行）。
+ */
+.stage-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (min-width: 640px) {
+  .stage-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (min-width: 768px) {
+  .stage-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1800px) {
+  .stage-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+@media (min-width: 1280px) and (max-width: 1799px) and (max-height: 880px) {
+  .stage-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+  /* 先解除常规档的 8 条上限，再限到 10 条（5 列 × 2 行）。 */
+  .stage-grid > *:nth-child(n+9) {
+    display: block;
+  }
+  .stage-grid > *:nth-child(n+11) {
+    display: none;
+  }
+}
+
 /* === 全局基线 === */
 html,
 body,

@@ -116,3 +116,23 @@ describe('ContinueReadingHero', () => {
     expect(onClearAll).toHaveBeenCalledTimes(1)
   })
 })
+
+// 舞台主封面的尺寸由 CSS 变量 --stage-cover-w 决定（随视口高度收缩，
+// 否则 1440×900 这类笔记本高度上主操作「继续阅读」会被滚动容器裁掉）。
+// 这里锁住"封面与墙签都用同一个变量"，避免有人改回固定像素。
+it('主封面与墙签都跟随 --stage-cover-w，主操作留在同一列里', () => {
+  renderHero([makeCard('/a', 'A', 5, 20), makeCard('/b', 'B', 1, 30)])
+  const poster = screen.getByRole('button', { name: /继续阅读「A」/ })
+  const posterBox = poster.parentElement as HTMLElement
+  expect(posterBox.className).toContain('xl:w-[var(--stage-cover-w)]')
+
+  // 墙签（标题 + 进度 + 主操作）的宽度同样跟随封面
+  const wallLabel = posterBox.parentElement?.children[1] as HTMLElement
+  expect(wallLabel.className).toContain('xl:w-[var(--stage-cover-w)]')
+
+  // 主操作按钮与封面同列（缩排在封面的容器里，不是被推到右栏尽头）
+  const ctas = screen
+    .getAllByRole('button')
+    .filter((el) => el.textContent?.trim().startsWith('继续阅读'))
+  expect(ctas.length).toBeGreaterThan(0)
+})

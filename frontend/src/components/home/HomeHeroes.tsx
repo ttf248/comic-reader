@@ -54,9 +54,11 @@ const GRID_HIDE_SM =
  * 在 1280~1800 之间被 auto-fill 切出的列宽会忽大忽小（150px ↔ 246px），
  * 写死列数后每档的封面宽度虽然也不完全单调，但变化都在 ±30% 以内，
  * 不会在同一屏里出现"忽大忽小"的墙。
+ *
+ * 列数本身写在 global.css 的 .stage-grid 里（那里还有一条"短屏改 5 列"
+ * 的高度联动规则），Tailwind 的 grid-cols-* 工具类不再用于这个网格。
  */
-const GRID_COLS =
-  "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-4 min-[1800px]:grid-cols-6";
+const GRID_COLS = "stage-grid";
 
 /**
  * 「未读」货架的宽度：条目少时撑开把整行铺满，条目多时保持最小宽度并横向滚动。
@@ -227,15 +229,15 @@ export function ContinueReadingHero({
             <div
               className={`flex flex-wrap gap-4 items-end ${
                 hasRight
-                  ? "xl:flex-col xl:items-stretch xl:gap-4"
+                  ? "xl:flex-col xl:items-stretch xl:gap-3"
                   : "xl:flex-row xl:items-start xl:gap-8"
               }`}
             >
               <div
                 className={`shrink-0 ${
                   hasRight
-                    ? "w-[112px] md:w-[200px] xl:w-full"
-                    : "w-[112px] md:w-[200px] xl:w-[320px]"
+                    ? "w-[112px] md:w-[200px] xl:w-[var(--stage-cover-w)]"
+                    : "w-[112px] md:w-[200px] xl:w-[var(--stage-cover-w)]"
                 }`}
               >
                 <StagePoster
@@ -243,20 +245,22 @@ export function ContinueReadingHero({
                   onClick={() => onContinue(featured)}
                 />
               </div>
-              {/* 墙签：标题贴在封面下方，像展厅里的作品说明 */}
+              {/* 墙签：标题贴在封面下方，像展厅里的作品说明。
+                  宽度跟随封面（不是整栏）：短屏收窄封面时，标题与进度条
+                  仍与封面左右对齐。 */}
               <div
                 className={
                   hasRight
-                    ? "w-full md:w-auto md:flex-1 min-w-0 xl:flex-none xl:w-full"
+                    ? "w-full md:w-auto md:flex-1 min-w-0 xl:flex-none xl:w-[var(--stage-cover-w)]"
                     : "w-full md:w-auto md:flex-1 min-w-0 xl:flex-1"
                 }
               >
                 <h3
-                  className={`hero-title line-clamp-2 ${hasRight ? "xl:mt-4" : ""}`}
+                  className={`hero-title line-clamp-2 ${hasRight ? "xl:mt-3" : ""}`}
                 >
                   {featured.title}
                 </h3>
-                <div className={`mt-3 ${hasRight ? "xl:mt-6" : "xl:mt-4"}`}>
+                <div className={`mt-3 ${hasRight ? "xl:mt-5" : "xl:mt-4"}`}>
                   <StageInfo
                     card={featured}
                     onContinue={() => onContinue(featured)}
@@ -419,7 +423,7 @@ function StageInfo({
         />
       </div>
 
-      <div className="mt-5 flex items-center gap-2.5 flex-wrap">
+      <div className="mt-4 flex items-center gap-2.5 flex-wrap">
         <button type="button" onClick={onContinue} className="btn btn-primary">
           继续阅读
           <ArrowRightLineIcon size={12} />

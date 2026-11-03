@@ -348,7 +348,7 @@ export default function Home() {
       {/* ScanProgress 已提升到 AppShell，跨路由常驻显示 */}
 
       {/* === 页头：标题 + 库统计 + 次级入口 === */}
-      <section className="page-shell pt-9 pb-6">
+      <section className="page-shell pt-6 pb-5">
         <div className="flex items-end justify-between gap-6 flex-wrap">
           <div className="min-w-0">
             <h1 className="page-title page-title--compact">图像库</h1>

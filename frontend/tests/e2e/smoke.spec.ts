@@ -518,6 +518,39 @@ for (const kind of ["images", "mixed", "videos"] as const) {
   });
 }
 
+// 首页主操作必须落在首屏里：舞台（封面 + 墙签 + 进度 + 主操作）比主区
+// 可用高度高时，"继续阅读"按钮会被滚动容器裁掉（1440×900 实测超出 33px，
+// 按钮只剩 3px、箭头图标整个不可见）。舞台按视口高度收缩，这条用例守住它。
+test("首页「继续阅读」主操作不被主区裁掉", async ({ page }) => {
+  const nodes = await scannedNodes(page.request);
+  const album = nodes.find((node) => (node.imageCount ?? 0) > 0) ?? nodes[0];
+  expect(album).toBeDefined();
+  // 进阅读器再离开，产生阅读进度，首页才有「继续阅读」舞台。
+  await page.goto(`/gallery?path=${encodeURIComponent(album!.id)}&index=0`);
+  await page.waitForTimeout(1500);
+
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 1366, height: 768 },
+    { width: 1920, height: 1080 },
+  ]) {
+    await page.setViewportSize(viewport);
+    await page.goto("/");
+    const cta = page
+      .getByRole("button", { name: "继续阅读", exact: true })
+      .first();
+    await expect(cta).toBeVisible({ timeout: 20_000 });
+    const ctaBox = await cta.boundingBox();
+    const mainBox = await page.locator("main").boundingBox();
+    expect(ctaBox, "主操作按钮应该拿得到位置").not.toBeNull();
+    expect(mainBox, "主区应该拿得到位置").not.toBeNull();
+    expect(
+      ctaBox!.y + ctaBox!.height,
+      `${viewport.width}×${viewport.height} 下主操作被主区裁掉了`,
+    ).toBeLessThanOrEqual(mainBox!.y + mainBox!.height + 1);
+  }
+});
+
 test("浏览器抽帧上传后封面可通过原资源 URL 显示", async ({ page }) => {
   const nodes = await scannedNodes(page.request);
   const album = nodes.find((node) => node.name === "sample-video-cover");
