@@ -22,8 +22,9 @@ import { chromium } from "@playwright/test";
 const BASE = process.env.LG_BASE ?? "http://127.0.0.1:5173";
 const THEMES = (process.env.LG_THEMES ?? "light,dark").split(",").filter(Boolean);
 // 页面清单里可以写伪路由：
-//   album —— 相册详情页（id 每次运行不同，从仪表盘现取一本图多的相册）
-const PAGES = (process.env.LG_PAGES ?? "/,/recents,/favorites,/unread,/settings,album")
+//   album  —— 相册详情页（id 每次运行不同，从仪表盘现取一本图多的相册）
+//   reader —— 阅读器（沉浸场景：顶栏 + 画面 + 浮动工具条 + 底部翻页条）
+const PAGES = (process.env.LG_PAGES ?? "/,/recents,/favorites,/unread,/settings,album,reader")
   .split(",")
   .map((p) => p.trim())
   .filter(Boolean);
@@ -172,6 +173,48 @@ async function resolveAlbumRoute(page) {
   return id ? `/albums/${encodeURIComponent(id)}` : null;
 }
 
+// 进入阅读器：阅读器是沉浸场景（顶栏 + 画面 + 浮动工具条 + 底部翻页条），
+// 它的控件尺寸与字号自成一套，从没被布局审计量过。
+//
+// 取仪表盘里一本图多的**图片**相册（视频相册进的是 /gallery 的视频模式，
+// 版式不同）再点「开始浏览 / 继续上次」进阅读器；
+// 用 domcontentloaded 而不是 networkidle —— 阅读器里有 SSE 与预览图请求，
+// networkidle 会一直等不到。
+async function openReader(page) {
+  const albumId = await page.evaluate(async () => {
+    const r = await fetch("/api/library/dashboard");
+    if (!r.ok) return null;
+    const j = await r.json();
+    const all = [
+      ...(j.dashboard?.unread ?? []),
+      ...(j.dashboard?.inProgress ?? []).map((p) => p.album),
+    ];
+    const hit =
+      all.find((a) => (a.imageCount ?? 0) > 3 && !(a.videoCount > 0)) ??
+      all.find((a) => !(a.videoCount > 0));
+    return hit?.id ?? null;
+  });
+  if (!albumId) return false;
+  await page.goto(`${BASE}/albums/${encodeURIComponent(albumId)}`, {
+    waitUntil: "domcontentloaded",
+    timeout: 60000,
+  });
+  await page.waitForTimeout(1500);
+  // 图片相册的主操作是「开始浏览」；读过一点的相册是「继续上次」。
+  const start = page
+    .getByRole("button", { name: /开始浏览|继续上次/ })
+    .first();
+  if ((await start.count()) > 0) await start.click();
+  // 等路由真的切到阅读器，再等画面与工具条渲染完。
+  const opened = await page
+    .waitForURL(/\/gallery/, { timeout: 15000 })
+    .then(() => true)
+    .catch(() => false);
+  if (!opened) return false;
+  await page.waitForTimeout(1500);
+  return true;
+}
+
 async function main() {
   const browser = await chromium.launch();
   const report = [];
@@ -190,30 +233,37 @@ async function main() {
       await setTheme(page, theme);
 
       for (const route of PAGES) {
-        // 伪路由 album：相册详情页的 id 运行时现取。
-        const target =
-          route === "album" ? await resolveAlbumRoute(page) : route;
-        if (!target) {
-          console.log(`  · 跳过 ${theme} ${route}：库里没有可打开的相册`);
-          continue;
+        if (route === "reader") {
+          if (!(await openReader(page))) {
+            console.log(`  · 跳过 ${theme} reader：库里没有可打开的相册`);
+            continue;
+          }
+        } else {
+          // 伪路由 album：相册详情页的 id 运行时现取。
+          const target =
+            route === "album" ? await resolveAlbumRoute(page) : route;
+          if (!target) {
+            console.log(`  · 跳过 ${theme} ${route}：库里没有可打开的相册`);
+            continue;
+          }
+          // 不用 networkidle：页面含 SSE 长连接，且 /api/previews 首次生成
+          // 预览图可能耗时数秒，networkidle 会一直等不到而超时。
+          await page.goto(BASE + target, {
+            waitUntil: "domcontentloaded",
+            timeout: 60000,
+          });
+          await page
+            .waitForFunction(
+              () =>
+                Array.from(document.images).every(
+                  (img) => !img.complete || img.naturalWidth > 0,
+                ),
+              undefined,
+              { timeout: 20000 },
+            )
+            .catch(() => {});
+          await page.waitForTimeout(900);
         }
-        // 不用 networkidle：页面含 SSE 长连接，且 /api/previews 首次生成
-        // 预览图可能耗时数秒，networkidle 会一直等不到而超时。
-        await page.goto(BASE + target, {
-          waitUntil: "domcontentloaded",
-          timeout: 60000,
-        });
-        await page
-          .waitForFunction(
-            () =>
-              Array.from(document.images).every(
-                (img) => !img.complete || img.naturalWidth > 0,
-              ),
-            undefined,
-            { timeout: 20000 },
-          )
-          .catch(() => {});
-        await page.waitForTimeout(900);
         const m = await page.evaluate(MEASURE, { minFontPx: MIN_FONT_PX, minControlPx: MIN_CONTROL_PX });
         report.push({ theme, route, vp: `${viewport.width}x${viewport.height}`, ...m });
         if (m.overflowPx > 0) failed = true;
