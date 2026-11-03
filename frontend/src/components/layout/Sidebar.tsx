@@ -108,25 +108,19 @@ export default function Sidebar({
   // 这样在六套强调色下都能保持稳定对比度 —— 选中文字直接用强调色时，
   // 浅色背景 + 靛蓝/琥珀这类中明度强调色的对比度并不总是够。
   const navItemClass = (isActive: boolean) =>
-    `group relative flex items-center gap-2.5 h-9 rounded-md text-[13.5px] transition-colors ${
-      collapsed ? "justify-center px-0" : "px-2.5"
-    } ${
-      isActive
-        ? "bg-accent-soft text-fg font-medium"
-        : "text-fg-muted hover:bg-bg-subtle hover:text-fg"
-    }`;
+    `nav-entry group ${collapsed ? "nav-entry--compact" : ""} ${isActive ? "is-active" : ""}`;
 
   return (
     <aside
       aria-label="主导航"
-      className={`flex flex-col bg-bg-elevated/80 backdrop-blur-xl border-r border-border-faint transition-[width] duration-200 ease-out ${
+      className={`app-sidebar flex flex-col shrink-0 transition-[width] duration-200 ease-out ${
         mobileOpen
-          ? "fixed inset-y-0 left-0 z-50 w-[208px]"
-          : `hidden lg:flex lg:static ${collapsed ? "w-[60px]" : "w-[208px]"}`
+          ? "fixed inset-y-0 left-0 z-50 w-[236px]"
+          : `hidden lg:flex lg:static ${collapsed ? "w-[72px]" : "w-[236px]"}`
       }`}
     >
       <div
-        className={`h-14 relative flex items-center px-3 ${
+        className={`sidebar-brand relative flex items-center ${
           collapsed ? "justify-center" : "justify-between"
         }`}
       >
@@ -134,8 +128,11 @@ export default function Sidebar({
           !collapsed ? (
             <div className="flex items-center gap-2.5 min-w-0">
               <Logo />
-              <div className="leading-none min-w-0 font-display font-semibold tracking-tight text-[13.5px] truncate">
+              <div className="leading-none min-w-0 font-display font-semibold text-[17px] truncate">
                 Local Gallery
+                <span className="block font-sans text-[12.5px] font-normal text-rail-muted mt-2">
+                  本地影像档案
+                </span>
               </div>
             </div>
           ) : null /* 折叠态下隐藏 logo,把整行让给展开按钮 */
@@ -152,7 +149,7 @@ export default function Sidebar({
           className={
             collapsed
               ? "group/toggle relative z-10 inline-flex items-center gap-1 h-7 pl-2 pr-2.5 rounded-full bg-accent text-accent-contrast shadow-md ring-1 ring-accent/40 hover:ring-2 hover:ring-accent/70 hover:scale-105 active:scale-95 transition-all"
-              : "shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-md text-fg-subtle hover:text-fg hover:bg-bg-subtle transition-colors"
+              : "shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-md text-rail-muted hover:text-rail-fg hover:bg-rail-hover transition-colors"
           }
         >
           {collapsed ? (
@@ -171,7 +168,7 @@ export default function Sidebar({
         </button>
       </div>
 
-      <nav ref={navRef} className="py-2 px-2 space-y-0.5">
+      <nav ref={navRef} className="pt-6 pb-3 px-4 space-y-1.5">
         {items.map((it) => (
           <NavLink
             key={it.to}
@@ -183,7 +180,7 @@ export default function Sidebar({
               <>
                 <it.Icon
                   size={16}
-                  className={`shrink-0 ${isActive ? "text-accent" : ""}`}
+                  className={`shrink-0 ${isActive ? "opacity-100" : ""}`}
                 />
                 {!collapsed && <span className="truncate">{it.label}</span>}
               </>
@@ -205,7 +202,7 @@ export default function Sidebar({
               <span className="truncate flex-1">未读</span>
               {unreadCount > 0 && (
                 <span
-                  className="inline-flex items-center justify-center min-w-[22px] h-[20px] px-1.5 rounded-full bg-accent-soft text-accent text-[12.5px] font-semibold tabular-nums"
+                  className="inline-flex items-center justify-center min-w-[22px] h-[20px] px-1.5 rounded-full bg-rail-hover text-rail-fg text-[12.5px] font-semibold tabular-nums"
                   aria-label={`还有 ${unreadCount} 本未读`}
                 >
                   {unreadCount > 999 ? "999+" : unreadCount}
@@ -225,10 +222,10 @@ export default function Sidebar({
       {/* 「继续阅读」区：紧跟导航，填掉侧栏中段的空白。
           上面是"正在读的那本"，下面是"接下来几本"。 */}
       {!collapsed && continueCard && (
-        <div className="px-2 pt-1 pb-2">
+        <div className="px-4 pt-5 pb-2 min-h-0 overflow-y-auto">
           <div className="px-1 pb-2 flex items-baseline gap-2">
-            <span className="text-[12.5px] text-fg-subtle">继续阅读</span>
-            <span className="text-[12.5px] text-fg-subtle tabular-nums">
+            <span className="text-[12.5px] text-rail-muted">继续阅读</span>
+            <span className="text-[12.5px] text-rail-muted tabular-nums">
               {inProgress.length} 本
             </span>
           </div>
@@ -250,7 +247,7 @@ export default function Sidebar({
             />
           ))}
           {continueRestCount > 0 && (
-            <div className="px-2 pt-1.5 text-[12.5px] text-fg-subtle tabular-nums">
+            <div className="px-2 pt-1.5 text-[12.5px] text-rail-muted tabular-nums">
               还有 {continueRestCount} 本没看完
             </div>
           )}
@@ -259,11 +256,11 @@ export default function Sidebar({
 
       {/* 弹性留白：把次级入口压到侧栏底部，侧栏中段即使没有内容
           也是"底部对齐"的布局，而不是内容浮在中间。 */}
-      <div className="flex-1 min-h-4" />
+      <div className="flex-1 min-h-8" />
 
       {/* 次级入口 + 随机：沉到底部一组，与主导航之间用一条细分隔线断开 */}
-      <div className="px-2 pb-3">
-        <div className="h-px bg-border-faint mb-2" />
+      <div className="px-4 pb-3">
+        <div className="h-px bg-rail-line mb-2" />
         {secondaryItems.map((it) => (
           <NavLink
             key={it.to}
@@ -275,7 +272,7 @@ export default function Sidebar({
               <>
                 <it.Icon
                   size={16}
-                  className={`shrink-0 ${isActive ? "text-accent" : ""}`}
+                  className={`shrink-0 ${isActive ? "opacity-100" : ""}`}
                 />
                 {!collapsed && <span className="truncate">{it.label}</span>}
               </>
@@ -288,7 +285,7 @@ export default function Sidebar({
           title="随机一本 (R)"
           className={`w-full flex items-center gap-2.5 h-9 rounded-md text-[13.5px] transition-colors ${
             collapsed ? "justify-center px-0" : "px-2.5"
-          } text-fg-muted hover:bg-bg-subtle hover:text-accent disabled:opacity-50`}
+          } text-rail-muted hover:bg-rail-hover hover:text-rail-fg disabled:opacity-50`}
         >
           <ShuffleIcon size={16} className="shrink-0" />
           {!collapsed && <span className="truncate">随机一本</span>}
@@ -300,7 +297,7 @@ export default function Sidebar({
 
       {!collapsed && (
         <div className="px-4 pb-3.5">
-          <div className="flex items-center gap-2 text-[12.5px] text-fg-subtle">
+          <div className="flex items-center gap-2 text-[12.5px] text-rail-muted">
             <span
               className={`inline-block w-1.5 h-1.5 rounded-full ${
                 location.pathname.startsWith("/gallery")
@@ -322,11 +319,7 @@ export default function Sidebar({
 function Logo() {
   // 字母直接放在底板上（不再用一层绝对定位的兄弟节点盖上去）：
   // 兄弟节点的方式会让对比度检查工具读不到深色底板，把白字判成白底白字。
-  return (
-    <div className="relative w-7 h-7 shrink-0 rounded-lg bg-accent flex items-center justify-center text-accent-contrast font-display font-semibold text-[13px] tracking-tighter">
-      L
-    </div>
-  );
+  return <div className="brand-mark">L</div>;
 }
 
 // 紧凑行：侧栏「继续阅读」区里其余在读书目的单行形态。
@@ -349,9 +342,9 @@ function ContinueRow({
       type="button"
       onClick={onOpen}
       title={`继续阅读「${title}」`}
-      className="w-full mt-1 rounded-md px-1 py-1 flex items-center gap-2.5 text-left transition-colors hover:bg-bg-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      className="w-full mt-1 rounded-md px-1 py-1 flex items-center gap-2.5 text-left transition-colors hover:bg-rail-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
     >
-      <span className="relative w-[26px] h-[34px] shrink-0 rounded overflow-hidden bg-bg-strong block">
+      <span className="relative w-[26px] h-[34px] shrink-0 rounded overflow-hidden bg-rail-hover block">
         {coverPath ? (
           <img
             src={thumbUrl(coverPath)}
@@ -369,10 +362,10 @@ function ContinueRow({
         </span>
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-[12.5px] text-fg truncate leading-tight">
+        <span className="block text-[12.5px] text-rail-fg truncate leading-tight">
           {title}
         </span>
-        <span className="block text-[12.5px] text-fg-subtle tabular-nums mt-0.5">
+        <span className="block text-[12.5px] text-rail-muted tabular-nums mt-0.5">
           看到 {index + 1} / {total}
         </span>
       </span>
@@ -403,9 +396,9 @@ function ContinueMiniCard({
       type="button"
       onClick={onOpen}
       title={`继续阅读「${title}」`}
-      className="mt-2 w-full rounded-lg bg-bg-subtle hover:bg-bg-strong/70 p-2 flex gap-2.5 items-center text-left transition-colors group/mini focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      className="mt-2 w-full rounded-lg bg-rail-hover hover:bg-rail-hover p-2 flex gap-2.5 items-center text-left transition-colors group/mini focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
     >
-      <span className="relative w-9 h-12 shrink-0 rounded overflow-hidden bg-bg-strong block">
+      <span className="relative w-9 h-12 shrink-0 rounded overflow-hidden bg-rail-hover block">
         {coverPath ? (
           <img
             src={thumbUrl(coverPath)}
@@ -419,18 +412,18 @@ function ContinueMiniCard({
       <span className="min-w-0 flex-1">
         {/* 标题直接起排：外层分组标题已经写了"继续阅读"，
             这里再写一遍是重复信息。
-            用 --fg-muted 而不是 --fg-subtle：卡片底色是 bg-bg-subtle，
+            用 --fg-muted 而不是 --fg-subtle：卡片底色是 bg-rail-hover，
             fg-subtle 在这个底上只有 4.4:1（AA 要求 4.5:1）。 */}
-        <span className="block text-[13px] font-medium text-fg truncate leading-tight group-hover/mini:text-accent transition-colors">
+        <span className="block text-[13px] font-medium text-rail-fg truncate leading-tight group-hover/mini:text-accent transition-colors">
           {title}
         </span>
-        <span className="mt-1.5 block h-[3px] rounded-full bg-bg-strong overflow-hidden">
+        <span className="mt-1.5 block h-[3px] rounded-full bg-rail-hover overflow-hidden">
           <span
             className="block h-full rounded-full bg-accent"
             style={{ width: `${percent}%` }}
           />
         </span>
-        <span className="mt-1 block text-[12.5px] text-fg-muted tabular-nums">
+        <span className="mt-1 block text-[12.5px] text-rail-muted tabular-nums">
           看到 {index + 1} / {total}
         </span>
       </span>

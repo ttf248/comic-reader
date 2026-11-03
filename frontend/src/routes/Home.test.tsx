@@ -180,18 +180,18 @@ it("筛选条紧贴在「全部图像」网格上方，不被英雄区 / 时间�
   }
 });
 
-it("只有一本在读时未读区进入舞台右栏，右栏不会整栏空掉", async () => {
+it("只有一本在读时阅读区和发现区独立呈现", async () => {
   renderHome();
   await waitFor(() => expect(screen.getByTestId("album-grid")).toBeTruthy());
-  // 默认夹具只有一本在读：未读区被塞进舞台右栏。
+  // 阅读进度与发现推荐是独立区块，避免重复陈列。
   expect(
     screen
       .getByTestId("continue-hero")
       .contains(screen.getByTestId("unread-hero")),
-  ).toBe(true);
+  ).toBe(false);
 });
 
-it("多本在读时未读区仍在舞台右栏 —— 右栏排两段：墙 + 未读", async () => {
+it("多本在读时保留独立发现区且未读预览不重复", async () => {
   mocks.items = [
     ...mocks.items,
     {
@@ -207,15 +207,13 @@ it("多本在读时未读区仍在舞台右栏 —— 右栏排两段：墙 + �
   ];
   renderHome();
   await waitFor(() => expect(screen.getByTestId("album-grid")).toBeTruthy());
-  // 两本在读时右栏已经有「其余在读」的墙，但墙的高度取决于在读数量：
-  // 真实场景里在读的常常只有几本，1920 下墙只排一行，右栏底下会空出
-  // 390px。所以「未读」永远是右栏的第二段，而不是另起一个整宽区块。
+  // 不同在读数量都不改变发现区的归属。
   expect(
     screen
       .getByTestId("continue-hero")
       .contains(screen.getByTestId("unread-hero")),
-  ).toBe(true);
-  // 未读只出现一次：既在右栏里，就不能再在下面重复一个整宽区块。
+  ).toBe(false);
+  // 未读预览始终只出现一次。
   expect(screen.getAllByTestId("unread-hero")).toHaveLength(1);
 });
 

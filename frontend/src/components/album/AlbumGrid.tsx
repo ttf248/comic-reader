@@ -62,7 +62,7 @@ export default function AlbumGrid({
   variant = "grid",
   showLastSeen,
   showUnreadBadge = true,
-  coverRatio = "4/5",
+  coverRatio = "4/3",
   cardMinWidth = 164,
 }: Props) {
   const [menu, setMenu] = useState<{
@@ -98,8 +98,8 @@ export default function AlbumGrid({
      所以两个宽度各写一个字面量类名，在这里二选一。 */
   const gridColsClass =
     cardMinWidth === 224
-      ? "grid-cols-[repeat(auto-fill,minmax(224px,1fr))]"
-      : "grid-cols-[repeat(auto-fill,minmax(164px,1fr))]";
+      ? "library-grid library-grid--spacious"
+      : "library-grid";
 
   // 列表按列数分组：一列时每组一张卡，两列时每组两张并排。
   // 分组后交给 Virtuoso 渲染，行高一致（列表行固定高度），

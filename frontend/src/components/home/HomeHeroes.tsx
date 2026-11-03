@@ -1,9 +1,10 @@
-import { useMemo, type ReactNode } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { thumbUrl } from "../../api/thumbs";
 import { previewUrl } from "../../api/images";
 import { useFavorites } from "../../hooks/useFavorites";
 import { decodeFavPath } from "../../utils/path";
+import { readingPercent } from "../../utils/continueReading";
 import AlbumCard from "../album/AlbumCard";
 import type { CardData } from "../album/AlbumGrid";
 import {
@@ -14,104 +15,82 @@ import {
   ShuffleIcon,
 } from "../common/Icon";
 
-// 当前首页的继续阅读与未读展示组件，布局与视觉比例可随设计目标重做。
-// GRID_ITEMS 是候选上限，实际显示条数由 global.css 的 .stage-grid 裁剪。
-const GRID_ITEMS = 12;
-
-// 当前推荐网格的列数与条数裁剪集中在此 CSS 类，调整布局时同步调用处。
-const GRID_COLS = "stage-grid";
-
-// 当前横向未读货架的卡片宽度范围，可与新的陈列方案一起调整。
-const SHELF_WIDTH = "flex-1 min-w-[148px] max-w-[240px]";
-
 interface UnreadHeroProps {
   cards: CardData[];
   count: number;
   onShuffle: () => void;
   onMarkRead: (card: CardData) => void;
-  /** 当前内嵌模式复用父容器，独立模式自行提供页面留白，避免重复内边距。 */
-  inline?: boolean;
 }
 
-// 当前首页未读预览最多六本，完整内容由未读页提供；展示方式可重新设计。
 export function UnreadHero({
   cards,
   count,
   onShuffle,
   onMarkRead,
-  inline = false,
 }: UnreadHeroProps) {
   const { favorites } = useFavorites();
   const favoriteIds = useMemo(() => new Set(favorites), [favorites]);
-  const visible = cards.slice(0, 6);
-
   return (
     <section
-      className={inline ? "mt-8" : "page-shell pt-2 pb-2"}
+      className="discovery-panel"
       data-testid="unread-hero"
+      aria-labelledby="unread-heading"
     >
-      <div className="flex items-center gap-3 flex-wrap mb-4">
-        <h2 className="section-title">未读</h2>
-        <span className="section-meta">
-          还有 <span className="tabular-nums text-fg font-medium">{count}</span>{" "}
-          本没看
-        </span>
-        <div className="ml-auto flex items-center gap-2">
-          <button onClick={onShuffle} className="btn btn-sm btn-outline">
-            <ShuffleIcon size={12} />
-            随机未读
+      <div className="flex items-start justify-between gap-3 mb-5">
+        <div>
+          <p className="page-eyebrow mb-2">下一本的灵感</p>
+          <h2 id="unread-heading" className="section-title">
+            未读{" "}
+            <span className="font-sans text-[13px] font-normal text-fg-muted ml-2 tabular-nums">
+              {count} 本等你翻开
+            </span>
+          </h2>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            onClick={onShuffle}
+            className="btn btn-sm btn-ghost"
+            title="随机未读"
+            aria-label="随机未读"
+          >
+            <ShuffleIcon size={15} />
           </button>
-          <Link to="/unread" className="btn btn-sm btn-ghost">
-            全部
-            <ArrowRightLineIcon size={12} />
+          <Link
+            to="/unread"
+            className="btn btn-sm btn-ghost"
+            aria-label="查看全部未读相册"
+          >
+            全部 <ArrowRightLineIcon size={14} />
           </Link>
         </div>
       </div>
-
-      <div
-        className={
-          inline
-            ? /* 当前内嵌布局共用 .stage-grid，窄屏保留货架；可随首页方案一起替换。 */
-              "shelf shelf-fade stage-grid stage-shelf"
-            : "shelf shelf-fade"
-        }
-      >
-        {visible.map((card) => (
-          <div
+      <div className="discovery-grid">
+        {cards.slice(0, 4).map((card) => (
+          <AlbumCard
             key={card.id}
-            className={
-              inline
-                ? `${SHELF_WIDTH} xl:flex-none xl:w-full xl:min-w-0 xl:max-w-none`
-                : SHELF_WIDTH
+            data={{
+              ...card,
+              isFavorite: favoriteIds.has(decodeFavPath(card.to)),
+            }}
+            showUnreadBadge={false}
+            coverRatio="16/9"
+            overlayAction={
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onMarkRead(card);
+                }}
+                className="w-7 h-7 rounded-full bg-black/65 text-white flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                title={`将「${card.title}」标记为已读`}
+                aria-label={`将${card.title}标记为已读`}
+              >
+                <CheckIcon size={13} />
+              </button>
             }
-          >
-            <AlbumCard
-              data={{
-                ...card,
-                isFavorite: favoriteIds.has(decodeFavPath(card.to)),
-              }}
-              /* 整个区块都是未读，卡片再挂「新」角标只是噪音 */
-              showUnreadBadge={false}
-              /* 视频按 16:9 排（封面本来就是横画幅，硬塞进海报比例
-                 会留下大片灰条）；图片按 2:3 海报比例。 */
-              coverRatio={card.coverKind === "video" ? "16/9" : "2/3"}
-              overlayAction={
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onMarkRead(card);
-                  }}
-                  className="w-7 h-7 rounded-full bg-black/55 text-white/90 hover:bg-accent hover:text-accent-contrast flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-all"
-                  title={`将「${card.title}」标记为已读`}
-                  aria-label={`将${card.title}标记为已读`}
-                >
-                  <CheckIcon size={13} />
-                </button>
-              }
-            />
-          </div>
+          />
         ))}
       </div>
     </section>
@@ -123,139 +102,101 @@ interface ContinueReadingHeroProps {
   onContinue: (card: CardData) => void;
   onRemove: (card: CardData) => void;
   onClearAll: () => void;
-  /** 当前布局中的补充内容槽，首页传入未读预览。 */
-  rightSlot?: ReactNode;
 }
 
-// 当前继续阅读入口使用主封面与推荐网格，点击恢复上次位置。
-// 排列、尺寸、信息层级与控制位置属于可调整的设计决策。
 export function ContinueReadingHero({
   cards,
   onContinue,
   onRemove,
   onClearAll,
-  rightSlot,
 }: ContinueReadingHeroProps) {
   const featured = cards[0];
-  // 候选数量与 .stage-grid 的裁剪配合，不代表固定的首页布局要求。
-  const rest = cards.slice(1, 1 + GRID_ITEMS);
-  // 右栏有没有内容：其余在读，或者调用方塞进来的替补（首页塞未读）。
-  const hasRight = rest.length > 0 || !!rightSlot;
-
+  if (!featured) return null;
+  const rest = cards.slice(1, 4);
   return (
-    <section className="page-shell pt-2 pb-10" data-testid="continue-hero">
-      <div className="flex items-center gap-3 flex-wrap mb-5">
-        <h2 className="section-title">继续阅读</h2>
-        <span className="section-meta">
-          <span className="tabular-nums text-fg font-medium">
-            {cards.length}
-          </span>{" "}
-          本还没看完
+    <section
+      className="reading-desk"
+      data-testid="continue-hero"
+      aria-labelledby="continue-heading"
+    >
+      <div className="flex items-center gap-3 flex-wrap">
+        <h2 id="continue-heading" className="section-title">
+          继续阅读
+        </h2>
+        <span className="reading-desk__muted tabular-nums">
+          {cards.length} 本还没看完
         </span>
         <button
+          type="button"
           onClick={onClearAll}
-          className="btn btn-sm btn-ghost ml-auto"
+          className="reading-desk__muted inline-flex items-center gap-1 ml-auto min-h-7 px-1 rounded"
           title="把当前所有继续阅读相册标记为已读(不影响收藏 / 最近)"
         >
-          <CloseIcon size={11} />
+          <CloseIcon size={12} />
           清空
         </button>
       </div>
-
-      <div className="flex flex-col gap-8 xl:flex-row xl:gap-9">
-        {featured && (
-          /* 窄屏 / 平板：封面 + 墙签并排，进度与操作落在它们下方；
-             宽屏（xl+）：封面独占一列（320px），标题与进度贴在其下。
-             平板档用 flex-wrap 让"标题 + 进度"整块换行到封面右侧，
-             否则标题右边会拖出一大片空白。
-             没有右栏时（整页只有一本在读）改为"封面 + 信息"并排，
-             让这一块本身有宽度，而不是在右边空出整屏。 */
-          <div
-            className={
-              hasRight
-                ? "shrink-0 xl:w-[320px] 2xl:w-[352px]"
-                : "shrink-0 xl:w-[760px] 2xl:w-[800px]"
-            }
-          >
-            <div
-              className={`flex flex-wrap gap-4 items-end ${
-                hasRight
-                  ? "xl:flex-col xl:items-stretch xl:gap-3"
-                  : "xl:flex-row xl:items-start xl:gap-8"
-              }`}
-            >
-              <div
-                className={`shrink-0 ${
-                  hasRight
-                    ? "w-[150px] md:w-[var(--stage-cover-w)]"
-                    : "w-[150px] md:w-[var(--stage-cover-w)]"
-                }`}
-              >
-                <StagePoster
-                  card={featured}
-                  onClick={() => onContinue(featured)}
-                />
-              </div>
-              {/* 当前标题区在桌面跟随封面宽度，窄屏并排；可随新的布局一起调整。 */}
-              <div
-                className={
-                  hasRight
-                    ? "w-auto flex-1 min-w-0 md:max-w-[440px] xl:flex-none xl:max-w-none xl:w-[var(--stage-cover-w)]"
-                    : "w-auto flex-1 min-w-0 md:max-w-[440px] xl:flex-1 xl:max-w-none"
-                }
-              >
-                <h3
-                  className={`hero-title line-clamp-2 ${hasRight ? "xl:mt-3" : ""}`}
-                >
-                  {featured.title}
-                </h3>
-                <div className={`mt-3 ${hasRight ? "xl:mt-5" : "xl:mt-4"}`}>
-                  <StageInfo
-                    card={featured}
-                    onContinue={() => onContinue(featured)}
-                    onRemove={() => onRemove(featured)}
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 当前 flex 行保留 min-w-0，让内嵌内容可收缩，避免宽度撑出容器。 */}
-        {(rightSlot || rest.length > 0) && (
-          <div className="flex-1 min-w-0">
-            {rest.length > 0 && (
-              <>
-                <div className="section-meta mb-4">其余在读</div>
-                <div className={`grid ${GRID_COLS} gap-x-3.5 gap-y-7`}>
-                  {rest.map((card) => (
-                    <MiniPoster
-                      key={card.id}
-                      card={card}
-                      onClick={() => onContinue(card)}
-                      onRemove={() => onRemove(card)}
-                    />
-                  ))}
-                </div>
-              </>
-            )}
-            {rightSlot}
-          </div>
-        )}
+      <div className="reading-desk__feature">
+        <StagePoster card={featured} onClick={() => onContinue(featured)} />
+        <div className="min-w-0">
+          <p className="reading-desk__muted">上次，看到这里</p>
+          <h3 className="reading-desk__title line-clamp-2">
+            {featured.displayTitle ?? featured.title}
+          </h3>
+          <StageInfo
+            card={featured}
+            onContinue={() => onContinue(featured)}
+            onRemove={() => onRemove(featured)}
+          />
+        </div>
       </div>
+      {rest.length > 0 && (
+        <div className="reading-queue">
+          {rest.map((card) => (
+            <QueueItem
+              key={card.id}
+              card={card}
+              onOpen={() => onContinue(card)}
+              onRemove={() => onRemove(card)}
+            />
+          ))}
+        </div>
+      )}
+      {cards.length > 4 && (
+        <Link
+          to="/recents"
+          className="reading-desk__muted inline-flex items-center gap-2 self-end mt-4 min-h-7"
+        >
+          还有 {cards.length - 4} 本在读 <ArrowRightLineIcon size={12} />
+        </Link>
+      )}
     </section>
   );
 }
 
-// 舞台主封面：2:3 海报比例，明显大于货架海报。
-//
-// 图片封面走 /api/previews（按宽度等比缩放），避免把 320px 的缩略图
-// 放大成 450px 高的主视觉；视频封面没有预览接口，用缩略图 + 深色底，
-// 让"画幅不同"看起来是有意的，而不是缺图。
-//
-// 可访问性约束（回归测试锁定）：
-// - 真正可点击的是 role=button 的内容区；「标记为已读」按钮是它的兄弟
-//   节点，嵌套会让 Enter/Space 冒泡触发跳转，也会污染卡片的可访问名。
+function Cover({ card, large = false }: { card: CardData; large?: boolean }) {
+  const [failedSource, setFailedSource] = useState<string | null>(null);
+  const src = card.coverPath
+    ? large && card.coverKind !== "video"
+      ? previewUrl(card.coverPath, 640)
+      : thumbUrl(card.coverPath)
+    : "";
+  return src && src !== failedSource ? (
+    <img
+      src={src}
+      alt=""
+      loading={large ? "eager" : "lazy"}
+      decoding="async"
+      onError={() => setFailedSource(src)}
+      className={`w-full h-full ${card.coverKind === "video" ? "object-contain" : "object-cover object-[50%_30%]"}`}
+    />
+  ) : (
+    <span className="w-full h-full flex items-center justify-center text-white/70">
+      <FolderIcon size={large ? 28 : 16} />
+    </span>
+  );
+}
+
 function StagePoster({
   card,
   onClick,
@@ -263,67 +204,18 @@ function StagePoster({
   card: CardData;
   onClick: () => void;
 }) {
-  const progress = card.progress;
-  const total = progress?.total ?? 0;
-  const index = progress?.index ?? 0;
-  const percent =
-    total > 1
-      ? Math.min(100, Math.round((index / Math.max(1, total - 1)) * 100))
-      : 0;
-
-  const isVideo = card.coverKind === "video";
-  const src = card.coverPath
-    ? isVideo
-      ? thumbUrl(card.coverPath)
-      : previewUrl(card.coverPath, 640)
-    : "";
-
   return (
-    <div
-      role="button"
-      tabIndex={0}
+    <button
+      type="button"
       onClick={onClick}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onClick();
-        }
-      }}
       aria-label={`继续阅读「${card.title}」`}
-      className="group relative block w-full aspect-[2/3] rounded-xl overflow-hidden bg-bg-subtle shadow-md cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+      className="reading-cover"
     >
-      {src ? (
-        <img
-          src={src}
-          alt=""
-          loading="eager"
-          decoding="async"
-          className={`w-full h-full group-hover:scale-[1.03] transition-transform duration-500 ${
-            isVideo ? "object-contain" : "object-cover object-[50%_30%]"
-          }`}
-        />
-      ) : (
-        <div className="w-full h-full flex items-center justify-center text-fg-subtle">
-          <FolderIcon size={26} />
-        </div>
-      )}
-
-      {/* 进度压在封面底边：既是进度，也是这块封面的收尾 */}
-      <div className="absolute left-0 right-0 bottom-0 h-[3px] bg-black/45">
-        <div
-          className="h-full bg-white/95 transition-[width] duration-300"
-          style={{ width: `${percent}%` }}
-        />
-      </div>
-    </div>
+      <Cover card={card} large />
+    </button>
   );
 }
 
-// 舞台信息栏：进度读数 + 进度条 + 主操作。
-//
-// 位置在主封面正下方（不是横跨整个右栏）：旧版把信息栏推到右栏最左侧、
-// 主按钮推到横幅最右端（与封面相距约 1000px），用户要横跨整屏才能把
-// 按钮和封面联系起来。现在按钮离封面不到 100px。
 function StageInfo({
   card,
   onContinue,
@@ -333,29 +225,16 @@ function StageInfo({
   onContinue: () => void;
   onRemove: () => void;
 }) {
-  const progress = card.progress;
-  const total = progress?.total ?? 0;
-  const index = progress?.index ?? 0;
-  const percent =
-    total > 1
-      ? Math.min(100, Math.round((index / Math.max(1, total - 1)) * 100))
-      : 0;
-
+  const { index = 0, total = 0 } = card.progress ?? {};
+  const percent = readingPercent({ index, total });
   return (
-    <div>
-      <div className="flex items-baseline gap-x-3 gap-y-1 flex-wrap">
-        <span className="text-[15px] text-fg font-medium tabular-nums">
-          看到 {index + 1} / {total}
-        </span>
-        {percent > 0 && (
-          <span className="text-[13px] text-fg-subtle tabular-nums">
-            已读 {percent}%
-          </span>
-        )}
-      </div>
-
+    <div className="mt-4">
+      <p className="reading-desk__muted tabular-nums">
+        看到 {index + 1} / {total}
+        <span className="ml-3">已读 {percent}%</span>
+      </p>
       <div
-        className="mt-3 h-1.5 w-full rounded-full bg-bg-strong overflow-hidden"
+        className="mt-3 h-1.5 rounded-full bg-accent/15 overflow-hidden"
         role="progressbar"
         aria-valuenow={percent}
         aria-valuemin={0}
@@ -363,119 +242,66 @@ function StageInfo({
         aria-label={`「${card.title}」阅读进度`}
       >
         <div
-          className="h-full rounded-full bg-accent transition-[width] duration-300"
+          className="h-full bg-accent rounded-full transition-[width]"
           style={{ width: `${percent}%` }}
         />
       </div>
-
-      <div className="mt-4 flex items-center gap-2.5 flex-wrap">
+      <div className="mt-5 flex flex-wrap items-center gap-2">
         <button type="button" onClick={onContinue} className="btn btn-primary">
-          继续阅读
-          <ArrowRightLineIcon size={12} />
+          继续阅读 <ArrowRightLineIcon size={14} />
         </button>
         <button
           type="button"
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onRemove();
-          }}
-          className="btn btn-sm btn-ghost border border-border-faint"
+          onClick={onRemove}
+          className="btn btn-sm btn-ghost"
           title={`将「${card.title}」标记为已读`}
           aria-label={`将${card.title}标记为已读`}
         >
-          <CheckIcon size={12} />
-          标记为已读
+          <CheckIcon size={13} />
+          <span className="hidden sm:inline">标记为已读</span>
         </button>
       </div>
     </div>
   );
 }
 
-// 网格里的次级海报：与主封面同族的卡片，但更小。
-//
-// 结构与旧版一致（role=button 包住内容，X 按钮是兄弟节点），
-// 这样既保留键盘 / 可访问名行为，也让封面成为这一行的视觉主体。
-function MiniPoster({
+function QueueItem({
   card,
-  onClick,
+  onOpen,
   onRemove,
 }: {
   card: CardData;
-  onClick: () => void;
+  onOpen: () => void;
   onRemove: () => void;
 }) {
-  const progress = card.progress;
-  const progressPercent =
-    progress && progress.total > 1
-      ? Math.min(
-          100,
-          Math.round((progress.index / Math.max(1, progress.total - 1)) * 100),
-        )
-      : null;
-
   return (
-    <div className="group relative rounded-lg overflow-hidden">
-      <div
-        role="button"
-        tabIndex={0}
-        onClick={onClick}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") {
-            event.preventDefault();
-            onClick();
-          }
-        }}
-        className="block w-full text-left cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-      >
-        <div className="relative aspect-[2/3] bg-bg-subtle overflow-hidden rounded-lg">
-          {card.coverPath ? (
-            <img
-              src={thumbUrl(card.coverPath)}
-              alt=""
-              loading="lazy"
-              decoding="async"
-              className="w-full h-full object-cover object-[50%_30%] group-hover:scale-[1.04] transition-transform duration-500"
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-fg-subtle">
-              <FolderIcon size={20} />
-            </div>
-          )}
-          {/* 进度角标只在真正读过几页时出现：刚打开过的相册（index=0）
-              挂一层暗化蒙版 + 「看到 1 / N」只是噪音。 */}
-          {progressPercent !== null && progress && progress.index > 0 && (
-            <div className="absolute bottom-0 left-0 right-0 px-2.5 py-2 bg-gradient-to-t from-black/75 to-transparent">
-              <div className="text-white/95 text-[11.5px] font-medium tabular-nums">
-                看到 {progress.index + 1} / {progress.total}
-              </div>
-              <div className="mt-1.5 h-0.5 bg-white/25 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-white rounded-full"
-                  style={{ width: `${progressPercent}%` }}
-                />
-              </div>
-            </div>
-          )}
-        </div>
-        <div className="pt-2.5">
-          <div className="text-[14px] font-medium text-fg line-clamp-2 leading-snug group-hover:text-accent transition-colors">
-            {card.title}
-          </div>
-        </div>
-      </div>
+    <div className="reading-queue__item group">
       <button
         type="button"
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          onRemove();
-        }}
-        className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-black/55 text-white/90 hover:bg-danger hover:text-white flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-all"
+        className="reading-queue__open"
+        onClick={onOpen}
+        aria-label={`继续阅读「${card.title}」`}
+      >
+        <span className="w-10 h-12 shrink-0 rounded-md overflow-hidden bg-bg-media">
+          <Cover card={card} />
+        </span>
+        <span className="min-w-0">
+          <span className="block truncate text-[13px] font-medium">
+            {card.displayTitle ?? card.title}
+          </span>
+          <span className="reading-desk__muted block mt-1 tabular-nums">
+            看到 {(card.progress?.index ?? 0) + 1} / {card.progress?.total ?? 0}
+          </span>
+        </span>
+      </button>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="reading-queue__remove"
         title={`将「${card.title}」标记为已读`}
         aria-label={`将${card.title}标记为已读`}
       >
-        <CloseIcon size={13} />
+        <CheckIcon size={12} />
       </button>
     </div>
   );

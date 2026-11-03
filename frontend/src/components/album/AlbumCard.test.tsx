@@ -136,14 +136,16 @@ describe("AlbumCard 封面语义", () => {
   });
 
   it.each(["grid", "list"] as const)(
-    "%s 模式使用真实链接、4:5 封面且没有嵌套按钮",
+    "%s 模式使用真实链接和对应画幅且没有嵌套按钮",
     (variant) => {
       renderCard(card(), variant);
 
       const link = screen.getByRole("link", { name: "打开相册“周末记录”" });
       expect(link).toHaveAttribute("href", "/albums/album-1");
       expect(link.querySelector("button")).toBeNull();
-      expect(screen.getByTestId("card-cover")).toHaveClass("aspect-[4/5]");
+      expect(screen.getByTestId("card-cover")).toHaveClass(
+        variant === "grid" ? "aspect-[4/3]" : "aspect-[4/5]",
+      );
     },
   );
   it.each(["grid", "list"] as const)(
@@ -234,7 +236,9 @@ describe("AlbumCard 状态表达", () => {
   });
 
   it("集合与标签是类型而不是状态：类型信息放在元信息行，不占封面角位", () => {
-    renderCard(card({ variant: "collection", title: "2026 年", subtitle: "集合" }));
+    renderCard(
+      card({ variant: "collection", title: "2026 年", subtitle: "集合" }),
+    );
 
     // 仍然能看到类型信息，但不再占用封面角位（角位留给未读 / 已读）。
     const chip = screen.getByText("集合");

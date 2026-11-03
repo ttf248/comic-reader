@@ -107,10 +107,15 @@ describe("AlbumGrid", () => {
     albumCardMock.props.length = 0;
     // 收藏页 = 精选陈列：2:3 海报比例 + 疏朗网格（minmax 224px）
     const { unmount } = render(
-      <AlbumGrid items={cards} variant="grid" coverRatio="2/3" cardMinWidth={224} />,
+      <AlbumGrid
+        items={cards}
+        variant="grid"
+        coverRatio="2/3"
+        cardMinWidth={224}
+      />,
     );
     let props = virtuoso.grid.mock.calls[0]?.[0] as { listClassName: string };
-    expect(props.listClassName).toContain("minmax(224px,1fr)");
+    expect(props.listClassName).toContain("library-grid--spacious");
     expect(
       albumCardMock.props.every(
         (p) => (p as { coverRatio?: string }).coverRatio === "2/3",
@@ -118,15 +123,15 @@ describe("AlbumGrid", () => {
     ).toBe(true);
     unmount();
 
-    // 未读 / 最近 / 全部图像 = 清单与浏览：默认 4:5 + 密集网格
+    // 默认使用横幅照片卡，收藏可独立选择海报画幅。
     virtuoso.grid.mockClear();
     albumCardMock.props.length = 0;
     render(<AlbumGrid items={cards} variant="grid" />);
     props = virtuoso.grid.mock.calls[0]?.[0] as { listClassName: string };
-    expect(props.listClassName).toContain("minmax(164px,1fr)");
+    expect(props.listClassName).toContain("library-grid");
     expect(
       albumCardMock.props.every(
-        (p) => (p as { coverRatio?: string }).coverRatio === "4/5",
+        (p) => (p as { coverRatio?: string }).coverRatio === "4/3",
       ),
     ).toBe(true);
   });

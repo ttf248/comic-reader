@@ -105,12 +105,13 @@ interface Props {
   alwaysShowFavorite?: boolean;
 }
 
-export type CoverRatio = "4/5" | "2/3" | "16/9";
+export type CoverRatio = "4/5" | "2/3" | "16/9" | "4/3";
 
 const COVER_RATIO_CLASS: Record<CoverRatio, string> = {
   "4/5": "aspect-[4/5]",
   "2/3": "aspect-[2/3]",
   "16/9": "aspect-video",
+  "4/3": "aspect-[4/3]",
 };
 
 // 通用卡片：网格（统一 4:5 封面）/ 列表（横向缩略图 + 元数据）。
@@ -127,7 +128,7 @@ export default function AlbumCard({
   onContextMenu,
   overlayAction,
   showUnreadBadge = true,
-  coverRatio = "4/5",
+  coverRatio = "4/3",
   alwaysShowFavorite = false,
 }: Props) {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
@@ -301,7 +302,7 @@ function GridCard({
     <div
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
-      className="relative group"
+      className="album-tile relative group"
     >
       <Link
         to={data.to}
@@ -309,7 +310,7 @@ function GridCard({
         className="group block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
       >
         <div
-          className={`relative ${COVER_RATIO_CLASS[coverRatio]} bg-bg-subtle rounded-lg overflow-hidden border border-border lift-card shadow-xs group-hover:shadow-lg group-hover:border-border-strong`}
+          className={`album-tile__cover relative ${COVER_RATIO_CLASS[coverRatio]} bg-bg-subtle overflow-hidden`}
           data-testid="card-cover"
         >
           <CardCover data={data} />
@@ -330,7 +331,6 @@ function GridCard({
 
           {/* 集合 / 标签 这类"类型"信息不属于阅读状态，已移到标题下的元信息行，
               封面角位只留给状态（未读点 / 已读），避免角标互相打架。 */}
-
 
           {/* 阅读进度：百分比放深色蒙版 chip，进度条压在封面底边的暗色条上。
               以前整块用一层渐变蒙版，白字在亮封面（照片里的白墙、白纸）上
@@ -361,7 +361,7 @@ function GridCard({
           )}
         </div>
 
-        <div className="pt-3 pb-1 min-w-0">
+        <div className="album-tile__meta min-w-0">
           <div
             className="text-[14px] font-medium text-fg truncate-2 leading-snug transition-colors group-hover:text-accent"
             title={data.displayTitle ?? data.title}
@@ -380,7 +380,10 @@ function GridCard({
                 // 不允许换行 —— 「384 张 · 19 个视 频」这种断字很难看，
                 // 空间不够时应该让后面的来源副标题截断。
                 return (
-                  <span title={media.title} className="shrink-0 whitespace-nowrap">
+                  <span
+                    title={media.title}
+                    className="shrink-0 whitespace-nowrap"
+                  >
                     {media.label}
                   </span>
                 );
@@ -585,9 +588,7 @@ function ListCard({
             {(() => {
               const media = formatMediaCount(data);
               if (media) {
-                return (
-                  <span title={media.title}>{media.label}</span>
-                );
+                return <span title={media.title}>{media.label}</span>;
               }
               return (
                 <>
@@ -649,9 +650,7 @@ function ListCard({
  *  showUnreadBadge=false 用于"整页都是未读"的列表：那里每张卡挂同一个
  *  标记纯属重复，未读状态由服务端筛选保证。 */
 function showUnreadMark(data: CardData, showUnreadBadge: boolean): boolean {
-  return (
-    showUnreadBadge && data.variant === "album" && isUnread(data.progress)
-  );
+  return showUnreadBadge && data.variant === "album" && isUnread(data.progress);
 }
 
 /** 未读：一颗白点 + 深色描边。

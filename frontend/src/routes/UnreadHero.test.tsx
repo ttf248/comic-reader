@@ -71,34 +71,37 @@ describe("UnreadHero", () => {
       makeCard("/a", "A"),
       makeCard("/b", "B"),
     ]);
-    // 计数「还有 2 本没看」— header 段被多个 <span> 拆开,用 queryAllByText 找「还有」前缀
-    expect(screen.queryAllByText(/还有/).length).toBeGreaterThan(0);
+    // 预览数量与全库未读计数分别展示。
+
     // 数字 2 通过 nearest 父节点 textContent 校验
     const heroSection = screen.getByTestId("unread-hero");
-    expect(heroSection.textContent).toMatch(/还有\s*2\s*本没看/);
+    expect(heroSection.textContent).toMatch(/2\s*本等你翻开/);
     // 随机未读按钮
-    const shuffleBtn = screen.getByText("随机未读");
+    const shuffleBtn = screen.getByRole("button", { name: "随机未读" });
     fireEvent.click(shuffleBtn);
     expect(onShuffle).toHaveBeenCalledTimes(1);
     // 全部 → 链接跳到 /unread
     expect(screen.getByText("全部").closest("a, button")).toBeInTheDocument();
   });
 
-  it("cards 超过 6 张时只显示前 6 张", () => {
+  it("发现区显示四本预览，并保留完整未读入口", () => {
     const eight = Array.from({ length: 8 }, (_, i) =>
       makeCard(`/p${i}`, `P${i}`),
     );
     const { container } = renderHero(eight, 8);
-    // 8 张里 grid 渲染只取前 6
+    // 发现区只预览四本，完整列表由明确链接承接。
     const renderedCards = container.querySelectorAll('a[href^="/albums/"]');
-    expect(renderedCards.length).toBe(6);
+    expect(renderedCards.length).toBe(4);
+    expect(
+      screen.getByRole("link", { name: "查看全部未读相册" }),
+    ).toHaveAttribute("href", "/unread");
   });
 
   it("count 与 cards.length 不一致时显示 count(可能 >6)", () => {
     // 模拟「7 张未读但只传 1 张做展示」的极端情况:display count 而非 length
     const { container } = renderHero([makeCard("/a", "A")], 7);
     const heroSection = screen.getByTestId("unread-hero");
-    expect(heroSection.textContent).toMatch(/还有\s*7\s*本没看/);
+    expect(heroSection.textContent).toMatch(/7\s*本等你翻开/);
     expect(container.querySelectorAll('a[href^="/albums/"]').length).toBe(1);
   });
 
@@ -107,7 +110,7 @@ describe("UnreadHero", () => {
     renderHero([], 0);
     const heroSection = screen.getByTestId("unread-hero");
     // 计数 0 仍然显示「还有 0 本没看」— 由 Home 条件 {unreadCards.length > 0} 隐藏
-    expect(heroSection.textContent).toMatch(/还有\s*0\s*本没看/);
+    expect(heroSection.textContent).toMatch(/0\s*本等你翻开/);
   });
 
   it("点 X 触发 onMarkRead 且不触发 onShuffle(未冒泡到其它 handler)", () => {

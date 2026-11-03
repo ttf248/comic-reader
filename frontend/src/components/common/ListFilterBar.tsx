@@ -38,7 +38,7 @@ export function ListFilterBar({
 
   return (
     <div className="page-shell">
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-border-faint py-3">
+      <div className="filter-strip flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
         <div className="flex items-center gap-1 flex-wrap min-w-0">
           {viewChips?.map((v) => {
             const active = activeViewKey === v.key;

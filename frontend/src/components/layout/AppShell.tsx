@@ -131,7 +131,7 @@ export default function AppShell() {
   });
 
   return (
-    <div className="flex h-full bg-bg">
+    <div className="app-shell flex h-full bg-bg">
       <Sidebar
         collapsed={mobileNavOpen ? false : sidebarCollapsed}
         onToggle={toggleSidebar}
@@ -142,7 +142,7 @@ export default function AppShell() {
           onOpenMobileNav={() => setMobileNavOpen(true)}
           mobileMenuButtonRef={mobileMenuButtonRef}
         />
-        <main className="flex-1 overflow-auto">
+        <main className="app-main flex-1 overflow-auto">
           {/* 路由层错误兜底:任意子组件 render 抛错都不会让整个 SPA 白屏。 */}
           <ErrorBoundary key={location.pathname}>
             <Outlet />

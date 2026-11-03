@@ -330,38 +330,21 @@ export default function Home() {
   // 年份筛选的"全部图像"section 顶部 chip
   const yearFilterLabel = yearFilter === "other" ? "其他" : String(yearFilter);
 
-  // 未读区：永远放进「继续阅读」舞台的右栏，作为右栏的第二段。
-  //
-  // 两种情况下右栏都会塌：
-  //   - 只有一本在读 → 右栏没有"其余在读"，整栏空掉（首屏右侧 1200px 空白）；
-  //   - 在读的相册多起来 → "其余在读"的墙只有一行，墙底到下一个区块之间
-  //     空出 390px（1920 实测），页面像没排完。
-  // 「未读」作为第二段内容补上，两种塌陷都消失：右栏变成
-  // "你正在读的 + 接下来读的"，与左栏的主角台齐平。
-  const unreadSection = (
-    <UnreadHero
-      cards={unreadCards}
-      count={unreadCount}
-      onShuffle={onShuffleUnread}
-      onMarkRead={onMarkReadUnread}
-      inline
-    />
-  );
-
   return (
-    <div className="min-h-full">
+    <div className="home-page min-h-full">
       {/* ScanProgress 已提升到 AppShell，跨路由常驻显示 */}
 
       {/* === 页头：标题 + 库统计 + 次级入口 === */}
-      <section className="page-shell pt-6 pb-5">
+      <section className="page-shell page-heading">
         <div className="flex items-end justify-between gap-6 flex-wrap">
           <div className="min-w-0">
-            <h1 className="page-title page-title--compact">图像库</h1>
+            <p className="page-eyebrow">属于你的影像年鉴</p>
+            <h1 className="page-title">图像库</h1>
             <p className="text-[13px] text-fg-muted mt-2">
               {manifest ? (
                 <>
-                  {/* 库规模（相册数 / 集合数）放在顶栏左槽作为全局上下文，
-                      这里只留"上次更新"——同一事实不在两处重复出现。 */}
+                  <span>照片、故事与每一次重逢</span>
+                  <span className="mx-2 text-fg-subtle">·</span>
                   {manifest.scannedAt && (
                     <span className="text-fg-subtle">
                       上次更新 {formatTime(manifest.scannedAt)}
@@ -422,41 +405,34 @@ export default function Home() {
         )}
       </section>
 
-      {/* === 继续阅读（有在读相册时置顶，是首页第一主入口） === */}
-      {hasContent && inProgressAll.length > 0 && (
-        <ContinueReadingHero
-          cards={inProgressAll}
-          onContinue={onContinue}
-          onRemove={onRemoveContinue}
-          onClearAll={onClearContinue}
-          /* 右栏第二段：「未读」。窄屏时右栏是堆叠在主角台下面的，
-             顺序与原来的独立「未读」区块完全一致。 */
-          rightSlot={unreadCards.length > 0 ? unreadSection : undefined}
-        />
+      {hasContent && (inProgressAll.length > 0 || unreadCards.length > 0) && (
+        <div className="page-shell">
+          <div className="home-overview">
+            {inProgressAll.length > 0 && (
+              <ContinueReadingHero
+                cards={inProgressAll}
+                onContinue={onContinue}
+                onRemove={onRemoveContinue}
+                onClearAll={onClearContinue}
+              />
+            )}
+            {unreadCards.length > 0 && (
+              <UnreadHero
+                cards={unreadCards}
+                count={unreadCount}
+                onShuffle={onShuffleUnread}
+                onMarkRead={onMarkReadUnread}
+              />
+            )}
+          </div>
+        </div>
       )}
-
-      {/* === 未读推荐(有未读时置顶 6 张,直接引导用户进下一本)== */}
-      {/* 没有在读相册时舞台不存在，「未读」才回到独立区块 —— 否则首页
-          第一屏只剩一个推荐货架，没有"接着读"的主入口。 */}
-      {hasContent && unreadCards.length > 0 && inProgressAll.length === 0 && (
-        <UnreadHero
-          cards={unreadCards}
-          count={unreadCount}
-          onShuffle={onShuffleUnread}
-          onMarkRead={onMarkReadUnread}
-        />
-      )}
-
-      {/* 有在读内容时不再重复一排「随机一本 / 未读 / 最近 / 收藏」：
-          这四项侧边栏里都有（随机在侧栏底部一组），在首页正文中间再摆一排
-          既是重复按钮，又把「继续阅读 → 未读 → 时间线 → 全部图像」这条
-          浏览主线切成了两段。没有在读内容时，主操作位由上面的
-          「随机一本」按钮承担。 */}
 
       {/* === 时间线（仅当有内容时显示） === */}
       {hasContent && yearGroups.length > 0 && (
-        <section className="page-shell pt-8">
-          <div className="flex items-center gap-3 mb-4">
+        <section className="page-shell pt-9">
+          <div className="section-heading">
+            <span className="section-index">01</span>
             <h2 className="section-title">时间线</h2>
             <span className="section-meta">按年份浏览</span>
           </div>
@@ -469,16 +445,16 @@ export default function Home() {
           四个动作按钮，数据到达后整页内容一次性长出来，视线要重新找
           一次位置。骨架占住网格的位置，数据回来时是"填满"而不是"重排"。 */}
       {(hasContent || isLoadingInitial) && (
-        <section
-          ref={gridRef}
-          className="page-shell pt-10 pb-4 scroll-mt-6"
-        >
-          <div className="flex items-center gap-3 flex-wrap">
+        <section ref={gridRef} className="page-shell pt-10 pb-4 scroll-mt-6">
+          <div className="section-heading">
+            <span className="section-index">02</span>
             <h2 className="section-title">
               {yearFilterActive ? "该年份的图像" : "全部图像"}
             </h2>
             {!isLoadingInitial && (
-              <span className="section-meta tabular-nums">{filtered.length}</span>
+              <span className="section-meta tabular-nums">
+                {filtered.length}
+              </span>
             )}
             {yearFilterActive && (
               <button
@@ -491,10 +467,7 @@ export default function Home() {
               </button>
             )}
             {favCount > 0 && !yearFilterActive && (
-              <button
-                onClick={() => navigate("/favorites")}
-                className="chip"
-              >
+              <button onClick={() => navigate("/favorites")} className="chip">
                 <StarIcon size={11} filled className="text-warning" />
                 <span>{favCount} 收藏</span>
               </button>
@@ -523,7 +496,11 @@ export default function Home() {
           )}
 
           {isLoadingInitial ? (
-            <AlbumGridSkeleton variant={viewMode} bare label="正在加载图像库…" />
+            <AlbumGridSkeleton
+              variant={viewMode}
+              bare
+              label="正在加载图像库…"
+            />
           ) : filtered.length === 0 ? (
             <EmptyState
               title={
@@ -634,10 +611,7 @@ function QuickLink({
   count?: number;
 }) {
   return (
-    <Link
-      to={to}
-      className="btn btn-sm btn-ghost border border-border-faint"
-    >
+    <Link to={to} className="btn btn-sm btn-ghost border border-border-faint">
       {icon}
       <span>{children}</span>
       {count !== undefined && (

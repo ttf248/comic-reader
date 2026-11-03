@@ -1,73 +1,57 @@
-/* 共享视觉 token：当前预置为冷调中性色。
-   色板、字体、间距、圆角、阴影与动效可随设计方案整体调整；
-   修改时同步主题覆盖与语义引用，检查可读性和交互状态。 */
-
-/* === Light (default) === */
+/* 私人影像年鉴：暖纸色、墨绿与陶土色。视觉值集中维护，主题保持成套。 */
 :root,
 :root[data-theme="light"] {
-  /* Surface — 冷调近白 */
-  --bg: #fafafa;
-  --bg-elevated: #ffffff;
-  --bg-subtle: #f4f4f5;
-  --bg-strong: #e4e4e7;
-  /* 卡片内部的次级底色（比 bg-subtle 更浅一档，用于"框内"的浅层分区） */
-  --bg-inset: #f7f7f8;
-  /* 媒体画布：视频封面 / 宽幅照片做 letterbox 时的底色。
-     恒为深色 —— 亮底上的一条黑边会被读成"缺图"，深底上则是
-     电影宽银幕的常规观感。 */
-  --bg-media: #16161a;
-
-  /* Foreground — 石墨近黑
-     三级文字都按 WCAG AA（正文 4.5:1）取值：
-     fg 19.9:1 / fg-muted 7.5:1 / fg-subtle 4.7:1（都落在 #fafafa 底上）。
-     以前 fg-subtle 用 #a1a1aa 只有 2.5:1，设置页提示、状态栏、脚注这些
-     真正承载信息的次级文字全部不达标。 */
-  --fg: #09090b;
-  --fg-muted: #52525b;
-  --fg-subtle: #71717a;
-  /* 禁用态文字 */
-  --fg-disabled: #b4b4bc;
-
-  /* Accent — 默认石墨黑；通过 [data-accent] 覆盖 */
-  --accent: #18181b;
-  --accent-hover: #27272a;
-  --accent-soft: #f4f4f5;
-  --accent-fg: #fafafa;
-  --accent-contrast: #fafafa;
-
-  /* Semantic — 也按 AA 取值：success 5.0:1 / warning 4.8:1 / danger 4.9:1
-     （浅色底上的文字色；实心底上配白字同样更稳）。 */
-  --danger: #dc2626;
-  --success: #15803d;
-  --warning: #b45309;
-
-  /* Borders — 极细，低对比 */
-  --border: #e4e4e7;
-  --border-strong: #d4d4d8;
-  --border-faint: #f4f4f5;
-
-  /* Geometry — 当前圆角与阴影
-     sm = 徽章 / 小标签，md = 控件，lg = 封面 / 菜单 / 弹窗，xl = 对话框 */
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --radius-xl: 18px;
-  --shadow-xs: 0 1px 1px rgba(9, 9, 11, 0.04);
-  --shadow-sm: 0 1px 2px rgba(9, 9, 11, 0.06);
-  --shadow-md: 0 4px 12px rgba(9, 9, 11, 0.08);
-  --shadow-lg: 0 12px 32px rgba(9, 9, 11, 0.12);
-
-  /* Typography */
+  --bg: #f6f4ee;
+  --bg-elevated: #fffefa;
+  --bg-subtle: #eeece4;
+  --bg-strong: #e1e3d9;
+  --bg-inset: #f1efe7;
+  --bg-media: #1d2923;
+  --fg: #25372e;
+  --fg-muted: #586258;
+  --fg-subtle: #687064;
+  --fg-disabled: #9a9f93;
+  --accent: #263c32;
+  --accent-hover: #3a5546;
+  --accent-soft: #e4eade;
+  --accent-fg: #fffdf4;
+  --accent-contrast: #fffdf4;
+  --brand: #bd603b;
+  --brand-soft: #f1d9c5;
+  --brand-ink: #6e351f;
+  --rail-bg: #203a30;
+  --rail-fg: #f7f3e9;
+  --rail-muted: #bdcabe;
+  --rail-hover: #314c3e;
+  --rail-line: #496052;
+  --rail-active: #edf0e1;
+  --rail-active-fg: #21372b;
+  --feature-bg: #e8ece0;
+  --feature-fg: #25372e;
+  --feature-muted: #57654e;
+  --reader-bg: #101b16;
+  --reader-panel: #203028;
+  --danger: #ba3e37;
+  --success: #376448;
+  --warning: #8b5b16;
+  --border: #deded2;
+  --border-strong: #bcc3b2;
+  --border-faint: #e9e7dd;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 22px;
+  --shadow-xs: 0 2px 5px rgba(37, 55, 46, 0.035);
+  --shadow-sm: 0 3px 12px rgba(37, 55, 46, 0.06);
+  --shadow-md: 0 12px 32px rgba(37, 55, 46, 0.1);
+  --shadow-lg: 0 22px 60px rgba(37, 55, 46, 0.16);
   --font-sans:
     "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
-    "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
-  --font-mono:
-    "JetBrains Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
-  --font-display:
-    "Inter", -apple-system, BlinkMacSystemFont, "PingFang SC",
     "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-
-  /* Spacing */
+  --font-mono: "SF Mono", "Consolas", "Liberation Mono", monospace;
+  --font-display:
+    "Iowan Old Style", "Palatino Linotype", "Noto Serif CJK SC", "Songti SC",
+    "STSong", "SimSun", serif;
   --space-0: 0;
   --space-1: 4px;
   --space-2: 8px;
@@ -81,8 +65,6 @@
   --space-10: 64px;
   --space-11: 80px;
   --space-12: 96px;
-
-  /* Motion — 微交互 120ms / 状态切换 180ms / 浮层出现 240ms */
   --ease: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -91,50 +73,53 @@
   --dur-slow: 240ms;
 }
 
-/* === Dark === */
 :root[data-theme="dark"] {
-  /* Surface — 深炭，非纯黑 */
-  --bg: #09090b;
-  --bg-elevated: #18181b;
-  --bg-subtle: #1f1f23;
-  --bg-strong: #2a2a2f;
-  --bg-inset: #131316;
-  --bg-media: #000000;
-
-  /* Foreground — 深色底上的三级文字，同样满足 AA：
-     fg 18.9:1 / fg-muted 7.3:1 / fg-subtle 5.5:1（底色 #09090b）。 */
-  --fg: #fafafa;
-  --fg-muted: #a1a1aa;
-  --fg-subtle: #8a8a93;
-  --fg-disabled: #52525b;
-
-  /* Accent — 暗色下走近白 */
-  --accent: #fafafa;
+  --bg: #151f19;
+  --bg-elevated: #1d2a22;
+  --bg-subtle: #26342b;
+  --bg-strong: #354638;
+  --bg-inset: #19251e;
+  --bg-media: #111c16;
+  --fg: #eeeadd;
+  --fg-muted: #bec7b8;
+  --fg-subtle: #a1af9e;
+  --fg-disabled: #73836f;
+  --accent: #f1ebdd;
   --accent-hover: #ffffff;
-  --accent-soft: #1f1f23;
-  --accent-fg: #09090b;
-  --accent-contrast: #09090b;
-
-  --danger: #f87171;
-  --success: #4ade80;
-  --warning: #fbbf24;
-
-  --border: #27272a;
-  --border-strong: #3f3f46;
-  --border-faint: #1a1a1d;
-
-  --shadow-xs: 0 1px 1px rgba(0, 0, 0, 0.3);
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 6px 18px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 20px 40px rgba(0, 0, 0, 0.5);
+  --accent-soft: #354638;
+  --accent-fg: #152019;
+  --accent-contrast: #152019;
+  --brand: #e0a178;
+  --brand-soft: #49382c;
+  --brand-ink: #f4c8a6;
+  --rail-bg: #101c15;
+  --rail-fg: #f2efdf;
+  --rail-muted: #b6c4b1;
+  --rail-hover: #26392c;
+  --rail-line: #344b38;
+  --rail-active: #dce4cf;
+  --rail-active-fg: #1d3222;
+  --feature-bg: #2d3e2e;
+  --feature-fg: #f0eedf;
+  --feature-muted: #c1cdb6;
+  --danger: #ffa39a;
+  --success: #a6cea3;
+  --warning: #edc688;
+  --border: #3b4c3b;
+  --border-strong: #63735b;
+  --border-faint: #2c3b2d;
+  --shadow-xs: 0 2px 5px rgba(0, 0, 0, 0.1);
+  --shadow-sm: 0 3px 12px rgba(0, 0, 0, 0.15);
+  --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.25);
+  --shadow-lg: 0 22px 60px rgba(0, 0, 0, 0.35);
 }
 
 /* === Accent color swatches (light) === */
 :root[data-accent="graphite"] {
-  --accent: #18181b;
-  --accent-hover: #27272a;
-  --accent-soft: #f4f4f5;
-  --accent-contrast: #fafafa;
+  --accent: #263c32;
+  --accent-hover: #3a5546;
+  --accent-soft: #e4eade;
+  --accent-contrast: #fffdf4;
 }
 :root[data-accent="indigo"] {
   --accent: #4f46e5;
@@ -169,10 +154,10 @@
 
 /* === Accent color swatches (dark) === */
 :root[data-theme="dark"][data-accent="graphite"] {
-  --accent: #fafafa;
+  --accent: #f1ebdd;
   --accent-hover: #ffffff;
-  --accent-soft: #1f1f23;
-  --accent-contrast: #09090b;
+  --accent-soft: #354638;
+  --accent-contrast: #152019;
 }
 :root[data-theme="dark"][data-accent="indigo"] {
   --accent: #818cf8;

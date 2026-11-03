@@ -87,7 +87,7 @@ export default function Toolbar({
     // 顶栏带 backdrop-blur，本身已经是一个层叠上下文，面板里的 z-30
     // 只在顶栏内部有效 —— 正文在 DOM 里排在顶栏之后，会把面板下半截
     // 盖掉（实测搜索结果的第 4、5 条被正文的封面压住）。
-    <header className="relative z-30 h-14 border-b border-border-faint bg-bg-elevated/70 backdrop-blur-xl">
+    <header className="app-toolbar relative z-30">
       <div className="page-shell h-full flex items-center gap-2 sm:gap-3">
         {/* 窄屏：导航 / 返回 */}
         <div className="flex items-center gap-1 lg:hidden shrink-0">
@@ -119,23 +119,26 @@ export default function Toolbar({
             看起来像被遗弃的控件区。把库规模放进左槽、搜索居中、
             动作靠右，顶栏才是一个有结构的应用栏。 */}
         {!onGallery && (
-          <div className="hidden lg:block w-[230px] shrink-0 text-[12.5px] text-fg-subtle tabular-nums truncate">
-            {libraryContext}
+          <div className="hidden xl:block shrink-0 mr-8">
+            <span className="toolbar-caption mb-1">我的媒体库</span>
+            <span className="text-[12.5px] text-fg-muted tabular-nums">
+              {libraryContext}
+            </span>
           </div>
         )}
-        {onGallery && <div className="hidden lg:block w-[230px] shrink-0" />}
+        {onGallery && <div className="hidden lg:block shrink-0" />}
 
         {/* 中槽：搜索。居中放置，和左右两槽形成对称。 */}
         {!onGallery && (
-          <div className="flex-1 min-w-0 flex justify-center">
-            <div className="w-full max-w-[560px]">
+          <div className="flex-1 min-w-0 flex justify-start">
+            <div className="w-full max-w-[620px]">
               <GlobalSearch />
             </div>
           </div>
         )}
         {onGallery && <div className="flex-1 min-w-0" />}
 
-        <div className="flex items-center gap-1 shrink-0 lg:w-[230px] lg:justify-end">
+        <div className="flex items-center gap-1 shrink-0 ml-auto">
           <button
             onClick={() =>
               window.dispatchEvent(new CustomEvent("comic:open-help"))

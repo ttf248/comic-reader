@@ -2,89 +2,379 @@
 @tailwind components;
 @tailwind utilities;
 
-/* 当前首页主封面的响应式尺寸，用视口高度控制首屏占用。
-   这些变量服务于现有双栏版式，可随重设计替换；同步检查标题、主操作与短屏空间。 */
-:root {
-  --stage-cover-max: 480px;
-  --stage-cover-h: clamp(240px, calc(100dvh - 440px), var(--stage-cover-max));
-  --stage-cover-w: calc(var(--stage-cover-h) * 2 / 3);
-}
-/* 超宽屏：封面更大（与 2xl 的历史尺寸一致） */
-@media (min-width: 1536px) {
-  :root {
-    --stage-cover-max: 528px;
+@layer components {
+  .app-main {
+    scroll-behavior: smooth;
   }
-}
-
-/* 当前首页推荐网格。列数和 nth-child 条数裁剪在这里一起维护，
-   并与 HomeHeroes 的候选上限配合；重设计可以更换排列与显示策略。 */
-.stage-grid {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-}
-@media (max-width: 639px) {
-  /* 手机：一条 4 张的缩略图带 */
-  .stage-grid > *:nth-child(n + 5) {
-    display: none;
+  .app-toolbar {
+    height: 76px;
+    flex-shrink: 0;
+    background: var(--bg);
+    border-bottom: 1px solid var(--border);
   }
-}
-@media (min-width: 640px) {
-  .stage-grid {
+  .toolbar-caption,
+  .page-eyebrow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--brand);
+    font-size: 12.5px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+  }
+  .page-eyebrow::before {
+    content: "";
+    width: 18px;
+    height: 2px;
+    background: currentColor;
+  }
+  .page-heading {
+    padding-top: 34px;
+    padding-bottom: 28px;
+  }
+  .page-heading .page-title {
+    margin-top: 10px;
+  }
+  .app-sidebar {
+    background: var(--rail-bg);
+    color: var(--rail-fg);
+  }
+  .sidebar-brand {
+    height: 76px;
+    padding-inline: 20px;
+    border-bottom: 1px solid var(--rail-line);
+  }
+  .brand-mark {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 40px;
+    flex-shrink: 0;
+    background: var(--brand-soft);
+    color: var(--brand-ink);
+    border-radius: 10px 10px 10px 2px;
+    font: 600 27px/1 var(--font-display);
+  }
+  .nav-entry {
+    display: flex;
+    align-items: center;
+    position: relative;
+    gap: 12px;
+    height: 46px;
+    padding-inline: 14px;
+    border-radius: 12px;
+    font-size: 14px;
+    color: var(--rail-muted);
+    transition:
+      background var(--dur),
+      color var(--dur);
+  }
+  .nav-entry:hover {
+    background: var(--rail-hover);
+    color: var(--rail-fg);
+  }
+  .nav-entry.is-active {
+    background: var(--rail-active);
+    color: var(--rail-active-fg);
+    font-weight: 600;
+    box-shadow: 0 3px 10px rgb(0 0 0 / 7%);
+  }
+  .nav-entry--compact {
+    justify-content: center;
+    padding-inline: 0;
+  }
+  .app-sidebar :focus-visible {
+    outline-color: var(--rail-fg);
+  }
+  .app-sidebar .is-active :focus-visible {
+    outline-color: var(--rail-active-fg);
+  }
+  .home-overview {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+    align-items: stretch;
+    gap: 24px;
+  }
+  .home-overview > :only-child {
+    grid-column: 1 / -1;
+  }
+  .reading-desk {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    padding: 26px;
+    border: 1px solid color-mix(in srgb, var(--feature-fg) 10%, transparent);
+    border-radius: 22px;
+    background: var(--feature-bg);
+    color: var(--feature-fg);
+  }
+  .reading-desk__feature {
+    display: grid;
+    grid-template-columns: minmax(140px, 0.78fr) minmax(0, 1fr);
+    align-items: center;
+    gap: clamp(20px, 3vw, 38px);
+    flex: 1;
+    padding-block: 24px;
+  }
+  .reading-cover {
+    position: relative;
+    width: 100%;
+    max-width: 180px;
+    aspect-ratio: 4 / 5;
+    justify-self: center;
+    overflow: hidden;
+    border-radius: 12px 16px 16px 12px;
+    background: var(--bg-media);
+    box-shadow: 8px 12px 22px rgb(15 31 20 / 16%);
+    transform: rotate(-3deg);
+    transition: transform 240ms var(--ease-out);
+  }
+  .reading-cover::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    box-shadow: inset 5px 0 8px rgb(0 0 0 / 18%);
+    pointer-events: none;
+    border: 1px solid rgb(255 255 255 / 25%);
+    border-radius: inherit;
+  }
+  .reading-cover:hover {
+    transform: rotate(-1deg) translateY(-3px);
+  }
+  .reading-desk__title {
+    margin-top: 12px;
+    font: 600 clamp(24px, 2.3vw, 34px)/1.4 var(--font-display);
+    overflow-wrap: anywhere;
+  }
+  .reading-desk__muted {
+    color: var(--feature-muted);
+    font-size: 12.5px;
+  }
+  .reading-queue {
+    display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    border-top: 1px solid color-mix(in srgb, var(--feature-fg) 15%, transparent);
+    padding-top: 18px;
   }
-}
-@media (min-width: 640px) and (max-width: 767px) {
-  /* 3 列 6 条 = 2 行 */
-  .stage-grid > *:nth-child(n + 7) {
-    display: none;
+  .reading-queue__item {
+    display: flex;
+    align-items: center;
+    position: relative;
+    min-width: 0;
   }
-}
-@media (min-width: 768px) {
-  .stage-grid {
+  .reading-queue__open {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    width: 100%;
+    border-radius: 8px;
+    text-align: left;
+  }
+  .reading-queue__remove {
+    position: absolute;
+    right: -5px;
+    top: -5px;
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--feature-bg);
+    color: var(--feature-muted);
+    opacity: 0;
+  }
+  .reading-queue__item:hover .reading-queue__remove,
+  .reading-queue__remove:focus-visible {
+    opacity: 1;
+  }
+  .discovery-panel {
+    min-width: 0;
+    padding: 24px;
+    border: 1px solid var(--border);
+    border-radius: 22px;
+    background: var(--bg-elevated);
+  }
+  .discovery-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px 14px;
+  }
+  .home-overview > .discovery-panel:only-child .discovery-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
-}
-@media (min-width: 768px) and (max-width: 1023px) {
-  /* 4 列 8 条 = 2 行 */
-  .stage-grid > *:nth-child(n + 9) {
+  .section-heading {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .section-index {
+    color: var(--brand);
+    font: 500 12.5px/1 var(--font-mono);
+  }
+  .album-tile {
+    border: 1px solid var(--border-faint);
+    border-radius: 16px;
+    background: var(--bg-elevated);
+    padding: 8px;
+    transition:
+      box-shadow var(--dur),
+      transform var(--dur);
+  }
+  .album-tile:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-3px);
+  }
+  .album-tile__cover {
+    border-radius: 11px;
+  }
+  .album-tile__meta {
+    padding: 12px 5px 7px;
+  }
+  .album-tile > .absolute {
+    top: 16px;
+    right: 16px;
+  }
+  .discovery-panel .album-tile {
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+  .discovery-panel .album-tile__meta {
+    padding-inline: 0;
+    padding-bottom: 0;
+  }
+  .discovery-panel .album-tile__meta > :not(:first-child) {
     display: none;
   }
-}
-@media (min-width: 1280px) and (max-width: 1799px) and (max-height: 880px) {
-  .stage-grid {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+  .discovery-panel .album-tile > .absolute {
+    top: 8px;
+    right: 8px;
   }
-  /* 先解除常规档的 8 条上限，再限到 10 条（5 列 × 2 行）。 */
-  .stage-grid > *:nth-child(n + 9) {
-    display: block;
+  .library-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
   }
-  .stage-grid > *:nth-child(n + 11) {
-    display: none;
+  .library-grid--spacious {
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   }
-}
-@media (min-width: 1800px) {
-  .stage-grid {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+  .year-index {
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    padding: 2px 2px 12px;
+    scroll-snap-type: x proximity;
   }
-}
-
-/* 当前宽屏右栏将其余在读与未读各排一行。
-   此处是现有布局的条数控制，不要求后续方案保留两栏或满行结构。 */
-@media (min-width: 1280px) and (max-width: 1799px) and (min-height: 881px) {
-  /* 4 列 1 行 = 4 条 */
-  .stage-grid > *:nth-child(n + 5) {
-    display: none;
+  .year-index__item {
+    position: relative;
+    flex: 0 0 184px;
+    scroll-snap-align: start;
   }
-}
-@media (min-width: 1280px) and (max-width: 1799px) and (max-height: 880px) {
-  /* 5 列 1 行 = 5 条 */
-  .stage-grid > *:nth-child(n + 6) {
-    display: none;
+  .year-index__open {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 12px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: var(--bg-elevated);
+    text-align: left;
+    transition:
+      background var(--dur),
+      border-color var(--dur);
   }
-}
-@media (min-width: 1800px) {
-  /* 6 列 1 行 = 6 条 */
-  .stage-grid > *:nth-child(n + 7) {
-    display: none;
+  .year-index__open:hover,
+  .year-index__open[aria-pressed="true"] {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .year-index__filter {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    color: var(--fg-muted);
+  }
+  .filter-strip {
+    margin-bottom: 16px;
+    border-top: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    padding-block: 13px;
+  }
+  .reader-shell {
+    background: var(--reader-bg);
+  }
+  @media (max-width: 1279px) {
+    .home-overview {
+      grid-template-columns: 1fr;
+    }
+    .discovery-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 639px) {
+    .app-toolbar {
+      height: 64px;
+    }
+    .page-heading {
+      padding-top: 26px;
+      padding-bottom: 22px;
+    }
+    .home-overview {
+      gap: 18px;
+    }
+    .reading-desk,
+    .discovery-panel {
+      padding: 18px;
+      border-radius: 18px;
+    }
+    .reading-desk__feature {
+      grid-template-columns: 108px minmax(0, 1fr);
+      gap: 18px;
+      padding-block: 22px;
+    }
+    .reading-desk__title {
+      font-size: 22px;
+    }
+    .reading-queue {
+      grid-template-columns: 1fr;
+      gap: 14px;
+    }
+    .reading-queue__remove {
+      opacity: 1;
+    }
+    .discovery-grid,
+    .home-overview > .discovery-panel:only-child .discovery-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .library-grid,
+    .library-grid--spacious {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .album-tile {
+      padding: 5px;
+      border-radius: 12px;
+    }
+    .album-tile__meta {
+      padding-inline: 3px;
+    }
+    .album-tile > .absolute {
+      top: 10px;
+      right: 10px;
+    }
+    .year-index__item {
+      flex-basis: 172px;
+    }
   }
 }
 
@@ -308,9 +598,9 @@ button:not(:disabled):active {
   /* 当前共享容器：限宽与流体留白可随视觉系统调整，页面也可使用不同布局。 */
   .page-shell {
     width: 100%;
-    max-width: 1600px;
+    max-width: 1720px;
     margin-inline: auto;
-    padding-inline: clamp(16px, 2vw, 40px);
+    padding-inline: clamp(20px, 3vw, 48px);
   }
   /* 设置页在宽屏（≥1280）改成两列：一列的分区按顺序读，另一列接着排。
      分区不能被列切断，所以 break-inside: avoid。 */
@@ -330,9 +620,9 @@ button:not(:disabled):active {
   /* --- 页面主标题 --- */
   .page-title {
     font-family: var(--font-display);
-    font-size: 30px;
+    font-size: 42px;
     line-height: 1.2;
-    font-weight: 650;
+    font-weight: 600;
     letter-spacing: -0.02em;
     color: var(--fg);
   }
@@ -342,34 +632,10 @@ button:not(:disabled):active {
     }
   }
 
-  /* 当前首页的紧凑页标题，与本页内容标题配合使用。 */
-  .page-title--compact {
-    font-size: 24px;
-  }
-  @media (max-width: 640px) {
-    .page-title--compact {
-      font-size: 20px;
-    }
-  }
-
-  /* 当前首页在读相册的内容标题；字号与层级随设计方案调整。 */
-  .hero-title {
-    font-family: var(--font-display);
-    font-size: 26px;
-    line-height: 1.25;
-    font-weight: 650;
-    letter-spacing: -0.02em;
-    color: var(--fg);
-  }
-  @media (max-width: 640px) {
-    .hero-title {
-      font-size: 21px;
-    }
-  }
-
   /* --- 区块标题：中文优先，不用 uppercase / 大字距 --- */
   .section-title {
-    font-size: 17px;
+    font-family: var(--font-display);
+    font-size: 21px;
     line-height: 1.4;
     font-weight: 600;
     color: var(--fg);
@@ -387,8 +653,8 @@ button:not(:disabled):active {
     align-items: center;
     justify-content: center;
     gap: 6px;
-    height: 36px;
-    padding-inline: 14px;
+    height: 40px;
+    padding-inline: 16px;
     border-radius: var(--radius-md);
     font-size: 13px;
     font-weight: 500;
@@ -405,13 +671,13 @@ button:not(:disabled):active {
     cursor: not-allowed;
   }
   .btn-sm {
-    height: 32px;
-    padding-inline: 11px;
+    height: 34px;
+    padding-inline: 13px;
     font-size: 13px;
     border-radius: var(--radius-sm);
   }
 
-  /* 主操作：accent 填充，全站只应有一个视觉主角 */
+  /* 主操作使用可切换的强调色。 */
   .btn-primary {
     background: var(--accent);
     color: var(--accent-contrast);
@@ -446,8 +712,8 @@ button:not(:disabled):active {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    height: 30px;
-    padding-inline: 10px;
+    height: 34px;
+    padding-inline: 12px;
     border-radius: var(--radius-sm);
     font-size: 13px;
     color: var(--fg-muted);
@@ -517,22 +783,6 @@ button:not(:disabled):active {
       #000 calc(100% - 28px),
       transparent 100%
     );
-  }
-
-  /* 当前内嵌未读区在宽屏共用 .stage-grid，解除货架的横向滚动与渐隐。
-     若重做首页陈列方式，同时调整这里与 HomeHeroes 的 inline 模式。 */
-  @media (min-width: 1280px) {
-    .stage-shelf {
-      display: grid;
-      overflow: visible;
-      overscroll-behavior-x: auto;
-      scroll-snap-type: none;
-      -webkit-mask-image: none;
-      mask-image: none;
-    }
-    .stage-shelf > * {
-      scroll-snap-align: none;
-    }
   }
 }
 
