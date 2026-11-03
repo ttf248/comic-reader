@@ -372,12 +372,15 @@ local-gallery/
 
 | 开关 | 取值 | 作用 |
 |------|------|------|
-| `LG_PAGES` | 路由，逗号分隔；`reader` 是伪路由 | 指定要审计的页面。`reader` 会取仪表盘里第一本相册直接进阅读器，审计压在图片上的浮层文字 |
+| `LG_PAGES` | 路由，逗号分隔；`reader` / `album` 是伪路由 | 指定要审计的页面。`reader` 会取仪表盘里第一本相册直接进阅读器，审计压在图片上的浮层文字；`album` 取仪表盘里一本图多的相册进详情页，审计 hero 与媒体网格 |
 | `LG_VIEWMODE` | `grid`（默认）/ `list` | 审计网格视图或列表视图（两套字号与排版） |
 | `LG_VIEWPORTS` | `390x844,1440x900` | 指定断点 |
 | `LG_THEMES` | `light` / `dark` | 指定主题 |
 
+两个脚本的默认页面清单为 `/`、`/recents`、`/favorites`、`/unread`、`/settings` 与伪路由 `album`。
+
 例：`LG_PAGES=reader npm run audit:contrast`（阅读器浮层对比度）、
+`LG_PAGES=album npm run audit:layout`（相册详情页的字号与溢出）、
 `LG_VIEWMODE=list npm run audit:layout`（列表视图的字号与溢出）。
 
 faststart 集成测试优先使用测试进程的 `FFMPEG_PATH`，未指定时查找仓库默认位置及 `PATH` 中可执行的 ffmpeg；工具不可用时跳过该用例。此变量只供测试选择工具，不覆盖应用的 `config.yaml`。
