@@ -24,7 +24,9 @@ const THEMES = (process.env.LG_THEMES ?? "light,dark").split(",").filter(Boolean
 // 页面清单里可以写伪路由：
 //   album  —— 相册详情页（id 每次运行不同，从仪表盘现取一本图多的相册）
 //   reader —— 阅读器（沉浸场景：顶栏 + 画面 + 浮动工具条 + 底部翻页条）
-const PAGES = (process.env.LG_PAGES ?? "/,/recents,/favorites,/unread,/settings,album,reader")
+//   tag    —— 标签页（真实库里可能一个标签都没有，用仪表盘里的真实相册
+//             伪造标签页数据，封面仍是真实缩略图）
+const PAGES = (process.env.LG_PAGES ?? "/,/recents,/favorites,/unread,/settings,album,reader,tag")
   .split(",")
   .map((p) => p.trim())
   .filter(Boolean);
@@ -215,6 +217,28 @@ async function openReader(page) {
   return true;
 }
 
+// 标签页：真实库里可能一个标签都没有（/api/tags 返回空数组），
+// 那这一页永远不会被量到。用仪表盘里的真实相册伪造一份标签页数据 ——
+// 封面走的是真实缩略图，版式与配色是真的，只是"标签"是假的。
+async function prepareTagRoute(page) {
+  await page.route(
+    (url) => url.pathname.includes("/api/tags/") && url.pathname.endsWith("/albums"),
+    async (route) => {
+      const data = await page.evaluate(async () => {
+        const r = await fetch("/api/library/dashboard");
+        const j = await r.json();
+        const items = j.dashboard?.unread ?? [];
+        return {
+          revision: j.dashboard?.revision ?? 0,
+          items,
+          total: items.length,
+        };
+      });
+      await route.fulfill({ json: { ok: true, page: data } });
+    },
+  );
+}
+
 async function main() {
   const browser = await chromium.launch();
   const report = [];
@@ -232,6 +256,8 @@ async function main() {
       await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
       await setTheme(page, theme);
 
+      await prepareTagRoute(page);
+
       for (const route of PAGES) {
         if (route === "reader") {
           if (!(await openReader(page))) {
@@ -240,8 +266,13 @@ async function main() {
           }
         } else {
           // 伪路由 album：相册详情页的 id 运行时现取。
+          // 伪路由 tag：标签页用固定的标签名，数据由 prepareTagRoute 伪造。
           const target =
-            route === "album" ? await resolveAlbumRoute(page) : route;
+            route === "album"
+              ? await resolveAlbumRoute(page)
+              : route === "tag"
+                ? `/tags/${encodeURIComponent("审计用标签")}`
+                : route;
           if (!target) {
             console.log(`  · 跳过 ${theme} ${route}：库里没有可打开的相册`);
             continue;

@@ -23,7 +23,9 @@ const THEMES = (process.env.LG_THEMES ?? "light,dark").split(",");
 // 页面清单里可以写伪路由：
 //   album  —— 相册详情页（id 每次运行不同，从仪表盘现取一本图多的相册）
 //   reader —— 阅读器（见下方 openReader）
-const PAGES = (process.env.LG_PAGES ?? "/,/unread,/recents,/favorites,/settings,album,reader")
+//   tag    —— 标签页（真实库里可能一个标签都没有，用仪表盘里的真实相册
+//             伪造标签页数据，封面仍是真实缩略图）
+const PAGES = (process.env.LG_PAGES ?? "/,/unread,/recents,/favorites,/settings,album,reader,tag")
   .split(",")
   .map((p) => p.trim())
   .filter(Boolean);
@@ -97,6 +99,140 @@ const AUDIT = () => {
     return parts.join(" > ");
   };
 
+  // 背板（backdrop）判定：这行字实际压着什么底色？
+  //
+  // 只看祖先链是不够的 —— 标签页 / 相册页的 hero 标题是用负边距压在
+  // 封面照片上的**兄弟层**，它不在照片的 DOM 子树里，祖先链查不到，
+  // 静态算出来的"纯色底"可能完全相反（白字压浅色照片：DOM 说 20:1，
+  // 实际 1.4:1）。
+  //
+  // 但也不能靠 elementsFromPoint 找"谁画在下面"：带 pointer-events-none
+  // 的渐变蒙版（首页年份卡、封面蒙版都是）根本不在那个列表里 ——
+  // 实测年份大字因此被判成"白字压白底"。所以改成几何判定：
+  //
+  //   1. 列出所有"图层"：<img> 与带 background-image 的元素；
+  //   2. 找出与文字包围盒相交、且**画在文字下面**的图层；
+  //   3. 文字自己带底色时，底色以它自己为准（半透明的要看底下那张图）。
+  //
+  // 画在下面怎么定：图层是文字的祖先 → 在下面；否则比较层叠层级
+  // （向上第一个定位祖先的 z-index），相同则按 DOM 顺序（后出现的在上）。
+  const allEls = document.querySelectorAll("*");
+  const domIndex = new Map();
+  {
+    let i = 0;
+    for (const n of allEls) domIndex.set(n, i++);
+  }
+  const levelCache = new Map();
+  const stackLevel = (el) => {
+    if (levelCache.has(el)) return levelCache.get(el);
+    let cur = el;
+    let z = 0;
+    while (cur && cur !== document.documentElement) {
+      const cs = getComputedStyle(cur);
+      if (cs.position !== "static") {
+        const zi = cs.zIndex;
+        z = zi && zi !== "auto" ? parseInt(zi, 10) : 0;
+        break;
+      }
+      cur = cur.parentElement;
+    }
+    levelCache.set(el, z);
+    return z;
+  };
+  // 图层：<img> 与带 background-image（渐变也算）的元素
+  const layers = [];
+  for (const n of allEls) {
+    const cs = getComputedStyle(n);
+    const bi = cs.backgroundImage;
+    const isImg = n.tagName === "IMG";
+    if (!isImg && (!bi || bi === "none")) continue;
+    const r = n.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) continue;
+    layers.push({
+      el: n,
+      kind: "image",
+      rect: { x: r.x, y: r.y, w: r.width, h: r.height },
+      z: stackLevel(n),
+      dom: domIndex.get(n) ?? 0,
+    });
+  }
+  // 图层是否画在文字下面
+  const layerBelow = (textEl, layer) => {
+    const le = layer.el;
+    if (le.contains(textEl)) return true; // 祖先 → 在下面
+    if (textEl.contains(le)) return false; // 后代 → 在上面
+    const zt = stackLevel(textEl);
+    if (zt !== layer.z) return zt > layer.z;
+    return (domIndex.get(textEl) ?? 0) > layer.dom;
+  };
+  const findBackdrop = (el, rect) => {
+    // 文字这一侧最上层的"底"：自己，或者最近的带背景的祖先。
+    const scrim = (() => {
+      let cur = el;
+      while (cur && cur.nodeType === 1) {
+        const cs = getComputedStyle(cur);
+        const bi = cs.backgroundImage;
+        if (bi && bi !== "none")
+          return {
+            kind: "image",
+            el: cur,
+            color: null,
+            z: stackLevel(cur),
+            dom: domIndex.get(cur) ?? 0,
+          };
+        const c = parseColor(cs.backgroundColor);
+        if (c && c.a > 0.02)
+          return {
+            kind: c.a >= 0.99 ? "opaque" : "translucent",
+            el: cur,
+            color: c,
+            z: stackLevel(cur),
+            dom: domIndex.get(cur) ?? 0,
+          };
+        cur = cur.parentElement;
+      }
+      return null;
+    })();
+    // 与文字相交、且画在文字下面的图层
+    let hit = null;
+    for (const layer of layers) {
+      const r = layer.rect;
+      if (
+        r.x >= rect.right ||
+        r.x + r.w <= rect.left ||
+        r.y >= rect.bottom ||
+        r.y + r.h <= rect.top
+      )
+        continue;
+      if (!layerBelow(el, layer)) continue;
+      if (
+        !hit ||
+        layer.z > hit.z ||
+        (layer.z === hit.z && layer.dom > hit.dom)
+      )
+        hit = layer;
+    }
+    // 两者里画得更上面的那个才是真正的背板
+    const topmost = (a, b) => {
+      if (!a) return b;
+      if (!b) return a;
+      if (a.z !== b.z) return a.z > b.z ? a : b;
+      return a.dom > b.dom ? a : b;
+    };
+    const best = topmost(scrim, hit);
+    if (!best) return { kind: "none", color: null, region: null };
+    const r = best.el.getBoundingClientRect();
+    const region = { x: r.x, y: r.y, w: r.width, h: r.height };
+    if (best.kind === "image")
+      return { kind: "image", color: null, region, self: best.el === el };
+    if (best.kind === "translucent") {
+      // 半透明的底：底下没有图的时候静态算得出，有图就得看像素。
+      if (!hit) return { kind: "translucent-static", color: best.color, region: null };
+      return { kind: "translucent", color: best.color, region, self: best.el === el };
+    }
+    return { kind: "opaque", color: best.color, region: null };
+  };
+
   const items = [];
   const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   const seen = new Set();
@@ -117,22 +253,41 @@ const AUDIT = () => {
     let fg = parseColor(cs.color);
     if (!fg) continue;
 
-    // 背景：沿祖先链合成；遇到 background-image 停下（图片覆盖，静态不可判）
-    const chain = [];
-    let cur = el;
-    let onImage = false;
-    while (cur && cur.nodeType === 1) {
-      const curCs = getComputedStyle(cur);
-      if (curCs.backgroundImage && curCs.backgroundImage !== "none") {
-        onImage = true;
-        break;
+    // 背景：先问"背板是谁"（绘制顺序 + 几何），再决定这条文字能不能静态判。
+    const backdrop = findBackdrop(el, rect);
+    const onImage = backdrop.kind === "image" || backdrop.kind === "translucent";
+
+    let bg;
+    if (backdrop.kind === "opaque" && backdrop.color) {
+      // 背板是不透明底色：直接用它，精确。
+      bg = backdrop.color;
+    } else if (backdrop.kind === "translucent-static" && backdrop.color) {
+      // 半透明底、底下没有图：沿祖先链合成也是精确的。
+      const chain = [];
+      let cur = el;
+      while (cur && cur.nodeType === 1) {
+        const curCs = getComputedStyle(cur);
+        if (curCs.backgroundImage && curCs.backgroundImage !== "none") break;
+        const c = parseColor(curCs.backgroundColor);
+        if (c) chain.push(c);
+        cur = cur.parentElement;
       }
-      const c = parseColor(curCs.backgroundColor);
-      if (c) chain.push(c);
-      cur = cur.parentElement;
+      bg = { r: 255, g: 255, b: 255, a: 1 };
+      for (let i = chain.length - 1; i >= 0; i--) bg = over(chain[i], bg);
+    } else {
+      // 沿祖先链合成（背板是图 / 半透明 / 找不到时的兜底）。
+      const chain = [];
+      let cur = el;
+      while (cur && cur.nodeType === 1) {
+        const curCs = getComputedStyle(cur);
+        if (curCs.backgroundImage && curCs.backgroundImage !== "none") break;
+        const c = parseColor(curCs.backgroundColor);
+        if (c) chain.push(c);
+        cur = cur.parentElement;
+      }
+      bg = { r: 255, g: 255, b: 255, a: 1 };
+      for (let i = chain.length - 1; i >= 0; i--) bg = over(chain[i], bg);
     }
-    let bg = { r: 255, g: 255, b: 255, a: 1 };
-    for (let i = chain.length - 1; i >= 0; i--) bg = over(chain[i], bg);
     if (fg.a < 1) fg = over(fg, bg);
 
     const size = parseFloat(cs.fontSize);
@@ -151,6 +306,14 @@ const AUDIT = () => {
       bg: `rgb(${Math.round(bg.r)}, ${Math.round(bg.g)}, ${Math.round(bg.b)})`,
       onImage,
       fgRgb: fg,
+      /* 像素通道的取样方式：
+         self —— 文字自己的盒子就是背板（半透明的角标 / 药丸），
+                 盒子里的像素是"底色 + 字形"，取中位数当底色；
+         ring —— 文字压在别的一层上，取包围盒外一圈像素，
+                 并裁剪到那一层的矩形内（不能采到那一层之外的像素，
+                 否则会把照片上更亮 / 更暗的地方当成背板）。 */
+      sampleMode: backdrop.kind === "translucent" && backdrop.self ? "self" : "ring",
+      region: backdrop.region,
       rect: {
         x: rect.x,
         y: rect.y,
@@ -256,11 +419,15 @@ const ICONS = () => {
 
 // 像素判定：在页面里把截图画到 canvas 上，按文字包围盒采样。
 //
-// 判定模型：文字的可读性取决于"文字颜色"与"它周围那一圈底色"的对比。
-// 取文字包围盒外 3px 的一圈像素当作底色（这一圈里没有字形，也没有
-// 抗锯齿的中间色），再按"最不利的一侧"算对比度：
-//   浅色文字取这一圈里最亮的像素（白字压到白墙上就是这种情况），
-//   深色文字取最暗的像素。
+// 判定模型：文字的可读性取决于"文字颜色"与"它背后那块底"的对比。
+// 两种取样方式（由 AUDIT 按背板类型决定）：
+//   ring —— 文字压在别的一层（图 / 渐变 / 半透明蒙版）上。取包围盒外
+//           3px 的一圈像素，并且**裁剪到那一层的矩形内**：圈里没有
+//           字形，也没有抗锯齿的中间色。再按"最不利的一侧"算：
+//           浅色文字取最亮的像素（白字压到白墙上），深色文字取最暗的。
+//   self —— 文字自己的盒子就是背板（半透明角标、药丸）。盒子里是
+//           "底色 + 字形"混在一起的，取**中位数**当底色：字形只占
+//           盒子的一小块，中位数落在底色上。
 const PIXELS = async ({ dataUrl, targets, dpr }) => {
   const img = new Image();
   img.src = dataUrl;
@@ -286,6 +453,55 @@ const PIXELS = async ({ dataUrl, targets, dpr }) => {
     const y = Math.round(t.rect.y * dpr);
     const w = Math.round(t.rect.w * dpr);
     const h = Math.round(t.rect.h * dpr);
+    const fg = t.fgRgb;
+    const fgLum = luminance(fg.r, fg.g, fg.b);
+    const lums = [];
+
+    if (t.sampleMode === "self") {
+      // 整盒取样：盒子里是"底色 + 字形"混在一起的。
+      // 先把与文字颜色接近的像素（字形与它的抗锯齿边缘）剔掉，
+      // 剩下的就是这块底色本身；再按"最不利的一侧"算 ——
+      // 浅色文字取最亮的底色，深色文字取最暗的。
+      //
+      // 盒子必须整个落在截图里：视口外的元素取到的是"透明"像素
+      // （getImageData 越界返回全 0），会被当成纯黑底色，
+      // 把虚拟滚动列表里还没滚到的条目误判成不合格。
+      if (w < 1 || h < 1) return { ...t, pixelRatio: null };
+      if (x < 0 || y < 0 || x + w > canvas.width || y + h > canvas.height)
+        return { ...t, pixelRatio: null };
+      const data = ctx.getImageData(x, y, w, h).data;
+      const all = [];
+      const bg = [];
+      for (let i = 0; i < w * h; i++) {
+        const r = data[i * 4];
+        const g = data[i * 4 + 1];
+        const b = data[i * 4 + 2];
+        const l = luminance(r, g, b);
+        all.push(l);
+        // 与文字颜色的距离：字形本身，以及紧贴字形的抗锯齿边缘
+        const dr = r - fg.r;
+        const dg = g - fg.g;
+        const db = b - fg.b;
+        if (Math.sqrt(dr * dr + dg * dg + db * db) > 70) bg.push(l);
+      }
+      if (bg.length) lums.push(...bg);
+      else lums.push(...all);
+      if (!lums.length) return { ...t, pixelRatio: null };
+      lums.sort((a, b) => a - b);
+      const median = lums[Math.floor(lums.length / 2)];
+      // 文字亮 → 最亮的一侧底色最糟；文字暗 → 最暗的一侧最糟。
+      const lightText = fgLum >= median;
+      const worstBg = lightText
+        ? lums[Math.floor(lums.length * 0.9)]
+        : lums[Math.floor(lums.length * 0.1)];
+      const worst = ratio(fgLum, worstBg);
+      return {
+        ...t,
+        pixelRatio: Math.round(worst * 100) / 100,
+        pixelBg: `自身底色 ${worstBg.toFixed(3)}（范围 ${lums[0].toFixed(3)}–${lums[lums.length - 1].toFixed(3)}）`,
+      };
+    }
+
     const band = 3;
     const rx = Math.max(0, x - band);
     const ry = Math.max(0, y - band);
@@ -293,7 +509,8 @@ const PIXELS = async ({ dataUrl, targets, dpr }) => {
     const rh = Math.min(canvas.height - ry, h + band * 2);
     if (rw < 1 || rh < 1) return { ...t, pixelRatio: null };
     const data = ctx.getImageData(rx, ry, rw, rh).data;
-    const lums = [];
+    // 背板层的矩形（CSS 像素）：圈到这一层之外就不算背板了。
+    const region = t.region;
     for (let i = 0; i < rw * rh; i++) {
       // 只取包围盒外面那一圈
       const px = i % rw;
@@ -301,12 +518,21 @@ const PIXELS = async ({ dataUrl, targets, dpr }) => {
       const inside =
         px >= x - rx && px < x - rx + w && py >= y - ry && py < y - ry + h;
       if (inside) continue;
+      if (region) {
+        const gx = (rx + px) / dpr;
+        const gy = (ry + py) / dpr;
+        if (
+          gx < region.x ||
+          gx > region.x + region.w ||
+          gy < region.y ||
+          gy > region.y + region.h
+        )
+          continue;
+      }
       lums.push(luminance(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]));
     }
     if (!lums.length) return { ...t, pixelRatio: null };
     lums.sort((a, b) => a - b);
-    const fg = t.fgRgb;
-    const fgLum = luminance(fg.r, fg.g, fg.b);
     const median = lums[Math.floor(lums.length / 2)];
     // 文字亮 → 最亮的一侧底色最糟；文字暗 → 最暗的一侧最糟。
     const lightText = fgLum >= median;
@@ -344,6 +570,72 @@ const SELF_TEST = () => {
   mk("rgb(255,255,255)", "rgb(255,255,255)", "自检-坏-白字压白底", "self-test-bad");
   mk("rgb(0,0,0)", "rgb(255,255,255)", "自检-好-白字压黑底", "self-test-good");
   mk("rgb(120,120,120)", "rgb(255,255,255)", "自检-坏-白字压中灰底", "self-test-bad2");
+
+  // 兄弟层自检：文字**不在**图的 DOM 子树里，而是靠 z-index 压在图上
+  // —— 标签页 / 相册页的 hero 标题就是这个结构。祖先链查不到它，
+  // 必须能证明新判据分得清好坏。
+  // 图层要比文字大一圈：取样环落在文字包围盒外 3px，
+  // 全落在图层里才采得到底色。
+  const mkSibling = (bg, color, label, id) => {
+    const layer = document.createElement("div");
+    layer.style.cssText =
+      `position:fixed;left:600px;top:${top}px;width:280px;height:60px;` +
+      `background-image:linear-gradient(${bg});z-index:99998`;
+    document.body.appendChild(layer);
+    const t = document.createElement("div");
+    t.id = id;
+    t.style.cssText =
+      `position:fixed;left:610px;top:${top + 10}px;width:240px;height:40px;` +
+      `color:${color};font-size:13px;line-height:40px;z-index:99999`;
+    t.textContent = label;
+    document.body.appendChild(t);
+    top += 70;
+  };
+  mkSibling(
+    "rgb(255,255,255)",
+    "rgb(255,255,255)",
+    "自检-坏-兄弟层白字压白图",
+    "self-test-sib-bad",
+  );
+  mkSibling(
+    "rgb(0,0,0)",
+    "rgb(255,255,255)",
+    "自检-好-兄弟层白字压黑图",
+    "self-test-sib-good",
+  );
+
+  // 半透明角标自检：角标自己有 85% 不透明的底，压在照片上。
+  // 这种"自己的盒子就是背板"的情况，取样必须落在盒子内部
+  // （取整盒中位数），否则会拿角标外的照片像素当底色 ——
+  // 报出假的不合格（好样本变坏），或者漏掉真问题（坏样本变好）。
+  const mkChip = (photo, chip, color, id) => {
+    const layer = document.createElement("div");
+    layer.style.cssText =
+      `position:fixed;left:600px;top:${top}px;width:240px;height:40px;` +
+      `background-image:linear-gradient(${photo});z-index:99998`;
+    document.body.appendChild(layer);
+    const chipEl = document.createElement("div");
+    chipEl.id = id;
+    chipEl.style.cssText =
+      `position:absolute;left:8px;top:8px;width:40px;height:24px;` +
+      `background:${chip};color:${color};font-size:13px;line-height:24px;` +
+      `text-align:center;z-index:99999`;
+    chipEl.textContent = "9";
+    layer.appendChild(chipEl);
+    top += 60;
+  };
+  mkChip(
+    "rgb(0,0,0)",
+    "rgba(255,255,255,0.85)",
+    "rgb(20,20,20)",
+    "self-test-chip-good",
+  );
+  mkChip(
+    "rgb(0,0,0)",
+    "rgba(255,255,255,0.85)",
+    "rgb(255,255,255)",
+    "self-test-chip-bad",
+  );
 
   // 图标自检：SVG 没有文字节点，必须单独证明这条通道也分得清好坏。
   // 图标要在底色块里居中：取样环是包围盒外 3px 的一圈，
@@ -432,6 +724,28 @@ async function openReader(page) {
   return page.url().includes("/gallery");
 }
 
+// 标签页：真实库里可能一个标签都没有（/api/tags 返回空数组），
+// 那这一页永远不会被量到。用仪表盘里的真实相册伪造一份标签页数据 ——
+// 封面走的是真实缩略图，版式与配色是真的，只是"标签"是假的。
+async function prepareTagRoute(page) {
+  await page.route(
+    (url) => url.pathname.includes("/api/tags/") && url.pathname.endsWith("/albums"),
+    async (route) => {
+      const data = await page.evaluate(async () => {
+        const r = await fetch("/api/library/dashboard");
+        const j = await r.json();
+        const items = j.dashboard?.unread ?? [];
+        return {
+          revision: j.dashboard?.revision ?? 0,
+          items,
+          total: items.length,
+        };
+      });
+      await route.fulfill({ json: { ok: true, page: data } });
+    },
+  );
+}
+
 const SELF_TEST_ONLY = process.argv.includes("--self-test");
 const browser = await chromium.launch();
 const violations = [];
@@ -450,6 +764,7 @@ for (const theme of THEMES) {
   });
   const page = await ctx.newPage();
   await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
+  await prepareTagRoute(page);
   await page.evaluate(({ t, vm }) => {
     const raw = localStorage.getItem("local-gallery-ui");
     const parsed = raw ? JSON.parse(raw) : { state: {} };
@@ -465,8 +780,13 @@ for (const theme of THEMES) {
       }
     } else {
       // 伪路由 album：相册详情页的 id 运行时现取。
+      // 伪路由 tag：标签页用固定的标签名，数据由 prepareTagRoute 伪造。
       const target =
-        route === "album" ? await resolveAlbumRoute(page) : route;
+        route === "album"
+          ? await resolveAlbumRoute(page)
+          : route === "tag"
+            ? `/tags/${encodeURIComponent("审计用标签")}`
+            : route;
       if (!target) {
         console.log(`  · 跳过 ${theme} ${route}：库里没有可打开的相册`);
         continue;
@@ -611,21 +931,42 @@ if (worstIcons.length) {
 if (SELF_TEST_ONLY) {
   // 自检结论：坏样本必须被判不合格，好样本必须被判合格。
   // 工具自己分不清好坏时，它报"全部通过"就没有意义。
-  const bad1 = pixelResults.find((r) => r.text?.includes("自检-坏-白字压白底"));
-  const bad2 = pixelResults.find((r) => r.text?.includes("自检-坏-白字压中灰底"));
-  const good = pixelResults.find((r) => r.text?.includes("自检-好"));
+  const byId = (list, id) =>
+    list.find((r) => (r.path ?? "").includes(`#${id}`));
+  const bad1 = byId(pixelResults, "self-test-bad");
+  const bad2 = byId(pixelResults, "self-test-bad2");
+  const good = byId(pixelResults, "self-test-good");
+  const sibBad = byId(pixelResults, "self-test-sib-bad");
+  const sibGood = byId(pixelResults, "self-test-sib-good");
+  const chipBad = byId(pixelResults, "self-test-chip-bad");
+  const chipGood = byId(pixelResults, "self-test-chip-good");
   const badIcon = iconResults.find((r) => r.text?.includes("自检-坏图标"));
   const goodIcon = iconResults.find((r) => r.text?.includes("自检-好图标"));
+  const passes = (r) => !!r && r.pixelRatio !== null && r.pixelRatio < r.need;
+  const okOf = (r) => !!r && r.pixelRatio !== null && r.pixelRatio >= r.need;
   const ok =
-    !!bad1 && bad1.pixelRatio < bad1.need &&
-    !!bad2 && bad2.pixelRatio < bad2.need &&
-    !!good && good.pixelRatio >= good.need &&
-    !!badIcon && badIcon.pixelRatio < badIcon.need &&
-    !!goodIcon && goodIcon.pixelRatio >= goodIcon.need;
+    passes(bad1) &&
+    passes(bad2) &&
+    okOf(good) &&
+    passes(sibBad) &&
+    okOf(sibGood) &&
+    passes(chipBad) &&
+    okOf(chipGood) &&
+    !!badIcon &&
+    badIcon.pixelRatio < badIcon.need &&
+    !!goodIcon &&
+    goodIcon.pixelRatio >= goodIcon.need;
+  const fmt = (r) =>
+    r ? `${r.pixelRatio}:1（需 ${r.need}）` : "未采到样本";
   console.log(
     ok
       ? "✓ 自检通过：文字与图标的坏样本都被判不合格，好样本都被判合格。"
-      : `✗ 自检失败：白字压白底 ${bad1?.pixelRatio}:1、白字压中灰底 ${bad2?.pixelRatio}:1（都应低于 ${bad1?.need}），白字压黑底 ${good?.pixelRatio}:1（应不低于 ${good?.need}）；白图标压白底 ${badIcon?.pixelRatio}:1（应低于 3），白图标压黑底 ${goodIcon?.pixelRatio}:1（应不低于 3）`,
+      : `✗ 自检失败：
+    白字压白底 ${fmt(bad1)}、白字压中灰底 ${fmt(bad2)}（都应低于阈值）；
+    白字压黑底 ${fmt(good)}（应不低于阈值）；
+    兄弟层白字压白图 ${fmt(sibBad)}、白字压黑图 ${fmt(sibGood)}；
+    半透明角标白字 ${fmt(chipBad)}、深字 ${fmt(chipGood)}；
+    白图标压白底 ${badIcon?.pixelRatio}:1（应低于 3），白图标压黑底 ${goodIcon?.pixelRatio}:1（应不低于 3）`,
   );
   console.log();
   process.exit(ok ? 0 : 1);
