@@ -14,7 +14,12 @@ interface Props {
 //
 // 跨卷导航保留在画面左侧竖排：它是低频但有辨识度的操作（这个项目的
 // 卖点之一就是「读完这本接着翻下一本」），需要常驻可见，不能藏进菜单。
+//
 // 样式刻意做轻 —— 不带玻璃面板，只在 hover 时浮出浅底，避免和图片抢戏。
+// 但"轻"不能等于"看不见"：箭头是白图标，压在亮照片上时白/70 的实际
+// 对比度只有 1.4:1（WCAG 对非文本控件要求 ≥3:1），实拍确认箭头在明亮
+// 画面上几乎消失。所以给每枚箭头配一层恒定的深色圆底 —— 底色只盖
+// 36px 的小圆，比玻璃面板轻得多，却保证箭头的局部背景永远是深色。
 export default function GalleryAlbumNav({
   visible,
   onPrevAlbum,
@@ -57,7 +62,7 @@ function NavButton({
       onClick={onClick}
       title={title}
       aria-label={title}
-      className="inline-flex h-9 w-9 items-center justify-center rounded-full text-white/70 transition-colors hover:bg-white/15 hover:text-white"
+      className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-neutral-900/55 text-white backdrop-blur-[2px] ring-1 ring-white/10 transition-colors hover:bg-neutral-900/75 hover:text-white"
     >
       {children}
     </button>

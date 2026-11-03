@@ -672,7 +672,7 @@ function UnreadDot() {
 function ReadChip() {
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-md bg-black/65 backdrop-blur-sm ring-1 ring-white/20 px-1.5 h-5 text-[11.5px] font-medium text-white shadow-sm"
+      className="inline-flex items-center gap-1 rounded-md bg-black/65 backdrop-blur-sm ring-1 ring-white/20 px-1.5 h-5 text-[12.5px] font-medium text-white shadow-sm"
       title="已读完"
     >
       <CheckIcon size={10} className="text-emerald-300" />

@@ -442,11 +442,14 @@ button:not(:disabled):active {
 /* 放在 @layer components 里：否则未分层的自定义规则会盖掉 Tailwind 的
    工具类（例如 GlobalSearch 里的 `hidden sm:inline-flex kbd` 会永远显示）。 */
 @layer components {
+  /* 键帽字号下限跟正文一致（12.5px）：键帽看着"小字"是排版惯例，
+     但 10.5px 的拉丁字母在高分屏上已经糊成一条线，而且它是布局审计
+     唯一剩下的 <12.5px 文本例外。 */
   .kbd {
     display: inline-flex;
     align-items: center;
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 12.5px;
     line-height: 1;
     padding: 3px 6px;
     border-radius: var(--radius-sm);
@@ -454,7 +457,7 @@ button:not(:disabled):active {
     background: var(--bg-elevated);
     color: var(--fg-muted);
     box-shadow: 0 1px 0 var(--border-faint);
-    min-width: 18px;
+    min-width: 20px;
     justify-content: center;
   }
 
@@ -463,14 +466,14 @@ button:not(:disabled):active {
     display: inline-flex;
     align-items: center;
     font-family: var(--font-mono);
-    font-size: 10.5px;
+    font-size: 12.5px;
     line-height: 1;
     padding: 2px 5px;
     border-radius: 4px;
     border: 1px solid rgba(255, 255, 255, 0.18);
     background: rgba(255, 255, 255, 0.08);
     color: rgba(255, 255, 255, 0.75);
-    min-width: 16px;
+    min-width: 19px;
     justify-content: center;
   }
 }

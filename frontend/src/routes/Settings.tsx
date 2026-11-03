@@ -248,7 +248,7 @@ export default function Settings() {
                 >
                   {active && (
                     <span className="absolute inset-0 ring-2 ring-fg ring-offset-2 ring-offset-bg-elevated rounded-full flex items-center justify-center">
-                      <CheckIcon size={12} className="text-fg" />
+                      <CheckIcon size={12} className="text-white" />
                     </span>
                   )}
                 </button>

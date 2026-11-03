@@ -39,7 +39,7 @@ export default function ImageInfoPanel({ absPath, onClose }: Props) {
         </h2>
         <button
           onClick={onClose}
-          className="text-white/60 hover:text-white p-1 rounded hover:bg-white/10 transition-colors"
+          className="inline-flex h-7 w-7 items-center justify-center rounded text-white/60 hover:text-white hover:bg-white/10 transition-colors"
           title="关闭 (I)"
           aria-label="关闭图片信息"
         >
@@ -109,7 +109,7 @@ function Row({ label, value, mono, copyable, copyValue }: RowProps) {
         {copyable && copyValue && <CopyButton value={copyValue} onDark />}
       </div>
       <div
-        className={`break-all ${mono ? 'font-mono text-[11.5px] text-white/70' : 'text-white/90'}`}
+        className={`break-all ${mono ? 'font-mono text-[12.5px] text-white/70' : 'text-white/90'}`}
       >
         {value}
       </div>

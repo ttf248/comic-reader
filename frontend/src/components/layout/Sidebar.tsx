@@ -212,7 +212,7 @@ export default function Sidebar({
               <span className="truncate flex-1">未读</span>
               {unreadCount > 0 && (
                 <span
-                  className="inline-flex items-center justify-center min-w-[20px] h-[18px] px-1.5 rounded-full bg-accent-soft text-accent text-[11.5px] font-semibold tabular-nums"
+                  className="inline-flex items-center justify-center min-w-[22px] h-[20px] px-1.5 rounded-full bg-accent-soft text-accent text-[12.5px] font-semibold tabular-nums"
                   aria-label={`还有 ${unreadCount} 本未读`}
                 >
                   {unreadCount > 999 ? "999+" : unreadCount}

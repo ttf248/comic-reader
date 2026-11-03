@@ -165,7 +165,7 @@ export default function GalleryToolbar({
         >
           <span className="inline-flex items-center gap-1">
             <RotateIcon size={15} />
-            <span className="text-[11.5px] tabular-nums">{rotation}°</span>
+            <span className="text-[12.5px] tabular-nums">{rotation}°</span>
           </span>
         </ToolButton>
 
