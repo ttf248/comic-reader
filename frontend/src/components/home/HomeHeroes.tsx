@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { thumbUrl } from "../../api/thumbs";
 import { previewUrl } from "../../api/images";
@@ -148,6 +148,14 @@ interface ContinueReadingHeroProps {
   onContinue: (card: CardData) => void;
   onRemove: (card: CardData) => void;
   onClearAll: () => void;
+  /**
+   * 右栏的替补内容。
+   *
+   * 只有一本在读时没有"其余在读"，右栏会整栏空掉 —— 首页第一屏右侧
+   * 1200px 全是空白。调用方（首页）把「未读」塞进来，右栏就永远有内容：
+   * "你正在读的"与"接下来读的"并排。
+   */
+  rightSlot?: ReactNode;
 }
 
 // 首页继续阅读入口：点击卡片直接进入上次阅读位置。
@@ -166,18 +174,22 @@ interface ContinueReadingHeroProps {
 //   - 主封面高度 ≥ 其余在读海报 1.6 倍（"主角 / 次要"必须一眼可分）；
 //   - 主按钮与封面紧挨着（同在左栏），旧版相距 ~1000px；
 //   - 右栏整栏都是图像，不留"信息栏只占 520px、右侧空 620px"的空洞；
+//   - 右栏不能空：只有一本在读时改放「未读」，否则整行右侧会空掉 1200px；
 //   - 进度同时用"数字 + 条"两处表达，不只靠一条 3px 细线。
 export function ContinueReadingHero({
   cards,
   onContinue,
   onRemove,
   onClearAll,
+  rightSlot,
 }: ContinueReadingHeroProps) {
   const featured = cards[0];
   // 其余在读最多铺 12 条（见 GRID_ITEMS）。剩下的本子不再往首页堆：
   // 侧栏的「继续阅读」已经列了最近 6 本 + "还有 N 本没看完"，两处都铺满
   // 只会让首页变成索引页，看不到任何一张图的细节。
   const rest = cards.slice(1, 1 + GRID_ITEMS);
+  // 右栏有没有内容：其余在读，或者调用方塞进来的替补（首页塞未读）。
+  const hasRight = rest.length > 0 || !!rightSlot;
 
   return (
     <section className="page-shell pt-2 pb-10" data-testid="continue-hero">
@@ -202,21 +214,49 @@ export function ContinueReadingHero({
           /* 窄屏 / 平板：封面 + 墙签并排，进度与操作落在它们下方；
              宽屏（xl+）：封面独占一列（320px），标题与进度贴在其下。
              平板档用 flex-wrap 让"标题 + 进度"整块换行到封面右侧，
-             否则标题右边会拖出一大片空白。 */
-          <div className="shrink-0 xl:w-[320px] 2xl:w-[352px]">
-            <div className="flex flex-wrap gap-4 items-end xl:flex-col xl:items-stretch xl:gap-4">
-              <div className="w-[112px] md:w-[200px] xl:w-full shrink-0">
+             否则标题右边会拖出一大片空白。
+             没有右栏时（整页只有一本在读）改为"封面 + 信息"并排，
+             让这一块本身有宽度，而不是在右边空出整屏。 */
+          <div
+            className={
+              hasRight
+                ? "shrink-0 xl:w-[320px] 2xl:w-[352px]"
+                : "shrink-0 xl:w-[760px] 2xl:w-[800px]"
+            }
+          >
+            <div
+              className={`flex flex-wrap gap-4 items-end ${
+                hasRight
+                  ? "xl:flex-col xl:items-stretch xl:gap-4"
+                  : "xl:flex-row xl:items-start xl:gap-8"
+              }`}
+            >
+              <div
+                className={`shrink-0 ${
+                  hasRight
+                    ? "w-[112px] md:w-[200px] xl:w-full"
+                    : "w-[112px] md:w-[200px] xl:w-[320px]"
+                }`}
+              >
                 <StagePoster
                   card={featured}
                   onClick={() => onContinue(featured)}
                 />
               </div>
               {/* 墙签：标题贴在封面下方，像展厅里的作品说明 */}
-              <div className="w-full md:w-auto md:flex-1 min-w-0 xl:flex-none xl:w-full">
-                <h3 className="hero-title xl:mt-4 line-clamp-2">
+              <div
+                className={
+                  hasRight
+                    ? "w-full md:w-auto md:flex-1 min-w-0 xl:flex-none xl:w-full"
+                    : "w-full md:w-auto md:flex-1 min-w-0 xl:flex-1"
+                }
+              >
+                <h3
+                  className={`hero-title line-clamp-2 ${hasRight ? "xl:mt-4" : ""}`}
+                >
                   {featured.title}
                 </h3>
-                <div className="mt-3 xl:mt-6">
+                <div className={`mt-3 ${hasRight ? "xl:mt-6" : "xl:mt-4"}`}>
                   <StageInfo
                     card={featured}
                     onContinue={() => onContinue(featured)}
@@ -228,20 +268,29 @@ export function ContinueReadingHero({
           </div>
         )}
 
-        {/* 其余在读：整栏都是封面，填掉旧版信息栏右侧那块空洞 */}
-        {rest.length > 0 && (
+        {/* 右栏：整栏都是图像，填掉旧版信息栏右侧那块空洞。
+            替补内容（未读区）也必须裹在 flex-1 min-w-0 里：它是 flex 行的
+            直接子元素，不加约束会按自身宽度（.page-shell 的 width:100%）
+            撑开，把整行顶出容器 —— 1920 下实测主内容横向溢出 203px。 */}
+        {(rightSlot || rest.length > 0) && (
           <div className="flex-1 min-w-0">
-            <div className="section-meta mb-4">其余在读</div>
-            <div className={`grid ${GRID_COLS} gap-x-3.5 gap-y-7 ${GRID_HIDE_SM}`}>
-              {rest.map((card) => (
-                <MiniPoster
-                  key={card.id}
-                  card={card}
-                  onClick={() => onContinue(card)}
-                  onRemove={() => onRemove(card)}
-                />
-              ))}
-            </div>
+            {rightSlot ?? (
+              <>
+                <div className="section-meta mb-4">其余在读</div>
+                <div
+                  className={`grid ${GRID_COLS} gap-x-3.5 gap-y-7 ${GRID_HIDE_SM}`}
+                >
+                  {rest.map((card) => (
+                    <MiniPoster
+                      key={card.id}
+                      card={card}
+                      onClick={() => onContinue(card)}
+                      onRemove={() => onRemove(card)}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>

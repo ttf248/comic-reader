@@ -330,6 +330,19 @@ export default function Home() {
   // 年份筛选的"全部图像"section 顶部 chip
   const yearFilterLabel = yearFilter === "other" ? "其他" : String(yearFilter);
 
+  // 未读区：只有一本在读时放进「继续阅读」舞台的右栏 ——
+  // 那时舞台没有"其余在读"，右栏会整栏空掉，首页第一屏右侧 1200px
+  // 全是空白。其余情况仍作为独立区块排在「继续阅读」之后。
+  const unreadSection = (
+    <UnreadHero
+      cards={unreadCards}
+      count={unreadCount}
+      onShuffle={onShuffleUnread}
+      onMarkRead={onMarkReadUnread}
+    />
+  );
+  const unreadInStage = inProgressAll.length === 1 && unreadCards.length > 0;
+
   return (
     <div className="min-h-full">
       {/* ScanProgress 已提升到 AppShell，跨路由常驻显示 */}
@@ -411,11 +424,14 @@ export default function Home() {
           onContinue={onContinue}
           onRemove={onRemoveContinue}
           onClearAll={onClearContinue}
+          /* 只有一本在读时，舞台右栏没有"其余在读"可放 —— 改放「未读」，
+             右栏就不空。下面的独立「未读」区此时不再重复渲染。 */
+          rightSlot={unreadInStage ? unreadSection : undefined}
         />
       )}
 
       {/* === 未读推荐(有未读时置顶 6 张,直接引导用户进下一本)== */}
-      {hasContent && unreadCards.length > 0 && (
+      {hasContent && unreadCards.length > 0 && !unreadInStage && (
         <UnreadHero
           cards={unreadCards}
           count={unreadCount}

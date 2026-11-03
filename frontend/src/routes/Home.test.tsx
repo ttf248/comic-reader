@@ -39,7 +39,11 @@ vi.mock("../components/home/YearTimeline", () => ({
   default: () => <div data-testid="year-timeline" />,
 }));
 vi.mock("../components/home/HomeHeroes", () => ({
-  ContinueReadingHero: () => <div data-testid="continue-hero" />,
+  // rightSlot 是真实组件的右栏（只有一本在读时，首页把「未读」塞进去），
+  // 占位组件也要渲染它，否则 DOM 顺序断言会漏掉未读区的位置。
+  ContinueReadingHero: ({ rightSlot }: { rightSlot?: React.ReactNode }) => (
+    <div data-testid="continue-hero">{rightSlot}</div>
+  ),
   UnreadHero: () => <div data-testid="unread-hero" />,
 }));
 vi.mock("../components/album/AlbumGrid", () => ({
@@ -84,7 +88,11 @@ vi.mock("../hooks/useLibrary", () => {
         dashboard: {
           unread: [mocks.items[0]],
           unreadCount: 1,
-          inProgress: [{ album: mocks.items[0], pageIndex: 1, pageCount: 3 }],
+          inProgress: mocks.items.map((album) => ({
+            album,
+            pageIndex: 1,
+            pageCount: 3,
+          })),
         },
       },
       isLoading: false,
@@ -164,4 +172,39 @@ it("筛选条紧贴在「全部图像」网格上方，不被英雄区 / 时间�
       hero.compareDocumentPosition(chip) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   }
+});
+
+it("只有一本在读时未读区进入舞台右栏，右栏不会整栏空掉", async () => {
+  renderHome();
+  await waitFor(() => expect(screen.getByTestId("album-grid")).toBeTruthy());
+  // 默认夹具只有一本在读：未读区被塞进舞台右栏。
+  expect(
+    screen
+      .getByTestId("continue-hero")
+      .contains(screen.getByTestId("unread-hero")),
+  ).toBe(true);
+});
+
+it("多本在读时未读区仍独立成块，不进舞台右栏", async () => {
+  mocks.items = [
+    ...mocks.items,
+    {
+      id: "a_2",
+      kind: "album" as const,
+      name: "2024年第二本",
+      displayName: "2024年第二本",
+      imageCount: 3,
+      coverImages: [],
+      modTime: "2024-01-02T00:00:00Z",
+      date: "2024-01-02T00:00:00Z",
+    },
+  ];
+  renderHome();
+  await waitFor(() => expect(screen.getByTestId("album-grid")).toBeTruthy());
+  // 两本在读：右栏放「其余在读」，未读区回到独立区块。
+  expect(
+    screen
+      .getByTestId("continue-hero")
+      .contains(screen.getByTestId("unread-hero")),
+  ).toBe(false);
 });
