@@ -61,6 +61,10 @@ export default function MixedMediaThumbnailGrid({
       style={{ height: "100%" }}
       data={slots}
       overscan={720}
+      /* 多渲染一截虚拟窗口：Virtuoso 估算的整段滚动长度比真实布局高约两行，
+         "拖到最底"时最后一行落在估算窗口之外，只剩占位块（图片渲染不出来）。
+         把窗口下沿多留 1600px（约 6 行），估算误差就被覆盖住了。 */
+      increaseViewportBy={{ top: 720, bottom: 1600 }}
       listClassName={`grid gap-2 px-6 lg:px-10 pb-10 max-w-[1400px] mx-auto ${gridClassName}`}
       itemClassName="min-w-0"
       computeItemKey={(index, item) =>
@@ -118,16 +122,16 @@ export default function MixedMediaThumbnailGrid({
                 </div>
               )}
               {isCurrent && (
-                <div className="absolute top-1.5 left-1.5 bg-accent text-accent-fg text-[11.5px] font-medium px-1.5 py-0.5 rounded">
+                <div className="absolute top-1.5 left-1.5 bg-accent text-accent-fg text-[12.5px] font-medium px-1.5 py-0.5 rounded">
                   当前
                 </div>
               )}
-              <div className="absolute bottom-1.5 right-1.5 text-[11.5px] bg-bg-elevated/85 backdrop-blur px-1.5 py-0.5 rounded text-fg-muted tabular-nums">
+              <div className="absolute bottom-1.5 right-1.5 text-[12.5px] bg-bg-elevated/85 backdrop-blur px-1.5 py-0.5 rounded text-fg-muted tabular-nums">
                 {isImage ? item.kindIndex + 1 : `视频 ${item.kindIndex + 1}`}
               </div>
               {!isImage && (
                 <div className="absolute bottom-0 inset-x-0 px-1.5 pt-1.5 pb-1 bg-gradient-to-t from-black/85 from-80% to-transparent">
-                  <div className="text-[11.5px] text-white/90 truncate flex items-center gap-1.5">
+                  <div className="text-[12.5px] text-white/90 truncate flex items-center gap-1.5">
                     <span className="truncate">{name}</span>
                     {duration !== undefined && duration > 0 && (
                       <span className="shrink-0 text-white/70 tabular-nums">

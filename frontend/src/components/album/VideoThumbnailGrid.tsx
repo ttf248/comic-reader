@@ -46,6 +46,10 @@ export default function VideoThumbnailGrid({
       style={{ height: "100%" }}
       data={slots}
       overscan={720}
+      /* 多渲染一截虚拟窗口：Virtuoso 估算的整段滚动长度比真实布局高约两行，
+         "拖到最底"时最后一行落在估算窗口之外，只剩占位块（图片渲染不出来）。
+         把窗口下沿多留 1600px（约 6 行），估算误差就被覆盖住了。 */
+      increaseViewportBy={{ top: 720, bottom: 1600 }}
       listClassName="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-2 px-6 lg:px-10 pb-10 max-w-[1400px] mx-auto"
       itemClassName="min-w-0"
       computeItemKey={(index, item) => item ?? `video-placeholder-${index}`}
@@ -70,7 +74,7 @@ export default function VideoThumbnailGrid({
               <div className="absolute top-1.5 right-1.5 bg-bg-elevated/90 backdrop-blur rounded-md p-1 shadow-sm group-hover:scale-110 transition-transform">
                 <PlayFilledIcon size={10} className="text-accent" />
               </div>
-              <div className="absolute bottom-1.5 right-1.5 text-[11.5px] bg-bg-elevated/85 backdrop-blur px-1.5 py-0.5 rounded text-fg-muted tabular-nums">
+              <div className="absolute bottom-1.5 right-1.5 text-[12.5px] bg-bg-elevated/85 backdrop-blur px-1.5 py-0.5 rounded text-fg-muted tabular-nums">
                 {index + 1}
               </div>
               {/* 文件名压在缩略图下沿：底色必须是不透明段而不是渐变起点。
@@ -80,7 +84,7 @@ export default function VideoThumbnailGrid({
                   注意：Tailwind 只认 5% 的整数倍色标（from-80% 有效，
                   from-78% 会被静默丢弃、整条规则不生成）。 */}
               <div className="absolute bottom-0 inset-x-0 px-1.5 pt-1.5 pb-1 bg-gradient-to-t from-black/85 from-80% to-transparent">
-                <div className="text-[11.5px] text-white/90 truncate flex items-center gap-1.5">
+                <div className="text-[12.5px] text-white/90 truncate flex items-center gap-1.5">
                   <span className="truncate">{name}</span>
                   {duration && duration > 0 && (
                     <span className="shrink-0 text-white/70 tabular-nums">
