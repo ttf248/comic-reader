@@ -220,17 +220,42 @@ const AUDIT = () => {
       return a.dom > b.dom ? a : b;
     };
     const best = topmost(scrim, hit);
-    if (!best) return { kind: "none", color: null, region: null };
+    if (!best) return { kind: "none", color: null, region: null, radius: 0 };
     const r = best.el.getBoundingClientRect();
     const region = { x: r.x, y: r.y, w: r.width, h: r.height };
+    // 背板的圆角：圆角切掉的那几块**没有底色**，露出来的是后面那层。
+    // 取样时必须把四角排除，否则会采到照片的亮部。
+    const radius = (() => {
+      const raw = getComputedStyle(best.el).borderTopLeftRadius;
+      const n = parseFloat(raw);
+      return Number.isFinite(n) ? n : 0;
+    })();
     if (best.kind === "image")
-      return { kind: "image", color: null, region, self: best.el === el };
+      return {
+        kind: "image",
+        color: null,
+        region,
+        radius,
+        self: best.el === el,
+      };
     if (best.kind === "translucent") {
       // 半透明的底：底下没有图的时候静态算得出，有图就得看像素。
-      if (!hit) return { kind: "translucent-static", color: best.color, region: null };
-      return { kind: "translucent", color: best.color, region, self: best.el === el };
+      if (!hit)
+        return {
+          kind: "translucent-static",
+          color: best.color,
+          region: null,
+          radius,
+        };
+      return {
+        kind: "translucent",
+        color: best.color,
+        region,
+        radius,
+        self: best.el === el,
+      };
     }
-    return { kind: "opaque", color: best.color, region: null };
+    return { kind: "opaque", color: best.color, region: null, radius };
   };
 
   const items = [];
@@ -314,6 +339,7 @@ const AUDIT = () => {
                  否则会把照片上更亮 / 更暗的地方当成背板）。 */
       sampleMode: backdrop.kind === "translucent" && backdrop.self ? "self" : "ring",
       region: backdrop.region,
+      radius: backdrop.radius ?? 0,
       rect: {
         x: rect.x,
         y: rect.y,
@@ -493,11 +519,20 @@ const PIXELS = async ({ dataUrl, targets, dpr }) => {
       if (!lums.length) return { ...t, pixelRatio: null };
       lums.sort((a, b) => a - b);
       const median = lums[Math.floor(lums.length / 2)];
+      // 只在"底色本身"的那一簇像素里找最不利的一侧。
+      //
+      // 为什么不直接用分位数：字形的抗锯齿边缘（字色与底色之间的中间色）
+      // 数量不多但亮度分散，会被"深色文字取最暗一侧"这条规则挑中 ——
+      // 一块白底深字的药丸（实测 17:1）会被算成"深底浅字"报 2.86:1。
+      // 底色的中位数是稳的，围绕它取 ±0.15 的簇，既保留底色自身的
+      // 明暗起伏，又把边缘像素排除在外。
+      const band = lums.filter((l) => Math.abs(l - median) <= 0.15);
+      const pool = band.length >= 8 ? band : lums;
       // 文字亮 → 最亮的一侧底色最糟；文字暗 → 最暗的一侧最糟。
       const lightText = fgLum >= median;
       const worstBg = lightText
-        ? lums[Math.floor(lums.length * 0.9)]
-        : lums[Math.floor(lums.length * 0.1)];
+        ? pool[Math.floor(pool.length * 0.9)]
+        : pool[Math.floor(pool.length * 0.1)];
       const worst = ratio(fgLum, worstBg);
       return {
         ...t,
@@ -522,16 +557,49 @@ const PIXELS = async ({ dataUrl, targets, dpr }) => {
       const inside =
         px >= x - rx && px < x - rx + w && py >= y - ry && py < y - ry + h;
       if (inside) continue;
+      // 只取四条"贴着字"的直边，不取四个角上的方块。
+      //
+      // 角上的方块离字形最远，却常常根本没有背板：药丸 / 角标是圆角的，
+      // 圆角切掉的那几块露出的是后面的照片（亮），采到它就得到"白字压在
+      // 亮照片上"的假象 —— 实测一枚 bg-black/65 的深色 chip（真实对比
+      // 约 9:1）被报成 1.75:1。
+      const left = px < x - rx;
+      const right = px >= x - rx + w;
+      const top = py < y - ry;
+      const bottom = py >= y - ry + h;
+      const withinY = py >= y - ry && py < y - ry + h;
+      const withinX = px >= x - rx && px < x - rx + w;
+      const straight =
+        (left && withinY) ||
+        (right && withinY) ||
+        (top && withinX) ||
+        (bottom && withinX);
+      if (!straight) continue;
       if (region) {
         const gx = (rx + px) / dpr;
         const gy = (ry + py) / dpr;
+        // 背板边缘 1px 是抗锯齿的过渡带：那里的像素是"背板 + 后面那层"
+        // 的混合色，不代表字背后的底色。药丸这种小背板尤其明显 ——
+        // 右边缘那一列像素直接采到照片的亮部（实测 0.61），把一枚
+        // 深色药丸上的白字报成 1.73:1。
         if (
-          gx < region.x ||
-          gx > region.x + region.w ||
-          gy < region.y ||
-          gy > region.y + region.h
+          gx < region.x + 1 ||
+          gx >= region.x + region.w - 1 ||
+          gy < region.y + 1 ||
+          gy >= region.y + region.h - 1
         )
           continue;
+        // 圆角切掉的四角没有底色，露出来的是后面那层（照片）——
+        // 采到它就把"深色药丸上的白字"误判成"白字压亮照片"。
+        const r = t.radius ?? 0;
+        if (r > 0) {
+          const inCorner =
+            (gx < region.x + r && gy < region.y + r) ||
+            (gx > region.x + region.w - r && gy < region.y + r) ||
+            (gx < region.x + r && gy > region.y + region.h - r) ||
+            (gx > region.x + region.w - r && gy > region.y + region.h - r);
+          if (inCorner) continue;
+        }
       }
       lums.push(luminance(data[i * 4], data[i * 4 + 1], data[i * 4 + 2]));
     }
