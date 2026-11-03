@@ -1,3 +1,4 @@
+import PageHeading from "../components/common/PageHeading";
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSearchStore } from "../store/searchStore";
@@ -15,7 +16,11 @@ import { decodeFavPath } from "../utils/path";
 import { compareDatesDesc } from "../utils/date";
 import type { GalleryContextEntry } from "../utils/galleryContext";
 import { useViewedSort } from "../hooks/useHistory";
-import { useLibraryNodes, useLibraryTags, useLibraryDashboard } from "../hooks/useLibrary";
+import {
+  useLibraryNodes,
+  useLibraryTags,
+  useLibraryDashboard,
+} from "../hooks/useLibrary";
 import {
   nodeSummaryToCard,
   tagSummaryToCard,
@@ -181,9 +186,7 @@ export default function Favorites() {
   const missingIds = useMemo(() => {
     if (detailsLoading) return [];
     return favorites.filter((f) =>
-      f.startsWith("smart:")
-        ? !tagsByName.has(f.slice(6))
-        : !nodesById.has(f),
+      f.startsWith("smart:") ? !tagsByName.has(f.slice(6)) : !nodesById.has(f),
     );
   }, [detailsLoading, favorites, nodesById, tagsByName]);
   const missingCount = missingIds.length;
@@ -219,28 +222,26 @@ export default function Favorites() {
 
   return (
     <div className="min-h-full">
-      <section className="page-shell pt-9 pb-6">
-        <h1 className="page-title">
-          我收藏的图像
-        </h1>
-        {/* 条数说的是"收藏了多少"，与网格里能显示几张无关：失效的收藏
-            也是用户收藏过的。失效数量另起一行说明，避免出现"1 项"配一
-            张空网格这种自相矛盾的读数。 */}
-        <div className="flex items-baseline gap-2.5 mt-2 flex-wrap">
-          <p className="text-[13px] text-fg-muted tabular-nums">
-            {favoritesQuery.isLoading
-              ? "正在加载收藏…"
-              : favoritesFailed && favorites.length === 0
-                ? "收藏暂不可用"
-                : `${favorites.length} 项`}
-          </p>
-          {missingCount > 0 && (
-            <span className="text-[12.5px] text-fg-subtle">
-              其中 {missingCount} 项暂时找不到
-            </span>
-          )}
-        </div>
-      </section>
+      <PageHeading
+        title="我收藏的图像"
+        eyebrow="值得反复翻看的"
+        description={
+          <div className="flex items-baseline gap-2.5 mt-2 flex-wrap">
+            <p className="text-[13px] text-fg-muted tabular-nums">
+              {favoritesQuery.isLoading
+                ? "正在加载收藏…"
+                : favoritesFailed && favorites.length === 0
+                  ? "收藏暂不可用"
+                  : `${favorites.length} 项`}
+            </p>
+            {missingCount > 0 && (
+              <span className="text-[12.5px] text-fg-subtle">
+                其中 {missingCount} 项暂时找不到
+              </span>
+            )}
+          </div>
+        }
+      />
 
       {loadFailed && (
         <div className="page-shell mb-4">
@@ -280,10 +281,7 @@ export default function Favorites() {
             description="收藏是给相册打星标：点封面右上角的星标，这一本就会出现在这里。下面这几本可以直接点星标试试。"
             icon={<StarIcon size={20} />}
             action={
-              <button
-                onClick={() => navigate("/")}
-                className="btn btn-primary"
-              >
+              <button onClick={() => navigate("/")} className="btn btn-primary">
                 去主页看看
               </button>
             }
@@ -296,9 +294,7 @@ export default function Favorites() {
             <section className="page-shell pb-14">
               <div className="flex items-baseline gap-3 flex-wrap mb-4">
                 <h2 className="section-title">从这里挑一个收藏</h2>
-                <span className="section-meta">
-                  点封面右上角的星标
-                </span>
+                <span className="section-meta">点封面右上角的星标</span>
               </div>
               <div className="shelf">
                 {suggestions.map((card) => (

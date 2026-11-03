@@ -944,7 +944,7 @@ export default function Gallery() {
     return (
       // 阅读器画布恒为深色：加载态、空态、失败态都跟着深色走，
       // 否则浅色主题下会先闪一屏白底，再跳到黑色画布。
-      <div className="flex flex-col h-full bg-neutral-950">
+      <div className="reader-shell flex flex-col h-full">
         {/* 顶部条：返回 / 名称（常驻） */}
         <div className="px-4 h-9 text-[12.5px] text-white/60 border-b border-white/10 bg-neutral-900/60 flex items-center gap-3">
           <button
@@ -963,7 +963,9 @@ export default function Gallery() {
               <div className="font-display text-[20px] font-semibold text-white/90">
                 无可显示的图片
               </div>
-              <div className="text-[13px] text-white/50 mt-1.5">未指定相册路径</div>
+              <div className="text-[13px] text-white/50 mt-1.5">
+                未指定相册路径
+              </div>
             </div>
           ) : loadError ? (
             <div className="text-center max-w-sm">
@@ -1023,7 +1025,8 @@ export default function Gallery() {
 
   return (
     <div
-      className="relative flex bg-neutral-950 overflow-hidden select-none"
+      data-testid="gallery-reader"
+      className="reader-shell relative flex overflow-hidden select-none"
       style={{ height: "100vh" }}
       onMouseMove={markActive}
       onContextMenu={(e) => {
@@ -1089,7 +1092,7 @@ export default function Gallery() {
         {progressFailure?.key === progressKey && (
           <div
             role="alert"
-            className="absolute top-16 left-3 right-3 z-30 mx-auto flex max-w-xl items-center justify-between gap-3 rounded-md border border-white/10 bg-neutral-900/95 backdrop-blur-md p-3 text-sm text-white/85 shadow-lg"
+            className="absolute top-20 left-3 right-3 z-30 mx-auto flex max-w-xl items-center justify-between gap-3 rounded-md border border-white/10 bg-neutral-900/95 backdrop-blur-md p-3 text-sm text-white/85 shadow-lg"
           >
             <span>
               {progressFailure.operation === "restore"

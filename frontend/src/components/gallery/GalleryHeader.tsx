@@ -114,7 +114,7 @@ export default function GalleryHeader({
   const hasAlbumNav = !!(onPrevAlbum || onNextAlbum);
 
   return (
-    <header className="absolute top-0 inset-x-0 z-20 flex h-12 items-center gap-1.5 scrim-top px-2 text-white/85 backdrop-blur-[2px] sm:px-3">
+    <header className="reader-header absolute z-20 flex items-center gap-1.5 px-3 text-white/85 backdrop-blur-xl">
       <button
         onClick={onBack}
         title="返回 (Esc)"

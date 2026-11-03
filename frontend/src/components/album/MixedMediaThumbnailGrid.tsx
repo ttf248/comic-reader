@@ -1,5 +1,5 @@
 import { useMemo, type MouseEvent } from "react";
-import { VirtuosoGrid } from "react-virtuoso";
+import VirtualMediaGrid, { type MediaGridSize } from "./VirtualMediaGrid";
 import type { LibraryMediaItem } from "../../api/library";
 import type { VideoInfo } from "../../api/videos";
 import { formatDuration } from "../../utils/format";
@@ -13,8 +13,7 @@ interface Props {
   items: LibraryMediaItem[];
   /** 图片与视频合计的服务端总数。 */
   total: number;
-  /** Tailwind grid-cols 类名。 */
-  gridClassName: string;
+  gridSize: MediaGridSize;
   /** 图片阅读进度使用 kindIndex，而不是混合媒体 index。 */
   progressIndex?: number;
   videoInfos: Record<string, VideoInfo>;
@@ -32,7 +31,7 @@ interface Props {
 export default function MixedMediaThumbnailGrid({
   items,
   total,
-  gridClassName,
+  gridSize,
   progressIndex,
   videoInfos,
   hasNextPage,
@@ -57,21 +56,9 @@ export default function MixedMediaThumbnailGrid({
   );
 
   return (
-    <VirtuosoGrid
-      style={{ height: "100%" }}
+    <VirtualMediaGrid
       data={slots}
-      overscan={720}
-      /* 多渲染一截虚拟窗口：Virtuoso 估算的整段滚动长度比真实布局高约两行，
-         "拖到最底"时最后一行落在估算窗口之外，只剩占位块（图片渲染不出来）。
-         窗口下沿多留 720px，估算误差（实测约 380px）就被覆盖住了。
-
-         注意：下沿留到 1600px 会让 Virtuoso 在同一帧里测量太多条目，
-         它的尺寸树遍历（内部是递归展开）直接爆栈 —— 405 个视频的相册
-         一进页面就抛 "Maximum call stack size exceeded"，整个相册页
-         被错误边界接管。720px 同时满足"末行能渲染"与"不爆栈"。 */
-      increaseViewportBy={{ top: 720, bottom: 720 }}
-      listClassName={`grid gap-2 px-6 lg:px-10 pb-10 max-w-[1400px] mx-auto ${gridClassName}`}
-      itemClassName="min-w-0"
+      size={gridSize}
       computeItemKey={(index, item) =>
         item?.id ?? `mixed-media-placeholder-${index}`
       }
@@ -100,9 +87,7 @@ export default function MixedMediaThumbnailGrid({
                而不是"缺图"。 */
             className={`group relative w-full aspect-[3/4] rounded overflow-hidden ${
               isImage ? "bg-bg-subtle" : "bg-bg-media"
-            } ${
-              isCurrent ? "ring-2 ring-accent" : isPast ? "opacity-70" : ""
-            }`}
+            } ${isCurrent ? "ring-2 ring-accent" : isPast ? "opacity-70" : ""}`}
           >
             {isImage ? (
               <ThumbImage

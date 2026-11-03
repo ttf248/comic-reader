@@ -516,6 +516,61 @@ for (const kind of ["images", "mixed", "videos"] as const) {
     ).toBeVisible();
     expect(mediaRequests).toHaveLength(3);
   });
+
+  test(`${kind} 网格在手机与宽屏对齐摘要，末项和首项均可到达`, async ({
+    page,
+  }) => {
+    const nodes = await scannedNodes(page.request);
+    const album = nodes.find((node) => node.name === `sample-paged-${kind}`);
+    expect(album).toBeDefined();
+    await page.route("**/api/thumbs/**", (route) =>
+      route.fulfill({ contentType: "image/png", body: solidPng(8, 8) }),
+    );
+    await page.route("**/api/videos/info/batch", (route) =>
+      route.fulfill({ json: { ok: true, items: [] } }),
+    );
+    for (const width of [390, 1440, 1920]) {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      await page.goto(`/albums/${album!.id}`);
+      const scroller = page.locator("[data-virtuoso-scroller]");
+      const first = scroller.getByRole("button").first();
+      await expect(first).toBeVisible();
+      const list = page.getByTestId("virtuoso-item-list");
+      const summaryBox = await page.locator(".album-summary").boundingBox();
+      const listBox = await list.boundingBox();
+      expect(summaryBox).not.toBeNull();
+      expect(listBox).not.toBeNull();
+      expect(Math.abs(listBox!.x - summaryBox!.x)).toBeLessThanOrEqual(1);
+      expect(Math.abs(listBox!.width - summaryBox!.width)).toBeLessThanOrEqual(
+        1,
+      );
+      // 虚拟视口与网格同宽，不能把左右留白算作额外的列。
+      const widthDifference = await list.evaluate((element) =>
+        Math.abs(
+          element.getBoundingClientRect().width -
+            element.parentElement!.getBoundingClientRect().width,
+        ),
+      );
+      expect(widthDifference).toBeLessThanOrEqual(1);
+      await scroller.evaluate((element) => {
+        element.scrollTop = element.scrollHeight;
+      });
+      const lastName =
+        kind === "videos"
+          ? "播放视频 405"
+          : kind === "mixed"
+            ? "播放zz-video.mp4"
+            : "打开第 405 张";
+      await expect(
+        scroller.getByRole("button", { name: lastName, exact: true }),
+      ).toBeVisible();
+      await scroller.evaluate((element) => {
+        element.scrollTop = 0;
+      });
+      await expect(scroller.getByRole("button").first()).toBeVisible();
+      await expect(page.getByRole("alert")).toHaveCount(0);
+    }
+  });
 }
 
 // 首页主操作必须落在首屏里：舞台（封面 + 墙签 + 进度 + 主操作）比主区
@@ -1489,8 +1544,16 @@ test("设置读取失败可重试，恢复后显示阅读设置", async ({ page 
     ]);
     expect(border[3]).toBe(77);
     expect(background[3]).toBe(13);
-    expect(border[0]).toBeGreaterThan(border[1] * 1.8);
-    expect(background[0]).toBeGreaterThan(background[1] * 1.8);
+    const [danger] = await renderedColors(page.locator("html"), ["--danger"]);
+    for (const channel of [0, 1, 2]) {
+      expect(Math.abs(border[channel] - danger[channel])).toBeLessThanOrEqual(
+        2,
+      );
+      // 5% 透明度经 canvas 预乘后会出现最多约 10 个色阶的量化误差。
+      expect(
+        Math.abs(background[channel] - danger[channel]),
+      ).toBeLessThanOrEqual(10);
+    }
     await page.screenshot({
       path: test.info().outputPath(`settings-error-${theme}.png`),
     });
@@ -1776,7 +1839,7 @@ test("主题令牌在明暗模式和六种强调色下保持边框及透明背�
     await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
     await expect(root).toHaveAttribute("data-theme", theme);
     const [expectedBorder, expectedSubtle] = await renderedColors(root, [
-      "--border-faint",
+      "--border",
       "--bg-subtle",
     ]);
     const [headerBorder] = await renderedColors(page.locator("header"), [
@@ -1801,12 +1864,27 @@ test("主题令牌在明暗模式和六种强调色下保持边框及透明背�
     ]) {
       await page.getByRole("button", { name, exact: true }).click();
       await expect(root).toHaveAttribute("data-accent", accent);
-      const expected = await renderedColors(root, ["--accent-soft", "--fg"]);
+      const navigationColors = await renderedColors(root, [
+        "--rail-active",
+        "--rail-active-fg",
+      ]);
+      expect(
+        await renderedColors(activeNavigation, ["background-color", "color"]),
+      ).toEqual(navigationColors);
+      await page.getByRole("button", { name: /^主题: .* · 强调色$/ }).click();
+      const activeTheme = page.getByRole("menuitemradio", {
+        name: "系统",
+        exact: true,
+      });
+      await expect(activeTheme).toHaveAttribute("aria-checked", "true");
+      const expected = await renderedColors(root, [
+        "--accent",
+        "--accent-contrast",
+      ]);
       await expect
-        .poll(() =>
-          renderedColors(activeNavigation, ["background-color", "color"]),
-        )
+        .poll(() => renderedColors(activeTheme, ["background-color", "color"]))
         .toEqual(expected);
+      await page.keyboard.press("Escape");
     }
     await page.screenshot({
       path: test.info().outputPath(`theme-tokens-${theme}.png`),
@@ -1946,7 +2024,10 @@ test("失效收藏清理成功后刷新失败也立即更新收藏项数", async
     await expect(
       page.locator(`main a[href="/albums/${album.id}"]`).first(),
     ).toBeVisible();
-    const count = page.locator("main section").first().locator("p");
+    const count = page
+      .getByRole("heading", { name: "我收藏的图像", exact: true })
+      .locator("..")
+      .getByText(/^\d+ 项$/);
     await expect(count).toHaveText(`${seededCount} 项`);
     await page.getByRole("link", { name: "设置", exact: true }).click();
     let failedReads = 0;
@@ -4117,6 +4198,8 @@ test("配置失败后可取消重新读取，迟到结果不覆盖新读取且�
     const editedPort = Number(config.port) === 9001 ? 9002 : 9001;
     const portInput = page.getByRole("spinbutton").last();
     await expect(port).toHaveCount(1);
+    // 由 runFor 精确推进自动保存时间，避免重排后的滚动消耗 debounce 窗口。
+    await page.clock.pauseAt(new Date(Date.now() + 1_000));
     await portInput.fill(String(editedPort));
     holdRead = true;
     await page.getByRole("button", { name: "重新读取配置" }).click();
@@ -4304,9 +4387,9 @@ test("阅读器放大与旋转真正作用到图片上", async ({ page }) => {
   await expect.poll(async () => (await matrix())[0]).toBeGreaterThan(1.1);
   // 旋转 90°：矩阵出现旋转分量
   await page.keyboard.press("r");
-  await expect.poll(async () => Math.abs((await matrix())[1])).toBeGreaterThan(
-    0.5,
-  );
+  await expect
+    .poll(async () => Math.abs((await matrix())[1]))
+    .toBeGreaterThan(0.5);
 });
 
 test("图片信息面板不遮挡阅读器顶栏：宽屏并排，窄屏落到顶栏下方", async ({
@@ -4383,7 +4466,10 @@ test("阅读器「原始」适配模式按像素显示图片，超出视口时�
   const scrolled = await page.evaluate(() => {
     const container = document.querySelector("[data-image-gallery]")!;
     container.scrollLeft = 9999;
-    return { scrollLeft: container.scrollLeft, scrollWidth: container.scrollWidth };
+    return {
+      scrollLeft: container.scrollLeft,
+      scrollWidth: container.scrollWidth,
+    };
   });
   expect(scrolled.scrollWidth).toBeGreaterThan(scrolled.scrollLeft);
 });
@@ -4662,8 +4748,8 @@ test("阅读器底部工具条常驻阅读模式与适配方式，切换后写�
     .poll(async () =>
       page.evaluate(
         () =>
-          JSON.parse(localStorage.getItem("local-gallery") ?? "{}").state?.mode ??
-          null,
+          JSON.parse(localStorage.getItem("local-gallery") ?? "{}").state
+            ?.mode ?? null,
       ),
     )
     .toBe("continuous");
@@ -4714,9 +4800,47 @@ test("重设计后的首页把继续阅读放在首屏，未读区不再逐张�
     const unread = page.getByTestId("unread-hero");
     await expect(unread).toBeVisible();
     await expect(unread.getByText("新", { exact: true })).toHaveCount(0);
+    await expect(continueSection.getByTestId("unread-hero")).toHaveCount(0);
+    expect(
+      await unread.locator('a[href^="/albums/"]').count(),
+    ).toBeLessThanOrEqual(4);
+    await expect(
+      unread.getByRole("link", { name: "查看全部未读相册" }),
+    ).toHaveAttribute("href", "/unread");
+
+    // 原生封面按钮可直接用键盘恢复上次阅读位置。
+    const resume = continueSection.getByRole("button", {
+      name: "继续阅读「sample-album」",
+      exact: true,
+    });
+    await resume.focus();
+    await resume.press("Enter");
+    await expect(page).toHaveURL(/\/gallery\?/);
+    await expect(page.getByRole("toolbar", { name: "阅读控制" })).toBeVisible();
+    await page.goto("/");
   } finally {
     expect((await page.request.delete(activityPath)).ok()).toBeTruthy();
   }
+});
+
+test("年份索引可用空格筛选，并保留首页上下文", async ({ page }) => {
+  await scannedNodes(page.request);
+  await page.goto("/");
+  const years = page.getByTestId("year-timeline");
+  await expect(years).toBeVisible();
+  const filter = years
+    .getByRole("button", { name: "筛选该年份", exact: true })
+    .first();
+  await filter.focus();
+  await filter.press("Space");
+  await expect(page).toHaveURL("/");
+  await expect(
+    page.getByRole("heading", { name: "该年份的图像", exact: true }),
+  ).toBeVisible();
+  await page.getByTitle("清除年份筛选", { exact: true }).click();
+  await expect(
+    page.getByRole("heading", { name: "全部图像", exact: true }),
+  ).toBeVisible();
 });
 
 for (const width of [1920, 1440, 1024, 768, 390]) {
@@ -4753,10 +4877,10 @@ for (const width of [1920, 1440, 1024, 768, 390]) {
 
 test("列表视图按内容宽度切双列 / 三列，窄屏仍是单列", async ({ page }) => {
   await page.goto("/unread");
-  await page
-    .getByRole("button", { name: "列表视图", exact: true })
-    .click();
-  const cards = page.locator('main [data-virtuoso-scroller] a[href^="/albums/"]');
+  await page.getByRole("button", { name: "列表视图", exact: true }).click();
+  const cards = page.locator(
+    'main [data-virtuoso-scroller] a[href^="/albums/"]',
+  );
   await expect(cards.first()).toBeVisible();
 
   // 1024：内容宽度不够（内容 816 → 单列 388 → 标题列只剩 222px），
@@ -4803,10 +4927,6 @@ test("阅读器全屏按钮可点击，点击后阅读器控制仍然可用", as
   // 无头浏览器里 Fullscreen API 不一定生效，这里只锁定"点击不报错、
   // 阅读器状态不被破坏"。
   await page.waitForTimeout(400);
-  await expect(
-    page.getByRole("toolbar", { name: "阅读控制" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "下一张" }),
-  ).toBeEnabled();
+  await expect(page.getByRole("toolbar", { name: "阅读控制" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "下一张" })).toBeEnabled();
 });

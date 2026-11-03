@@ -93,9 +93,7 @@ export default function AlbumGrid({
 
   const { favorites } = useFavorites();
 
-  /* Tailwind 的 JIT 只认源码里的字面量类名，写成模板字符串
-     (`grid-cols-[...minmax(${cardMinWidth}px...)]`) 不会被生成 ——
-     所以两个宽度各写一个字面量类名，在这里二选一。 */
+  // 当前提供标准与宽松两套照片网格，断点由语义样式统一维护。
   const gridColsClass =
     cardMinWidth === 224
       ? "library-grid library-grid--spacious"

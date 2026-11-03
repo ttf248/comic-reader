@@ -10,8 +10,8 @@ interface VirtualizedProps {
   itemContent: (index: number, item: LibraryMediaItem | null) => ReactNode;
 }
 
-vi.mock("react-virtuoso", () => ({
-  VirtuosoGrid: ({ data, itemContent }: VirtualizedProps) => (
+vi.mock("./VirtualMediaGrid", () => ({
+  default: ({ data, itemContent }: VirtualizedProps) => (
     <div data-testid="mixed-virtual-grid">
       {data.map((item, index) => (
         <div key={item?.id ?? index}>{itemContent(index, item)}</div>
@@ -60,7 +60,7 @@ describe("MixedMediaThumbnailGrid", () => {
       <MixedMediaThumbnailGrid
         items={items}
         total={2}
-        gridClassName="grid-cols-2"
+        gridSize="lg"
         videoInfos={infos}
         hasNextPage={false}
         isLoadingMore={false}

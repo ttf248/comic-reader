@@ -3,23 +3,19 @@ import { describe, expect, it } from "vitest";
 import AlbumGridSkeleton from "./AlbumGridSkeleton";
 
 describe("AlbumGridSkeleton 加载骨架", () => {
-  it("网格骨架按真实卡片的 4:5 封面 + 标题行 + 元信息行画，且数量可控", () => {
+  it("网格骨架按真实照片卡的横幅封面与文字区域画，且数量可控", () => {
     const { container } = render(<AlbumGridSkeleton count={6} />);
 
     const cards = container.querySelectorAll(
       '[data-testid="album-skeleton-cards"] > div',
     );
     expect(cards).toHaveLength(6);
-    // 封面块与真实卡片同为 4:5，数据到达时卡片落在同一位置。
-    expect(
-      container.querySelector('[class*="aspect-[4/5]"]'),
-    ).not.toBeNull();
+    // 骨架与默认照片卡使用同一画幅，避免加载后大幅重排。
+    expect(container.querySelector('[class*="aspect-[4/3]"]')).not.toBeNull();
   });
 
   it("列表骨架按真实行的缩略图 + 两行文字画", () => {
-    const { container } = render(
-      <AlbumGridSkeleton variant="list" rows={4} />,
-    );
+    const { container } = render(<AlbumGridSkeleton variant="list" rows={4} />);
 
     expect(
       container.querySelectorAll('[data-testid="album-skeleton-rows"] > div'),

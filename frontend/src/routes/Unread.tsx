@@ -1,3 +1,4 @@
+import PageHeading from "../components/common/PageHeading";
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSearchStore } from "../store/searchStore";
@@ -89,33 +90,34 @@ export default function Unread() {
 
   return (
     <div className="min-h-full">
-      <section className="page-shell pt-9 pb-6">
-        <h1 className="page-title">
-          未读相册
-        </h1>
-        <p className="text-[13px] text-fg-muted mt-2 tabular-nums flex items-center gap-3 flex-wrap">
-          {isLoading ? (
-            // 加载中不要报「0 本」：那是"还没数出来"，不是"没有未读"。
-            <span>正在统计未读相册…</span>
-          ) : (
-            <span>
-              还有 <span className="text-fg">{count}</span> 本没看
-              <span className="text-fg-subtle mx-1.5">·</span>
-              全库 <span className="text-fg">{total}</span> 本
-            </span>
-          )}
-          {count > 0 && (
-            <button
-              onClick={onShuffleUnread}
-              className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-accent/40 text-accent hover:bg-accent/10 text-[12.5px] transition-colors"
-              title="从未读里随机挑一本"
-            >
-              <ShuffleIcon size={11} />
-              随机一本未读
-            </button>
-          )}
-        </p>
-      </section>
+      <PageHeading
+        title="未读相册"
+        eyebrow="下一本的灵感"
+        description={
+          <p className="text-[13px] text-fg-muted mt-2 tabular-nums flex items-center gap-3 flex-wrap">
+            {isLoading ? (
+              // 加载中不要报「0 本」：那是"还没数出来"，不是"没有未读"。
+              <span>正在统计未读相册…</span>
+            ) : (
+              <span>
+                还有 <span className="text-fg">{count}</span> 本没看
+                <span className="text-fg-subtle mx-1.5">·</span>
+                全库 <span className="text-fg">{total}</span> 本
+              </span>
+            )}
+            {count > 0 && (
+              <button
+                onClick={onShuffleUnread}
+                className="btn btn-sm btn-outline"
+                title="从未读里随机挑一本"
+              >
+                <ShuffleIcon size={11} />
+                随机一本未读
+              </button>
+            )}
+          </p>
+        }
+      />
 
       {needsHistory && <ViewedSortNotice query={historyQuery} />}
       {count > 0 && <ListFilterBar totalCount={filtered.length} />}
@@ -140,10 +142,7 @@ export default function Unread() {
                 去设置
               </button>
             ) : (
-              <button
-                onClick={() => navigate("/")}
-                className="btn btn-outline"
-              >
+              <button onClick={() => navigate("/")} className="btn btn-outline">
                 回主页
               </button>
             )
@@ -165,7 +164,11 @@ export default function Unread() {
       ) : (
         <section className="page-shell">
           <div className="pb-10">
-            <AlbumGrid items={filtered} variant={viewMode} showUnreadBadge={false} />
+            <AlbumGrid
+              items={filtered}
+              variant={viewMode}
+              showUnreadBadge={false}
+            />
           </div>
         </section>
       )}

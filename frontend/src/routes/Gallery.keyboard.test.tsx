@@ -286,7 +286,7 @@ describe("Gallery 按媒体类型隔离快捷键", () => {
     await screen.findByTestId("image-gallery");
     await waitFor(() => expect(useGalleryStore.getState().index).toBe(1));
     await act(async () => {
-      fireEvent.contextMenu(document.querySelector("div.relative.bg-neutral-950")!);
+      fireEvent.contextMenu(screen.getByTestId("gallery-reader"));
     });
     await act(async () => {
       fireEvent.click(

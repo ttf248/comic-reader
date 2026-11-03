@@ -1,34 +1,34 @@
-import { CloseIcon } from '../common/Icon'
-import CopyButton from '../common/CopyButton'
-import { useImageInfo } from '../../hooks/useImageInfo'
-import { formatSize } from '../../utils/format'
-import { formatDateTime } from '../../utils/date'
-import { apiErrorMessage } from '../../utils/apiError'
+import { CloseIcon } from "../common/Icon";
+import CopyButton from "../common/CopyButton";
+import { useImageInfo } from "../../hooks/useImageInfo";
+import { formatSize } from "../../utils/format";
+import { formatDateTime } from "../../utils/date";
+import { apiErrorMessage } from "../../utils/apiError";
 
 interface Props {
-  absPath: string | null
-  onClose: () => void
+  absPath: string | null;
+  onClose: () => void;
 }
 
 // 画廊右侧图片信息面板。
 //
 // 布局：阅读器根节点是横向 flex，面板在宽屏（md+）作为独立的一栏与画布并排，
-// 不叠在顶栏上；窄屏没有并排空间，改为顶栏下方的整宽浮层（top-12 让开顶栏），
+// 不叠在顶栏上；窄屏没有并排空间，改为浮动顶栏下方的整宽浮层，
 // 至少不遮住返回按钮和相册名。
 //
-// 配色：阅读器画布恒为深色（bg-neutral-950），顶栏和右侧控件都用白色系。
+// 配色：阅读器画布恒为深色，顶栏和右侧控件都用白色系。
 // 面板同样按阅读器的深色约定渲染，不用应用主题色——否则浅色主题下会
 // 出现"黑底阅读器里嵌一块白板"，且白底上的深色小字与深色画布割裂。
 export default function ImageInfoPanel({ absPath, onClose }: Props) {
-  const { info, err, loading } = useImageInfo(absPath)
+  const { info, err, loading } = useImageInfo(absPath);
 
-  if (!absPath) return null
+  if (!absPath) return null;
 
   return (
     <aside
       data-testid="image-info-panel"
       className="
-        absolute inset-x-0 bottom-0 top-12 z-30 flex flex-col
+        absolute inset-x-0 bottom-0 top-[76px] z-30 flex flex-col
         border-t border-white/10 bg-neutral-900/95 backdrop-blur-md
         md:static md:inset-auto md:z-auto md:w-72 md:shrink-0 md:border-l md:border-t-0
       "
@@ -50,7 +50,7 @@ export default function ImageInfoPanel({ absPath, onClose }: Props) {
         {loading && <div className="text-white/60 text-[12.5px]">加载中…</div>}
         {err !== null && (
           <div className="text-red-300/90 text-[12.5px]">
-            错误: {apiErrorMessage(err, '无法读取图片信息')}
+            错误: {apiErrorMessage(err, "无法读取图片信息")}
           </div>
         )}
         {info && (
@@ -90,15 +90,15 @@ export default function ImageInfoPanel({ absPath, onClose }: Props) {
         )}
       </div>
     </aside>
-  )
+  );
 }
 
 interface RowProps {
-  label: string
-  value: string
-  mono?: boolean
-  copyable?: boolean
-  copyValue?: string
+  label: string;
+  value: string;
+  mono?: boolean;
+  copyable?: boolean;
+  copyValue?: string;
 }
 
 function Row({ label, value, mono, copyable, copyValue }: RowProps) {
@@ -109,10 +109,10 @@ function Row({ label, value, mono, copyable, copyValue }: RowProps) {
         {copyable && copyValue && <CopyButton value={copyValue} onDark />}
       </div>
       <div
-        className={`break-all ${mono ? 'font-mono text-[12.5px] text-white/70' : 'text-white/90'}`}
+        className={`break-all ${mono ? "font-mono text-[12.5px] text-white/70" : "text-white/90"}`}
       >
         {value}
       </div>
     </div>
-  )
+  );
 }

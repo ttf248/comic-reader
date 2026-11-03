@@ -14,8 +14,8 @@ vi.mock("../../hooks/useVideoCover", () => ({
     retry: retryCover,
   }),
 }));
-vi.mock("react-virtuoso", () => ({
-  VirtuosoGrid: ({
+vi.mock("./VirtualMediaGrid", () => ({
+  default: ({
     data,
     itemContent,
   }: {
@@ -64,7 +64,7 @@ it.each(["video", "mixed"] as const)(
         <MixedMediaThumbnailGrid
           items={[item]}
           total={1}
-          gridClassName="grid-cols-2"
+          gridSize="lg"
           videoInfos={{}}
           onOpen={onOpen}
           {...paging}

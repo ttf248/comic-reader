@@ -109,8 +109,7 @@ function albumDetailFromSummary(
   return {
     type: "album",
     path: summary.id,
-    name:
-      virtual && location ? location : summary.displayName || summary.name,
+    name: virtual && location ? location : summary.displayName || summary.name,
     imageFiles: media
       .filter((item) => item.kind === "image")
       .map((item) => item.id),
@@ -254,10 +253,7 @@ export default function Album() {
         title="找不到此文件夹"
         description="资源可能已移动，或者媒体库尚未完成扫描。"
         action={
-          <button
-            onClick={() => navigate("/")}
-            className="btn btn-outline"
-          >
+          <button onClick={() => navigate("/")} className="btn btn-outline">
             返回主页
           </button>
         }
@@ -499,13 +495,6 @@ function AlbumView({
     );
   }
 
-  const gridCls =
-    gridSize === "sm"
-      ? "grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10"
-      : gridSize === "lg"
-        ? "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
-        : "grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6";
-
   const currentPageCount = detail.imageCount;
   const progressPct =
     progress && currentPageCount > 0
@@ -523,34 +512,18 @@ function AlbumView({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Hero: 大封面 + 渐变叠加 + 标题 + CTA */}
-      <section className="relative bg-bg-elevated border-b border-border-faint">
-        <div className="absolute inset-0 overflow-hidden">
-          <img
-            src={thumbUrl(detail.coverImage)}
-            alt=""
-            className="w-full h-full object-cover scale-110 blur-2xl opacity-20"
-          />
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-bg-elevated/70 to-bg-elevated" />
-        </div>
-
+      {/* 相册封面、摘要与主要操作 */}
+      <section className="album-sheet relative shrink-0">
         <div className="page-shell relative pt-5 pb-6">
           <div className="flex items-center gap-2 mb-4">
-            <button
-              onClick={onBack}
-              className="btn btn-sm btn-ghost -ml-2"
-            >
+            <button onClick={onBack} className="btn btn-sm btn-ghost -ml-2">
               <ChevronLeftIcon size={13} />
               <span>返回</span>
             </button>
           </div>
 
-          <div className="flex items-center gap-5 sm:gap-7 flex-wrap lg:items-end">
-            {/* 大封面缩略图 */}
-            {/* 封面尺寸：桌面端 200×267（2:3 海报）。旧版桌面只有 120×152，
-                比下面网格里的缩略图（标准档 ~190×235）还小 —— 一页里
-                "代表这本"的那张图反而是整页最小的图，层级倒置。 */}
-            <div className="relative w-[104px] h-[132px] sm:w-[200px] sm:h-[267px] rounded-lg overflow-hidden border border-border shadow-md shrink-0 bg-bg-subtle">
+          <div className="album-summary">
+            <div className="album-summary__cover bg-bg-subtle">
               <img
                 src={thumbUrl(detail.coverImage)}
                 alt={detail.name}
@@ -568,10 +541,9 @@ function AlbumView({
 
             {/* 标题 + 元信息 + CTA */}
             <div className="min-w-0 flex-1">
+              <p className="page-eyebrow mb-3">影像档案 · 相册</p>
               <div className="flex items-center gap-2.5 flex-wrap">
-                <h1 className="page-title">
-                  {detail.name}
-                </h1>
+                <h1 className="page-title">{detail.name}</h1>
                 {/* 散图视图：标题已是归属目录，这里标明它是「目录内散图」 */}
                 {detail.virtual && (
                   <span className="inline-flex items-center gap-1 h-6 px-2 rounded-md bg-bg-subtle text-fg-muted text-[12.5px] shrink-0">
@@ -639,11 +611,10 @@ function AlbumView({
                   </div>
                 </div>
               )}
-
             </div>
 
             {/* CTA 行 */}
-            <div className="flex items-center gap-2 flex-wrap shrink-0">
+            <div className="album-summary__actions flex items-center gap-2 flex-wrap">
               {progressPct !== null && progressPct > 0 ? (
                 <button
                   onClick={() => openGallery(startIndex)}
@@ -766,12 +737,12 @@ function AlbumView({
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto">
+      <div className="page-shell flex-1 min-h-0">
         {videoCount > 0 ? (
           <MixedMediaThumbnailGrid
             items={mediaItems}
             total={detail.imageCount + videoCount}
-            gridClassName={gridCls}
+            gridSize={gridSize}
             progressIndex={progress?.pageIndex}
             videoInfos={videoInfos.data ?? {}}
             hasNextPage={hasNextPage}
@@ -793,7 +764,7 @@ function AlbumView({
           <MediaThumbnailGrid
             files={imageFiles}
             total={detail.imageCount}
-            gridClassName={gridCls}
+            gridSize={gridSize}
             progressIndex={progress?.pageIndex}
             hasNextPage={hasNextPage}
             isLoadingMore={isLoadingMore}
@@ -986,19 +957,14 @@ function CollectionView({
 
   return (
     <div className="flex flex-col h-full">
-      <div className="page-shell pt-8 pb-5">
-        <button
-          onClick={onBack}
-          className="btn btn-sm btn-ghost mb-4 -ml-2"
-        >
+      <div className="page-shell page-heading">
+        <button onClick={onBack} className="btn btn-sm btn-ghost mb-4 -ml-2">
           <ChevronLeftIcon size={13} />
           <span>返回</span>
         </button>
         <div className="flex items-end justify-between gap-4 flex-wrap">
           <div className="min-w-0">
-            <h1 className="page-title truncate">
-              {detail.name}
-            </h1>
+            <h1 className="page-title truncate">{detail.name}</h1>
             <div className="text-[13px] text-fg-muted mt-1.5">
               <span className="tabular-nums">{detail.albumCount} 卷</span>
             </div>
@@ -1109,30 +1075,19 @@ function VideoAlbumView({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Hero：大封面 + 标题 + CTA（与 AlbumView 视觉一致） */}
-      <section className="relative bg-bg-elevated border-b border-border-faint">
-        <div className="absolute inset-0 overflow-hidden">
-          <div className="w-full h-full bg-bg-subtle scale-110 blur-2xl opacity-20" />
-          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-bg-elevated/70 to-bg-elevated" />
-        </div>
+      {/* 视频封面、摘要与主要操作 */}
+      <section className="album-sheet relative shrink-0">
         <div className="page-shell relative pt-6 pb-8">
           <div className="mb-5">
-            <button
-              onClick={onBack}
-              className="btn btn-sm btn-ghost -ml-2"
-            >
+            <button onClick={onBack} className="btn btn-sm btn-ghost -ml-2">
               <ChevronLeftIcon size={13} />
               <span>返回</span>
             </button>
           </div>
 
-          <div className="flex items-end gap-8 flex-wrap">
-            {/* 大封面（视频时由 VideoCoverImage 处理抽帧）
-                底色用深色媒体画布：视频是 16:9，竖框里必然有上下留边，
-                留边落在浅灰底上会被读成"图缺了一块"。 */}
-            {/* 与图片相册页同尺寸（200×300），两个 hero 的封面一样大，
-                不因媒体类型而缩水。 */}
-            <div className="relative w-32 h-48 sm:w-[200px] sm:h-[300px] rounded-lg overflow-hidden border border-border shadow-md shrink-0 bg-bg-media">
+          <div className="album-summary album-summary--video">
+            {/* 视频封面保留原始画幅，异常时使用媒体底色。 */}
+            <div className="album-summary__cover bg-bg-media">
               <VideoCoverImage
                 videoPath={detail.coverImage}
                 alt={detail.name}
@@ -1141,12 +1096,8 @@ function VideoAlbumView({
             </div>
 
             <div className="min-w-0 flex-1">
-              {/* 与图片相册页共用 .page-title / .btn —— 视频相册页此前是
-                  一套独立写死的字号与按钮样式，同一个应用的两种标题大小
-                  会让"哪个才是标准"变得不可预期。 */}
-              <h1 className="page-title">
-                {detail.name}
-              </h1>
+              <p className="page-eyebrow mb-3">影像档案 · 视频</p>
+              <h1 className="page-title">{detail.name}</h1>
               <div className="flex items-center gap-2 text-[13px] text-fg-muted mt-2 flex-wrap">
                 {detail.tags.length > 0 && (
                   <>
@@ -1175,13 +1126,12 @@ function VideoAlbumView({
                   </>
                 )}
               </div>
-
             </div>
 
             {/* CTA 行：与标题块并排，落在同一行的右端。
                 旧版把按钮塞在标题下面，右侧整片空着 —— 和首页那条
                 "横幅空洞"是同一类问题：内容集中在左侧，右边没有重量。 */}
-            <div className="flex items-center gap-2 flex-wrap shrink-0">
+            <div className="album-summary__actions flex items-center gap-2 flex-wrap">
               <button onClick={() => openVideo(0)} className="btn btn-primary">
                 <PlayFilledIcon size={13} />
                 <span>开始播放</span>
@@ -1211,7 +1161,7 @@ function VideoAlbumView({
         </span>
       </div>
 
-      <div className="flex-1 overflow-auto">
+      <div className="page-shell flex-1 min-h-0">
         <VideoThumbnailGrid
           videos={videos}
           total={detail.videoCount ?? videos.length}

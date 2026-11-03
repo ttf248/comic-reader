@@ -77,7 +77,7 @@ export default function GalleryToolbar({
       role="toolbar"
       aria-label="阅读控制"
     >
-      <div className="flex items-center gap-0.5 rounded-xl bg-neutral-900/80 p-1 shadow-2xl ring-1 ring-white/10 backdrop-blur-xl">
+      <div className="reader-control-panel flex items-center gap-0.5 p-1.5 shadow-2xl ring-1 ring-white/15 backdrop-blur-xl">
         <ToolButton
           onClick={onPrev}
           disabled={atStart}

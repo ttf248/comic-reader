@@ -1,3 +1,4 @@
+import PageHeading from "../components/common/PageHeading";
 import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSearchStore } from "../store/searchStore";
@@ -122,27 +123,30 @@ export default function Recents() {
 
   return (
     <div className="min-h-full">
-      <section className="page-shell pt-9 pb-6">
-        <h1 className="page-title">最近阅读</h1>
-        <p className="text-[13px] text-fg-muted mt-2 tabular-nums">
-          {history.length > 0 ? (
-            <>
-              <span className="text-fg font-medium">{history.length}</span> 个
-              <span className="text-fg-subtle mx-1.5">·</span>
-              最近打开{" "}
-              <span className="text-fg">
-                {formatRelative(history[0]?.openedAt)}
-              </span>
-            </>
-          ) : historyQuery.isLoading ? (
-            "正在加载记录…"
-          ) : historyFailed ? (
-            "记录暂不可用"
-          ) : (
-            "还没有记录"
-          )}
-        </p>
-      </section>
+      <PageHeading
+        title="最近阅读"
+        eyebrow="阅读足迹"
+        description={
+          <p className="text-[13px] text-fg-muted mt-2 tabular-nums">
+            {history.length > 0 ? (
+              <>
+                <span className="text-fg font-medium">{history.length}</span> 个
+                <span className="text-fg-subtle mx-1.5">·</span>
+                最近打开{" "}
+                <span className="text-fg">
+                  {formatRelative(history[0]?.openedAt)}
+                </span>
+              </>
+            ) : historyQuery.isLoading ? (
+              "正在加载记录…"
+            ) : historyFailed ? (
+              "记录暂不可用"
+            ) : (
+              "还没有记录"
+            )}
+          </p>
+        }
+      />
 
       {loadFailed && (
         <div className="page-shell mb-4">
@@ -179,10 +183,7 @@ export default function Recents() {
           description="打开任意一个文件夹开始浏览，它会出现在这里。"
           icon={<ClockIcon size={20} />}
           action={
-            <button
-              onClick={() => navigate("/")}
-              className="btn btn-primary"
-            >
+            <button onClick={() => navigate("/")} className="btn btn-primary">
               去主页看看
             </button>
           }
@@ -192,10 +193,7 @@ export default function Recents() {
           title="最近访问的相册暂不可用"
           description="相册可能已移动，或媒体库尚未完成扫描。"
           action={
-            <button
-              onClick={() => navigate("/")}
-              className="btn btn-outline"
-            >
+            <button onClick={() => navigate("/")} className="btn btn-outline">
               去主页看看
             </button>
           }

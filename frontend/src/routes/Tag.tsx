@@ -168,26 +168,13 @@ export default function Tag() {
 
   return (
     <div className="min-h-full">
-      {/* Hero — 头图 + 概览 */}
-      <section className="relative">
-        <div className="relative h-56 lg:h-72 overflow-hidden bg-bg-elevated">
-          {cover?.coverImage && (
-            <img
-              key={cover.id}
-              src={thumbUrl(cover.coverImage)}
-              alt=""
-              className="absolute inset-0 w-full h-full object-cover scale-fade"
-            />
-          )}
-          <div className="absolute inset-0 bg-gradient-to-t from-bg via-bg/40 to-transparent" />
-        </div>
-
-        <div className="page-shell -mt-20 relative z-10">
-          <div className="flex items-end gap-6 flex-wrap">
-            <div className="min-w-0">
-              <h1 className="page-title text-fg">{tag}</h1>
-            </div>
-            <div className="flex items-center gap-2 mb-3">
+      <section className="page-shell page-heading">
+        <div className="tag-feature">
+          <div className="min-w-0">
+            <p className="page-eyebrow mb-3">由标签串起的故事</p>
+            <h1 className="page-title break-words">{tag}</h1>
+            <div className="mt-4">
+              {" "}
               <button
                 onClick={() =>
                   toggle(`smart:${tag}`).then(() => {
@@ -207,44 +194,50 @@ export default function Tag() {
                 <span>{isFav ? "已收藏" : "收藏标签"}</span>
               </button>
             </div>
+            <div className="mt-7 grid grid-cols-2 md:grid-cols-4 gap-x-7 gap-y-4">
+              {" "}
+              <Stat
+                icon={<FolderIcon size={13} />}
+                label="作品数"
+                value={albums.length}
+              />
+              <Stat
+                icon={<ReaderIcon size={13} />}
+                label="总媒体"
+                value={totalMedia}
+                detail={`图片 ${totalImages} · 视频 ${totalVideos}`}
+              />
+              <Stat
+                icon={<ClockIcon size={13} />}
+                label="已读"
+                value={`${readCount}/${albums.length}`}
+              />
+              <Stat
+                icon={<StarIcon size={13} />}
+                label="最近更新"
+                value={
+                  recentDate
+                    ? new Date(recentDate).toLocaleDateString("zh-CN")
+                    : "—"
+                }
+              />
+            </div>
           </div>
-
-          {/* 数据条 */}
-          <div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-x-8 gap-y-3 max-w-2xl">
-            <Stat
-              icon={<FolderIcon size={13} />}
-              label="作品数"
-              value={albums.length}
-            />
-            <Stat
-              icon={<ReaderIcon size={13} />}
-              label="总媒体"
-              value={totalMedia}
-              detail={`图片 ${totalImages} · 视频 ${totalVideos}`}
-            />
-            <Stat
-              icon={<ClockIcon size={13} />}
-              label="已读"
-              value={`${readCount}/${albums.length}`}
-            />
-            <Stat
-              icon={<StarIcon size={13} />}
-              label="最近更新"
-              value={
-                recentDate
-                  ? new Date(recentDate).toLocaleDateString("zh-CN")
-                  : "—"
-              }
-            />
-          </div>
+          {cover?.coverImage && (
+            <div className="tag-feature__image">
+              <img
+                key={cover.id}
+                src={thumbUrl(cover.coverImage)}
+                alt=""
+                className="w-full h-full object-cover"
+              />
+            </div>
+          )}
         </div>
       </section>
 
       {/* 作品列表 */}
-      <section
-        aria-label="作品列表"
-        className="page-shell pt-8 pb-10"
-      >
+      <section aria-label="作品列表" className="page-shell pt-8 pb-10">
         {needsHistory && <ViewedSortNotice query={historyQuery} />}
         <ListFilterBar totalCount={cards.length} showMinImageFilter={false} />
         {filtered.length === 0 ? (

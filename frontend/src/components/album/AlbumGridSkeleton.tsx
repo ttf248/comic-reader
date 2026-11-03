@@ -24,7 +24,7 @@ interface Props {
  * 从零变成满屏，视线要重新找一遍位置（闪烁 + 跳动），而且转圈对"还要
  * 等多久"没有任何信息量。
  *
- * 骨架按真实卡片的尺寸与排版画：网格用同样的 4:5 封面块 + 标题行 +
+ * 骨架按真实卡片的尺寸与排版画：网格用同样的横幅封面块 + 标题行 +
  * 元信息行，列表用同样的 56×70 缩略图 + 两行文字。数据到达时卡片落
  * 在原来的位置上，视觉上是"填满"而不是"重排"。
  *
@@ -39,15 +39,11 @@ export default function AlbumGridSkeleton({
   label,
 }: Props) {
   const shell = bare ? "" : "page-shell";
-  const text = label ?? (variant === "list" ? "正在加载列表…" : "正在加载图像…");
+  const text =
+    label ?? (variant === "list" ? "正在加载列表…" : "正在加载图像…");
   if (variant === "list") {
     return (
-      <div
-        className={shell}
-        role="status"
-        aria-live="polite"
-        aria-label={text}
-      >
+      <div className={shell} role="status" aria-live="polite" aria-label={text}>
         <span className="sr-only">{text}</span>
         <div aria-hidden="true" data-testid="album-skeleton-rows">
           {Array.from({ length: rows }).map((_, i) => (
@@ -72,21 +68,16 @@ export default function AlbumGridSkeleton({
   }
 
   return (
-    <div
-      className={shell}
-      role="status"
-      aria-live="polite"
-      aria-label={text}
-    >
+    <div className={shell} role="status" aria-live="polite" aria-label={text}>
       <span className="sr-only">{text}</span>
       <div
         aria-hidden="true"
         data-testid="album-skeleton-cards"
-        className="grid gap-x-5 gap-y-8 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6"
+        className="library-grid gap-x-5 gap-y-8"
       >
         {Array.from({ length: count }).map((_, i) => (
-          <div key={i} className="min-w-0">
-            <div className="relative aspect-[4/5] rounded-lg bg-bg-subtle border border-border" />
+          <div key={i} className="album-tile min-w-0">
+            <div className="relative aspect-[4/3] rounded-lg bg-bg-subtle border border-border" />
             <div className="pt-3 space-y-2">
               <div className="h-3.5 w-3/4 rounded bg-bg-subtle" />
               <div className="h-3 w-1/3 rounded bg-bg-subtle" />

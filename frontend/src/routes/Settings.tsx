@@ -1,3 +1,4 @@
+import PageHeading from "../components/common/PageHeading";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { prefsApi, favoritesApi, historyApi, type Prefs } from "../api/prefs";
 import { scanApi } from "../api/scan";
@@ -212,9 +213,14 @@ export default function Settings() {
   );
   if (!data) {
     return (
-      <div className="page-shell py-10">
+      <div className="page-shell settings-page pb-10">
         <div className="max-w-3xl">
-          <h1 className="page-title mb-6">设置</h1>
+          <PageHeading
+            title="设置"
+            eyebrow="你的空间，你的习惯"
+            contained
+            description="调整外观、阅读方式与本地媒体配置。"
+          />
           {prefsError || (
             <div role="status" className="text-fg-muted text-[13px]">
               正在加载设置…
@@ -226,14 +232,15 @@ export default function Settings() {
   }
 
   return (
-    <div className="page-shell py-10">
-      <div className="settings-columns max-w-3xl xl:max-w-none xl:columns-2 xl:gap-10">
-        <h1 className="page-title">设置</h1>
-        <p className="text-[13px] text-fg-muted mt-2 mb-10">
-          个性化你的阅读体验
-        </p>
-        {prefsError}
-
+    <div className="page-shell settings-page pb-10">
+      <PageHeading
+        title="设置"
+        eyebrow="你的空间，你的习惯"
+        contained
+        description="调整外观、阅读方式与本地媒体配置。"
+      />
+      {prefsError}
+      <div className="settings-columns">
         <Section title="外观" icon={<SunIcon size={13} />}>
           <Row label="主题">
             <ThemeSwitcher />
@@ -487,14 +494,14 @@ export default function Settings() {
           </Row>
         </Section>
 
-        <section className="mb-10">
-          <div className="flex items-center gap-2 mb-3">
+        <section className="settings-section">
+          <div className="settings-section__heading">
             <span className="text-fg-muted">
               <ServerIcon size={13} />
             </span>
             <h2 className="section-title">服务端</h2>
             <span className="text-[12.5px] text-fg-subtle ml-2">
-              改动自动写回后端 config.yaml
+              修改后自动保存，部分设置需重启
             </span>
           </div>
           <ServerConfigPanel />
@@ -515,7 +522,7 @@ export default function Settings() {
             </div>
             <div className="mt-3 text-[12.5px] text-fg-subtle flex items-center gap-2">
               <KeyboardIcon size={12} />
-              <span>所有偏好（主题、强调色、视图、收藏）均存于本机</span>
+              <span>媒体保存在本地，收藏与阅读记录由服务端保存</span>
             </div>
           </div>
         </Section>
@@ -534,12 +541,12 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="mb-10">
-      <div className="flex items-center gap-2 mb-3">
+    <section className="settings-section">
+      <div className="settings-section__heading">
         {icon && <span className="text-fg-muted">{icon}</span>}
         <h2 className="section-title">{title}</h2>
       </div>
-      <div className="bg-bg-elevated border border-border-faint rounded-lg divide-y divide-border-faint overflow-hidden">
+      <div className="settings-section__body divide-y divide-border-faint">
         {children}
       </div>
     </section>
@@ -558,7 +565,7 @@ function Row({
   return (
     // 标签固定不换行：内容多的时候应该让内容换行，而不是把"缓存占用"
     // 挤成两行、同时把右侧内容裁掉。
-    <div className="flex items-center justify-between gap-4 px-4 py-3 text-sm">
+    <div className="settings-row flex items-center justify-between gap-4 px-5 py-4 text-sm">
       <span
         className={`shrink-0 whitespace-nowrap ${danger ? "text-danger" : "text-fg"}`}
       >

@@ -1,5 +1,5 @@
 import { useMemo, type MouseEvent } from "react";
-import { VirtuosoGrid } from "react-virtuoso";
+import VirtualMediaGrid, { type MediaGridSize } from "./VirtualMediaGrid";
 import { useMediaGridPagination } from "../../hooks/useMediaGridPagination";
 import ThumbImage from "../common/ThumbImage";
 
@@ -8,8 +8,7 @@ interface Props {
   files: string[];
   /** 当前媒体类型的服务端总数。 */
   total: number;
-  /** Tailwind grid-cols 类名。 */
-  gridClassName: string;
+  gridSize: MediaGridSize;
   progressIndex?: number;
   hasNextPage: boolean;
   isLoadingMore: boolean;
@@ -21,14 +20,14 @@ interface Props {
 /**
  * 相册图片缩略图网格。
  *
- * 用轻量占位槽保留服务端总长度，VirtuosoGrid 只挂载视口附近的真实
+ * 用轻量占位槽保留服务端总长度，虚拟列表只挂载视口附近的真实
  * 图片；滚动接近已加载边界时由父级继续加载媒体页。这样首屏不需要等待整本
  * 相册，也不会为数千张图片创建完整 DOM 树。
  */
 export default function MediaThumbnailGrid({
   files,
   total,
-  gridClassName,
+  gridSize,
   progressIndex,
   hasNextPage,
   isLoadingMore,
@@ -52,21 +51,9 @@ export default function MediaThumbnailGrid({
   );
 
   return (
-    <VirtuosoGrid
-      style={{ height: "100%" }}
+    <VirtualMediaGrid
       data={slots}
-      overscan={720}
-      /* 多渲染一截虚拟窗口：Virtuoso 估算的整段滚动长度比真实布局高约两行，
-         "拖到最底"时最后一行落在估算窗口之外，只剩占位块（图片渲染不出来）。
-         窗口下沿多留 720px，估算误差（实测约 380px）就被覆盖住了。
-
-         注意：下沿留到 1600px 会让 Virtuoso 在同一帧里测量太多条目，
-         它的尺寸树遍历（内部是递归展开）直接爆栈 —— 405 个视频的相册
-         一进页面就抛 "Maximum call stack size exceeded"，整个相册页
-         被错误边界接管。720px 同时满足"末行能渲染"与"不爆栈"。 */
-      increaseViewportBy={{ top: 720, bottom: 720 }}
-      listClassName={`grid gap-2 px-6 lg:px-10 pb-10 max-w-[1400px] mx-auto ${gridClassName}`}
-      itemClassName="min-w-0"
+      size={gridSize}
       computeItemKey={(index, item) => item ?? `media-placeholder-${index}`}
       rangeChanged={rangeChanged}
       itemContent={(index, file) => {
