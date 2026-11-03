@@ -196,7 +196,7 @@ export default function PageSlider({ total, index, onJump, images }: Props) {
           {safeIndex + 1}
         </button>
       )}
-      <span className="text-white/60 text-[12.5px] tabular-nums">/ {total}</span>
+      <span className="text-white/70 text-[12.5px] tabular-nums">/ {total}</span>
 
       {/* 进度条 */}
       <div className="flex-1 relative h-9 flex items-center group">
@@ -224,7 +224,7 @@ export default function PageSlider({ total, index, onJump, images }: Props) {
       </div>
 
       {/* 快捷键提示 */}
-      <span className="text-[12.5px] text-white/45 hidden md:inline">
+      <span className="text-[12.5px] text-white/55 hidden md:inline">
         <kbd className="kbd-light">G</kbd> 跳转
       </span>
     </div>

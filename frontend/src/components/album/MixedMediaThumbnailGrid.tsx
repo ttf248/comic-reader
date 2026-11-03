@@ -126,7 +126,7 @@ export default function MixedMediaThumbnailGrid({
                 {isImage ? item.kindIndex + 1 : `视频 ${item.kindIndex + 1}`}
               </div>
               {!isImage && (
-                <div className="absolute bottom-0 inset-x-0 px-1.5 py-1 bg-gradient-to-t from-black/60 to-transparent">
+                <div className="absolute bottom-0 inset-x-0 px-1.5 pt-1.5 pb-1 bg-gradient-to-t from-black/85 from-80% to-transparent">
                   <div className="text-[11.5px] text-white/90 truncate flex items-center gap-1.5">
                     <span className="truncate">{name}</span>
                     {duration !== undefined && duration > 0 && (

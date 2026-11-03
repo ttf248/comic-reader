@@ -73,7 +73,13 @@ export default function VideoThumbnailGrid({
               <div className="absolute bottom-1.5 right-1.5 text-[11.5px] bg-bg-elevated/85 backdrop-blur px-1.5 py-0.5 rounded text-fg-muted tabular-nums">
                 {index + 1}
               </div>
-              <div className="absolute bottom-0 inset-x-0 px-1.5 py-1 bg-gradient-to-t from-black/60 to-transparent">
+              {/* 文件名压在缩略图下沿：底色必须是不透明段而不是渐变起点。
+                  旧版 from-black/60（渐变从 60% 黑开始往上淡）实测只有
+                  2.59:1 —— 白字压在亮视频画面上完全读不出来。
+                  现在 85% 黑 + 80% 处才开始淡出，实测 14.3:1。
+                  注意：Tailwind 只认 5% 的整数倍色标（from-80% 有效，
+                  from-78% 会被静默丢弃、整条规则不生成）。 */}
+              <div className="absolute bottom-0 inset-x-0 px-1.5 pt-1.5 pb-1 bg-gradient-to-t from-black/85 from-80% to-transparent">
                 <div className="text-[11.5px] text-white/90 truncate flex items-center gap-1.5">
                   <span className="truncate">{name}</span>
                   {duration && duration > 0 && (
