@@ -58,8 +58,13 @@ export default function MediaThumbnailGrid({
       overscan={720}
       /* 多渲染一截虚拟窗口：Virtuoso 估算的整段滚动长度比真实布局高约两行，
          "拖到最底"时最后一行落在估算窗口之外，只剩占位块（图片渲染不出来）。
-         把窗口下沿多留 1600px（约 6 行），估算误差就被覆盖住了。 */
-      increaseViewportBy={{ top: 720, bottom: 1600 }}
+         窗口下沿多留 720px，估算误差（实测约 380px）就被覆盖住了。
+
+         注意：下沿留到 1600px 会让 Virtuoso 在同一帧里测量太多条目，
+         它的尺寸树遍历（内部是递归展开）直接爆栈 —— 405 个视频的相册
+         一进页面就抛 "Maximum call stack size exceeded"，整个相册页
+         被错误边界接管。720px 同时满足"末行能渲染"与"不爆栈"。 */
+      increaseViewportBy={{ top: 720, bottom: 720 }}
       listClassName={`grid gap-2 px-6 lg:px-10 pb-10 max-w-[1400px] mx-auto ${gridClassName}`}
       itemClassName="min-w-0"
       computeItemKey={(index, item) => item ?? `media-placeholder-${index}`}
