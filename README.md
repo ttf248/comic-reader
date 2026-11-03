@@ -356,6 +356,7 @@ local-gallery/
 | e2e      | `cd frontend && npm run test:e2e` 或 `scripts/test-e2e.ps1` |
 | 设计审计（布局 / 字号） | `cd frontend && npm run audit:layout`            |
 | 设计审计（对比度 AA） | `cd frontend && npm run audit:contrast`      |
+| 相册页崩溃探针 | `cd frontend && npm run audit:crash`         |
 | 多断点截图 | `cd frontend && npm run shot -- --out .smoke/xxx` |
 | 全栈启动 | VSCode → "全栈复合调试"                         |
 | 全栈构建 | `scripts/build.ps1` 或 VSCode 任务 `build: all`             |
@@ -400,6 +401,15 @@ Playwright 之后，对同一个临时服务再跑一遍布局 / 对比度审计
 
 两个审计都会检查**页面有没有崩**：掉进错误边界（React 渲染异常）的页面重试一次再判，
 仍失败就单独报出来 —— 崩掉的页面没有内容可量，报"全部通过"是假象。
+
+`audit:crash` 量的是另一个东西：**相册详情页反复打开时的崩溃率**。
+虚拟网格的参数（`increaseViewportBy` / `overscan`）改一点点，
+相册页就可能从"几乎不崩"变成"一半以上整页崩掉"（`Maximum call stack size exceeded`），
+而这种改动靠肉眼看页面根本发现不了 —— 所以它需要一个能出数字的探针：
+连续访问相册页 N 次，统计掉进错误边界的次数，有崩溃就以非零退出码失败。
+开关：`LG_CRASH_VISITS`（访问次数，默认 10）、`LG_CRASH_ALBUM`（相册名，默认取媒体最多的那本）、
+`LG_CRASH_VIEWPORT`（默认 `1280x720`）、`LG_CRASH_MOCK_THUMBS=1`（用假缩略图，默认用真实缩略图）。
+`scripts/test-e2e.ps1 -Crash` 会对 e2e 的临时环境（里面有 405 项的相册）跑一遍这个探针。
 
 例：`LG_PAGES=reader npm run audit:contrast`（阅读器浮层与图标对比度）、
 `LG_PAGES=album npm run audit:layout`（相册详情页的字号与溢出）、

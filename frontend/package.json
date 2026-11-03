@@ -15,6 +15,7 @@
     "lint": "eslint . --ext .ts,.tsx",
     "audit:contrast": "node scripts/contrast-audit.mjs",
     "audit:layout": "node scripts/layout-audit.mjs",
+    "audit:crash": "node scripts/album-crash-probe.mjs",
     "shot": "node scripts/screenshot.mjs",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\""
   },

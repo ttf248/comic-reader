@@ -5,9 +5,14 @@
 #   -Audit   Playwright 跑完后，再对同一个临时服务跑一遍布局 / 对比度审计。
 #            临时媒体库里带真实标签（测试 / 空 格 / C++ …），所以这一次
 #            审计量的是**真实标签页**，而不是开发库里那种伪造数据。
+#   -Crash   Playwright 跑完后，再对同一个临时服务跑一遍相册页爆栈探针。
+#            临时媒体库里有 405 项的相册，虚拟网格的测量压力足够大，
+#            能把相册页偶发整页崩掉（Maximum call stack size exceeded）
+#            的概率量出来 —— 这个 bug 靠"看一次页面"发现不了。
 
 param(
-  [switch]$Audit
+  [switch]$Audit,
+  [switch]$Crash
 )
 
 $ErrorActionPreference = "Stop"
@@ -184,6 +189,25 @@ staticDir: "$staticPathYaml"
     } finally {
       Pop-Location
       Remove-Item Env:\LG_BASE -ErrorAction SilentlyContinue
+    }
+  }
+
+  if ($Crash) {
+    # 同一个临时服务上量相册页的崩溃率：临时媒体库里有 405 项的相册，
+    # 虚拟网格的测量压力足够大，能把这个偶发 bug 的概率量成数字。
+    Write-Host "[3.6/4] 对临时服务跑相册页爆栈探针..." -ForegroundColor Cyan
+    Push-Location $frontendRoot
+    try {
+      $env:LG_BASE = $env:PLAYWRIGHT_BASE_URL
+      $env:LG_CRASH_ALBUM = "sample-paged-videos"
+      $env:LG_CRASH_VISITS = "10"
+      node scripts/album-crash-probe.mjs
+      if ($LASTEXITCODE -ne 0) { throw "相册页爆栈探针发现崩溃，退出码 $LASTEXITCODE" }
+    } finally {
+      Pop-Location
+      Remove-Item Env:\LG_BASE -ErrorAction SilentlyContinue
+      Remove-Item Env:\LG_CRASH_ALBUM -ErrorAction SilentlyContinue
+      Remove-Item Env:\LG_CRASH_VISITS -ErrorAction SilentlyContinue
     }
   }
 } finally {
