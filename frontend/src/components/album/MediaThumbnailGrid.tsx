@@ -98,7 +98,7 @@ export default function MediaThumbnailGrid({
                 当前
               </div>
             )}
-            <div className="absolute bottom-1.5 right-1.5 text-[12.5px] bg-bg-elevated/85 backdrop-blur px-1.5 py-0.5 rounded text-fg-muted tabular-nums">
+            <div className="absolute bottom-1.5 right-1.5 text-[12.5px] bg-bg-elevated/90 backdrop-blur px-1.5 py-0.5 rounded text-fg tabular-nums">
               {index + 1}
             </div>
           </button>

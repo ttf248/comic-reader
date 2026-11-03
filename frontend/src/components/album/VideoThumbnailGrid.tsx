@@ -79,7 +79,7 @@ export default function VideoThumbnailGrid({
               <div className="absolute top-1.5 right-1.5 bg-bg-elevated/90 backdrop-blur rounded-md p-1 shadow-sm group-hover:scale-110 transition-transform">
                 <PlayFilledIcon size={10} className="text-accent" />
               </div>
-              <div className="absolute bottom-1.5 right-1.5 text-[12.5px] bg-bg-elevated/85 backdrop-blur px-1.5 py-0.5 rounded text-fg-muted tabular-nums">
+              <div className="absolute bottom-1.5 right-1.5 text-[12.5px] bg-bg-elevated/90 backdrop-blur px-1.5 py-0.5 rounded text-fg tabular-nums">
                 {index + 1}
               </div>
               {/* 文件名压在缩略图下沿：底色必须是不透明段而不是渐变起点。
