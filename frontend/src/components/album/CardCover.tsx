@@ -52,7 +52,7 @@ export default function CardCover({ data, loading = "lazy", compact }: Props) {
         path={paths[0]}
         alt={data.title}
         loading={loading}
-        /* 相册封面统一偏上取景：漫画封面的标题与人物头部在���方，
+        /* 相册封面统一偏上取景：漫画封面的标题与人物头部在上方，
            居中裁切会把它们切掉；横向照片本身是横向裁切，不受影响。 */
         position="50% 25%"
       />
