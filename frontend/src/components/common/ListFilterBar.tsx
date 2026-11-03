@@ -258,7 +258,7 @@ function MinImageFilter({
             setDraft(String(value));
           }
         }}
-        className="w-9 bg-transparent border-0 outline-none text-[12.5px] tabular-nums text-right focus:outline-none"
+        className="w-9 h-7 bg-transparent border-0 outline-none text-[12.5px] tabular-nums text-right focus:outline-none"
         aria-label="最少图数"
       />
       {active && (

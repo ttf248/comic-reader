@@ -571,21 +571,28 @@ function Toggle({
   onChange: (v: boolean) => void;
 }) {
   return (
+    // 视觉是 20px 的药丸（和系统设置一致），可点区域撑到 28px：
+    // 外层按钮 28px 高、内部药丸居中，命中区从 20px 提到 28px，
+    // 视觉尺寸完全不变。20px 的开关在触摸设备上很难点准。
     <button
       role="switch"
       aria-label={label}
       aria-checked={checked}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-5 w-9 rounded-full transition-colors disabled:opacity-50 ${
-        checked ? "bg-accent" : "bg-bg-strong"
-      }`}
+      className="relative inline-flex h-7 w-9 items-center justify-center rounded-full disabled:opacity-50"
     >
       <span
-        className={`absolute top-0.5 left-0.5 w-4 h-4 bg-bg-elevated rounded-full shadow transition-transform ${
-          checked ? "translate-x-4" : ""
+        className={`relative inline-flex h-5 w-9 rounded-full transition-colors ${
+          checked ? "bg-accent" : "bg-bg-strong"
         }`}
-      />
+      >
+        <span
+          className={`absolute top-0.5 left-0.5 w-4 h-4 bg-bg-elevated rounded-full shadow transition-transform ${
+            checked ? "translate-x-4" : ""
+          }`}
+        />
+      </span>
     </button>
   );
 }
@@ -665,7 +672,7 @@ function SubUsageBadge({
   const inner = (
     <>
       <div className="flex items-center justify-between gap-1.5">
-        <span className="text-fg-muted text-[11.5px]">
+        <span className="text-fg-muted text-[12.5px]">
           {label}
         </span>
         {showClear && (
@@ -675,7 +682,7 @@ function SubUsageBadge({
               onClear!();
             }}
             disabled={clearPending}
-            className="inline-flex items-center justify-center w-4 h-4 rounded text-fg-subtle hover:text-danger hover:bg-danger/10 transition-colors disabled:opacity-50"
+            className="inline-flex items-center justify-center w-7 h-7 -mr-1 rounded text-fg-subtle hover:text-danger hover:bg-danger/10 transition-colors disabled:opacity-50"
             title={`清空 ${label} 缓存`}
             aria-label={`清空 ${label} 缓存`}
           >

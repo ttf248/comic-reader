@@ -591,7 +591,7 @@ export default function ServerConfigPanel() {
                     : "默认模式，所有 API 只允许运行服务的计算机访问。"}
                 </p>
               </div>
-              <span className="shrink-0 rounded-full border border-border px-2 py-1 text-[11.5px] text-fg-muted">
+              <span className="shrink-0 rounded-full border border-border px-2 py-1 text-[12.5px] text-fg-muted">
                 {data.accessMode === "lan" ? "LAN" : "LOCAL"}
               </span>
             </div>
@@ -934,7 +934,7 @@ function ConfigRow({
         <span className="text-fg flex items-center gap-2">
           {def.label}
           {requiresRestart && (
-            <span className="inline-flex items-center gap-1 text-[11.5px] text-fg-subtle border border-border-faint px-1.5 py-0.5 rounded">
+            <span className="inline-flex items-center gap-1 text-[12.5px] text-fg-subtle border border-border-faint px-1.5 py-0.5 rounded">
               <RestartIcon size={10} />
               需重启
             </span>
@@ -1291,20 +1291,26 @@ function Toggle({
   ariaLabel?: string;
 }) {
   return (
+    // 视觉 20px 的药丸，可点区域 28px（外层按钮撑开，药丸居中）。
+    // 20px 的开关在触摸设备上很难点准。
     <button
       role="switch"
       aria-checked={checked}
       aria-label={ariaLabel}
       onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-5 w-9 rounded-full transition-colors ${
-        checked ? "bg-accent" : "bg-bg-strong"
-      }`}
+      className="relative inline-flex h-7 w-9 items-center justify-center rounded-full"
     >
       <span
-        className={`absolute top-0.5 left-0.5 w-4 h-4 bg-bg-elevated rounded-full shadow transition-transform ${
-          checked ? "translate-x-4" : ""
+        className={`relative inline-flex h-5 w-9 rounded-full transition-colors ${
+          checked ? "bg-accent" : "bg-bg-strong"
         }`}
-      />
+      >
+        <span
+          className={`absolute top-0.5 left-0.5 w-4 h-4 bg-bg-elevated rounded-full shadow transition-transform ${
+            checked ? "translate-x-4" : ""
+          }`}
+        />
+      </span>
     </button>
   );
 }

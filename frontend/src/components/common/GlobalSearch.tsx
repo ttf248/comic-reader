@@ -95,7 +95,10 @@ export default function GlobalSearch() {
             }
           }}
           placeholder="搜索文件夹 / 标签…"
-          className="flex-1 min-w-0 bg-transparent border-0 outline-none text-[14px] placeholder:text-fg-subtle"
+          /* h-full：输入框本身要撑满 40px 的胶囊。外壳是 h-10，输入框却
+             只有内容高度（23px）—— 真正能点到的只有中间那一小条，
+             低于 28px 的触控下限。 */
+          className="flex-1 min-w-0 h-full bg-transparent border-0 outline-none text-[14px] placeholder:text-fg-subtle"
           role="combobox"
           aria-autocomplete="list"
           aria-controls="global-search-results"

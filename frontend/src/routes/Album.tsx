@@ -547,7 +547,10 @@ function AlbumView({
 
           <div className="flex items-center gap-5 sm:gap-7 flex-wrap lg:items-end">
             {/* 大封面缩略图 */}
-            <div className="relative w-[104px] h-[132px] sm:w-[120px] sm:h-[152px] rounded-lg overflow-hidden border border-border shadow-md shrink-0 bg-bg-subtle">
+            {/* 封面尺寸：桌面端 200×267（2:3 海报）。旧版桌面只有 120×152，
+                比下面网格里的缩略图（标准档 ~190×235）还小 —— 一页里
+                "代表这本"的那张图反而是整页最小的图，层级倒置。 */}
+            <div className="relative w-[104px] h-[132px] sm:w-[200px] sm:h-[267px] rounded-lg overflow-hidden border border-border shadow-md shrink-0 bg-bg-subtle">
               <img
                 src={thumbUrl(detail.coverImage)}
                 alt={detail.name}
@@ -1127,7 +1130,9 @@ function VideoAlbumView({
             {/* 大封面（视频时由 VideoCoverImage 处理抽帧）
                 底色用深色媒体画布：视频是 16:9，竖框里必然有上下留边，
                 留边落在浅灰底上会被读成"图缺了一块"。 */}
-            <div className="relative w-32 h-44 sm:w-40 sm:h-56 rounded-lg overflow-hidden border border-border shadow-md shrink-0 bg-bg-media">
+            {/* 与图片相册页同尺寸（200×300），两个 hero 的封面一样大，
+                不因媒体类型而缩水。 */}
+            <div className="relative w-32 h-48 sm:w-[200px] sm:h-[300px] rounded-lg overflow-hidden border border-border shadow-md shrink-0 bg-bg-media">
               <VideoCoverImage
                 videoPath={detail.coverImage}
                 alt={detail.name}
