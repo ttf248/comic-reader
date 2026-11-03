@@ -36,16 +36,15 @@ import {
 const GRID_ITEMS = 12;
 
 /**
- * 窄屏隐藏多余条目。
- *
  * 网格条目数必须跟着列数走：条目数固定而列数变少时，行数会线性膨胀
- * （12 条在 2 列下是 6 行 ≈ 1500px 高，页面被拉成长条）。用 nth-child
- * 规则按断点裁掉多余条目，比在 JS 里按列数算更可靠 —— 列数是 CSS 决定的。
+ * （12 条在 2 列下是 6 行 ≈ 1500px 高，页面被拉成长条）。
  *
- * 各断点实际行数：手机 2 行 / 平板 2~3 行 / 桌面 2 行 / 超宽 2 行。
+ * 裁剪规则放在 global.css 的 `.stage-grid` 里，和列数写在同一处 ——
+ * 列数与条数必须成对（4 列配 8 条、5 列配 10 条、6 列配 12 条），
+ * 分成两处维护就会出现"5 列只排 8 条、末行只剩 3 张"的半行。
+ *
+ * 各断点实际行数：手机 1 行 / 平板 2~3 行 / 桌面 2 行 / 超宽 2 行。
  */
-const GRID_HIDE_SM =
-  "max-sm:[&>*:nth-child(n+5)]:hidden max-[1800px]:[&>*:nth-child(n+9)]:hidden";
 
 /**
  * 「其余在读」网格的列数。
@@ -286,7 +285,7 @@ export function ContinueReadingHero({
               <>
                 <div className="section-meta mb-4">其余在读</div>
                 <div
-                  className={`grid ${GRID_COLS} gap-x-3.5 gap-y-7 ${GRID_HIDE_SM}`}
+                  className={`grid ${GRID_COLS} gap-x-3.5 gap-y-7`}
                 >
                   {rest.map((card) => (
                     <MiniPoster

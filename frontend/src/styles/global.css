@@ -48,9 +48,21 @@
 .stage-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
+@media (max-width: 639px) {
+  /* 手机：一条 4 张的缩略图带 */
+  .stage-grid > *:nth-child(n+5) {
+    display: none;
+  }
+}
 @media (min-width: 640px) {
   .stage-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (min-width: 640px) and (max-width: 767px) {
+  /* 3 列 6 条 = 2 行 */
+  .stage-grid > *:nth-child(n+7) {
+    display: none;
   }
 }
 @media (min-width: 768px) {
@@ -58,9 +70,10 @@
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
-@media (min-width: 1800px) {
-  .stage-grid {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+@media (min-width: 768px) and (max-width: 1023px) {
+  /* 4 列 8 条 = 2 行 */
+  .stage-grid > *:nth-child(n+9) {
+    display: none;
   }
 }
 @media (min-width: 1280px) and (max-width: 1799px) and (max-height: 880px) {
@@ -73,6 +86,11 @@
   }
   .stage-grid > *:nth-child(n+11) {
     display: none;
+  }
+}
+@media (min-width: 1800px) {
+  .stage-grid {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 }
 
