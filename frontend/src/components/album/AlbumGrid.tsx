@@ -35,9 +35,14 @@ interface Props {
   cardMinWidth?: 164 | 224;
 }
 
-// 超宽屏（≥1536px）列表改双列：单列时标题与右侧数字之间会空出上千像素，
+// 宽屏（≥1280px）列表改双列：单列时标题与右侧数字之间会空出几百到上千像素，
 // 眼睛要横跨整屏才能对上数字，信息密度只有网格视图的一半。
-const ULTRA_WIDE_QUERY = "(min-width: 1536px)";
+//
+// 阈值按**内容宽度**定的，不是随手取的整数：内容宽 = 视口 − 侧栏 208 −
+// 左右留白 80。1280px 视口 → 内容 1072 → 双列每列 516 → 标题列还有
+// 350px，标题不会被截断；再窄（1024 → 内容 816 → 每列 388 → 标题列
+// 222px）就会截断，所以阈值留在 1280。
+const ULTRA_WIDE_QUERY = "(min-width: 1280px)";
 
 const VirtualList = forwardRef<HTMLDivElement, ListProps>(function VirtualList(
   { children, style },
@@ -45,7 +50,7 @@ const VirtualList = forwardRef<HTMLDivElement, ListProps>(function VirtualList(
 ) {
   // 列表视图铺满内容宽度：信息列右对齐后逐行对齐，便于扫读；
   // 之前限制 max-w-4xl 会让右半屏空着，一屏能看的条目比网格视图还少。
-  // 超宽屏（≥1536px）改双列，单列时标题与右侧数字之间会空出上千像素。
+  // 宽屏（≥1280px）改双列，单列时标题与右侧数字之间会空出几百像素。
   // 左右留白由调用方的 page-shell 统一提供，这里不再重复加 padding。
   return (
     <div ref={ref} style={style} className="py-1">
