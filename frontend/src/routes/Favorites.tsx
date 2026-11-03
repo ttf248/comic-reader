@@ -320,7 +320,7 @@ export default function Favorites() {
       ) : cards.length === 0 ? (
         <EmptyState
           title={`收藏的 ${favorites.length} 项内容暂时找不到`}
-          description="收藏记录的是相册的路径标识：相册被改名或移动后标识会变，旧收藏就找不到对应的内容了。回到主页重新点星标即可重新收藏。"
+          description="相册被改名或移动之后，这一条收藏就对不上了。回到主页找到这本相册，重新点一下星标就能再收藏。"
           icon={<StarIcon size={20} />}
           action={
             <div className="flex items-center gap-2.5 flex-wrap justify-center">
