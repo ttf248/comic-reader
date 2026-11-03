@@ -342,25 +342,11 @@ export default function Home() {
             <p className="text-[13px] text-fg-muted mt-2">
               {manifest ? (
                 <>
-                  {/* 标题描述整个库，而不是当前根目录下的条目数：
-                      下面的标签页已经区分「文件夹 / 集合」，这里再叫
-                      「N 个文件夹」既不准确也容易和标签页打架。 */}
-                  <span className="tabular-nums text-fg font-medium">
-                    {manifest.statistics.albumCount}
-                  </span>{" "}
-                  本相册
-                  {manifest.statistics.collectionCount > 0 && (
-                    <>
-                      {" · "}
-                      <span className="tabular-nums text-fg font-medium">
-                        {manifest.statistics.collectionCount}
-                      </span>{" "}
-                      个集合
-                    </>
-                  )}
+                  {/* 库规模（相册数 / 集合数）放在顶栏左槽作为全局上下文，
+                      这里只留"上次更新"——同一事实不在两处重复出现。 */}
                   {manifest.scannedAt && (
-                    <span className="text-fg-subtle ml-1">
-                      · 上次更新 {formatTime(manifest.scannedAt)}
+                    <span className="text-fg-subtle">
+                      上次更新 {formatTime(manifest.scannedAt)}
                     </span>
                   )}
                 </>

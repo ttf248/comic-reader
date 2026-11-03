@@ -78,21 +78,38 @@ export default function Sidebar({
     if (!randomAlbum.isPending) randomAlbum.mutate("all");
   };
 
-  // 「接着读」迷你卡：侧栏底部常驻最近在读的一本。
+  // 「继续阅读」区：侧栏中段常驻在读的书目。
   //
   // 侧栏中段原本是一整片空白（4 个导航项撑不满 208px × 900px），
-  // 而"接着看上一本"是全局最高频的动作。与其留白，不如把最高频的
-  // 入口钉在侧栏底部 —— 像播放器的"正在播放"条。
-  // 数据来自与首页同一个 dashboard 查询（React Query 共享缓存，不额外请求）。
+  // 而"接着看上一本"是全局最高频的动作。与其留白，不如把在读列表
+  // 钉在那里 —— 像播放器的"正在播放 + 接下来"。
+  //
+  // 数据全部来自与首页同一个 dashboard 查询（React Query 共享缓存，
+  // 不额外请求）：侧栏刻意不下载全库摘要（见 useLibrary 的注释），
+  // 所以这里只能用 dashboard 里已经有的在读条目。
   const dashboard = useLibraryDashboard();
+  const inProgress = useMemo(
+    () => dashboard.data?.dashboard.inProgress ?? [],
+    [dashboard.data],
+  );
   const continueCard = useMemo(() => {
-    const first = dashboard.data?.dashboard.inProgress?.[0];
+    const first = inProgress[0];
     if (!first) return null;
     return {
       ...nodeSummaryToCard(first.album),
       progress: { index: first.pageIndex, total: first.pageCount },
     };
-  }, [dashboard.data]);
+  }, [inProgress]);
+  // 其余在读：最多 5 条紧凑行，再多就只给一个总数提示。
+  const continueRest = useMemo(
+    () =>
+      inProgress.slice(1, 6).map((item) => ({
+        ...nodeSummaryToCard(item.album),
+        progress: { index: item.pageIndex, total: item.pageCount },
+      })),
+    [inProgress],
+  );
+  const continueRestCount = Math.max(0, inProgress.length - 6);
 
   // 选中态：强调色浅底 + 前景色文字（文字保持 --fg，图标用强调色）。
   // 这样在六套强调色下都能保持稳定对比度 —— 选中文字直接用强调色时，
@@ -161,7 +178,7 @@ export default function Sidebar({
         </button>
       </div>
 
-      <nav ref={navRef} className="flex-1 py-2 px-2 space-y-0.5">
+      <nav ref={navRef} className="py-2 px-2 space-y-0.5">
         {items.map((it) => (
           <NavLink
             key={it.to}
@@ -212,6 +229,45 @@ export default function Sidebar({
         </NavLink>
       </nav>
 
+      {/* 「继续阅读」区：紧跟导航，填掉侧栏中段的空白。
+          上面是"正在读的那本"，下面是"接下来几本"。 */}
+      {!collapsed && continueCard && (
+        <div className="px-2 pt-1 pb-2">
+          <div className="px-1 pb-2 flex items-baseline gap-2">
+            <span className="text-[12.5px] text-fg-subtle">继续阅读</span>
+            <span className="text-[12.5px] text-fg-subtle tabular-nums">
+              {inProgress.length} 本
+            </span>
+          </div>
+          <ContinueMiniCard
+            title={continueCard.displayTitle ?? continueCard.title}
+            coverPath={continueCard.coverPath}
+            index={continueCard.progress?.index ?? 0}
+            total={continueCard.progress?.total ?? 0}
+            onOpen={() => navigate(continueReadingTarget(continueCard))}
+          />
+          {continueRest.map((card) => (
+            <ContinueRow
+              key={card.id}
+              title={card.displayTitle ?? card.title}
+              coverPath={card.coverPath}
+              index={card.progress?.index ?? 0}
+              total={card.progress?.total ?? 0}
+              onOpen={() => navigate(continueReadingTarget(card))}
+            />
+          ))}
+          {continueRestCount > 0 && (
+            <div className="px-2 pt-1.5 text-[12.5px] text-fg-subtle tabular-nums">
+              还有 {continueRestCount} 本没看完
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 弹性留白：把次级入口压到侧栏底部，侧栏中段即使没有内容
+          也是"底部对齐"的布局，而不是内容浮在中间。 */}
+      <div className="flex-1 min-h-4" />
+
       {/* 次级入口 + 随机：沉到底部一组，与主导航之间用一条细分隔线断开 */}
       <div className="px-2 pb-3">
         <div className="h-px bg-border-faint mb-2" />
@@ -245,23 +301,13 @@ export default function Sidebar({
           {!collapsed && <span className="truncate">随机一本</span>}
         </button>
 
-        {/* 「接着读」迷你卡：见上方说明。
-            「随机未读」原本也在这里，与「未读」页 / 首页的"随机未读"重复，
+        {/* 「随机未读」原本也在这里，与「未读」页 / 首页的"随机未读"重复，
             已移除 —— 同一动作只保留一个入口。 */}
-        {!collapsed && continueCard && (
-          <ContinueMiniCard
-            title={continueCard.displayTitle ?? continueCard.title}
-            coverPath={continueCard.coverPath}
-            index={continueCard.progress?.index ?? 0}
-            total={continueCard.progress?.total ?? 0}
-            onOpen={() => navigate(continueReadingTarget(continueCard))}
-          />
-        )}
       </div>
 
       {!collapsed && (
         <div className="px-4 pb-3.5">
-          <div className="flex items-center gap-2 text-[11.5px] text-fg-subtle">
+          <div className="flex items-center gap-2 text-[12.5px] text-fg-subtle">
             <span
               className={`inline-block w-1.5 h-1.5 rounded-full ${
                 location.pathname.startsWith("/gallery")
@@ -290,7 +336,58 @@ function Logo() {
   );
 }
 
-// 「接着读」迷你卡：侧栏底部常驻最近在读的一本。
+// 紧凑行：侧栏「继续阅读」区里其余在读书目的单行形态。
+function ContinueRow({
+  title,
+  coverPath,
+  index,
+  total,
+  onOpen,
+}: {
+  title: string;
+  coverPath?: string;
+  index: number;
+  total: number;
+  onOpen: () => void;
+}) {
+  const percent = readingPercent({ index, total });
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      title={`继续阅读「${title}」`}
+      className="w-full mt-1 rounded-md px-1 py-1 flex items-center gap-2.5 text-left transition-colors hover:bg-bg-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+    >
+      <span className="relative w-[26px] h-[34px] shrink-0 rounded overflow-hidden bg-bg-strong block">
+        {coverPath ? (
+          <img
+            src={thumbUrl(coverPath)}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            className="w-full h-full object-cover object-[50%_30%]"
+          />
+        ) : null}
+        <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-black/40">
+          <span
+            className="block h-full bg-white/90"
+            style={{ width: `${percent}%` }}
+          />
+        </span>
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block text-[12.5px] text-fg truncate leading-tight">
+          {title}
+        </span>
+        <span className="block text-[12.5px] text-fg-subtle tabular-nums mt-0.5">
+          看到 {index + 1} / {total}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+// 「接着读」迷你卡：侧栏常驻最近在读的一本。
 //
 // 版式参照播放器的"正在播放"条：左侧封面缩略图 + 右侧标题与进度。
 // 点击直接回到上次看到的那一页（与首页封面台同一份跳转逻辑）。
@@ -327,12 +424,11 @@ function ContinueMiniCard({
         ) : null}
       </span>
       <span className="min-w-0 flex-1">
-        {/* 用 --fg-muted 而不是 --fg-subtle：卡片底色是 bg-bg-subtle，
+        {/* 标题直接起排：外层分组标题已经写了"继续阅读"，
+            这里再写一遍是重复信息。
+            用 --fg-muted 而不是 --fg-subtle：卡片底色是 bg-bg-subtle，
             fg-subtle 在这个底上只有 4.4:1（AA 要求 4.5:1）。 */}
-        <span className="block text-[12px] text-fg-muted leading-none mb-1">
-          接着读
-        </span>
-        <span className="block text-[12.5px] font-medium text-fg truncate leading-tight group-hover/mini:text-accent transition-colors">
+        <span className="block text-[13px] font-medium text-fg truncate leading-tight group-hover/mini:text-accent transition-colors">
           {title}
         </span>
         <span className="mt-1.5 block h-[3px] rounded-full bg-bg-strong overflow-hidden">
@@ -341,7 +437,7 @@ function ContinueMiniCard({
             style={{ width: `${percent}%` }}
           />
         </span>
-        <span className="mt-1 block text-[12px] text-fg-muted tabular-nums">
+        <span className="mt-1 block text-[12.5px] text-fg-muted tabular-nums">
           看到 {index + 1} / {total}
         </span>
       </span>

@@ -60,7 +60,8 @@ describe("Sidebar", () => {
       { album: albumNode, pageIndex: 5, pageCount: 20 },
     ];
     renderSidebar();
-    expect(screen.getByText("接着读")).toBeInTheDocument();
+    // 分组标题现在是「继续阅读」（迷你卡内部不再重复写一次）
+    expect(screen.getByText("继续阅读")).toBeInTheDocument();
     expect(screen.getByText("某本漫画")).toBeInTheDocument();
     expect(screen.getByText("看到 6 / 20")).toBeInTheDocument();
   });
@@ -79,7 +80,7 @@ describe("Sidebar", () => {
 
   it("没有在读相册时不显示迷你卡", () => {
     renderSidebar();
-    expect(screen.queryByText("接着读")).not.toBeInTheDocument();
+    expect(screen.queryByText("继续阅读")).not.toBeInTheDocument();
   });
 
   it("折叠态不显示迷你卡（侧栏只有 60px，放不下封面与标题）", () => {
@@ -87,7 +88,19 @@ describe("Sidebar", () => {
       { album: albumNode, pageIndex: 5, pageCount: 20 },
     ];
     renderSidebar(true);
-    expect(screen.queryByText("接着读")).not.toBeInTheDocument();
+    expect(screen.queryByText("继续阅读")).not.toBeInTheDocument();
+  });
+
+  it("其余在读以紧凑行列出，并给出剩余数量", () => {
+    dashboard.dashboard.inProgress = [
+      { album: albumNode, pageIndex: 5, pageCount: 20 },
+      { album: { ...albumNode, id: "a_2", name: "第二本", displayName: "第二本" }, pageIndex: 2, pageCount: 8 },
+      { album: { ...albumNode, id: "a_3", name: "第三本", displayName: "第三本" }, pageIndex: 0, pageCount: 30 },
+    ];
+    renderSidebar();
+    expect(screen.getByText("第二本")).toBeInTheDocument();
+    expect(screen.getByText("看到 3 / 8")).toBeInTheDocument();
+    expect(screen.getByText("3 本")).toBeInTheDocument();
   });
 
   it("不再提供「随机未读」：该动作在未读页与首页已有入口", () => {

@@ -54,6 +54,18 @@ describe('YearTimeline', () => {
     useSearchStore.setState({ yearFilter: null })
   })
 
+  it('代表封面加载失败时降级为年份卡，不露出破图', () => {
+    const { container } = renderTimeline([makeGroup(2024)])
+    const img = container.querySelector('img')
+    expect(img).not.toBeNull()
+
+    // 封面可能是已删除的文件（404）或无法解码的格式（415）。
+    fireEvent.error(img as HTMLImageElement)
+
+    expect(container.querySelector('img')).toBeNull()
+    expect(screen.getByText('2024')).toBeInTheDocument()
+  })
+
   it('漏斗按钮不进入年份卡的可访问名', () => {
     renderTimeline([makeGroup(2024)])
     const card = screen.getByRole('button', { name: /2024/ })

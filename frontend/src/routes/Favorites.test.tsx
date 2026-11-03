@@ -191,6 +191,26 @@ it("收藏资源均失效时不引导清除筛选", async () => {
   ).not.toBeInTheDocument();
 });
 
+it("收藏资源均失效时提供清理失效收藏的动作", async () => {
+  vi.mocked(useLibraryNodes).mockReturnValue({
+    data: { items: [], missing: [node.id] },
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  } as never);
+  vi.mocked(favoritesApi.remove).mockResolvedValue({ favorites: [] });
+  renderFavorites();
+
+  const cleanBtn = await screen.findByRole("button", {
+    name: /清理 1 项失效收藏/,
+  });
+  fireEvent.click(cleanBtn);
+
+  await waitFor(() => {
+    expect(favoritesApi.remove).toHaveBeenCalledWith(node.id);
+  });
+});
+
 it("最近看排序依赖的历史查询失败时保留收藏并提供重试", async () => {
   useSearchStore.getState().setSortBy("viewed");
   vi.mocked(historyApi.list).mockRejectedValueOnce(new Error("offline"));

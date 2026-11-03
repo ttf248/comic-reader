@@ -401,7 +401,6 @@ button:not(:disabled):active {
   }
   .shelf > * {
     scroll-snap-align: start;
-    flex: 0 0 auto;
   }
   /* 货架右端的渐隐提示：内容被截断时给出"还有更多"的暗示。
      只淡右端 —— 左端是货架起点，淡左端会把第一张卡切掉一块。 */

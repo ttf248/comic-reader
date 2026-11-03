@@ -28,8 +28,9 @@ export default function StatusBar() {
   } else if (sse.isError) {
     leftLabel = "扫描失败";
   } else if (manifest) {
-    // 与首页标题用同一个词（"本相册"）：albumCount 是相册数，不是根目录条目数。
-    leftLabel = `${manifest.statistics.albumCount} 本相册 · ${manifest.statistics.tagCount} 个标签`;
+    // 库规模已经放在顶栏左槽（全局上下文），这里不再重复一遍。
+    // 空闲时只给一个"就绪"，把这一行让给真正在变的状态。
+    leftLabel = "就绪";
   }
 
   return (

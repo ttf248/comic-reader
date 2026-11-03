@@ -7,7 +7,7 @@ import { useScanSSE } from "../../hooks/useScanSSE";
 import { useKeyboard } from "../../hooks/useKeyboard";
 import { useUIStore } from "../../store/uiStore";
 import { libraryApi } from "../../api/library";
-import { libraryQueryKeys } from "../../hooks/useLibrary";
+import { libraryQueryKeys, useLibraryManifest } from "../../hooks/useLibrary";
 import ThemeSwitcher from "../common/ThemeSwitcher";
 import GlobalSearch from "../common/GlobalSearch";
 import {
@@ -39,6 +39,11 @@ export default function Toolbar({
   const pushToast = useUIStore((s) => s.pushToast);
 
   const onGallery = location.pathname.startsWith("/gallery");
+  // 媒体库规模：放在顶栏左槽，作为全局上下文（底部状态栏不再重复）。
+  const manifest = useLibraryManifest().data?.manifest;
+  const libraryContext = manifest
+    ? `${manifest.statistics.albumCount} 本相册 · ${manifest.statistics.collectionCount} 个集合`
+    : "";
 
   const startScan = useMutation({
     mutationFn: () => scanApi.start(),
@@ -106,17 +111,28 @@ export default function Toolbar({
           )}
         </div>
 
+        {/* 左槽：全局上下文（媒体库规模）。
+            旧版顶栏只有"搜索 + 右侧三个图标"，中间空出六七百像素，
+            看起来像被遗弃的控件区。把库规模放进左槽、搜索居中、
+            动作靠右，顶栏才是一个有结构的应用栏。 */}
         {!onGallery && (
-          /* 搜索容器不设 max-width：它要占满剩余空间，把右侧的全局动作
-             推到视口右缘。旧版 max-w-[560px] 让图标组停在 x=850，
-             1920px 下右边空出约 1000px，看起来像被遗弃的控件。 */
-          <div className="flex-1 min-w-0">
-            <GlobalSearch />
+          <div className="hidden lg:block w-[230px] shrink-0 text-[12.5px] text-fg-subtle tabular-nums truncate">
+            {libraryContext}
+          </div>
+        )}
+        {onGallery && <div className="hidden lg:block w-[230px] shrink-0" />}
+
+        {/* 中槽：搜索。居中放置，和左右两槽形成对称。 */}
+        {!onGallery && (
+          <div className="flex-1 min-w-0 flex justify-center">
+            <div className="w-full max-w-[560px]">
+              <GlobalSearch />
+            </div>
           </div>
         )}
         {onGallery && <div className="flex-1 min-w-0" />}
 
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-1 shrink-0 lg:w-[230px] lg:justify-end">
           <button
             onClick={() =>
               window.dispatchEvent(new CustomEvent("comic:open-help"))

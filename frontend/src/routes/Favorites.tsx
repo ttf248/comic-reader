@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSearchStore } from "../store/searchStore";
 import { useUIStore } from "../store/uiStore";
@@ -26,6 +26,7 @@ import {
 export default function Favorites() {
   const navigate = useNavigate();
   const viewMode = useUIStore((s) => s.viewMode);
+  const pushToast = useUIStore((s) => s.pushToast);
   const query = useSearchStore((s) => s.query);
   const sortBy = useSearchStore((s) => s.sortBy);
   const minImageCount = useSearchStore((s) => s.minImageCount);
@@ -152,11 +153,35 @@ export default function Favorites() {
   const detailsLoading =
     (nodeIds.length > 0 && nodesQuery.isLoading) ||
     (smartNames.length > 0 && tagsQuery.isLoading);
-  // 收藏里指向已不存在资源的数量（改名 / 移动过的相册）。
+  // 收藏里指向已不存在资源的 id（改名 / 移动过的相册）。
   // 详情还没查完时不能算：那时的 cards 为空只是"还没加载"，不是"找不到"。
-  const missingCount = detailsLoading
-    ? 0
-    : Math.max(0, favorites.length - cards.length);
+  const missingIds = useMemo(() => {
+    if (detailsLoading) return [];
+    return favorites.filter((f) =>
+      f.startsWith("smart:")
+        ? !tagsByName.has(f.slice(6))
+        : !nodesById.has(f),
+    );
+  }, [detailsLoading, favorites, nodesById, tagsByName]);
+  const missingCount = missingIds.length;
+
+  // 清理失效收藏：这些条目永远渲染不出来，留着只会让收藏页一直空着。
+  const [cleaning, setCleaning] = useState(false);
+  const onCleanMissing = async () => {
+    if (!missingIds.length) return;
+    setCleaning(true);
+    try {
+      for (const id of missingIds) await favoritesQuery.remove(id);
+      pushToast({
+        kind: "success",
+        message: `已清理 ${missingIds.length} 项失效收藏`,
+      });
+    } catch {
+      pushToast({ kind: "error", message: "清理失败，请稍后重试" });
+    } finally {
+      setCleaning(false);
+    }
+  };
   const retrying =
     favoritesQuery.isFetching ||
     (nodeIds.length > 0 && nodesQuery.isFetching) ||
@@ -243,13 +268,23 @@ export default function Favorites() {
         <EmptyState
           title={`收藏的 ${favorites.length} 项内容暂时找不到`}
           description="收藏记录的是相册的路径标识：相册被改名或移动后标识会变，旧收藏就找不到对应的内容了。回到主页重新点星标即可重新收藏。"
+          icon={<StarIcon size={20} />}
           action={
-            <button
-              onClick={() => navigate("/")}
-              className="btn btn-outline"
-            >
-              去主页看看
-            </button>
+            <div className="flex items-center gap-2.5 flex-wrap justify-center">
+              {missingCount > 0 && (
+                <button
+                  onClick={onCleanMissing}
+                  disabled={cleaning}
+                  className="btn btn-outline"
+                  title="移除这些永远渲染不出来的收藏条目"
+                >
+                  {cleaning ? "清理中…" : `清理 ${missingCount} 项失效收藏`}
+                </button>
+              )}
+              <button onClick={() => navigate("/")} className="btn btn-primary">
+                去主页看看
+              </button>
+            </div>
           }
         />
       ) : filtered.length === 0 ? (
