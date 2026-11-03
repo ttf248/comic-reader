@@ -84,7 +84,12 @@ export default function Toolbar({
     // 顶栏背景铺满，但内容必须和正文共用同一条左基线：
     // 内层复用 .page-shell（同样的 max-width / padding / 居中规则），
     // 否则 1920px 下顶栏起点在 x=248、正文起点在 x=302，一屏两套基准。
-    <header className="h-14 border-b border-border-faint bg-bg-elevated/70 backdrop-blur-xl">
+    //
+    // relative z-30：顶栏里的下拉（搜索结果、更多菜单）要盖住正文。
+    // 顶栏带 backdrop-blur，本身已经是一个层叠上下文，面板里的 z-30
+    // 只在顶栏内部有效 —— 正文在 DOM 里排在顶栏之后，会把面板下半截
+    // 盖掉（实测搜索结果的第 4、5 条被正文的封面压住）。
+    <header className="relative z-30 h-14 border-b border-border-faint bg-bg-elevated/70 backdrop-blur-xl">
       <div className="page-shell h-full flex items-center gap-2 sm:gap-3">
         {/* 窄屏：导航 / 返回 */}
         <div className="flex items-center gap-1 lg:hidden shrink-0">
