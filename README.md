@@ -368,6 +368,18 @@ local-gallery/
 `frontend/.smoke/`（已被 `.gitignore` 忽略）。设计口径见
 [docs/DESIGN_NORTH_STAR.md](./docs/DESIGN_NORTH_STAR.md)。
 
+两个审计脚本都支持开关（Git Bash 下 `LG_PAGES=/` 会被当成路径改写，加 `MSYS_NO_PATHCONV=1`）：
+
+| 开关 | 取值 | 作用 |
+|------|------|------|
+| `LG_PAGES` | 路由，逗号分隔；`reader` 是伪路由 | 指定要审计的页面。`reader` 会取仪表盘里第一本相册直接进阅读器，审计压在图片上的浮层文字 |
+| `LG_VIEWMODE` | `grid`（默认）/ `list` | 审计网格视图或列表视图（两套字号与排版） |
+| `LG_VIEWPORTS` | `390x844,1440x900` | 指定断点 |
+| `LG_THEMES` | `light` / `dark` | 指定主题 |
+
+例：`LG_PAGES=reader npm run audit:contrast`（阅读器浮层对比度）、
+`LG_VIEWMODE=list npm run audit:layout`（列表视图的字号与溢出）。
+
 faststart 集成测试优先使用测试进程的 `FFMPEG_PATH`，未指定时查找仓库默认位置及 `PATH` 中可执行的 ffmpeg；工具不可用时跳过该用例。此变量只供测试选择工具，不覆盖应用的 `config.yaml`。
 
 视频元数据性能测试使用 `go test ./internal/services -run '^$' -bench BenchmarkVideoInfoRepeated -benchtime=32x -count=3 -benchmem`（在 `backend` 下执行）。可用测试变量 `VIDEO_INFO_BENCH_FILE` 指定只读本地视频；未指定则生成临时素材。此变量不影响应用配置，测量方法与对照见 [架构文档](./docs/ARCHITECTURE.md)。

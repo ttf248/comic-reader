@@ -20,6 +20,7 @@
 | R2 | 2026-11-03 | `frontend/.smoke/r2b/`、`frontend/.smoke/r2c/` | 侧栏迷你卡、视频画幅与封面取景、视频相册页一致性 |
 | R3 | 2026-11-03 | `frontend/.smoke/r3/` | 列表页语义差异、卡片 meta 字号、B12 / B14 实测复核 |
 | R4 | 2026-11-03 | `frontend/.smoke/r4/` | 侧栏中段、顶栏三段式、年份胶片带、货架铺满、空态与失效收藏 |
+| R5 | 2026-11-03 | `frontend/.smoke/r5/` | 舞台封洞（左栏封面台 + 右栏封面网格）、浮层对比度、收藏空态推荐位、列表视图字号收口 |
 
 ---
 
@@ -57,6 +58,11 @@
 | B12 | **状态栏与页面内信息重复**，且内容滚动时被状态栏切边 | 占用固定高度；滚动到底部的内容被半截遮住 | `base0/light-390-home.png`（底部卡片被切） | WONTFIX | 实测**不是问题**：`main` 与状态栏是 flex 兄弟，实测 `main` 下边界 = 状态栏上边界 = 868px（不存在覆盖），滚动到底后最后一行完整可见。截图 `.smoke/r3/recents-bottom.png`。理由：内容被滚动视口裁切是正常滚动行为，不是遮挡 |
 | B13 | **收藏 / 最近 / 未读页沿用同一网格与密度** | 三类页面语义不同却长得一样，缺少"最近=时间序""未读=待办"的信息表达 | `base0/light-1920-recents.png` | DONE | R3：`AlbumGrid` 新增 `coverRatio` / `cardMinWidth` —— 收藏页（精选陈列）用 2:3 海报比例 + 224px 疏朗网格，未读 / 最近 / 全部图像（清单与浏览）保持 4:5 + 164px 密集网格。三页第一次有结构性区别而不只是标题不同。新增 AlbumGrid 契约用例 |
 | B14 | **阅读器与其它页面的密度/明度反差大** | 从画廊跳进阅读器像换了个应用 | 待第二轮审计 | WONTFIX | 实测**不是问题**：阅读器顶栏已带 `.scrim-top`（黑色 88% 覆盖至 62% 高度），computed backgroundImage 生效，亮图上白字清晰可读（截图 `.smoke/scrim-top.png`）。理由：该问题在更早一轮已被处理，遗留清单未及时关闭 |
+| B21 | **首页「继续阅读」舞台右上角一整块空洞**：1920 下右栏宽 1244，信息栏只占 520，右上角空出约 620×150 | 直接违反北极星 §1「禁止大面积留白 + 小图 + 文字」；空白夹在内容之间会被读成排版没做完 | `frontend/.smoke/r4/light-1920-home.png` | DONE | R5：舞台改两栏 —— 左栏 = 主封面 + 墙签标题 + 进度 + 操作，右栏 = 「其余在读」封面网格（1920 下 6 列 × 2 行）。右栏整栏是图像，空洞归零；主按钮离主封面 < 100px（原 ~600px）。截图 `.smoke/r5/stage3/light-1920-home.png`、`.smoke/r5/stage3/dark-1920-home.png` |
+| B22 | **收藏页空态 90% 留白，且文案指着看不见的东西**：文案教用户「点封面右上角的星标」，而星标在桌面端默认 hover 才露出 | 新用户既面对一片空白，又找不到文案说的那个按钮 | `frontend/.smoke/r3/favorites.png` | DONE | R5：空态下方补一排真实封面（仪表盘里的未读相册，最多 6 本，复用已有接口），星标常驻（`AlbumCard` 新增 `alwaysShowFavorite`）；`EmptyState` 增 `dense` 档避免推荐位被推到首屏外。截图 `.smoke/r5/temp/light-1440-favorites.png`、`.smoke/r5/temp/light-390-favorites.png` |
+| B23 | **压在图片上的浮层文字对比度不足**：视频缩略图底部的文件名标签实测 2.59:1；阅读器底栏 `.scrim-bottom` 的不透明段只到 52%，字形上沿落在渐变过渡带（纯白图上 4.4:1，压 AA 线） | 白字压在亮画面上读不出来，等于功能不可见 | `LG_PAGES=reader node scripts/contrast-audit.mjs` 的像素判定 | DONE | R5：文件名标签底色改 `from-black/85 from-80%`（实测 14.34:1）；`.scrim-bottom` 与 `.scrim-top` 对齐（0.88 黑、覆盖到 68%，实测 8.9:1）；底栏次级文字提亮。截图 `.smoke/r5/reader/light-fit-height-bottom.png` |
+| B24 | **列表视图比网格卡低一档字号**：R2 把网格卡 meta 提到 13px，ListCard 的类型 chip / 副标题 / 计数 / 进度读数仍停在 12.5px | 同一卡片组件的两种视图像两套产品 | `LG_VIEWMODE=list node scripts/layout-audit.mjs` → /unread 12.5px×43 | DONE | R5：ListCard 的 meta / 状态 chip / 进度读数 / 右侧计数统一提到 13px。`audit:layout` 实测 /unread 页 12.5px 文本 43 → 22，13px 7 → 28 |
+| B25 | **对比度审计漏掉阅读器**：脚本只跑静态路由，而阅读器的浮层全是压在图片上的白字，静态算不出背景 | 阅读器的浮层对比度从未被任何工具检查过（B23 就是这么漏出来的） | `scripts/contrast-audit.mjs`（改动前无 reader 分支） | DONE | R5：新增 `LG_PAGES=reader`（取仪表盘第一本相册直接进阅读器，按像素判定那一遍检查）；`LG_VIEWMODE=grid\|list` 同时加到 `contrast-audit` 与 `layout-audit`，列表视图也能单独量 |
 
 ---
 
