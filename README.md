@@ -372,14 +372,19 @@ local-gallery/
 
 | 开关 | 取值 | 作用 |
 |------|------|------|
-| `LG_PAGES` | 路由，逗号分隔；`reader` / `album` 是伪路由 | 指定要审计的页面。`reader` 会取仪表盘里第一本相册直接进阅读器，审计压在图片上的浮层文字；`album` 取仪表盘里一本图多的相册进详情页，审计 hero 与媒体网格 |
+| `LG_PAGES` | 路由，逗号分隔；`reader` / `album` 是伪路由 | 指定要审计的页面。`reader` 会取仪表盘里一本图多的图片相册直接进阅读器，审计压在图片上的浮层与图标；`album` 取仪表盘里一本图多的相册进详情页，审计 hero 与媒体网格 |
 | `LG_VIEWMODE` | `grid`（默认）/ `list` | 审计网格视图或列表视图（两套字号与排版） |
 | `LG_VIEWPORTS` | `390x844,1440x900` | 指定断点 |
 | `LG_THEMES` | `light` / `dark` | 指定主题 |
 
-两个脚本的默认页面清单为 `/`、`/recents`、`/favorites`、`/unread`、`/settings` 与伪路由 `album`。
+两个脚本的默认页面清单为 `/`、`/recents`、`/favorites`、`/unread`、`/settings` 与伪路由 `album`、`reader`。
 
-例：`LG_PAGES=reader npm run audit:contrast`（阅读器浮层对比度）、
+`audit:contrast` 有三条判定通道：文字的 DOM 判定（AA 4.5:1）、压在图片上的文字的像素判定
+（按文字包围盒外一圈的真实像素算），以及**图标**的像素判定（非文本内容 3:1，WCAG 1.4.11 ——
+图标是 SVG，没有文字节点，必须单独开通道）。加 `-- --self-test` 会注入"已知好坏"的样本，
+验证这三条通道自己分得清好坏。
+
+例：`LG_PAGES=reader npm run audit:contrast`（阅读器浮层与图标对比度）、
 `LG_PAGES=album npm run audit:layout`（相册详情页的字号与溢出）、
 `LG_VIEWMODE=list npm run audit:layout`（列表视图的字号与溢出）。
 
