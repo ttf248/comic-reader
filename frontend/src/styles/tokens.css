@@ -1,13 +1,10 @@
-/* 主题 token。
-   设计原则：
-   - 冷感中性色（不偏黄/米），偏现代极简
-   - 接近纯白/纯黑但保留微对比，避免刺激
-   - 强调色更现代：靛蓝、紫罗兰、翠绿、琥珀等
-   - 字体节奏紧、留白克制，圆角与阴影更轻 */
+/* 共享视觉 token：当前预置为冷调中性色。
+   色板、字体、间距、圆角、阴影与动效可随设计方案整体调整；
+   修改时同步主题覆盖与语义引用，检查可读性和交互状态。 */
 
 /* === Light (default) === */
 :root,
-:root[data-theme='light'] {
+:root[data-theme="light"] {
   /* Surface — 冷调近白 */
   --bg: #fafafa;
   --bg-elevated: #ffffff;
@@ -49,7 +46,7 @@
   --border-strong: #d4d4d8;
   --border-faint: #f4f4f5;
 
-  /* Geometry — 圆角克制
+  /* Geometry — 当前圆角与阴影
      sm = 徽章 / 小标签，md = 控件，lg = 封面 / 菜单 / 弹窗，xl = 对话框 */
   --radius-sm: 6px;
   --radius-md: 8px;
@@ -61,11 +58,14 @@
   --shadow-lg: 0 12px 32px rgba(9, 9, 11, 0.12);
 
   /* Typography */
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
-    'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Arial, sans-serif;
-  --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
-  --font-display: 'Inter', -apple-system, BlinkMacSystemFont, 'PingFang SC',
-    'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  --font-sans:
+    "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+  --font-mono:
+    "JetBrains Mono", "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --font-display:
+    "Inter", -apple-system, BlinkMacSystemFont, "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
 
   /* Spacing */
   --space-0: 0;
@@ -92,7 +92,7 @@
 }
 
 /* === Dark === */
-:root[data-theme='dark'] {
+:root[data-theme="dark"] {
   /* Surface — 深炭，非纯黑 */
   --bg: #09090b;
   --bg-elevated: #18181b;
@@ -130,37 +130,37 @@
 }
 
 /* === Accent color swatches (light) === */
-:root[data-accent='graphite'] {
+:root[data-accent="graphite"] {
   --accent: #18181b;
   --accent-hover: #27272a;
   --accent-soft: #f4f4f5;
   --accent-contrast: #fafafa;
 }
-:root[data-accent='indigo'] {
+:root[data-accent="indigo"] {
   --accent: #4f46e5;
   --accent-hover: #4338ca;
   --accent-soft: #eef2ff;
   --accent-contrast: #ffffff;
 }
-:root[data-accent='rose'] {
+:root[data-accent="rose"] {
   --accent: #e11d48;
   --accent-hover: #be123c;
   --accent-soft: #fff1f2;
   --accent-contrast: #ffffff;
 }
-:root[data-accent='forest'] {
+:root[data-accent="forest"] {
   --accent: #059669;
   --accent-hover: #047857;
   --accent-soft: #ecfdf5;
   --accent-contrast: #ffffff;
 }
-:root[data-accent='ochre'] {
+:root[data-accent="ochre"] {
   --accent: #d97706;
   --accent-hover: #b45309;
   --accent-soft: #fffbeb;
   --accent-contrast: #ffffff;
 }
-:root[data-accent='plum'] {
+:root[data-accent="plum"] {
   --accent: #7c3aed;
   --accent-hover: #6d28d9;
   --accent-soft: #f5f3ff;
@@ -168,37 +168,37 @@
 }
 
 /* === Accent color swatches (dark) === */
-:root[data-theme='dark'][data-accent='graphite'] {
+:root[data-theme="dark"][data-accent="graphite"] {
   --accent: #fafafa;
   --accent-hover: #ffffff;
   --accent-soft: #1f1f23;
   --accent-contrast: #09090b;
 }
-:root[data-theme='dark'][data-accent='indigo'] {
+:root[data-theme="dark"][data-accent="indigo"] {
   --accent: #818cf8;
   --accent-hover: #a5b4fc;
   --accent-soft: #1e1b4b;
   --accent-contrast: #0a0917;
 }
-:root[data-theme='dark'][data-accent='rose'] {
+:root[data-theme="dark"][data-accent="rose"] {
   --accent: #fb7185;
   --accent-hover: #fda4af;
   --accent-soft: #4c0519;
   --accent-contrast: #1a0309;
 }
-:root[data-theme='dark'][data-accent='forest'] {
+:root[data-theme="dark"][data-accent="forest"] {
   --accent: #34d399;
   --accent-hover: #6ee7b7;
   --accent-soft: #064e3b;
   --accent-contrast: #022c22;
 }
-:root[data-theme='dark'][data-accent='ochre'] {
+:root[data-theme="dark"][data-accent="ochre"] {
   --accent: #fbbf24;
   --accent-hover: #fcd34d;
   --accent-soft: #451a03;
   --accent-contrast: #1a0a01;
 }
-:root[data-theme='dark'][data-accent='plum'] {
+:root[data-theme="dark"][data-accent="plum"] {
   --accent: #a78bfa;
   --accent-hover: #c4b5fd;
   --accent-soft: #2e1065;

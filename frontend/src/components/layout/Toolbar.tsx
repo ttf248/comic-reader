@@ -81,9 +81,7 @@ export default function Toolbar({
   }, [queryClient, sse.isComplete, sse.scanId, pushToast]);
 
   return (
-    // 顶栏背景铺满，但内容必须和正文共用同一条左基线：
-    // 内层复用 .page-shell（同样的 max-width / padding / 居中规则），
-    // 否则 1920px 下顶栏起点在 x=248、正文起点在 x=302，一屏两套基准。
+    // 当前顶栏内层复用 .page-shell；可随导航与页面布局方案调整。
     //
     // relative z-30：顶栏里的下拉（搜索结果、更多菜单）要盖住正文。
     // 顶栏带 backdrop-blur，本身已经是一个层叠上下文，面板里的 z-30

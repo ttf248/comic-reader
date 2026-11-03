@@ -78,15 +78,8 @@ export default function Sidebar({
     if (!randomAlbum.isPending) randomAlbum.mutate("all");
   };
 
-  // 「继续阅读」区：侧栏中段常驻在读的书目。
-  //
-  // 侧栏中段原本是一整片空白（4 个导航项撑不满 208px × 900px），
-  // 而"接着看上一本"是全局最高频的动作。与其留白，不如把在读列表
-  // 钉在那里 —— 像播放器的"正在播放 + 接下来"。
-  //
-  // 数据全部来自与首页同一个 dashboard 查询（React Query 共享缓存，
-  // 不额外请求）：侧栏刻意不下载全库摘要（见 useLibrary 的注释），
-  // 所以这里只能用 dashboard 里已经有的在读条目。
+  // 当前侧栏复用首页 dashboard 的在读摘要，React Query 共享查询缓存。
+  // 导航可重新设计；数据仍按需查询，避免为常驻区域下载全库摘要。
   const dashboard = useLibraryDashboard();
   const inProgress = useMemo(
     () => dashboard.data?.dashboard.inProgress ?? [],
