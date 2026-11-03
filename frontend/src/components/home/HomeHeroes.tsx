@@ -27,11 +27,19 @@ import {
 // "主角 / 次要 / 其它"三档拉开。
 
 /**
- * 书架上一张海报的宽度。
+ * 「其余在读」货架的固定宽度。
  *
- * 用 flex-1 + min/max 而不是固定宽度：条目少时（如未读的 6 张）
- * 海报会撑开把整行铺满，不会在右侧留一大块看起来像"排版没做完"的空白；
- * 条目多时（在读的 10 张）撑不开就保持最小宽度并横向滚动。
+ * 这里**必须固定**：主封面是 300px（货架海报的 1.67 倍）。如果货架也跟着
+ * flex-1 撑开，条目少时（比如只剩 1 本）单张会涨到 240px，和主封面几乎
+ * 一样大，"主角 / 次要"的分级就没了。
+ */
+const RAIL_WIDTH = "w-[148px] sm:w-[164px] lg:w-[180px]";
+
+/**
+ * 「未读」货架的宽度：条目少时撑开把整行铺满，条目多时保持最小宽度并横向滚动。
+ *
+ * 与「其余在读」用不同策略是有意的：未读是"下一本读什么"的推荐位，
+ * 铺满一行更像陈列；「其余在读」是主封面的下级，必须让出层级。
  */
 const SHELF_WIDTH = "flex-1 min-w-[148px] max-w-[240px]";
 
@@ -195,7 +203,7 @@ export function ContinueReadingHero({
               <div className="section-meta mb-3">其余在读</div>
               <div className="shelf shelf-fade">
                 {rest.map((card) => (
-                  <div key={card.id} className={SHELF_WIDTH}>
+                  <div key={card.id} className={RAIL_WIDTH}>
                     <ShelfPoster
                       card={card}
                       onClick={() => onContinue(card)}
