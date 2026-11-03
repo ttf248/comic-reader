@@ -63,6 +63,7 @@
 | B23 | **压在图片上的浮层文字对比度不足**：视频缩略图底部的文件名标签实测 2.59:1；阅读器底栏 `.scrim-bottom` 的不透明段只到 52%，字形上沿落在渐变过渡带（纯白图上 4.4:1，压 AA 线） | 白字压在亮画面上读不出来，等于功能不可见 | `LG_PAGES=reader node scripts/contrast-audit.mjs` 的像素判定 | DONE | R5：文件名标签底色改 `from-black/85 from-80%`（实测 14.34:1）；`.scrim-bottom` 与 `.scrim-top` 对齐（0.88 黑、覆盖到 68%，实测 8.9:1）；底栏次级文字提亮。截图 `.smoke/r5/reader/light-fit-height-bottom.png` |
 | B24 | **列表视图比网格卡低一档字号**：R2 把网格卡 meta 提到 13px，ListCard 的类型 chip / 副标题 / 计数 / 进度读数仍停在 12.5px | 同一卡片组件的两种视图像两套产品 | `LG_VIEWMODE=list node scripts/layout-audit.mjs` → /unread 12.5px×43 | DONE | R5：ListCard 的 meta / 状态 chip / 进度读数 / 右侧计数统一提到 13px。`audit:layout` 实测 /unread 页 12.5px 文本 43 → 22，13px 7 → 28 |
 | B25 | **对比度审计漏掉阅读器**：脚本只跑静态路由，而阅读器的浮层全是压在图片上的白字，静态算不出背景 | 阅读器的浮层对比度从未被任何工具检查过（B23 就是这么漏出来的） | `scripts/contrast-audit.mjs`（改动前无 reader 分支） | DONE | R5：新增 `LG_PAGES=reader`（取仪表盘第一本相册直接进阅读器，按像素判定那一遍检查）；`LG_VIEWMODE=grid\|list` 同时加到 `contrast-audit` 与 `layout-audit`，列表视图也能单独量 |
+| B26 | **只有一本在读时舞台右栏整栏空掉**：右栏放的是"其余在读"，一本在读时没有其余可放 | 刚填掉的空洞换了个位置又出现一遍：新用户（只读了一本）的首页第一屏右侧 1200px 全是空白 | `frontend/.smoke/r5/one/light-1440-home.png`（R5 改造后） | DONE | R5 补：舞台新增 `rightSlot` —— 只有一本在读时，首页把「未读」区塞进右栏（"你正在读的"与"接下来读的"并排），下方不再重复渲染未读区；两样都没有时（1 在读 + 0 未读）左栏改成"主封面 + 信息"并排的紧凑块。截图 `.smoke/r5/one3/light-1440-home.png`、`.smoke/r5/onlyone2/light-1440-home.png` |
 
 ---
 
