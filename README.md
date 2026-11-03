@@ -93,7 +93,7 @@
 - 6 套强调色：graphite / indigo / rose / forest / ochre / plum
 - 工具栏主题菜单支持方向键定位、Enter/Space 确认；主题与强调色分组显示当前选择，色块使用中文名称，可连续调整后按 Esc 关闭
 - CSS 变量驱动，主题切换一次 reflow 不重渲组件树
-- 统一设计系统（排版层级 / 间距 / 圆角 / 阴影 / 动效节奏）沉淀在 `frontend/src/styles/tokens.css` 与 `global.css` 的共享组件层；中文正文最小 12.5px，不再用大写拉丁 + 大字距做章节标签。详见 [docs/UI_REDESIGN.md](./docs/UI_REDESIGN.md)
+- 统一设计系统（排版层级 / 间距 / 圆角 / 阴影 / 动效节奏）沉淀在 `frontend/src/styles/tokens.css` 与 `global.css` 的共享组件层；中文正文最小 12.5px，不再用大写拉丁 + 大字距做章节标签。详见 [docs/DESIGN.md](./docs/DESIGN.md)
 
 ### 导航与搜索
 
@@ -311,10 +311,7 @@ local-gallery/
 │   ├── API.md              # HTTP 接口契约
 │   ├── SHORTCUTS.md        # 快捷键全集
 │   ├── FEATURES.md         # 全功能清单
-│   ├── UI_REDESIGN.md      # 前端视觉与交互重设计（设计规范 / 页面改动 / 两轮评审）
-│   ├── DESIGN_NORTH_STAR.md # 设计北极星：定位 / 信息架构 / 视觉语言 / 明确不采用的设计模式
-│   ├── UX_BACKLOG.md       # UX 问题台账：问题 / 优先级 / 证据 / 状态 / 验收依据
-│   └── UX_ITERATIONS.md    # 设计迭代日志：假设 / 方案 / 改动 / 前后截图 / 失败尝试
+│   └── DESIGN.md          # 当前界面规范、审计方法与未完成事项
 ├── scripts/                # dev / build / package / publish / monitor / install-ffmpeg
 ├── .github/workflows/      # CI 与 v2 发布工作流
 └── .vscode/                # launch / tasks / settings / extensions
@@ -332,9 +329,7 @@ local-gallery/
 | [docs/API.md](./docs/API.md)                   | HTTP 接口手册                            |
 | [docs/SHORTCUTS.md](./docs/SHORTCUTS.md)       | 快捷键全集（含视频播放器）               |
 | [docs/RELEASE.md](./docs/RELEASE.md)            | 手动验证、推送、版本线与发布包             |
-| [docs/DESIGN_NORTH_STAR.md](./docs/DESIGN_NORTH_STAR.md) | 设计北极星：定位、信息架构、视觉语言、明确不采用的模式 |
-| [docs/UX_BACKLOG.md](./docs/UX_BACKLOG.md)     | UX 问题台账（优先级 / 证据 / 状态）        |
-| [docs/UX_ITERATIONS.md](./docs/UX_ITERATIONS.md) | 设计迭代日志（假设 / 改动 / 前后截图）     |
+| [docs/DESIGN.md](./docs/DESIGN.md)             | 当前界面规范、审计方法与未完成事项        |
 
 `?` 可唤起可搜索的帮助浮层，按主页面、图片或视频场景显示对应操作，搜索也仅匹配当前场景。打开后聚焦搜索，Tab 在浮层内循环；背景快捷键暂停响应，Esc、关闭按钮或点击遮罩关闭后回到原控件。
 
@@ -367,7 +362,7 @@ local-gallery/
 `audit:layout` / `audit:contrast` / `shot` 需要先起前端 dev server（`npm run dev`）。
 前两个把"内容宽度、控件字号、溢出、对比度"量化成可复核的数据，截图产物统一写在
 `frontend/.smoke/`（已被 `.gitignore` 忽略）。设计口径见
-[docs/DESIGN_NORTH_STAR.md](./docs/DESIGN_NORTH_STAR.md)。
+[docs/DESIGN.md](./docs/DESIGN.md)。
 
 也可以直接对 **e2e 的临时环境**跑审计：`scripts/test-e2e.ps1 -Audit` 会在
 Playwright 之后，对同一个临时服务再跑一遍布局 / 对比度审计 —— 那个临时
