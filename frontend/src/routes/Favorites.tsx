@@ -6,6 +6,7 @@ import { useFavorites } from "../hooks/useFavorites";
 import { useImageActivities } from "../hooks/useImageActivity";
 import { useGalleryContextSync } from "../hooks/useGalleryContextSync";
 import AlbumGrid, { type CardData } from "../components/album/AlbumGrid";
+import AlbumCard from "../components/album/AlbumCard";
 import AlbumGridSkeleton from "../components/album/AlbumGridSkeleton";
 import { ListFilterBar } from "../components/common/ListFilterBar";
 import EmptyState from "../components/common/EmptyState";
@@ -14,7 +15,7 @@ import { decodeFavPath } from "../utils/path";
 import { compareDatesDesc } from "../utils/date";
 import type { GalleryContextEntry } from "../utils/galleryContext";
 import { useViewedSort } from "../hooks/useHistory";
-import { useLibraryNodes, useLibraryTags } from "../hooks/useLibrary";
+import { useLibraryNodes, useLibraryTags, useLibraryDashboard } from "../hooks/useLibrary";
 import {
   nodeSummaryToCard,
   tagSummaryToCard,
@@ -23,6 +24,15 @@ import {
 
 // 收藏页：合并 albums + smart collections 中的收藏。
 // 支持搜索 + 排序 + 阅读进度展示。
+
+/**
+ * 空态推荐位的单本宽度。
+ *
+ * 用 flex-1 铺满整行：条目少时把行填满（不留右侧空白），条目多时
+ * 收窄到上限并横向滚动。与首页「未读」货架同一套策略。
+ */
+const SUGGEST_WIDTH = "flex-1 min-w-[148px] max-w-[240px]";
+
 export default function Favorites() {
   const navigate = useNavigate();
   const viewMode = useUIStore((s) => s.viewMode);
@@ -49,6 +59,9 @@ export default function Favorites() {
   );
   const nodesQuery = useLibraryNodes(nodeIds);
   const tagsQuery = useLibraryTags(smartNames.length > 0);
+  // 空态推荐位：拿仪表盘里的未读相册当"可以马上收藏的对象"。
+  // 仪表盘本来就常驻在侧栏 / 首页，这里复用同一份数据，不额外发请求。
+  const dashboardQuery = useLibraryDashboard();
   const nodesById = useMemo(
     () =>
       new Map((nodesQuery.data?.items ?? []).map((node) => [node.id, node])),
@@ -74,6 +87,16 @@ export default function Favorites() {
     }
     return out;
   }, [favorites, nodesById, tagsByName]);
+
+  // 空态推荐位：仪表盘里的未读相册（最多 6 本）。
+  // 收藏为空时这一排就是"现在可以马上收藏的东西"。
+  const suggestions = useMemo<CardData[]>(
+    () =>
+      (dashboardQuery.data?.dashboard?.unread ?? [])
+        .slice(0, 6)
+        .map((album) => nodeSummaryToCard(album, "u:")),
+    [dashboardQuery.data],
+  );
 
   const progressPaths = useMemo(
     () =>
@@ -251,19 +274,49 @@ export default function Favorites() {
       ) : detailsLoading && cards.length === 0 ? (
         <AlbumGridSkeleton variant={viewMode} label="正在加载收藏…" />
       ) : loadFailed && cards.length === 0 ? null : favorites.length === 0 ? (
-        <EmptyState
-          title="还没有收藏"
-          description="在主页或文件夹页点击卡片右上角的星标收藏，或右键点击卡片选择「收藏」。"
-          icon={<StarIcon size={20} />}
-          action={
-            <button
-              onClick={() => navigate("/")}
-              className="btn btn-primary"
-            >
-              去主页看看
-            </button>
-          }
-        />
+        <>
+          <EmptyState
+            title="还没有收藏"
+            description="收藏是给相册打星标：点封面右上角的星标，这一本就会出现在这里。下面这几本可以直接点星标试试。"
+            icon={<StarIcon size={20} />}
+            action={
+              <button
+                onClick={() => navigate("/")}
+                className="btn btn-primary"
+              >
+                去主页看看
+              </button>
+            }
+            dense={suggestions.length > 0}
+          />
+          {/* 空态不能只是一句话加一个按钮：整页会剩下一大片无意义的空白。
+              这里直接把「可收藏的对象」摆出来 —— 一排真实封面 + 常驻的
+              星标，用户点一下就完成收藏，不必先去主页找。 */}
+          {suggestions.length > 0 && (
+            <section className="page-shell pb-14">
+              <div className="flex items-baseline gap-3 flex-wrap mb-4">
+                <h2 className="section-title">从这里挑一个收藏</h2>
+                <span className="section-meta">
+                  点封面右上角的星标
+                </span>
+              </div>
+              <div className="shelf">
+                {suggestions.map((card) => (
+                  <div key={card.id} className={SUGGEST_WIDTH}>
+                    <AlbumCard
+                      data={card}
+                      /* 星标常驻：这排封面的作用就是教用户点哪里 */
+                      alwaysShowFavorite
+                      /* 整排都是未读，"新"角标是噪音 */
+                      showUnreadBadge={false}
+                      coverRatio="2/3"
+                    />
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </>
       ) : cards.length === 0 ? (
         <EmptyState
           title={`收藏的 ${favorites.length} 项内容暂时找不到`}

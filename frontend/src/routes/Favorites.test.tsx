@@ -9,7 +9,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
 import { favoritesApi, historyApi } from "../api/prefs";
-import { useLibraryNodes, useLibraryTags } from "../hooks/useLibrary";
+import {
+  useLibraryDashboard,
+  useLibraryNodes,
+  useLibraryTags,
+} from "../hooks/useLibrary";
 import { useSearchStore } from "../store/searchStore";
 import Favorites from "./Favorites";
 
@@ -20,6 +24,7 @@ vi.mock("../api/prefs", () => ({
 vi.mock("../hooks/useLibrary", () => ({
   useLibraryNodes: vi.fn(),
   useLibraryTags: vi.fn(),
+  useLibraryDashboard: vi.fn(),
 }));
 vi.mock("../hooks/useImageActivity", () => ({
   useImageActivities: () => ({ data: {} }),
@@ -71,6 +76,13 @@ beforeEach(() => {
   } as never);
   vi.mocked(useLibraryTags).mockReturnValue({
     data: { items: [{ tag: "旅行", albumCount: 1, coverImages: [] }] },
+    isLoading: false,
+    isError: false,
+    isFetching: false,
+    refetch: vi.fn(),
+  } as never);
+  vi.mocked(useLibraryDashboard).mockReturnValue({
+    data: { dashboard: { unread: [], inProgress: [] } },
     isLoading: false,
     isError: false,
     isFetching: false,
@@ -234,4 +246,37 @@ it("名称排序不读取历史，真正的筛选空结果仍可清除", async (
   fireEvent.click(screen.getByRole("button", { name: "清除筛选" }));
   expect(await screen.findByText("春游相册")).toBeInTheDocument();
   expect(historyApi.list).not.toHaveBeenCalled();
+});
+
+it("收藏为空时给出可收藏的推荐位，而不是只留一片空白", async () => {
+  vi.mocked(favoritesApi.list).mockResolvedValue({ favorites: [] });
+  vi.mocked(useLibraryDashboard).mockReturnValue({
+    data: {
+      dashboard: {
+        unread: [
+          {
+            id: "a_picnic",
+            kind: "album",
+            name: "野餐那本",
+            displayName: "野餐那本",
+            imageCount: 12,
+            coverImages: [],
+          },
+        ],
+        inProgress: [],
+      },
+    },
+    isLoading: false,
+    isError: false,
+    isFetching: false,
+    refetch: vi.fn(),
+  } as never);
+  renderFavorites();
+  expect(await screen.findByText("还没有收藏")).toBeInTheDocument();
+  // 推荐位：真实封面 + 常驻的星标（文案在教用户点哪里，星标不能藏起来）
+  expect(screen.getByText("从这里挑一个收藏")).toBeInTheDocument();
+  expect(screen.getByText("野餐那本")).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "收藏「野餐那本」" }),
+  ).toBeInTheDocument();
 });
