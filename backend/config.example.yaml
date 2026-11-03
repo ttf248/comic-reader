@@ -59,6 +59,12 @@ cacheMaxAgeDays: 30
 # 只清理 derived 内完整产物；最近十分钟的新文件、临时文件及 state 不参与。
 cacheMaxSizeMB: 10240
 
+# ffmpeg 可执行文件路径，修改后需重启。
+# 留空沿用内置默认值 ../bin/ffmpeg/windows/amd64/ffmpeg.exe（相对进程 CWD）。
+# Windows 源码目录从 backend/ 启动时与安装脚本的输出一致；
+# 其他平台或自定义安装位置需填写可执行文件路径，ffprobe 可放在同目录。
+ffmpegPath: ""
+
 # 是否允许通过 /api/fs/open 在服务端打开系统文件管理器
 # （仅在受信环境开启，如本地开发）
 allowOsOpen: false

@@ -1,456 +1,125 @@
 # Local Gallery · 本地画廊
 
-> 本地图像 / 视频画廊。Go + React，单进程单端口，离线可用。
+本地照片、漫画与视频浏览器，Go + React，单进程单端口，离线可用。协作规则见 [AGENTS.md](./AGENTS.md)。
 
-> 协作与自动化规则见 [AGENTS.md](./AGENTS.md)；构建、推送和发布流程见 [docs/RELEASE.md](./docs/RELEASE.md)。
+## 当前能力
 
-指一下硬盘上的文件夹，按 `R` 随机翻一卷，hover 看大图，按 `?` 翻出所有快捷键。
-剩下的，让它自己跑。
+- 多个媒体根合并为一个库，保留目录集合，从目录名提取标签，支持年份、搜索、收藏、最近与未读浏览。
+- 可取消的后台扫描与 SSE 进度；分页接口和虚拟网格支撑大库，扫描失败保留上次完整结果。
+- 图片单张、连续、双张并排阅读，支持 RTL、适配、缩放、旋转、全屏、触摸翻页与进度恢复。
+- 视频原生播放与 Range；可选 ffmpeg 提供封面、元数据、faststart、按需 H.264 + AAC 转码及特殊图片格式转换。
+- 缩略图、预览图和视频派生缓存分层存储，可分别清理；收藏、最近、阅读/播放活动与偏好通过服务端 JSON 持久化。
+- 明暗/跟随系统主题、六套强调色、键盘操作与响应式导航。主页面按 `R` 随机一本、`Ctrl+S` 扫描、`?` 查看当前场景的快捷键。
 
----
+## 开发启动
 
-## TL;DR
+需要 Go 1.24+、Node.js 20+（含 npm）；仓库脚本与 E2E 使用 PowerShell 7。首选 VSCode「运行和调试」中的“全栈复合调试”，入口见 [.vscode/launch.json](./.vscode/launch.json)。
 
-- **零客户端**：浏览器即用，无桌面安装
-- **多根目录**：`mediaRoots[]` 数组，所有根下的子目录合并成一个全局库
-- **三态标签**：`[xxx]` 从目录名自动提取 → 智能合集
-- **视频管线**：ffmpeg 抽帧 / ffprobe 元数据 / faststart 修 moov / **冷门编码自动转 H.264+AAC**
-- **缩略图**：LRU + 磁盘双层缓存，mtime 失效
-- **画廊**：单张 / 连续滚动 / 双张并排（支持 RTL），4 套 fit；移动端横向滑动翻页，放大后可拖拽平移
-- **主题**：light / dark / system + 6 套强调色，透明背景与细边框随主题一致切换
-- **跨设备持久化**：收藏、最近、图片阅读/视频播放活动、设置走服务端 JSON
-- **无障碍与触摸适配**：尊重系统减少动态效果设置，移动端使用导航抽屉，阅读器支持横向滑动翻页
-- **单进程单端口部署**：Go 后端托管前端静态资源，一个端口一把梭
-- **手动验证发布**：手动 CI 覆盖三平台测试，手动 Release 生成跨平台发布包
+首次配置与安装，在仓库根目录执行：
 
----
+```powershell
+Copy-Item backend/config.example.yaml backend/config.yaml
+# 编辑 mediaRoots，填入本机媒体目录；也可设为 [] 后从设置页添加
+cd frontend
+npm ci
+```
 
-## 能力清单
+分别在两个终端启动，以下均从仓库根目录开始：
 
-### 库与扫描
-
-- 多个媒体根目录并入一个全局库
-- 根目录相对进程工作目录绝对化、去空并保序去重；Windows 按大小写不敏感比较，其他平台保持大小写敏感。仅调整等价路径写法不会清空媒体库或触发重新扫描提示
-- 父子目录可同时作为根：相册归最具体的配置根，父根跳过独立子根，统计与目录树不重复。子根自身由根节点表示，不再同时作为父根中的集合
-- 手动配置的目录链接可作为独立根，图片访问不受父子根顺序影响；未单独配置的符号链接或 Windows junction 跳过并告警，带媒体扩展名也不会被当作图片或视频
-- 异步扫描 + SSE 实时进度，可取消
-- 扫描启动、各根读取前后和发布前检查根目录可读性及身份；检测到根离线或被替换时整轮失败，保留已发布媒体库与磁盘缓存。可读的空根仍可正常发布，普通子目录读取失败作为告警
-- 多根扫描累计已发现相册数；百分比按根目录和阶段估算，界面以“约”标注，动态发现目录时不回退。取消或失败保留最后进度，只有结果成功发布后才到 100%
-- 扫描连接每 15 秒发送注释心跳，断开后释放该连接的订阅；重新连接会恢复原始进度、耗时与终态统计
-- 进度连接中断时保留最后进度与待确认状态；支持自动恢复和“重新连接进度”，重连只查询原任务，不重复启动扫描。扫描期间可折叠进度卡，收到终态后可关闭；连接无法恢复时可“停止跟踪”，后台扫描不受影响
-- 扫描完成后显示脱敏告警详情，帮助定位不可读目录、跳过符号链接和媒体元数据问题
-- worker pool（`min(8, NumCPU)`），大库不卡
-- 扫描结果内存 + 磁盘缓存，结果树与资源 ID 索引作为同一 revision 原子发布
-- manifest、目录子节点、全局相册、相册媒体与标签使用 revision 游标分页；收藏/最近浏览可按 ID 批量解析摘要
-- 相册业务日期由后端统一解析，固定按“拍摄元数据 → 严格目录日期 → 修改时间”降级，并返回时间来源
-- 标签名称按 URL 路径段编解码，支持中文、空格、加号和字面百分号，每次传输只解码一次
-- **扫描排除规则**：跳过隐藏目录 + 系统白名单 + 用户 glob 模式（`node_modules` / `temp*` 等）
-- **收录格式**：图片 jpg / jpeg / jfif / png / gif / bmp / webp / tiff / heic，视频 mp4 / m4v / webm / mov / mkv / avi / 3gp；浏览器放不了的容器（mkv / avi / 3gp）自动转码
-
-### 缩略图
-
-- LRU（默认 500 项）+ 磁盘双层缓存
-- mtime 失效：源文件改了，缓存自动重生成
-- 缩略图尺寸和编码版本参与缓存键；浏览器重新验证稳定媒体 URL，修改尺寸后不继续命中旧图
-- 视频封面：服务端 ffmpeg `-ss` before `-i` 抽帧，浏览器零内存负担；定位点始终落在画面之内，短视频取片头帧
-- 视频封面等比缩放、不补黑边，与图片缩略图和浏览器抽帧回退形状一致；竖框网格里按原始比例完整显示，不裁切画面
-- 浏览器抽帧回退使用媒体 Range 按需读取，抽帧后释放解码器；上传成功沿用原封面资源 URL 重新验证，失败可重试，离开页面取消探测、抽帧和上传
-- 视频和混合媒体缩略图的播放与封面重试各自使用独立按钮，支持键盘操作，重试不会打开播放器
-- 并发受 CPU 核数与像素预算双重限制：大图少量并行，小图跑满并行度；大原图先做 Box 面积平均预缩放再高质量缩放
-- HEIC/HEIF/TIFF 浏览器解不了：服务端用 ffmpeg 转成 JPEG 后再显示（带磁盘缓存），缩略图同样由 ffmpeg 生成；ffmpeg 不可用时显示占位图而不是破图
-
-### 视频
-
-- 原生 `<video>` 播放，Range / ETag 协商
-- 视频左右键定位 ±5 秒、空格播放/暂停；PageUp/PageDown 换片，Home/End 定位首尾，Esc 返回。图片显示模式不影响视频计数和快捷键
-- 优先用 ffprobe 读取时长、分辨率和码率；仅有 ffmpeg 时自动回退，探测超时不会缓存部分结果
-- faststart：自动 remux，moov 跑到 mdat 前面，"0:00 卡死"问题自动消失
-- **自动转码**：AV1 / HEVC / ProRes / 未知编码 → H.264 + AAC 喂给浏览器
-- 冷门编码转码状态可在列表卡片上看到（转码中 X% / 已缓存 / 转码失败）
-- 转码 singleflight 去重 + 全局并发限流 + 可取消
-- **缓存清理**：设置页按 thumbs / converted（HEIC 等整图转换）/ faststart / transcode 四个 scope 独立清理 + 一键全清（`POST /api/cache/clear?scope=…`）；占用统计按这四类细分，各项之和等于总占用
-- 视频元数据成功结果使用最多 512 项的内存 LRU，同一文件的并发查询共享探测；文件大小或修改时间变化会失效，失败可立即重试，一键全清同时重置摘要
-
-### 画廊
-
-- 3 种显示模式：单张 / 连续滚动 / 双张并排
-- 4 种图片适配：适应 / 按宽 / 按高 / 原始（按 `F` 循环）
-- 缩放 / 旋转 / 90° 翻转 / 全屏
-- 单页阅读器支持触摸横向滑动翻页，放大后用拖拽平移且不会误触翻页
-- 跳到指定张（`G` + 张数），底部张数滑块拖拽时浮出 5 张缩略图条
-- 幻灯片自动播放
-- 进度恢复或保存失败时持续提示并提供重试；恢复失败期间暂停自动保存，保护原记录
-
-### 视频播放器
-
-- 原生 `<video controls>` + 增强快捷键
-- `Space/K` 播放暂停，`←/→` 跳 5 秒，`↑/↓` 音量 ±10%，`M` 静音
-- 视频元数据（时长 / 尺寸 / 编码 / 码率）随列表渲染，无需等加载
-
-### 主题与外观
-
-- light / dark / system 三态
-- 6 套强调色：graphite / indigo / rose / forest / ochre / plum
-- 工具栏主题菜单支持方向键定位、Enter/Space 确认；主题与强调色分组显示当前选择，色块使用中文名称，可连续调整后按 Esc 关闭
-- CSS 变量驱动，主题切换一次 reflow 不重渲组件树
-- 统一设计系统（排版层级 / 间距 / 圆角 / 阴影 / 动效节奏）沉淀在 `frontend/src/styles/tokens.css` 与 `global.css` 的共享组件层；中文正文最小 12.5px，不再用大写拉丁 + 大字距做章节标签。详见 [docs/DESIGN.md](./docs/DESIGN.md)
-
-### 导航与搜索
-
-- 主页：年份时间线（海报式 4:5 卡）+ 全库网格；网格和列表仅渲染视口附近卡片
-- 长相册列表拖到末尾或返回开头时会更新可见卡片，集合内滚动同样支持网格和列表
-- 相册媒体网格接近已加载边界时自动翻页，拖到远处也会逐页补齐；分页失败保留已加载内容并提供重试
-- 小屏使用可关闭的响应式导航抽屉，不压缩主内容区域；设置项在窄屏改为标签在上、控件在下，中文标签不会被挤成竖排
-- 阅读器在窄屏收起右侧悬浮控件，显示设置（模式 / 适配 / 缩放 / 旋转 / 方向）收进顶栏的「阅读设置」弹层，图片右缘不再被遮挡，点击右三分之一可正常翻到下一张
-- 阅读器的图片信息面板（`I`）在宽屏是画布右侧的独立一栏，窄屏落到顶栏下方的整宽浮层，不再压住顶栏；面板沿用阅读器的深色底，明暗主题下都保持可读
-- 悬停预览：240×300 放大卡，含进度条 / 上次阅读 / 张数
-- 卡片右上角的星标可直接收藏：网格放在封面右上角、列表放在行尾，星标渲染在链接之外，点击只写收藏不会跳转；桌面端悬停卡片才出现，已收藏的常驻显示，窄屏没有 hover 因此常驻；写入失败给出中文提示
-- 全局搜索（`/` 聚焦）模糊匹配 name / 标签
-- 全局最小图数 filter（`≥N` 控件）隐藏杂物相册
-- 年份筛选；主页、集合、标签、收藏、最近与未读页均提供排序和网格 / 列表切换；列表视图铺满内容宽度，张数与最近查看右对齐成列，便于逐行扫读
-- 随机一本（`R` / 侧边栏"随机"按钮）：服务端直接从摘要索引抽取，不为常驻导航下载全库
-- 首页仪表盘：服务端一次返回未读总数、6 本未读预览与在读摘要；完整未读列表仅在 `U` 页面按需加载；首屏是「封面台 + 封面墙」两栏，宽屏下右栏排两段（其余在读 / 未读，两段共用一套列宽），两栏齐平收尾
-- 排序：按名称 / 张数 / 最近改 / 最近看；最近改按修改时间倒序，缺失或无效时间置后，同时间按名称稳定排序
-- 排序选项支持 Tab / Shift+Tab、回车 / 空格确认及 Esc 取消；确认或取消后焦点返回排序按钮，移出选项时自动关闭
-- 最近看按相册的最近访问时间倒序，未访问项与同时间项按名称排序；除最近页外，仅选择此排序时读取历史，读取失败保留卡片并提供重试
-- **未读列表**（`U`）：服务端直接筛选未读相册并分页传输，side badge 显计数 + 随机未读快捷键
-- 未读相册保留真实状态，单图相册不会提前显示读完；网格、列表及首页预览复用右键操作，支持图片相册标记和取消已读
-- 属性按资源类型展示：相册和集合读取最近扫描的统计，图片读取文件元数据；失败可重试，弹窗支持 Tab 循环与 Esc 关闭并返回来源焦点
-- 属性字段复制在剪贴板 API 不可用或权限受限时尝试选区复制；失败可重试，操作后保留按钮焦点
-- 相册、集合和收藏标签右键支持“复制链接”，复制当前站点可直接打开的地址，保留标签名编码；复制成功或失败均有提示
-- 相册详情的“更多”菜单同样支持复制链接，图片右键提供“复制相册链接”
-- 本机系统文件管理器权限随加载和设置保存即时更新；相册、集合和设置中的目录打开均提示结果，失败可重试；阅读器右键可在系统文件管理器中定位当前这一份文件
-- 图片属性中的目录仅显示来源别名和父目录；图片信息接口会明确拒绝目录及视频资源
-- 视频单条与批量元数据统一使用文件 ID 和父目录；批量查询保留输入顺序，失效项不影响其余结果
-- 批量视频信息与单条接口使用相同的实时路径白名单，扫描后替换的目录链接及已移除的媒体根会被拒绝
-- `N` / `P` 跨卷翻页（留在阅读器里继续读）；设置里的「阅读到末尾自动切换下一本」会在读完时自动进入下一本
-- 阅读器通过相册资源 ID（`/gallery?path=a_...`）定位并按需加载媒体；标题和最近访问摘要采用真实相册名称、图片总数，视频数量不会覆盖图片总数
-
-### 持久化
-
-- 收藏：跨设备，按稳定资源 ID 保存，`POST /api/favorites` 幂等
-- 收藏页区分加载、读取失败、资源失效与筛选为空；列表或详情失败可重试并保留已加载卡片，“最近看”排序才读取访问历史
-- 收藏增删成功立即采用服务端返回列表，后续刷新失败仍保留已确认状态；切换操作读取当前共享缓存，首次列表未完成时等待结果
-- 收藏、历史及失效收藏清理结果的空列表统一返回 `[]`，无失效项时清理明确提示零项成功
-- 清理失效收藏后立即更新已加载列表与项数，后续刷新失败仍保留清理结果
-- 最近：LRU，去重，默认保留 10 条，可在设置调整为 1–50 条
-- 最近阅读区分加载、读取失败、资源失效与筛选为空；读取失败可重试，后台刷新失败保留已加载记录
-- 打开相册写入最近访问后立即刷新相关列表与“最近看”排序；媒体分页不重复记录同一次打开
-- 记录访问、清空历史和调整保留条数后立即同步已确认的历史快照，后续读取失败仍保留操作结果
-- 媒体活动：图片保存 0-based 页码，每个视频独立恢复毫秒位置；批量标记只触发一次原子落盘
-- 偏好：原子写（tmp + rename），崩溃不丢
-- 设置读取失败可重试并保留已加载值；保存阅读设置、清理收藏和清空历史失败会提示，请求期间禁用相关按钮避免重复操作
-
-### 资源安全
-
-- 公共 API 只接受 `r_` / `a_` / `c_` / `f_` 稳定资源 ID
-- 绝对路径只存在于后端进程内部；库快照、URL、日志和浏览器 store 均不暴露
-- ID 解析后仍由 `path_safety` 按最具体配置根校验边界；根内未单独配置的链接仍拒绝访问
-- 每次资源请求重新检查根内路径组件，拒绝扫描后被替换为符号链接或 Windows junction 的目录
-- 配置与系统打开接口仅允许回环地址访问，越权请求一律拒绝
-- 系统打开资源时按当前媒体根校验，拒绝根内目录链接、已删除资源及文件/目录类型变化的旧标识
-- 原图、视频、元数据与缩略图只处理仍为普通文件的源路径；扫描后被目录替换时返回 404，拒绝条件缓存响应与封面上传，不产生目录重定向。恢复文件后原资源 ID 可继续使用
-
----
-
-## 30 秒上手
-
-```bash
-# 1. 拉代码
-git clone <repo> && cd local-gallery
-
-# 2. 写一份配置（任意本地媒体根目录）
+```powershell
+# 终端一：后端
 cd backend
-cp config.example.yaml config.yaml
-# 编辑 config.yaml，至少把 mediaRoots 改成你机器上的路径
-
-# 3. 装前端依赖
-cd ../frontend && npm install
-
-# 4. 跑起来
-# 后端
-cd ../backend && go run ./cmd/server      # 默认 :8080
-# 前端（开发模式，HMR）
-cd ../frontend && npm run dev              # 默认 :5173，反向代理到 :8080
+go run ./cmd/server
 ```
 
-打开 `http://localhost:5173`，`Ctrl+S` 扫描，按 `R` 随机翻一卷。
-
-> 全栈开发首选 VSCode → 运行和调试 → **"全栈复合调试"**。详见 `.vscode/launch.json`。
-
-### 生产部署
-
-Windows 源码目录支持双击根目录的 `build.bat` 构建，再双击 `start.bat` 启动：
-
-1. 构建需要 PATH 中可用的 Go 1.24+、Node.js 20+（含 npm）和 PowerShell 7（`pwsh`）。
-2. `build.bat` 调用 `scripts/build.ps1`，执行 `npm ci`、前端构建和 Windows 本机架构后端构建，输出 `frontend/dist/` 与 `bin/local-gallery.exe`。
-3. 首次运行前，将 `backend/config.example.yaml` 复制为 `backend/config.yaml`，设置实际存在的 `mediaRoots`，并设置 `staticDir: "../frontend/dist"`。已有配置直接检查这两项，无需覆盖。
-4. `start.bat` 从 `backend/` 工作目录直接运行上述二进制，读取 `config.yaml`；启动不需要 Go、Node.js 或 PowerShell，也不会自动构建。默认访问 `http://127.0.0.1:8080`，按 `Ctrl+C` 停止。
-
-两个 BAT 都可从任意工作目录调用；构建结束或启动失败时会暂停显示结果。命令行及自动化调用可加 `--no-pause`，退出码会保留。配置、缓存和构建产物不入仓。完整说明见 [构建与发布](./docs/RELEASE.md)。
-
-手动构建运行（同样先配置 `staticDir: "../frontend/dist"`，并从 `backend/` 启动）：
-
-```bash
-cd frontend && npm run build              # 产物在 frontend/dist
-cd ../backend && go build -o ../bin/server ./cmd/server
-../bin/server                             # 单端口同时托管 API + 静态资源
+```powershell
+# 终端二：前端
+cd frontend
+npm run dev
 ```
 
-生产发布包、版本线和手动验证流程见 [`docs/RELEASE.md`](./docs/RELEASE.md)。当前 Go + React 架构从 `v2.0.0` 开始；GitHub 上已有的 `v1.x` Release 属于旧 Python 架构，仅作为历史版本保留。
+打开 `http://localhost:5173`。Vite 将 `/api` 代理到 `http://127.0.0.1:8080`，同时改写 Host 与 Origin；无需额外跨域配置。
 
----
+## 构建与运行
+
+Windows 源码目录支持 `build.bat` 构建、`start.bat` 运行。先准备上述配置，并设置 `staticDir: "../frontend/dist"`；两个入口可双击或从命令行调用，自动化可加 `--no-pause`。
+
+其他平台可在仓库根目录执行 `pwsh -File scripts/build.ps1`，同样使用 `staticDir: "../frontend/dist"`，从 `backend/` 运行生成的 `../bin/local-gallery`。Windows 产物带 `.exe` 后缀。默认访问 `http://127.0.0.1:8080`。
+
+发布包用户：在解压目录复制 `config.example.yaml` 为 `config.yaml`，设置媒体根并保留 `staticDir: "dist"`，从该目录运行 `local-gallery`（Windows 为 `local-gallery.exe`）。运行发布包无需 Go、Node.js 或 PowerShell。
+
+跨平台打包、手动 CI 与 Release 流程见 [构建与发布](./docs/RELEASE.md)。构建产物与运行时配置不入仓。
 
 ## 配置
 
-所有运行时参数集中在 `backend/config.yaml`（默认相对后端 CWD 查找）。完整字段见 [`backend/config.example.yaml`](./backend/config.example.yaml)。
+字段、配置示例与默认值说明集中在 [backend/config.example.yaml](./backend/config.example.yaml)，内置默认值以 `config.Default()` 为准；热更新规则见 [API 配置契约](./docs/API.md#健康与配置)。
 
-| 字段                        | 说明                                                                      |
-| --------------------------- | ------------------------------------------------------------------------- |
-| `mediaRoots`                | 媒体根目录数组，可设 `[]` 后从设置页配置；离线目录不阻止启动                            |
-| `host` / `port`             | 监听地址 / 端口                                                           |
-| `accessMode`                | `local` 仅回环访问（默认）；`lan` 开启可信家庭网络令牌保护         |
-| `accessToken`               | LAN 模式必填，32-256 个无空白字符；只用于换取 HttpOnly 会话       |
-| `cacheDir`                  | 应用工作目录；`state/` 保存状态，`derived/` 保存可清缓存，默认 `./.local-gallery/`；旧顶层文件不读取、不移动；修改需重启 |
-| `thumbSizeW` / `thumbSizeH` | 缩略图尺寸                                                                |
-| `thumbCacheSize`            | LRU 内存缓存项数                                                          |
-| `cacheMaxAgeDays`           | 磁盘缓存保留天数                                                          |
-| `cacheMaxSizeMB`            | 派生缓存容量软上限，默认 10240 MiB；0 不限容量；启动及每小时按年龄和容量清理 |
-| `ffmpegPath`                | ffmpeg / ffprobe 路径，留空则自动探测 `bin/ffmpeg/<os>/<arch>/`；修改需重启 |
-| `allowOsOpen`               | 是否允许 `/api/fs/open` 在系统资源管理器里打开                            |
-| `staticDir`                 | 前端构建产物目录（生产单端口托管用）                                      |
-| `skipHidden`                | 是否跳过以 `.` 开头的隐藏目录（默认 true）                                |
-| `excludePatterns`           | 扫描时跳过的目录/文件名 glob 模式列表，每行一条；按 basename 匹配任意深度 |
-| `systemFiles`               | 在内置白名单（Thumbs.db / desktop.ini / .DS_Store）之上追加跳过的系统文件 |
+- 运行参数来自 YAML，CLI 只支持 `--config <yaml>` 选择文件，不支持环境变量或其他参数覆盖。相对媒体、缓存与静态目录均相对进程 CWD 解析。
+- `mediaRoots` 是唯一媒体根字段，可设空数组；目录暂时离线仍可启动并访问设置页，扫描不会发布部分根的结果。
+- `cacheDir` 默认是 CWD 下 `.local-gallery/`，`state/` 保存持久状态，`derived/` 保存可重建缓存；“清空缓存”保留状态。存储布局见 [架构文档](./docs/ARCHITECTURE.md#配置与持久化)。
+- `/settings` 的“服务端”可修改配置，仅本机可管理。默认 `127.0.0.1:8080`、`accessMode: local`；可信家庭网络访问需配置 `lan` 与强令牌，浏览器通过 HttpOnly 会话认证。
+- `host`、`port`、`cacheDir`、`staticDir` 与 `ffmpegPath` 修改后重启；配置页会显示重启提示。源码运行与发布包的 `staticDir` 布局不同，按上一节设置。
 
-启动参数只保留 `--config <yaml>`；`staticDir` 也从配置文件读取。**不支持环境变量或其他 CLI 覆盖**。
-配置项可在网页 `/settings` → 「服务端」里改，部分字段热生效（见 [`docs/API.md`](./docs/API.md)「配置项」一节）。
-配置按编辑顺序保存，等待期间持续显示最新待保存值，离开再返回仍会保留。旧结果不会把新草稿标为“已保存”，保存失败也不阻塞后续修改。保存成功后显示 1.5 秒确认提示；再次保存重新计时，离开页面时清理提示任务。
-保存失败会保留输入，提供“重试保存”和“重新读取配置”，不会自动重复写入。失败输入只保留在当前应用会话内，离开设置页再返回仍可恢复，刷新或关闭页面后清除；LAN 令牌使用独立的确认流程，不进入通用重试。
-重新读取成功后显示服务器当前值并清除失败输入，保留其他尚未提交的草稿；读取期间暂停表单操作与自动保存，支持取消，读取失败或取消仍保留原输入。根目录写入结果不明时，重试或重新读取确认后刷新客户端媒体库并提示重新扫描。
-缓存与静态资源目录按 Enter 或移开焦点保存；目录输入框内按 Enter 也可重试该字段保留的失败值。按 Esc 撤销该字段的编辑草稿和失败输入。媒体根按整组自动保存，任一根输入框内的 Esc 撤销整组编辑草稿（含新增空槽位）和失败输入。撤销保留其他设置草稿；已经显示“保存中”的修改会按顺序完成，写入结果不明时仍需重新读取确认。切换 LAN 时，后续保存会等待新会话建立完成。
-输入法组合期间，媒体根整组及正在输入的文本、数字配置暂停自动保存；确认输入后重新等待原保存间隔，不提交中间候选文字或数字，也不阻塞其他字段保存。移开焦点会确认当前输入，删除正在编辑的根目录不会留下暂停状态。
-目录输入框旁的“选择本地目录”可浏览服务所在电脑的真实目录、上一级及磁盘根目录，也可输入路径后按 Enter 前往。子目录分页加载，取消不改配置；“使用此目录”填写完整路径并保存，媒体根目录沿用 450ms 自动保存。此功能只对本机开放，不依赖浏览器原生目录选择 API。
+前端默认同源访问；自定义 API 基址时按 [frontend/.env.example](./frontend/.env.example) 设置构建期 `VITE_API_BASE`，它不覆盖后端 YAML。
 
-开发版只接受当前 API 与持久化 schema：所有 HTTP 失败响应固定为 `{ code, message, details? }`；扫描缓存 schema 不匹配时会隔离原文件并以空缓存启动。
+### 可选依赖
 
----
-
-## ffmpeg · 可选但强烈推荐
-
-视频元数据、抽帧封面、faststart 修 moov、自动转码、HEIC/HEIF 缩略图，全部依赖 `ffmpeg` / `ffprobe`。
-**没有 ffmpeg 也能用**——只是视频封面/元数据会回退到浏览器抽帧，冷门编码视频播不了，HEIC/HEIF 照片在网格里显示占位图、在阅读器里提示无法显示。
-
-视频缓存只接受非空普通文件，空文件会在下次播放时按需重建。缓存路径被目录占用时，播放请求沿用后续 faststart 或源文件流程，转码状态查询和进度流不会误报为已缓存；占位目录及内容保留。生成先写独立临时文件，成功后才发布为可播放缓存。
-
-重新连接转码进度流时，会按当前缓存与视频能力返回终态；服务重启后已有缓存、无需转码的视频均不会误报失败。源视频大小或修改时间变化后，新播放请求取消旧转码并按需处理当前版本；旧任务错误不再遮蔽当前有效缓存。转码启动与发布前复核源版本，变化时丢弃本次输出，退出服务也会等待旧任务回收。
-
-原图和视频的 200、206、304 响应均要求浏览器重新验证，避免稳定资源地址长期沿用旧内容或跳过媒体根校验。视频每次切换、重试、转码完成和抽帧使用独立播放地址，避免同页解码缓冲复用旧片段；普通重绘及同次 Range 请求沿用同一地址。新的播放尝试会重新按需读取片段，不预先下载整段视频。
-
-原图、视频和缩略图的缓存协商支持弱 ETag、多个标识及通配符 `*`；命中时返回空的 304 响应，减少重复传输。源文件失效仍先返回 404。
-
-媒体响应独立打开文件并在发送完成或断连后关闭，不保留原图、视频的文件句柄和旧长度；同一路径覆盖、缩小或替换后，后续请求立即按当前文件返回内容和 Range。修改时间、大小及 ETag 来自同一次打开的文件，文件读取不预先缓存整段内容。
-
-续传携带 `If-Range` 时，只有与当前文件一致的强 ETag 或修改时间才返回片段；旧标识返回完整当前文件，避免拼接新旧内容。
-
-仓库自带绿色安装脚本（不动 `PATH`、不需管理员）：
+ffmpeg / ffprobe 提供视频增强能力及 HEIC/HEIF/TIFF 转换。Windows 可从仓库根目录安装到 `bin/ffmpeg/windows/amd64/`，后端自动探测，不修改 PATH：
 
 ```powershell
-# Windows PowerShell：默认从 gyan.dev 拉 ffmpeg-release-essentials.zip
 pwsh -File scripts/install-ffmpeg.ps1
-
-# 强制重装
-pwsh -File scripts/install-ffmpeg.ps1 -Force
-
-# 换源 / 自定义安装目录
-pwsh -File scripts/install-ffmpeg.ps1 -Url <zip-url> -TargetDir D:\tools\ffmpeg
+# 可选参数：-Force 强制重装；-Url 指定压缩包；-TargetDir 指定安装位置
 ```
 
-默认安装到 `bin/ffmpeg/windows/amd64/`，后端启动时自动探测，**不用改配置**。脚本幂等，缺啥装啥。
-macOS / Linux 走 `bin/ffmpeg/<os>/<arch>/` 同形目录，安装脚本后续补。
+其他平台或自定义安装位置需设置 `ffmpegPath` 为可执行文件路径。工具缺失时图片浏览与原生可播放视频仍可用，视频封面回退浏览器抽帧；需转码的视频和特殊图片格式可能无法显示。
 
-### 没有 ffmpeg 会怎样
+## 开发验证
 
-| 能力                           | 有 ffmpeg           | 无 ffmpeg                       |
-| ------------------------------ | ------------------- | ------------------------------- |
-| 缩略图（图片）                 | ✅                  | ✅                              |
-| 视频封面                       | ffmpeg 抽帧，~339ms | 浏览器 Range 抽帧，超时可重试 |
-| 视频元数据                     | ffprobe，~100ms     | 等 `<video>` 加载完，秒级延迟   |
-| 视频播放                       | ✅                  | ✅                              |
-| 冷门编码（AV1/HEVC/ProRes）    | 自动转 H.264+AAC    | 浏览器播不了就播不了            |
-| Faststart（moov 在末尾的 MP4） | 自动 remux          | 浏览器可能 0:00 卡死            |
+| 工作目录    | 命令                             | 用途                                   |
+| ----------- | -------------------------------- | -------------------------------------- |
+| `backend/`  | `go test ./...`                  | 后端单元与集成测试                     |
+| `backend/`  | `go test ./tests/integration -v` | 仅 HTTP 集成主链路                     |
+| `backend/`  | `go vet ./...`                   | 后端静态检查                           |
+| `frontend/` | `npm run lint`                   | 前端静态检查                           |
+| `frontend/` | `npm run test`                   | Vitest 单元/组件测试                   |
+| `frontend/` | `npm run build`                  | TypeScript 检查与生产构建              |
+| `frontend/` | `npm run test:e2e`               | 使用独立临时库启动真实全栈 E2E         |
+| 仓库根      | `pwsh -File scripts/build.ps1`   | 全栈构建；也可使用 VSCode `build: all` |
 
----
+首次跑 E2E 需在 `frontend/` 执行 `npx playwright install chromium`。E2E 自动选择端口、生成媒体与构建产物，结束清理临时服务，不读取个人媒体库。业务改动按协作规则同步相应测试；纯文档改动检查链接、引用与格式。
 
-## 项目结构
+布局/对比度审计、截图和相册崩溃探针统一见 [界面验证方法](./docs/DESIGN.md#验证方法)；性能基准只在显式优化任务运行，方法见架构文档。
 
-```
-local-gallery/
-├── build.bat / start.bat    # Windows 一键构建 / 运行构建产物
-├── backend/                # Go + Fiber
-│   ├── cmd/server/         # 入口（flag + YAML 配置装配 + 服务装配）
-│   ├── internal/
-│   │   ├── config/         # YAML 加载 + 校验 + 热更新
-│   │   ├── pathutil/       # 媒体根目录规范化与等价比较
-│   │   ├── models/         # 领域模型（Album / Collection / SmartCollection / Prefs）
-│   │   ├── services/       # 业务（scanner / thumbnail / scan_runner / video_*）
-│   │   ├── store/          # JSON 偏好/媒体活动持久化（原子写）
-│   │   ├── handlers/       # Fiber 路由处理
-│   │   └── middleware/     # logger / recover / path_safety
-│   └── tests/integration/  # 端到端 HTTP 测试
-├── frontend/               # React 18 + Vite + TypeScript
-│   └── src/
-│       ├── api/            # fetch + SSE 封装，端点模块
-│       ├── hooks/          # useKeyboard / useScanSSE / useTheme / useFavorites…
-│       ├── store/          # zustand（ui / gallery / search）
-│       ├── routes/         # 按需加载的 Home / Album / 标签 / Gallery / Recents / Favorites / Unread / Settings
-│       ├── components/     # album / gallery / layout / home / common
-│       └── utils/          # shortcuts / path / storage / format / albumGrouping / libraryCard
-├── docs/                   # 架构 / API / 快捷键 / 全功能清单
-│   ├── ARCHITECTURE.md     # 模块划分、数据流、扩展点
-│   ├── API.md              # HTTP 接口契约
-│   ├── SHORTCUTS.md        # 快捷键全集
-│   ├── FEATURES.md         # 全功能清单
-│   └── DESIGN.md          # 当前界面规范、审计方法与未完成事项
-├── scripts/                # dev / build / package / publish / monitor / install-ffmpeg
-├── .github/workflows/      # CI 与 v2 发布工作流
-└── .vscode/                # launch / tasks / settings / extensions
+## 项目结构与文档
+
+```text
+backend/
+  cmd/server/         Go 入口与服务装配
+  internal/           config、pathutil、models、middleware、handlers、services、store
+  tests/integration/  真实 HTTP 路由测试
+frontend/
+  src/                api、hooks、store、routes、components、styles、utils
+  scripts/            布局/对比度审计、截图、崩溃探针
+  tests/e2e/          Playwright 全栈用例
+scripts/              开发、构建、E2E、ffmpeg 安装与手动发布工具
+.vscode/              现有调试、任务与编辑器配置
+.github/workflows/    仅手动触发的 CI 与 Release
 ```
 
----
+后续 AI 默认只需阅读 `AGENTS.md` 与本页，再按任务选读下表；无需逐份加载。依赖版本看 `backend/go.mod` 与 `frontend/package.json`，配置字段看 YAML 样例，具体行为与测试以当前代码为准。
 
-## 文档导航
+| 文档                                           | 何时阅读                                             |
+| ---------------------------------------------- | ---------------------------------------------------- |
+| [AGENTS.md](./AGENTS.md)                       | 开始工作：边界、修改规则、验证与提交要求             |
+| [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | 定位模块，修改扫描、资源索引、媒体管线、状态或持久化 |
+| [docs/API.md](./docs/API.md)                   | 修改或对接 HTTP/SSE 契约、字段和错误码               |
+| [docs/SHORTCUTS.md](./docs/SHORTCUTS.md)       | 修改快捷键、菜单、弹窗和输入控件的键盘行为           |
+| [docs/DESIGN.md](./docs/DESIGN.md)             | 修改界面：当前规范、审计方法与未完成事项             |
+| [docs/RELEASE.md](./docs/RELEASE.md)           | 构建、推送、手动验证与正式发布                       |
+| [docs/release-notes/](./docs/release-notes/)   | 查询对应版本的发布/迁移记录；不作为当前规则或待办    |
 
-| 文档                                           | 看什么                                   |
-| ---------------------------------------------- | ---------------------------------------- |
-| [README.md](./README.md)                       | 30 秒上手、能力清单、配置                |
-| [docs/FEATURES.md](./docs/FEATURES.md)         | 全功能清单（按域分组，每项指向代码位置） |
-| [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | 系统设计、模块划分、数据流、性能         |
-| [docs/API.md](./docs/API.md)                   | HTTP 接口手册                            |
-| [docs/SHORTCUTS.md](./docs/SHORTCUTS.md)       | 快捷键全集（含视频播放器）               |
-| [docs/RELEASE.md](./docs/RELEASE.md)            | 手动验证、推送、版本线与发布包             |
-| [docs/DESIGN.md](./docs/DESIGN.md)             | 当前界面规范、审计方法与未完成事项        |
+每类信息只维护一份完整说明。已完成工作与历史实验通过 `git log` 查询，开放界面问题集中在设计文档末尾。
 
-`?` 可唤起可搜索的帮助浮层，按主页面、图片或视频场景显示对应操作，搜索也仅匹配当前场景。打开后聚焦搜索，Tab 在浮层内循环；背景快捷键暂停响应，Esc、关闭按钮或点击遮罩关闭后回到原控件。
+## 使用范围与许可
 
-控件自身的键盘操作优先：按钮或链接上的空格、回车保留给控件，文本编辑和输入法组合期间不触发页面操作。视频控制与页码跳转也不会抢占 Ctrl / Alt / Meta 组合键。
-
-阅读器“更多”、右键菜单和工具栏主题菜单支持上下键循环选择及 Home/End 首尾定位，Esc 只关闭当前菜单；焦点移出时自动关闭，并保留已经移到外部控件的焦点。
-
----
-
-## 开发
-
-| 操作     | 命令                                                        |
-| -------- | ----------------------------------------------------------- |
-| 启动后端 | `cd backend && go run ./cmd/server`                         |
-| 启动前端 | `cd frontend && npm run dev`                                |
-| 后端测试 | `cd backend && go test ./...`                               |
-| 前端单测 | `cd frontend && npm run test`                               |
-| 集成测试 | `cd backend && go test ./tests/integration -v`              |
-| e2e      | `cd frontend && npm run test:e2e` 或 `scripts/test-e2e.ps1` |
-| 设计审计（布局 / 字号） | `cd frontend && npm run audit:layout`            |
-| 设计审计（对比度 AA） | `cd frontend && npm run audit:contrast`      |
-| 相册页崩溃探针 | `cd frontend && npm run audit:crash`         |
-| 多断点截图 | `cd frontend && npm run shot -- --out .smoke/xxx` |
-| 全栈启动 | VSCode → "全栈复合调试"                         |
-| 全栈构建 | `scripts/build.ps1` 或 VSCode 任务 `build: all`             |
-| 提交已暂存文件并推送 | `pwsh -File scripts/publish.ps1 -Message "feat: ..."`      |
-
-端到端脚本使用独立的系统临时目录保存前后端产物和测试数据，结束后统一清理，支持与本地运行实例并行验证。
-
-`audit:layout` / `audit:contrast` / `shot` 需要先起前端 dev server（`npm run dev`）。
-前两个把"内容宽度、控件字号、溢出、对比度"量化成可复核的数据，截图产物统一写在
-`frontend/.smoke/`（已被 `.gitignore` 忽略）。设计口径见
-[docs/DESIGN.md](./docs/DESIGN.md)。
-
-也可以直接对 **e2e 的临时环境**跑审计：`scripts/test-e2e.ps1 -Audit` 会在
-Playwright 之后，对同一个临时服务再跑一遍布局 / 对比度审计 —— 那个临时
-媒体库里带真实标签（`测试` / `空 格` / `C++` / `100%` …），所以这一次量到的
-是**真实标签页**，而不是开发库里那种伪造数据。
-
-两个审计脚本都支持开关（Git Bash 下 `LG_PAGES=/` 会被当成路径改写，加 `MSYS_NO_PATHCONV=1`）：
-
-| 开关 | 取值 | 作用 |
-|------|------|------|
-| `LG_PAGES` | 路由，逗号分隔；`reader` / `album` / `tag` 是伪路由 | 指定要审计的页面。`reader` 会取仪表盘里一本图多的图片相册直接进阅读器，审计压在图片上的浮层与图标；`album` 取仪表盘里一本图多的相册进详情页，审计 hero 与媒体网格；`tag` 用仪表盘里的真实相册伪造标签页数据（真实库里往往没有标签），审计标签页的 hero 与数据条 |
-| `LG_VIEWMODE` | `grid`（默认）/ `list` | 审计网格视图或列表视图（两套字号与排版） |
-| `LG_VIEWPORTS` | `390x844,1440x900` | 指定断点 |
-| `LG_THEMES` | `light` / `dark` | 指定主题 |
-
-两个脚本的默认页面清单为 `/`、`/recents`、`/favorites`、`/unread`、`/settings` 与伪路由 `album`、`reader`、`tag`。
-标签页**优先用真实标签**：库里 `/api/tags` 有标签就用真的，没有才用仪表盘里的
-真实相册伪造一份（输出里会写明用的是哪种）。
-
-`audit:layout` 除了"容器宽度 / 溢出 / 字号"，还量**有效内容宽**与**内容左缘**：
-容器宽度 ≠ 内容宽度（设置页的容器铺满 1600px，内容只有 768px 一列）。
-同一断点下所有页面的内容左缘必须落在同一条网格线上（阅读器是沉浸场景，不参与），
-对不上时审计会以非零退出码失败。
-
-`audit:contrast` 有三条判定通道：文字的 DOM 判定（AA 4.5:1）、压在图片上的文字的像素判定
-（按文字包围盒外一圈的真实像素算），以及**图标**的像素判定（非文本内容 3:1，WCAG 1.4.11 ——
-图标是 SVG，没有文字节点，必须单独开通道）。文字压在图上的判定**按绘制顺序**找背板
-（既认"文字在图片的 DOM 子树里"，也认"文字靠负边距压在兄弟层的照片上"），
-取样落在背板那一层之内。加 `-- --self-test` 会注入"已知好坏"的样本
-（白字压白底、兄弟层白字压白图、半透明角标等），验证这三条通道自己分得清好坏。
-
-两个审计都会检查**页面有没有崩**：掉进错误边界（React 渲染异常）的页面重试一次再判，
-仍失败就单独报出来 —— 崩掉的页面没有内容可量，报"全部通过"是假象。
-
-`audit:crash` 量的是另一个东西：**相册详情页反复打开时的崩溃率**。
-虚拟网格的参数（`increaseViewportBy` / `overscan`）改一点点，
-相册页就可能从"几乎不崩"变成"一半以上整页崩掉"（`Maximum call stack size exceeded`），
-而这种改动靠肉眼看页面根本发现不了 —— 所以它需要一个能出数字的探针：
-连续访问相册页 N 次，统计掉进错误边界的次数，有崩溃就以非零退出码失败。
-开关：`LG_CRASH_VISITS`（访问次数，默认 10）、`LG_CRASH_ALBUM`（相册名，默认取媒体最多的那本）、
-`LG_CRASH_VIEWPORT`（默认 `1280x720`）、`LG_CRASH_MOCK_THUMBS=1`（用假缩略图，默认用真实缩略图）。
-`scripts/test-e2e.ps1 -Crash` 会对 e2e 的临时环境（里面有 405 项的相册）跑一遍这个探针。
-
-例：`LG_PAGES=reader npm run audit:contrast`（阅读器浮层与图标对比度）、
-`LG_PAGES=album npm run audit:layout`（相册详情页的字号与溢出）、
-`LG_PAGES=tag npm run audit:contrast`（标签页 hero 的对比度）、
-`LG_VIEWMODE=list npm run audit:layout`（列表视图的字号与溢出）。
-
-faststart 集成测试优先使用测试进程的 `FFMPEG_PATH`，未指定时查找仓库默认位置及 `PATH` 中可执行的 ffmpeg；工具不可用时跳过该用例。此变量只供测试选择工具，不覆盖应用的 `config.yaml`。
-
-视频元数据性能测试使用 `go test ./internal/services -run '^$' -bench BenchmarkVideoInfoRepeated -benchtime=32x -count=3 -benchmem`（在 `backend` 下执行）。可用测试变量 `VIDEO_INFO_BENCH_FILE` 指定只读本地视频；未指定则生成临时素材。此变量不影响应用配置，测量方法与对照见 [架构文档](./docs/ARCHITECTURE.md)。
-
-**改动业务逻辑必须同步改测试**——后端 handler / service / middleware → `go test`；前端组件 / hook / store → Vitest；跨层主链路 → integration / e2e。
-
----
-
-## 命名历史
-
-| 时期            | 项目名                    | Go module                     | 默认缓存目录      | 查看器路由 |
-| --------------- | ------------------------- | ----------------------------- | ----------------- | ---------- |
-| v1（最初）      | comic-reader              | `tianlongxiang/comic-reader`  | `.comic-reader/`  | `/reader`  |
-| v2（2026 早期） | image-viewer / 图像浏览器 | `tianlongxiang/comic-reader`  | `.image-viewer/`  | `/viewer`  |
-| v3（当前）      | local-gallery / 本地画廊  | `tianlongxiang/local-gallery` | `.local-gallery/` | `/gallery` |
-
-配置仅保留当前 `mediaRoots[]` 契约，不维护已废弃的单数根目录别名。
-
----
-
-## 不做什么
-
-诚实声明：
-
-- ✅ 手动 CI 验证 Windows / macOS / Linux；手动 Release 生成发布包
-- ❌ 不存数据库（偏好走服务端 JSON 原子写）
-- ❌ 不引入微服务 / 消息队列
-- ❌ 不做用户系统（单用户本地工具）
-- ❌ 不支持在线分享 / 协作
-- ❌ 不解析 ZIP / RAR 漫画包（只读目录）
-
----
-
-## 许可
-
-仅供个人学习和非商业用途。
-
----
-
-```
-$ cat .signature
-Mavis · Local Gallery · 本地画廊
-```
+当前为单用户本地工具，媒体按目录读取，不解析 ZIP/RAR，不提供在线分享或协作。仅供个人学习和非商业用途。

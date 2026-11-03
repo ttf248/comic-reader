@@ -145,8 +145,8 @@ Write-Host "       ffmpeg:  $ffmpegVer"
 Write-Host "       ffprobe: $ffprobeVer"
 Write-Host "       路径:    $TargetDir"
 Write-Host ""
-Write-Host "注: ffmpeg/ffprobe 现已被后端直接调用(视频服务端抽帧 + 元数据)。" -ForegroundColor DarkGray
-Write-Host "    不安装时系统回退到浏览器端抽帧,功能不丢但首次封面慢很多。" -ForegroundColor DarkGray
-Write-Host "    详见 README「可选依赖」小节 + docs/ARCHITECTURE.md「视频封面流程」。" -ForegroundColor DarkGray
+Write-Host "注: ffmpeg/ffprobe 提供视频抽帧、元数据、转码与特殊图片转换。" -ForegroundColor DarkGray
+Write-Host "    未安装时封面回退到浏览器抽帧；需转码的视频与特殊图片可能无法显示。" -ForegroundColor DarkGray
+Write-Host "    详见 README「可选依赖」小节 + docs/ARCHITECTURE.md「图片、缩略图与预览」。" -ForegroundColor DarkGray
 Write-Host ""
 exit 0

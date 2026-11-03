@@ -830,8 +830,8 @@ func (s *TranscodeService) Evict(maxBytes int64, maxAgeDays int) (deleted int, f
 
 // needsTranscode 判断"浏览器原生是否能播这个文件"。
 //
-// V1 保守策略:不在"已知支持列表"里的就转。判定表见
-// docs/ARCHITECTURE.md §2.4.1。
+// 保守策略:不在"已知支持列表"里的就转。媒体管线说明见
+// docs/ARCHITECTURE.md「视频元数据与转码」。
 func (s *TranscodeService) needsTranscode(absPath, ext string) bool {
 	// 浏览器原生放不了的容器一律转：MKV/AVI/3GP 即使里面是 H.264，
 	// Chrome 也解不开容器（<video> 只认 mp4/webm）。
@@ -1234,6 +1234,7 @@ func parseProgressLine(line string, totalDurSec float64, job *transcodeJob, svc 
 //   - 订阅者 channel 容量 8,满了就丢;订阅者慢不会拖慢 ffmpeg
 //   - 任务结束(cached / failed)后 defer broadcast 还会跑一次,
 //     broadcast 内部判断 job.done 关闭后会关掉所有 sub channel
+//
 // etaMinProgress:低于该进度时不给预计时间（速率还不准）。
 const etaMinProgress = 0.005
 

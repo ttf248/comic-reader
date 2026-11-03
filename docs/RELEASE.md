@@ -1,5 +1,7 @@
 # 构建与发布
 
+本文件只维护当前构建与人工发布流程。[release-notes/](./release-notes/) 保留对应版本的发布与迁移记录，其中历史实现、schema 和“后续”说明不作为当前规则或待办；开发入口与标准验证命令见根 [README.md](../README.md)。
+
 ## Windows 源码目录一键运行
 
 根目录 `build.bat` 复用 `scripts/build.ps1`，安装锁定的前端依赖、构建前端，再编译 Windows 本机架构的后端。构建需要 Go 1.24+、Node.js 20+（含 npm）和 PowerShell 7，均从 PATH 查找。

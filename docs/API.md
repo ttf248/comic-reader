@@ -10,10 +10,11 @@
 - 资源校验错误使用 `{ "code": "...", "message": "..." }`；媒体不存在或 ID 已过期时重新扫描。所有 4xx/5xx 响应统一为：
 
   ```json
-  { "code": "snake_case_id", "message": "...", "details": { } }
+  { "code": "snake_case_id", "message": "...", "details": {} }
   ```
 
   `code` 是稳定字符串，前端用此做 `if (err.code === 'video_cover_missing')` 区分。
+
 - `r_`、`a_`、`c_`、`f_` 分别表示根、相册、集合和文件资源 ID。
 - 资源 ID 在根目录和相对路径不变时保持稳定，不包含可逆的绝对路径信息。
 - SSE 响应使用 `text/event-stream`，客户端断开后服务端必须清理订阅。
@@ -75,11 +76,13 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 读取或更新 `config.yaml`。与下文的目录选择接口同属允许处理绝对路径的本机配置管理例外，只接受服务端回环地址请求；远程请求返回 `403 local_access_required`。
 
-可更新字段：`mediaRoots`、`host`、`port`、`accessMode`、`accessToken`、`cacheDir`、`thumbSizeW`、`thumbSizeH`、`thumbCacheSize`、`cacheMaxAgeDays`、`ffmpegPath`、`allowOsOpen`、`staticDir`、`skipHidden`、`excludePatterns`、`systemFiles`。`accessToken` 永不在 GET/PUT 响应中回显，只返回 `accessTokenConfigured`。
+可更新字段：`mediaRoots`、`host`、`port`、`accessMode`、`accessToken`、`cacheDir`、`thumbSizeW`、`thumbSizeH`、`thumbCacheSize`、`cacheMaxAgeDays`、`cacheMaxSizeMB`、`ffmpegPath`、`allowOsOpen`、`staticDir`、`skipHidden`、`excludePatterns`、`systemFiles`。`accessToken` 永不在 GET/PUT 响应中回显，只返回 `accessTokenConfigured`。
 
 `mediaRoots` 相对进程 CWD 绝对化、清理路径分隔与 `.`、去空并保序去重，响应和写回 YAML 均使用规范化后的路径，保留首次出现的大小写。Windows 比较时忽略大小写，其他平台区分大小写；不通过解析符号链接或 junction 合并不同路径。仅增加等价写法、重复项或调整顺序时，`mediaRootsChanged=false`，保留现有媒体库、revision 和有效扫描缓存。
 
 `host`、`port`、`cacheDir`、`ffmpegPath` 和 `staticDir` 修改后需要重启；`accessMode` 与 `accessToken` 可热更新，其中 LAN 令牌必须是 32-256 个无空白字符。缩略图尺寸、LRU、保留天数和 `allowOsOpen` 也可热更新，媒体根和扫描排除规则在下一次扫描生效。
+
+`cacheMaxSizeMB` 为整数 MiB，0～1048576，默认 10240；0 不限制容量。与 `cacheMaxAgeDays` 一起在下一轮自动维护生效，无需重启。启动时及每小时检查一次，只删除派生目录中的完整缓存文件；十分钟内的新文件与临时产物保留，因此容量是软上限。状态数据不参与清理。
 
 ## 图像库与扫描
 
@@ -162,8 +165,6 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 ## 媒体、缩略图与视频
 
-配置接口支持 `cacheMaxSizeMB`（整数 MiB，0～1048576，默认 10240；0 不限制容量）。与 `cacheMaxAgeDays` 一起在下一轮自动维护生效，无需重启。启动时及每小时检查一次，只删除派生目录中的完整缓存文件；十分钟内的新文件与临时产物保留，因此容量是软上限。状态数据不参与清理。
-
 ### `GET /api/media/:fileId`
 
 发送图片或视频，支持 ETag 和 Range；视频按需经过转码和 faststart 管线。
@@ -192,12 +193,12 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 响应 `Content-Type: image/jpeg`，ETag 由源文件的 mtime+size+目标宽度派生；带 `If-None-Match` 命中时返回 `304`，不重复传图。预览图按源文件版本与宽度分别缓存在 `derived/previews/`，可在设置页单独清理。
 
-| 状态 | code                       | 含义                             |
-| ---- | -------------------------- | -------------------------------- |
-| 400  | `invalid_preview_width`    | `w` 不是正整数                   |
-| 404  | `media_not_found`          | 源路径不存在或不再是普通文件     |
-| 415  | `unsupported_image_format` | 不是受支持的图片，例如视频文件   |
-| 500  | `preview_failed`           | 无法生成预览图                   |
+| 状态 | code                       | 含义                           |
+| ---- | -------------------------- | ------------------------------ |
+| 400  | `invalid_preview_width`    | `w` 不是正整数                 |
+| 404  | `media_not_found`          | 源路径不存在或不再是普通文件   |
+| 415  | `unsupported_image_format` | 不是受支持的图片，例如视频文件 |
+| 500  | `preview_failed`           | 无法生成预览图                 |
 
 ### `GET /api/thumbs/:fileId`
 
@@ -311,12 +312,12 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 `POST /api/fs/open` 拒绝扫描后出现在根内路径中的符号链接或 Windows junction，`allowConfig` 查询参数不能豁免该资源校验。主要错误如下：
 
-| 状态 | code | 含义 |
-| --- | --- | --- |
-| 400 | `invalid_resource_id` | 缺少 ID 或请求体非法 |
-| 403 | `os_open_disabled` / `local_access_required` | 系统打开未开启或请求来自远程 |
-| 404 | `resource_not_found` | ID 无效、已过期、路径不在当前根中、含链接、资源不可用或类型已变化 |
-| 500 | `os_open_failed` | 校验或系统打开依赖不可用，或系统打开执行失败 |
+| 状态 | code                                         | 含义                                                              |
+| ---- | -------------------------------------------- | ----------------------------------------------------------------- |
+| 400  | `invalid_resource_id`                        | 缺少 ID 或请求体非法                                              |
+| 403  | `os_open_disabled` / `local_access_required` | 系统打开未开启或请求来自远程                                      |
+| 404  | `resource_not_found`                         | ID 无效、已过期、路径不在当前根中、含链接、资源不可用或类型已变化 |
+| 500  | `os_open_failed`                             | 校验或系统打开依赖不可用，或系统打开执行失败                      |
 
 ### `POST /api/admin/fs/directories`
 
@@ -336,12 +337,12 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 `roots` 为 Windows 逻辑盘根列表，或 macOS/Linux 的 `/`；文件系统根的 `parent` 为空。仅返回直属目录，跳过普通文件和目录链接；按目录名的 UTF-8 字节序升序，每页最多 200 项。`nextAfter` 非空时用原值请求下一页；为空时已到末页。分页使用实时文件系统视图，目录发生变化后可重新前往该目录刷新。响应 `Cache-Control: no-store`，完整路径只用于设置组件的临时状态，不写入浏览器持久化 store；请求路径放在 JSON body 中，访问日志不记录 body。
 
-| 状态 | code | 含义 |
-| --- | --- | --- |
-| 400 | `invalid_directory_request` | 请求体非法、路径含 NUL 或目标不是目录 |
-| 403 | `directory_access_denied` | 服务进程没有读取目录的权限 |
-| 404 | `directory_not_found` | 目录不存在或离线 |
-| 500 | `directory_read_failed` | 目录读取失败，错误信息不包含完整路径 |
+| 状态 | code                        | 含义                                  |
+| ---- | --------------------------- | ------------------------------------- |
+| 400  | `invalid_directory_request` | 请求体非法、路径含 NUL 或目标不是目录 |
+| 403  | `directory_access_denied`   | 服务进程没有读取目录的权限            |
+| 404  | `directory_not_found`       | 目录不存在或离线                      |
+| 500  | `directory_read_failed`     | 目录读取失败，错误信息不包含完整路径  |
 
 浏览、翻页和取消不修改文件或配置。确认选择后，前端把返回的完整路径提交给现有 `PUT /api/config`；媒体根沿用停止输入 450ms 后保存，缓存与静态目录立即保存并保留需重启提示。
 
