@@ -8,7 +8,10 @@ import { useSearchStore } from "../store/searchStore";
 import { useUIStore } from "../store/uiStore";
 import Home from "./Home";
 
-const mocks = vi.hoisted(() => ({ items: [] as LibraryNodeSummary[] }));
+const mocks = vi.hoisted(() => ({
+  items: [] as LibraryNodeSummary[],
+  inProgress: true,
+}));
 
 vi.mock("../api/prefs", () => ({ historyApi: { list: vi.fn() } }));
 vi.mock("../hooks/useFavorites", () => ({
@@ -88,11 +91,13 @@ vi.mock("../hooks/useLibrary", () => {
         dashboard: {
           unread: [mocks.items[0]],
           unreadCount: 1,
-          inProgress: mocks.items.map((album) => ({
-            album,
-            pageIndex: 1,
-            pageCount: 3,
-          })),
+          inProgress: mocks.inProgress
+            ? mocks.items.map((album) => ({
+                album,
+                pageIndex: 1,
+                pageCount: 3,
+              }))
+            : [],
         },
       },
       isLoading: false,
@@ -111,6 +116,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   useUIStore.setState({ viewMode: "grid" });
   useSearchStore.getState().reset();
+  mocks.inProgress = true;
   vi.mocked(historyApi.list).mockResolvedValue({ history: [] });
   mocks.items = [
     {
@@ -185,7 +191,7 @@ it("只有一本在读时未读区进入舞台右栏，右栏不会整栏空掉"
   ).toBe(true);
 });
 
-it("多本在读时未读区仍独立成块，不进舞台右栏", async () => {
+it("多本在读时未读区仍在舞台右栏 —— 右栏排两段：墙 + 未读", async () => {
   mocks.items = [
     ...mocks.items,
     {
@@ -201,10 +207,24 @@ it("多本在读时未读区仍独立成块，不进舞台右栏", async () => {
   ];
   renderHome();
   await waitFor(() => expect(screen.getByTestId("album-grid")).toBeTruthy());
-  // 两本在读：右栏放「其余在读」，未读区回到独立区块。
+  // 两本在读时右栏已经有「其余在读」的墙，但墙的高度取决于在读数量：
+  // 真实场景里在读的常常只有几本，1920 下墙只排一行，右栏底下会空出
+  // 390px。所以「未读」永远是右栏的第二段，而不是另起一个整宽区块。
   expect(
     screen
       .getByTestId("continue-hero")
       .contains(screen.getByTestId("unread-hero")),
-  ).toBe(false);
+  ).toBe(true);
+  // 未读只出现一次：既在右栏里，就不能再在下面重复一个整宽区块。
+  expect(screen.getAllByTestId("unread-hero")).toHaveLength(1);
+});
+
+it("没有在读相册时未读区独立成块（没有舞台可挂）", async () => {
+  mocks.inProgress = false;
+  renderHome();
+  await waitFor(() => expect(screen.getByTestId("album-grid")).toBeTruthy());
+  // 没有在读就没有「继续阅读」舞台，未读回到独立区块，
+  // 否则首页第一屏只剩一个推荐货架，没有"接着读"的主入口。
+  expect(screen.queryByTestId("continue-hero")).toBeNull();
+  expect(screen.getByTestId("unread-hero")).toBeTruthy();
 });

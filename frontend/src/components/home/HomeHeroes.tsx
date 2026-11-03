@@ -72,6 +72,14 @@ interface UnreadHeroProps {
   count: number;
   onShuffle: () => void;
   onMarkRead: (card: CardData) => void;
+  /**
+   * 内嵌模式：区块挂在「继续阅读」舞台的右栏里，而不是独占一整行。
+   *
+   * 两种模式的差别只有外层包裹：独立区块要自己的 page-shell（对齐全站
+   * 网格线、带上边距），内嵌模式不能带 —— 它已经在一个 page-shell 里面，
+   * 再套一层会让卡片左缘比同一栏的墙往右缩一截（两条内容线对不上）。
+   */
+  inline?: boolean;
 }
 
 // 首页未读入口：只展示前六本，完整列表交给 /unread 页面。
@@ -83,13 +91,17 @@ export function UnreadHero({
   count,
   onShuffle,
   onMarkRead,
+  inline = false,
 }: UnreadHeroProps) {
   const { favorites } = useFavorites();
   const favoriteIds = useMemo(() => new Set(favorites), [favorites]);
   const visible = cards.slice(0, 6);
 
   return (
-    <section className="page-shell pt-2 pb-2" data-testid="unread-hero">
+    <section
+      className={inline ? "mt-8" : "page-shell pt-2 pb-2"}
+      data-testid="unread-hero"
+    >
       <div className="flex items-center gap-3 flex-wrap mb-4">
         <h2 className="section-title">未读</h2>
         <span className="section-meta">
@@ -108,9 +120,25 @@ export function UnreadHero({
         </div>
       </div>
 
-      <div className="shelf shelf-fade">
+      <div
+        className={
+          inline
+            ? /* 内嵌模式：宽屏下这一段要和上面的「其余在读」墙用同一套列宽，
+                 两行海报的竖线才对得上（列宽写在 .stage-grid 里，只此一处）。
+                 窄屏仍是横向货架：右栏此时是堆叠在主角台下面的，货架更省高度。 */
+              "shelf shelf-fade stage-grid stage-shelf"
+            : "shelf shelf-fade"
+        }
+      >
         {visible.map((card) => (
-          <div key={card.id} className={SHELF_WIDTH}>
+          <div
+            key={card.id}
+            className={
+              inline
+                ? `${SHELF_WIDTH} xl:flex-none xl:w-full xl:min-w-0 xl:max-w-none`
+                : SHELF_WIDTH
+            }
+          >
             <AlbumCard
               data={{
                 ...card,
@@ -150,11 +178,12 @@ interface ContinueReadingHeroProps {
   onRemove: (card: CardData) => void;
   onClearAll: () => void;
   /**
-   * 右栏的替补内容。
+   * 右栏的第二段内容。
    *
    * 只有一本在读时没有"其余在读"，右栏会整栏空掉 —— 首页第一屏右侧
-   * 1200px 全是空白。调用方（首页）把「未读」塞进来，右栏就永远有内容：
-   * "你正在读的"与"接下来读的"并排。
+   * 1200px 全是空白；在读的相册多起来之后，右栏又会被"墙只有一行"
+   * 掏出一块 390px 的空洞（1920 实测）。调用方（首页）把「未读」塞进来，
+   * 右栏就有第二段内容："你正在读的"与"接下来读的"并排，两栏也齐平。
    */
   rightSlot?: ReactNode;
 }
@@ -278,15 +307,19 @@ export function ContinueReadingHero({
         {/* 右栏：整栏都是图像，填掉旧版信息栏右侧那块空洞。
             替补内容（未读区）也必须裹在 flex-1 min-w-0 里：它是 flex 行的
             直接子元素，不加约束会按自身宽度（.page-shell 的 width:100%）
-            撑开，把整行顶出容器 —— 1920 下实测主内容横向溢出 203px。 */}
+            撑开，把整行顶出容器 —— 1920 下实测主内容横向溢出 203px。
+
+            右栏现在是**两段**：上面的「其余在读」墙 + 下面的「未读」货架。
+            只放墙的话，右栏的高度由条目数决定：真实场景里在读的相册往往
+            只有几本，1920 下墙就只剩一行（实测右栏高 300px，左栏 699px），
+            墙底到下一个区块之间空出 390px —— 页面看着像没排完。把「未读」
+            搬进右栏，右栏就有了第二段内容，两栏高度自然拉平。 */}
         {(rightSlot || rest.length > 0) && (
           <div className="flex-1 min-w-0">
-            {rightSlot ?? (
+            {rest.length > 0 && (
               <>
                 <div className="section-meta mb-4">其余在读</div>
-                <div
-                  className={`grid ${GRID_COLS} gap-x-3.5 gap-y-7`}
-                >
+                <div className={`grid ${GRID_COLS} gap-x-3.5 gap-y-7`}>
                   {rest.map((card) => (
                     <MiniPoster
                       key={card.id}
@@ -298,6 +331,7 @@ export function ContinueReadingHero({
                 </div>
               </>
             )}
+            {rightSlot}
           </div>
         )}
       </div>

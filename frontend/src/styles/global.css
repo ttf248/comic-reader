@@ -94,6 +94,39 @@
   }
 }
 
+/* === R11：宽屏的右栏是「墙 + 未读」两段，墙只占一行 === */
+/*
+ * 宽屏（≥1280）右栏并排放两段内容：「其余在读」的墙 + 「未读」货架。
+ * 两段的高度都要跟左栏的主角台对齐，否则右栏底下（1920 实测 390px）
+ * 或左栏 CTA 底下（1440 实测 426px）会空出一大块。
+ *
+ * 墙的高度 = 行数 × 行高，行高由列宽决定，列宽由列数决定 —— 也就是说
+ * "墙有多高"取决于**在读的相册有几本**，而这个数前端控制不了：
+ *   - 6 本在读：1920 下 6 列只排 1 行（315px），左栏却有 762px；
+ *   - 12 本在读：1920 下 6 列排 2 行（688px），高度刚好。
+ * 既然行数不可控，就让"墙 + 未读"两段各自占一行：右栏固定是两行海报，
+ * 高度只随列宽变化（1920 下 315 + 381 = 696 ≈ 左栏 762），
+ * 各断点都齐平，且末行永远是满的。
+ */
+@media (min-width: 1280px) and (max-width: 1799px) and (min-height: 881px) {
+  /* 4 列 1 行 = 4 条 */
+  .stage-grid > *:nth-child(n+5) {
+    display: none;
+  }
+}
+@media (min-width: 1280px) and (max-width: 1799px) and (max-height: 880px) {
+  /* 5 列 1 行 = 5 条 */
+  .stage-grid > *:nth-child(n+6) {
+    display: none;
+  }
+}
+@media (min-width: 1800px) {
+  /* 6 列 1 行 = 6 条 */
+  .stage-grid > *:nth-child(n+7) {
+    display: none;
+  }
+}
+
 /* === 全局基线 === */
 html,
 body,
@@ -531,6 +564,25 @@ button:not(:disabled):active {
       #000 calc(100% - 28px),
       transparent 100%
     );
+  }
+
+  /* --- 内嵌在「继续阅读」右栏里的未读货架 ---
+     宽屏（≥1280）下它要和上一段「其余在读」的墙用同一套列宽：右栏
+     变成两行海报，两行的竖线必须对齐，否则一眼就是两套排版。
+     列宽与"每档显示几条"都写在 .stage-grid 里（只此一处），
+     这里只负责把货架切成网格、去掉横向滚动与右端渐隐。 */
+  @media (min-width: 1280px) {
+    .stage-shelf {
+      display: grid;
+      overflow: visible;
+      overscroll-behavior-x: auto;
+      scroll-snap-type: none;
+      -webkit-mask-image: none;
+      mask-image: none;
+    }
+    .stage-shelf > * {
+      scroll-snap-align: none;
+    }
   }
 }
 

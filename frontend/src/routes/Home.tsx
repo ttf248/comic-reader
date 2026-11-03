@@ -330,18 +330,23 @@ export default function Home() {
   // 年份筛选的"全部图像"section 顶部 chip
   const yearFilterLabel = yearFilter === "other" ? "其他" : String(yearFilter);
 
-  // 未读区：只有一本在读时放进「继续阅读」舞台的右栏 ——
-  // 那时舞台没有"其余在读"，右栏会整栏空掉，首页第一屏右侧 1200px
-  // 全是空白。其余情况仍作为独立区块排在「继续阅读」之后。
+  // 未读区：永远放进「继续阅读」舞台的右栏，作为右栏的第二段。
+  //
+  // 两种情况下右栏都会塌：
+  //   - 只有一本在读 → 右栏没有"其余在读"，整栏空掉（首屏右侧 1200px 空白）；
+  //   - 在读的相册多起来 → "其余在读"的墙只有一行，墙底到下一个区块之间
+  //     空出 390px（1920 实测），页面像没排完。
+  // 「未读」作为第二段内容补上，两种塌陷都消失：右栏变成
+  // "你正在读的 + 接下来读的"，与左栏的主角台齐平。
   const unreadSection = (
     <UnreadHero
       cards={unreadCards}
       count={unreadCount}
       onShuffle={onShuffleUnread}
       onMarkRead={onMarkReadUnread}
+      inline
     />
   );
-  const unreadInStage = inProgressAll.length === 1 && unreadCards.length > 0;
 
   return (
     <div className="min-h-full">
@@ -424,14 +429,16 @@ export default function Home() {
           onContinue={onContinue}
           onRemove={onRemoveContinue}
           onClearAll={onClearContinue}
-          /* 只有一本在读时，舞台右栏没有"其余在读"可放 —— 改放「未读」，
-             右栏就不空。下面的独立「未读」区此时不再重复渲染。 */
-          rightSlot={unreadInStage ? unreadSection : undefined}
+          /* 右栏第二段：「未读」。窄屏时右栏是堆叠在主角台下面的，
+             顺序与原来的独立「未读」区块完全一致。 */
+          rightSlot={unreadCards.length > 0 ? unreadSection : undefined}
         />
       )}
 
       {/* === 未读推荐(有未读时置顶 6 张,直接引导用户进下一本)== */}
-      {hasContent && unreadCards.length > 0 && !unreadInStage && (
+      {/* 没有在读相册时舞台不存在，「未读」才回到独立区块 —— 否则首页
+          第一屏只剩一个推荐货架，没有"接着读"的主入口。 */}
+      {hasContent && unreadCards.length > 0 && inProgressAll.length === 0 && (
         <UnreadHero
           cards={unreadCards}
           count={unreadCount}
