@@ -124,11 +124,14 @@ it('主封面与墙签都跟随 --stage-cover-w，主操作留在同一列里', 
   renderHero([makeCard('/a', 'A', 5, 20), makeCard('/b', 'B', 1, 30)])
   const poster = screen.getByRole('button', { name: /继续阅读「A」/ })
   const posterBox = poster.parentElement as HTMLElement
-  expect(posterBox.className).toContain('xl:w-[var(--stage-cover-w)]')
+  expect(posterBox.className).toContain('md:w-[var(--stage-cover-w)]')
 
   // 墙签（标题 + 进度 + 主操作）的宽度同样跟随封面
   const wallLabel = posterBox.parentElement?.children[1] as HTMLElement
   expect(wallLabel.className).toContain('xl:w-[var(--stage-cover-w)]')
+  // 窄屏（<768）墙签与封面并排，不再另起一行 —— 另起一行时封面右侧
+  // 会空出一大片，主操作也被推到整屏下方。
+  expect(wallLabel.className).toContain('flex-1')
 
   // 主操作按钮与封面同列（缩排在封面的容器里，不是被推到右栏尽头）
   const ctas = screen

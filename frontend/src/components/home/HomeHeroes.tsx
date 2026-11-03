@@ -236,8 +236,8 @@ export function ContinueReadingHero({
               <div
                 className={`shrink-0 ${
                   hasRight
-                    ? "w-[112px] md:w-[200px] xl:w-[var(--stage-cover-w)]"
-                    : "w-[112px] md:w-[200px] xl:w-[var(--stage-cover-w)]"
+                    ? "w-[150px] md:w-[var(--stage-cover-w)]"
+                    : "w-[150px] md:w-[var(--stage-cover-w)]"
                 }`}
               >
                 <StagePoster
@@ -247,12 +247,16 @@ export function ContinueReadingHero({
               </div>
               {/* 墙签：标题贴在封面下方，像展厅里的作品说明。
                   宽度跟随封面（不是整栏）：短屏收窄封面时，标题与进度条
-                  仍与封面左右对齐。 */}
+                  仍与封面左右对齐。
+                  窄屏（<768）改成与封面并排：另起一行时封面右侧会空出
+                  一大片（390 下是 150px 封面 + 246px 空白），而且主操作
+                  被推到整屏下方。并排后封面、标题、进度与主操作都留在
+                  首屏里。 */}
               <div
                 className={
                   hasRight
-                    ? "w-full md:w-auto md:flex-1 min-w-0 xl:flex-none xl:w-[var(--stage-cover-w)]"
-                    : "w-full md:w-auto md:flex-1 min-w-0 xl:flex-1"
+                    ? "w-auto flex-1 min-w-0 md:max-w-[440px] xl:flex-none xl:max-w-none xl:w-[var(--stage-cover-w)]"
+                    : "w-auto flex-1 min-w-0 md:max-w-[440px] xl:flex-1 xl:max-w-none"
                 }
               >
                 <h3
