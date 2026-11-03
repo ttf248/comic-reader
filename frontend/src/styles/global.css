@@ -303,6 +303,14 @@ button:not(:disabled):active {
     margin-inline: auto;
     padding-inline: clamp(16px, 2vw, 40px);
   }
+  /* 设置页在宽屏（≥1280）改成两列：一列的分区按顺序读，另一列接着排。
+     分区不能被列切断，所以 break-inside: avoid。 */
+  @media (min-width: 1280px) {
+    .page-shell .settings-columns > * {
+      break-inside: avoid;
+    }
+  }
+
   /* 防御：组件内部若再套一层 .page-shell，会凭空多出左右内边距
      （历史上 YearTimeline 就踩过这个坑，整块右移 32px）。 */
   .page-shell .page-shell {

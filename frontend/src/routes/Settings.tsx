@@ -212,304 +212,314 @@ export default function Settings() {
   );
   if (!data) {
     return (
-      <div className="page-shell py-10 max-w-3xl mx-auto">
-        <h1 className="page-title mb-6">设置</h1>
-        {prefsError || (
-          <div role="status" className="text-fg-muted text-[13px]">
-            正在加载设置…
-          </div>
-        )}
+      <div className="page-shell py-10">
+        <div className="max-w-3xl">
+          <h1 className="page-title mb-6">设置</h1>
+          {prefsError || (
+            <div role="status" className="text-fg-muted text-[13px]">
+              正在加载设置…
+            </div>
+          )}
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="page-shell py-10 max-w-3xl mx-auto">
-      <h1 className="page-title">设置</h1>
-      <p className="text-[13px] text-fg-muted mt-2 mb-10">个性化你的阅读体验</p>
-      {prefsError}
+    <div className="page-shell py-10">
+      <div className="settings-columns max-w-3xl xl:max-w-none xl:columns-2 xl:gap-10">
+        <h1 className="page-title">设置</h1>
+        <p className="text-[13px] text-fg-muted mt-2 mb-10">
+          个性化你的阅读体验
+        </p>
+        {prefsError}
 
-      <Section title="外观" icon={<SunIcon size={13} />}>
-        <Row label="主题">
-          <ThemeSwitcher />
-        </Row>
-        <Row label="强调色">
-          <div className="flex items-center gap-2">
-            {ACCENT_SWATCHES.map((s) => {
-              const active = accent === s.id;
-              return (
+        <Section title="外观" icon={<SunIcon size={13} />}>
+          <Row label="主题">
+            <ThemeSwitcher />
+          </Row>
+          <Row label="强调色">
+            <div className="flex items-center gap-2">
+              {ACCENT_SWATCHES.map((s) => {
+                const active = accent === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    onClick={() => setAccent(s.id as AccentKey)}
+                    className="relative w-7 h-7 rounded-full transition-transform hover:scale-110 focus:outline-none"
+                    style={{ background: s.light }}
+                    title={s.name}
+                    aria-label={s.name}
+                  >
+                    {active && (
+                      <span className="absolute inset-0 ring-2 ring-fg ring-offset-2 ring-offset-bg-elevated rounded-full flex items-center justify-center">
+                        <CheckIcon size={12} className="text-white" />
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </Row>
+          <Row label="侧边栏">
+            <button
+              onClick={toggleSidebar}
+              className="px-3 h-8 rounded-md border border-border-faint hover:bg-bg-subtle text-sm transition-colors"
+            >
+              {sidebarCollapsed ? "展开" : "折叠"}
+            </button>
+          </Row>
+          <Row label="默认视图">
+            <div className="flex items-center border border-border-faint rounded-md overflow-hidden">
+              {(["grid", "list"] as const).map((k) => (
                 <button
-                  key={s.id}
-                  onClick={() => setAccent(s.id as AccentKey)}
-                  className="relative w-7 h-7 rounded-full transition-transform hover:scale-110 focus:outline-none"
-                  style={{ background: s.light }}
-                  title={s.name}
-                  aria-label={s.name}
+                  key={k}
+                  onClick={() => setViewMode(k)}
+                  className={`h-8 px-3 text-[12.5px] transition-colors ${
+                    viewMode === k
+                      ? "bg-bg-subtle text-fg"
+                      : "text-fg-muted hover:text-fg"
+                  }`}
                 >
-                  {active && (
-                    <span className="absolute inset-0 ring-2 ring-fg ring-offset-2 ring-offset-bg-elevated rounded-full flex items-center justify-center">
-                      <CheckIcon size={12} className="text-white" />
-                    </span>
-                  )}
+                  {k === "grid" ? "网格" : "列表"}
                 </button>
-              );
-            })}
-          </div>
-        </Row>
-        <Row label="侧边栏">
-          <button
-            onClick={toggleSidebar}
-            className="px-3 h-8 rounded-md border border-border-faint hover:bg-bg-subtle text-sm transition-colors"
-          >
-            {sidebarCollapsed ? "展开" : "折叠"}
-          </button>
-        </Row>
-        <Row label="默认视图">
-          <div className="flex items-center border border-border-faint rounded-md overflow-hidden">
-            {(["grid", "list"] as const).map((k) => (
-              <button
-                key={k}
-                onClick={() => setViewMode(k)}
-                className={`h-8 px-3 text-[12.5px] transition-colors ${
-                  viewMode === k
-                    ? "bg-bg-subtle text-fg"
-                    : "text-fg-muted hover:text-fg"
-                }`}
-              >
-                {k === "grid" ? "网格" : "列表"}
-              </button>
-            ))}
-          </div>
-        </Row>
-      </Section>
-
-      <Section title="阅读" icon={<LibraryIcon size={13} />}>
-        <Row label="阅读到末尾自动切换下一本">
-          <Toggle
-            label="阅读到末尾自动切换下一本"
-            checked={data.autoSwitchAlbum}
-            disabled={patchPrefs.isPending}
-            onChange={(v) => patchPrefs.mutate({ autoSwitchAlbum: v })}
-          />
-        </Row>
-        <Row label="切换时显示通知">
-          <Toggle
-            label="切换时显示通知"
-            checked={data.showSwitchNotif}
-            disabled={patchPrefs.isPending}
-            onChange={(v) => patchPrefs.mutate({ showSwitchNotif: v })}
-          />
-        </Row>
-        <Row label="最近访问保留条数">
-          <NumberInput
-            value={data.maxRecent}
-            disabled={patchPrefs.isPending}
-            min={1}
-            max={50}
-            onChange={(v) => patchPrefs.mutate({ maxRecent: v })}
-          />
-        </Row>
-      </Section>
-
-      <Section title="数据" icon={<LibraryIcon size={13} />}>
-        <Row label="图像库缓存">
-          <div className="flex min-w-0 flex-1 flex-col items-end gap-2">
-            <div className="flex flex-wrap items-center justify-end gap-3">
-              <span className="text-[12.5px] text-fg-muted">
-                {manifest
-                  ? `${manifest.statistics.albumCount} 本相册 · ${manifest.statistics.tagCount} 个标签${
-                      manifest.scannedAt
-                        ? ` · ${new Date(manifest.scannedAt).toLocaleString("zh-CN", { hour12: false })}`
-                        : " · 尚未扫描"
-                    }`
-                  : "尚未加载"}
-              </span>
-              <button
-                onClick={() =>
-                  void qc.invalidateQueries({ queryKey: libraryQueryKeys.root })
-                }
-                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border-faint hover:bg-bg-subtle text-[12.5px] transition-colors"
-              >
-                <RefreshIcon size={11} />
-                <span>刷新</span>
-              </button>
-              <button
-                onClick={() => startScan.mutate()}
-                disabled={startScan.isPending || sse.isRunning}
-                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border-faint hover:bg-bg-subtle text-[12.5px] transition-colors disabled:opacity-50"
-                title="扫描 (Ctrl+S)"
-              >
-                <RefreshIcon size={11} />
-                <span>
-                  {sse.isRunning
-                    ? "扫描中…"
-                    : startScan.isPending
-                      ? "启动中…"
-                      : "重新扫描"}
-                </span>
-              </button>
-              <button
-                onClick={() => clearScanCache.mutate()}
-                disabled={clearScanCache.isPending}
-                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-danger/40 text-danger hover:bg-danger/5 text-[12.5px] transition-colors disabled:opacity-50"
-                title="清空图像库缓存（不会立即重新扫描）"
-              >
-                <TrashIcon size={11} />
-                <span>{clearScanCache.isPending ? "清空中…" : "清空缓存"}</span>
-              </button>
+              ))}
             </div>
-            {manifest && (
-              <ScanWarnings
-                warnings={manifest.warnings}
-                total={manifest.statistics.warningCount}
-              />
-            )}
-          </div>
-        </Row>
-        <Row label="缓存占用">
-          {/* 统计行与细分徽章纵向排列：作为 Row 的两个并列子元素时，
-              徽章会被排到统计行右边，把整行挤到换行。 */}
-          <div className="flex min-w-0 flex-1 flex-col items-end gap-2">
-            <div className="flex flex-wrap items-center justify-end gap-3 text-[12.5px] text-fg-muted">
-              <span className="whitespace-nowrap">
-                {cacheStats.isLoading
-                  ? "计算中…"
-                  : !cacheStats.data
-                    ? "—"
-                    : !cacheStats.data.available
-                      ? "不可用"
-                      : `${formatBytes(cacheStats.data.totalBytes)} · ${
-                          cacheStats.data.fileCount
-                        } 个文件`}
-              </span>
-              {cacheStats.data && (
-                <span
-                  className="whitespace-nowrap text-fg-subtle tabular-nums"
-                  title={
-                    cacheStats.data.scannedAt
-                      ? `扫描于 ${new Date(cacheStats.data.scannedAt).toLocaleString("zh-CN", { hour12: false })}`
-                      : ""
+          </Row>
+        </Section>
+
+        <Section title="阅读" icon={<LibraryIcon size={13} />}>
+          <Row label="阅读到末尾自动切换下一本">
+            <Toggle
+              label="阅读到末尾自动切换下一本"
+              checked={data.autoSwitchAlbum}
+              disabled={patchPrefs.isPending}
+              onChange={(v) => patchPrefs.mutate({ autoSwitchAlbum: v })}
+            />
+          </Row>
+          <Row label="切换时显示通知">
+            <Toggle
+              label="切换时显示通知"
+              checked={data.showSwitchNotif}
+              disabled={patchPrefs.isPending}
+              onChange={(v) => patchPrefs.mutate({ showSwitchNotif: v })}
+            />
+          </Row>
+          <Row label="最近访问保留条数">
+            <NumberInput
+              value={data.maxRecent}
+              disabled={patchPrefs.isPending}
+              min={1}
+              max={50}
+              onChange={(v) => patchPrefs.mutate({ maxRecent: v })}
+            />
+          </Row>
+        </Section>
+
+        <Section title="数据" icon={<LibraryIcon size={13} />}>
+          <Row label="图像库缓存">
+            <div className="flex min-w-0 flex-1 flex-col items-end gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-3">
+                <span className="text-[12.5px] text-fg-muted">
+                  {manifest
+                    ? `${manifest.statistics.albumCount} 本相册 · ${manifest.statistics.tagCount} 个标签${
+                        manifest.scannedAt
+                          ? ` · ${new Date(manifest.scannedAt).toLocaleString("zh-CN", { hour12: false })}`
+                          : " · 尚未扫描"
+                      }`
+                    : "尚未加载"}
+                </span>
+                <button
+                  onClick={() =>
+                    void qc.invalidateQueries({
+                      queryKey: libraryQueryKeys.root,
+                    })
                   }
+                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border-faint hover:bg-bg-subtle text-[12.5px] transition-colors"
                 >
-                  {cacheStats.data.cacheTtlSeconds > 0
-                    ? `${cacheStats.data.cacheTtlSeconds}s 内复用`
-                    : "缓存已过期"}
-                </span>
-              )}
-              <button
-                onClick={refreshCacheStats}
-                disabled={cacheStats.isFetching}
-                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border-faint hover:bg-bg-subtle text-[12.5px] transition-colors disabled:opacity-50"
-                title="重新扫描磁盘计算缓存占用"
-              >
-                {cacheStats.isFetching ? (
-                  <span className="inline-block w-3 h-3 rounded-full border-2 border-fg-muted border-t-transparent animate-spin" />
-                ) : (
                   <RefreshIcon size={11} />
-                )}
-                <span>刷新</span>
-              </button>
-              <button
-                onClick={() => clearAll.mutate()}
-                disabled={clearAll.isPending}
-                className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-danger/40 text-danger hover:bg-danger/5 text-[12.5px] transition-colors disabled:opacity-50"
-                title="清空全部缓存（缩略图 + 转换图 + 预览图 + faststart + 转码）"
-              >
-                <TrashIcon size={11} />
-                <span>{clearAll.isPending ? "清空中…" : "一键全清"}</span>
-              </button>
-            </div>
-            {/* 按类型细分 — 大头一目了然,转码缓存过大时可单独清。
-                五类之和等于上面的总占用,少列一类用户就对不上账。 */}
-            {cacheStats.data && cacheStats.data.available && (
-              <div className="mt-2 grid grid-cols-2 sm:grid-cols-5 gap-2 text-[12.5px]">
-                <SubUsageBadge
-                  label="缩略图"
-                  sub={cacheStats.data.thumbs}
-                  onClear={() => clearThumbsScope.mutate()}
-                  clearPending={clearThumbsScope.isPending}
-                />
-                <SubUsageBadge
-                  label="转换图"
-                  sub={cacheStats.data.converted}
-                  onClear={() => clearConverted.mutate()}
-                  clearPending={clearConverted.isPending}
-                />
-                <SubUsageBadge
-                  label="预览图"
-                  sub={cacheStats.data.previews}
-                  onClear={() => clearPreviews.mutate()}
-                  clearPending={clearPreviews.isPending}
-                />
-                <SubUsageBadge
-                  label="faststart"
-                  sub={cacheStats.data.videoFaststart}
-                  onClear={() => clearFaststart.mutate()}
-                  clearPending={clearFaststart.isPending}
-                />
-                <SubUsageBadge
-                  label="转码"
-                  sub={cacheStats.data.videoTranscode}
-                  onClear={() => clearTranscode.mutate()}
-                  clearPending={clearTranscode.isPending}
-                />
+                  <span>刷新</span>
+                </button>
+                <button
+                  onClick={() => startScan.mutate()}
+                  disabled={startScan.isPending || sse.isRunning}
+                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border-faint hover:bg-bg-subtle text-[12.5px] transition-colors disabled:opacity-50"
+                  title="扫描 (Ctrl+S)"
+                >
+                  <RefreshIcon size={11} />
+                  <span>
+                    {sse.isRunning
+                      ? "扫描中…"
+                      : startScan.isPending
+                        ? "启动中…"
+                        : "重新扫描"}
+                  </span>
+                </button>
+                <button
+                  onClick={() => clearScanCache.mutate()}
+                  disabled={clearScanCache.isPending}
+                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-danger/40 text-danger hover:bg-danger/5 text-[12.5px] transition-colors disabled:opacity-50"
+                  title="清空图像库缓存（不会立即重新扫描）"
+                >
+                  <TrashIcon size={11} />
+                  <span>
+                    {clearScanCache.isPending ? "清空中…" : "清空缓存"}
+                  </span>
+                </button>
               </div>
-            )}
-          </div>
-        </Row>
-        <Row label="清理失效收藏">
-          <button
-            onClick={() => pruneFav.mutate()}
-            disabled={pruneFav.isPending}
-            className="h-8 px-3 rounded-md border border-border-faint hover:bg-bg-subtle text-[12.5px] transition-colors disabled:opacity-50"
-          >
-            {pruneFav.isPending ? "清理中…" : "清理"}
-          </button>
-        </Row>
-        <Row label="清空最近访问" danger>
-          <button
-            onClick={() => clearHist.mutate()}
-            disabled={clearHist.isPending}
-            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-danger/40 text-danger hover:bg-danger/5 text-[12.5px] transition-colors disabled:opacity-50"
-          >
-            <TrashIcon size={11} />
-            <span>{clearHist.isPending ? "清空中…" : "清空"}</span>
-          </button>
-        </Row>
-      </Section>
+              {manifest && (
+                <ScanWarnings
+                  warnings={manifest.warnings}
+                  total={manifest.statistics.warningCount}
+                />
+              )}
+            </div>
+          </Row>
+          <Row label="缓存占用">
+            {/* 统计行与细分徽章纵向排列：作为 Row 的两个并列子元素时，
+              徽章会被排到统计行右边，把整行挤到换行。 */}
+            <div className="flex min-w-0 flex-1 flex-col items-end gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-3 text-[12.5px] text-fg-muted">
+                <span className="whitespace-nowrap">
+                  {cacheStats.isLoading
+                    ? "计算中…"
+                    : !cacheStats.data
+                      ? "—"
+                      : !cacheStats.data.available
+                        ? "不可用"
+                        : `${formatBytes(cacheStats.data.totalBytes)} · ${
+                            cacheStats.data.fileCount
+                          } 个文件`}
+                </span>
+                {cacheStats.data && (
+                  <span
+                    className="whitespace-nowrap text-fg-subtle tabular-nums"
+                    title={
+                      cacheStats.data.scannedAt
+                        ? `扫描于 ${new Date(cacheStats.data.scannedAt).toLocaleString("zh-CN", { hour12: false })}`
+                        : ""
+                    }
+                  >
+                    {cacheStats.data.cacheTtlSeconds > 0
+                      ? `${cacheStats.data.cacheTtlSeconds}s 内复用`
+                      : "缓存已过期"}
+                  </span>
+                )}
+                <button
+                  onClick={refreshCacheStats}
+                  disabled={cacheStats.isFetching}
+                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border-faint hover:bg-bg-subtle text-[12.5px] transition-colors disabled:opacity-50"
+                  title="重新扫描磁盘计算缓存占用"
+                >
+                  {cacheStats.isFetching ? (
+                    <span className="inline-block w-3 h-3 rounded-full border-2 border-fg-muted border-t-transparent animate-spin" />
+                  ) : (
+                    <RefreshIcon size={11} />
+                  )}
+                  <span>刷新</span>
+                </button>
+                <button
+                  onClick={() => clearAll.mutate()}
+                  disabled={clearAll.isPending}
+                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-danger/40 text-danger hover:bg-danger/5 text-[12.5px] transition-colors disabled:opacity-50"
+                  title="清空全部缓存（缩略图 + 转换图 + 预览图 + faststart + 转码）"
+                >
+                  <TrashIcon size={11} />
+                  <span>{clearAll.isPending ? "清空中…" : "一键全清"}</span>
+                </button>
+              </div>
+              {/* 按类型细分 — 大头一目了然,转码缓存过大时可单独清。
+                五类之和等于上面的总占用,少列一类用户就对不上账。 */}
+              {cacheStats.data && cacheStats.data.available && (
+                <div className="mt-2 grid w-full grid-cols-[repeat(auto-fit,minmax(112px,1fr))] gap-2 text-[12.5px]">
+                  <SubUsageBadge
+                    label="缩略图"
+                    sub={cacheStats.data.thumbs}
+                    onClear={() => clearThumbsScope.mutate()}
+                    clearPending={clearThumbsScope.isPending}
+                  />
+                  <SubUsageBadge
+                    label="转换图"
+                    sub={cacheStats.data.converted}
+                    onClear={() => clearConverted.mutate()}
+                    clearPending={clearConverted.isPending}
+                  />
+                  <SubUsageBadge
+                    label="预览图"
+                    sub={cacheStats.data.previews}
+                    onClear={() => clearPreviews.mutate()}
+                    clearPending={clearPreviews.isPending}
+                  />
+                  <SubUsageBadge
+                    label="faststart"
+                    sub={cacheStats.data.videoFaststart}
+                    onClear={() => clearFaststart.mutate()}
+                    clearPending={clearFaststart.isPending}
+                  />
+                  <SubUsageBadge
+                    label="转码"
+                    sub={cacheStats.data.videoTranscode}
+                    onClear={() => clearTranscode.mutate()}
+                    clearPending={clearTranscode.isPending}
+                  />
+                </div>
+              )}
+            </div>
+          </Row>
+          <Row label="清理失效收藏">
+            <button
+              onClick={() => pruneFav.mutate()}
+              disabled={pruneFav.isPending}
+              className="h-8 px-3 rounded-md border border-border-faint hover:bg-bg-subtle text-[12.5px] transition-colors disabled:opacity-50"
+            >
+              {pruneFav.isPending ? "清理中…" : "清理"}
+            </button>
+          </Row>
+          <Row label="清空最近访问" danger>
+            <button
+              onClick={() => clearHist.mutate()}
+              disabled={clearHist.isPending}
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-danger/40 text-danger hover:bg-danger/5 text-[12.5px] transition-colors disabled:opacity-50"
+            >
+              <TrashIcon size={11} />
+              <span>{clearHist.isPending ? "清空中…" : "清空"}</span>
+            </button>
+          </Row>
+        </Section>
 
-      <section className="mb-10">
-        <div className="flex items-center gap-2 mb-3">
-          <span className="text-fg-muted">
-            <ServerIcon size={13} />
-          </span>
-          <h2 className="section-title">服务端</h2>
-          <span className="text-[12.5px] text-fg-subtle ml-2">
-            改动自动写回后端 config.yaml
-          </span>
-        </div>
-        <ServerConfigPanel />
-      </section>
+        <section className="mb-10">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-fg-muted">
+              <ServerIcon size={13} />
+            </span>
+            <h2 className="section-title">服务端</h2>
+            <span className="text-[12.5px] text-fg-subtle ml-2">
+              改动自动写回后端 config.yaml
+            </span>
+          </div>
+          <ServerConfigPanel />
+        </section>
 
-      <Section title="关于" icon={<InfoIcon size={13} />}>
-        <div className="text-[13px] text-fg-muted leading-relaxed">
-          <div className="font-display text-base text-fg">
-            Local Gallery · 本地画廊
+        <Section title="关于" icon={<InfoIcon size={13} />}>
+          <div className="text-[13px] text-fg-muted leading-relaxed">
+            <div className="font-display text-base text-fg">
+              Local Gallery · 本地画廊
+            </div>
+            <div className="mt-1">Web 版 · v{__APP_VERSION__}</div>
+            <div className="mt-4 text-[12.5px] text-fg-subtle flex items-center gap-2">
+              <span>按</span>
+              <kbd className="font-mono px-1.5 py-0.5 rounded border border-border-faint bg-bg-subtle text-fg-muted">
+                ?
+              </kbd>
+              <span>查看所有快捷键</span>
+            </div>
+            <div className="mt-3 text-[12.5px] text-fg-subtle flex items-center gap-2">
+              <KeyboardIcon size={12} />
+              <span>所有偏好（主题、强调色、视图、收藏）均存于本机</span>
+            </div>
           </div>
-          <div className="mt-1">Web 版 · v{__APP_VERSION__}</div>
-          <div className="mt-4 text-[12.5px] text-fg-subtle flex items-center gap-2">
-            <span>按</span>
-            <kbd className="font-mono px-1.5 py-0.5 rounded border border-border-faint bg-bg-subtle text-fg-muted">
-              ?
-            </kbd>
-            <span>查看所有快捷键</span>
-          </div>
-          <div className="mt-3 text-[12.5px] text-fg-subtle flex items-center gap-2">
-            <KeyboardIcon size={12} />
-            <span>所有偏好（主题、强调色、视图、收藏）均存于本机</span>
-          </div>
-        </div>
-      </Section>
+        </Section>
+      </div>
     </div>
   );
 }
@@ -672,9 +682,7 @@ function SubUsageBadge({
   const inner = (
     <>
       <div className="flex items-center justify-between gap-1.5">
-        <span className="text-fg-muted text-[12.5px]">
-          {label}
-        </span>
+        <span className="text-fg-muted text-[12.5px]">{label}</span>
         {showClear && (
           <button
             onClick={(e) => {
