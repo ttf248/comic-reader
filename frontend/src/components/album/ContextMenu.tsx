@@ -23,11 +23,23 @@ interface Props {
   items: AnyMenuItem[];
   onSelect: (id: string) => void;
   onClose: () => void;
+  /**
+   * 配色档：theme（跟随应用主题）/ reader（阅读器暗场）。
+   * 阅读器画布恒为深色，浅色菜单浮在上面像"嵌了一块白板"。
+   */
+  tone?: "theme" | "reader";
 }
 
 // 右键菜单：分隔符、边界检查、自动关闭、Esc 关闭。
 // 视觉：极细的边 + 中性背景。
-export default function ContextMenu({ x, y, items, onSelect, onClose }: Props) {
+export default function ContextMenu({
+  x,
+  y,
+  items,
+  onSelect,
+  onClose,
+  tone = "theme",
+}: Props) {
   const ref = useRef<HTMLDivElement>(null);
   // 打开菜单前获得焦点的元素（右键时是卡片链接），关闭后还回去。
   const previousRef = useRef<HTMLElement | null>(null);
@@ -108,11 +120,16 @@ export default function ContextMenu({ x, y, items, onSelect, onClose }: Props) {
     };
   }, [onClose]);
 
+  const dark = tone === "reader";
   return (
     <div
       ref={ref}
       style={{ position: "fixed", top: y, left: x, zIndex: 1000 }}
-      className="min-w-[190px] bg-bg-elevated border border-border rounded-lg shadow-lg py-1.5 fade-up text-[13px]"
+      className={`min-w-[190px] border rounded-lg shadow-lg py-1.5 fade-up text-[13px] ${
+        dark
+          ? "bg-neutral-900/95 border-white/15 text-white backdrop-blur-md"
+          : "bg-bg-elevated border-border"
+      }`}
       role="menu"
       tabIndex={-1}
       aria-label="上下文菜单"
@@ -125,7 +142,9 @@ export default function ContextMenu({ x, y, items, onSelect, onClose }: Props) {
         "separator" in it ? (
           <div
             key={`sep-${i}`}
-            className="my-1 border-t border-border-faint mx-1"
+            className={`my-1 border-t mx-1 ${
+              dark ? "border-white/12" : "border-border-faint"
+            }`}
           />
         ) : (
           <button
@@ -137,9 +156,13 @@ export default function ContextMenu({ x, y, items, onSelect, onClose }: Props) {
               if (!it.disabled) onSelect(it.id);
             }}
             className={`w-full text-left px-3 py-2 flex items-center gap-2.5 rounded-md transition-colors ${
-              it.disabled
-                ? "text-fg-subtle cursor-not-allowed"
-                : "text-fg hover:bg-bg-subtle"
+              dark
+                ? it.disabled
+                  ? "text-white/35 cursor-not-allowed"
+                  : "text-white/85 hover:text-white hover:bg-white/10"
+                : it.disabled
+                  ? "text-fg-subtle cursor-not-allowed"
+                  : "text-fg hover:bg-bg-subtle"
             }`}
           >
             {it.icon && (

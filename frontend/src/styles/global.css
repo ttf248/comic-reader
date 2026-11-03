@@ -94,6 +94,15 @@ a:focus-visible,
   outline-offset: 1px;
 }
 
+/* 阅读器的浮层是暗色的，而浅色主题的强调色恰好是近黑的石墨色
+   （--accent: #18181b）—— 焦点环会变成"黑底上的黑框"，等于没有焦点
+   指示。暗色浮层里改用半透明白作为焦点环颜色。
+   这条规则必须不分层写：未分层的声明优先级高于 @layer utilities，
+   否则压不过上面的 :focus-visible 与 Tailwind 的 outline-none。 */
+[data-tone="reader"] :focus-visible {
+  outline-color: rgba(255, 255, 255, 0.85);
+}
+
 /* === 按钮 / 输入基线 === */
 input,
 button,

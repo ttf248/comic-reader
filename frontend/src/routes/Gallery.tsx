@@ -1178,6 +1178,7 @@ export default function Gallery() {
         context={isVideo ? "video" : "image"}
         open={showHelp}
         onClose={() => setShowHelp(false)}
+        tone="reader"
       />
       {/* 右键菜单：阅读器内任意位置右键都弹出。
           「设为封面」「清除自定义封面」用与 GalleryHeader 同一份 handler，
@@ -1186,6 +1187,7 @@ export default function Gallery() {
         <ContextMenu
           x={contextMenu.x}
           y={contextMenu.y}
+          tone="reader"
           items={
             [
               {

@@ -10,6 +10,14 @@ interface Props {
   open: boolean;
   onClose: () => void;
   context: ShortcutContext;
+  /**
+   * 配色档：
+   *   theme  —— 跟随应用主题（页面内的普通快捷键面板）
+   *   reader —— 阅读器暗场。阅读器画布恒为深色，浅色卡片浮在上面就像
+   *              "黑底里嵌了一块白板"；信息面板已经是暗的，菜单再是
+   *              浅的，两块浮层自己就打架。
+   */
+  tone?: "theme" | "reader";
 }
 
 // 按当前页面显示全局操作，或阅读器共用操作及对应媒体操作。
@@ -28,11 +36,17 @@ const GROUP_ORDER: Array<{
 //
 // 数据源：直接消费 SHORTCUTS（按 group 字段分组）。新增/删除快捷键时，
 // 只需修改 shortcuts.ts，HelpOverlay 自动同步。
-export default function HelpOverlay({ open, onClose, context }: Props) {
+export default function HelpOverlay({
+  open,
+  onClose,
+  context,
+  tone = "theme",
+}: Props) {
   const [q, setQ] = useState("");
   const dialogRef = useRef<HTMLDialogElement>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const titleId = useId();
+  const dark = tone === "reader";
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -84,7 +98,12 @@ export default function HelpOverlay({ open, onClose, context }: Props) {
   return (
     <dialog
       ref={dialogRef}
-      className="fixed inset-0 m-auto w-[680px] max-w-[94vw] max-h-[80dvh] overflow-hidden rounded-xl border border-border bg-bg-elevated p-0 text-fg shadow-lg backdrop:bg-black/40 backdrop:backdrop-blur-sm scale-fade"
+      data-tone={dark ? "reader" : undefined}
+      className={`fixed inset-0 m-auto w-[680px] max-w-[94vw] max-h-[80dvh] overflow-hidden rounded-xl border p-0 shadow-lg scale-fade ${
+        dark
+          ? "border-white/15 bg-neutral-900/95 text-white backdrop:bg-black/60 backdrop:backdrop-blur-sm"
+          : "border-border bg-bg-elevated text-fg backdrop:bg-black/40 backdrop:backdrop-blur-sm"
+      }`}
       aria-modal="true"
       aria-labelledby={titleId}
       onCancel={(event) => {
@@ -115,7 +134,11 @@ export default function HelpOverlay({ open, onClose, context }: Props) {
       onContextMenu={(event) => event.stopPropagation()}
     >
       <div className="flex max-h-[80dvh] flex-col">
-        <header className="flex items-center justify-between px-6 h-14 border-b border-border-faint">
+        <header
+          className={`flex items-center justify-between px-6 h-14 border-b ${
+            dark ? "border-white/10" : "border-border-faint"
+          }`}
+        >
           <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 rounded-md bg-accent-soft flex items-center justify-center text-accent">
               <KeyboardIcon size={14} />
@@ -124,30 +147,55 @@ export default function HelpOverlay({ open, onClose, context }: Props) {
               <h2 id={titleId} className="font-display text-[15px] font-semibold">
                 快捷键
               </h2>
-              <p className="text-[12.5px] text-fg-subtle mt-0.5">
-                按 <kbd className="kbd">?</kbd> 随时唤起
+              <p
+                className={`text-[12.5px] mt-0.5 ${
+                  dark ? "text-white/60" : "text-fg-subtle"
+                }`}
+              >
+                按 <kbd className={dark ? "kbd-light" : "kbd"}>?</kbd> 随时唤起
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="text-fg-muted hover:text-fg p-1.5 rounded hover:bg-bg-subtle transition-colors"
+            className={`inline-flex h-7 w-7 items-center justify-center rounded transition-colors ${
+              dark
+                ? "text-white/60 hover:text-white hover:bg-white/10"
+                : "text-fg-muted hover:text-fg hover:bg-bg-subtle"
+            }`}
             aria-label="关闭"
           >
             <CloseIcon size={14} />
           </button>
         </header>
 
-        <div className="px-6 py-3 border-b border-border-faint">
-          <div className="input-focus-ring flex items-center gap-2 bg-bg-subtle rounded-md px-3 h-9 focus-within:bg-bg-elevated focus-within:border focus-within:border-border-strong">
-            <SearchIcon size={13} className="text-fg-subtle shrink-0" />
+        <div
+          className={`px-6 py-3 border-b ${
+            dark ? "border-white/10" : "border-border-faint"
+          }`}
+        >
+          <div
+            className={`input-focus-ring flex items-center gap-2 rounded-md px-3 h-9 ${
+              dark
+                ? "bg-white/10 focus-within:bg-white/15 focus-within:border focus-within:border-white/25"
+                : "bg-bg-subtle focus-within:bg-bg-elevated focus-within:border focus-within:border-border-strong"
+            }`}
+          >
+            <SearchIcon
+              size={13}
+              className={`shrink-0 ${dark ? "text-white/50" : "text-fg-subtle"}`}
+            />
             <input
               ref={searchRef}
               aria-label="搜索快捷键"
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="搜索快捷键…"
-              className="flex-1 bg-transparent border-0 outline-none text-[13.5px] placeholder:text-fg-subtle"
+              className={`flex-1 h-full bg-transparent border-0 outline-none text-[13.5px] ${
+                dark
+                  ? "text-white placeholder:text-white/45"
+                  : "placeholder:text-fg-subtle"
+              }`}
             />
             {q && (
               <button
@@ -155,7 +203,11 @@ export default function HelpOverlay({ open, onClose, context }: Props) {
                   setQ("");
                   searchRef.current?.focus({ preventScroll: true });
                 }}
-                className="text-fg-subtle hover:text-fg text-[12.5px]"
+                className={`inline-flex h-7 items-center px-2 -mr-2 rounded text-[12.5px] transition-colors ${
+                  dark
+                    ? "text-white/60 hover:text-white hover:bg-white/10"
+                    : "text-fg-subtle hover:text-fg hover:bg-bg-subtle"
+                }`}
               >
                 清除
               </button>
@@ -163,17 +215,29 @@ export default function HelpOverlay({ open, onClose, context }: Props) {
           </div>
         </div>
 
+        {/* 列表可滚动，但 Windows 上的滚动条只在悬停时出现 ——
+            底部渐隐让"下面还有"这件事看得见，而不是把最后一行切一半。 */}
         <div
-          className={`flex-1 overflow-auto p-6 grid grid-cols-1 ${filteredGroups.length > 1 ? "md:grid-cols-2" : ""} gap-x-10 gap-y-6 scroll-thin`}
+          className={`flex-1 overflow-auto p-6 grid grid-cols-1 ${
+            filteredGroups.length > 1 ? "md:grid-cols-2" : ""
+          } gap-x-10 gap-y-6 scroll-thin [mask-image:linear-gradient(to_bottom,#000_calc(100%-24px),transparent)]`}
         >
           {total === 0 && (
-            <div className="col-span-full text-center text-[13px] text-fg-muted py-12">
+            <div
+              className={`col-span-full text-center text-[13px] py-12 ${
+                dark ? "text-white/60" : "text-fg-muted"
+              }`}
+            >
               没有匹配「{q}」的快捷键
             </div>
           )}
           {filteredGroups.map((g) => (
             <div key={g.title}>
-              <h3 className="text-[13px] font-semibold text-fg mb-3">
+              <h3
+                className={`text-[13px] font-semibold mb-3 ${
+                  dark ? "text-white" : "text-fg"
+                }`}
+              >
                 {g.title}
               </h3>
               <ul className="space-y-1">
@@ -182,8 +246,14 @@ export default function HelpOverlay({ open, onClose, context }: Props) {
                     key={s.id}
                     className="flex items-center justify-between text-[13px] py-1.5"
                   >
-                    <span className="text-fg-muted">{s.description}</span>
-                    <kbd className="kbd shrink-0 ml-3">{s.label}</kbd>
+                    <span className={dark ? "text-white/75" : "text-fg-muted"}>
+                      {s.description}
+                    </span>
+                    <kbd
+                      className={`shrink-0 ml-3 ${dark ? "kbd-light" : "kbd"}`}
+                    >
+                      {s.label}
+                    </kbd>
                   </li>
                 ))}
               </ul>

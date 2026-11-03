@@ -167,3 +167,22 @@ it("切换媒体场景时保留搜索词，展示该按键在新场景的含义"
   expect(screen.getByText("播放 / 暂停")).toBeInTheDocument();
   expect(screen.queryByText(/幻灯片/)).not.toBeInTheDocument();
 });
+
+// 阅读器是恒定深色的沉浸场景：帮助浮层必须跟着暗，
+// 否则就是"黑底阅读器里嵌一块白板"（与信息面板的约定一致）。
+it("tone=reader 时帮助浮层走深色，并标记 data-tone 供焦点环取色", () => {
+  render(<HelpOverlay context="image" open onClose={vi.fn()} tone="reader" />);
+  const dialog = screen.getByRole("dialog");
+  expect(dialog).toHaveAttribute("data-tone", "reader");
+  expect(dialog.className).toContain("bg-neutral-900/95");
+  expect(dialog.className).not.toContain("bg-bg-elevated");
+  // 键帽走暗色变体（.kbd-light），否则白底键帽浮在深色浮层上很扎眼。
+  expect(document.querySelector(".kbd-light")).not.toBeNull();
+});
+
+it("默认（theme 档）帮助浮层仍跟应用主题走", () => {
+  render(<HelpOverlay context="image" open onClose={vi.fn()} />);
+  const dialog = screen.getByRole("dialog");
+  expect(dialog).not.toHaveAttribute("data-tone");
+  expect(dialog.className).toContain("bg-bg-elevated");
+});

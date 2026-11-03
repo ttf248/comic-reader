@@ -24,6 +24,15 @@ type TriggerProps = {
 
 const PopoverCloseContext = createContext<(() => void) | null>(null);
 
+/**
+ * 菜单配色档：
+ *   theme —— 跟随应用主题（页面内的普通菜单）
+ *   reader —— 阅读器暗场（画布恒为深色，菜单也必须跟着暗；
+ *              浅色卡片浮在黑底阅读器上就像"嵌了一块白板"）
+ */
+type PopoverTone = "theme" | "reader";
+const PopoverToneContext = createContext<PopoverTone>("theme");
+
 interface Props {
   trigger: ReactNode;
   children: ReactNode;
@@ -34,6 +43,8 @@ interface Props {
   onOpenChange?: (open: boolean) => void;
   /** 菜单容器类名（用于覆盖默认样式）。 */
   className?: string;
+  /** 配色档；阅读器里的菜单传 "reader"。 */
+  tone?: PopoverTone;
   "aria-label"?: string;
 }
 
@@ -48,6 +59,7 @@ export default function Popover({
   open: controlled,
   onOpenChange,
   className = "",
+  tone = "theme",
   "aria-label": ariaLabel,
 }: Props) {
   const [internal, setInternal] = useState(false);
@@ -145,7 +157,9 @@ export default function Popover({
 
   // 默认菜单样式 + 用户覆盖
   const baseCls =
-    "min-w-[180px] bg-bg-elevated border border-border rounded-lg shadow-lg p-1.5 text-[13px]";
+    tone === "reader"
+      ? "min-w-[180px] bg-neutral-900/95 border border-white/15 rounded-lg shadow-2xl p-1.5 text-[13px] text-white backdrop-blur-md"
+      : "min-w-[180px] bg-bg-elevated border border-border rounded-lg shadow-lg p-1.5 text-[13px]";
   const enhancedTrigger = isValidElement(trigger)
     ? cloneElement(trigger as ReactElement<TriggerProps>, {
         "aria-haspopup": "menu",
@@ -166,29 +180,31 @@ export default function Popover({
         pos &&
         createPortal(
           <PopoverCloseContext.Provider value={() => setOpen(false)}>
-            <div
-              ref={menuRef}
-              role="menu"
-              aria-label={ariaLabel}
-              tabIndex={-1}
-              onKeyDown={(event) =>
-                handleMenuKeyDown(event, () => setOpen(false))
-              }
-              onBlur={(event) => {
-                if (!event.currentTarget.contains(event.relatedTarget))
-                  setOpen(false);
-              }}
-              style={{
-                position: "fixed",
-                top: pos.top,
-                left: pos.left,
-                transform: align === "end" ? "translateX(-100%)" : "none",
-                zIndex: 60,
-              }}
-              className={`${baseCls} ${className}`}
-            >
-              {children}
-            </div>
+            <PopoverToneContext.Provider value={tone}>
+              <div
+                ref={menuRef}
+                role="menu"
+                aria-label={ariaLabel}
+                tabIndex={-1}
+                onKeyDown={(event) =>
+                  handleMenuKeyDown(event, () => setOpen(false))
+                }
+                onBlur={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget))
+                    setOpen(false);
+                }}
+                style={{
+                  position: "fixed",
+                  top: pos.top,
+                  left: pos.left,
+                  transform: align === "end" ? "translateX(-100%)" : "none",
+                  zIndex: 60,
+                }}
+                className={`${baseCls} ${className}`}
+              >
+                {children}
+              </div>
+            </PopoverToneContext.Provider>
           </PopoverCloseContext.Provider>,
           document.body,
         )}
@@ -211,6 +227,15 @@ export function PopoverItem({
   children,
 }: MenuItemProps) {
   const close = useContext(PopoverCloseContext);
+  const tone = useContext(PopoverToneContext);
+  const stateCls =
+    tone === "reader"
+      ? active
+        ? "bg-white/15 text-white"
+        : "text-white/80 hover:text-white hover:bg-white/10"
+      : active
+        ? "bg-bg-subtle text-fg"
+        : "text-fg-muted hover:text-fg hover:bg-bg-subtle/70";
   return (
     <button
       type="button"
@@ -223,11 +248,7 @@ export function PopoverItem({
           close?.();
         }
       }}
-      className={`w-full text-left flex items-center gap-2.5 px-2.5 h-9 rounded-md text-[13px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-        active
-          ? "bg-bg-subtle text-fg"
-          : "text-fg-muted hover:text-fg hover:bg-bg-subtle/70"
-      }`}
+      className={`w-full text-left flex items-center gap-2.5 px-2.5 h-9 rounded-md text-[13px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${stateCls}`}
     >
       {children}
     </button>
@@ -236,13 +257,23 @@ export function PopoverItem({
 
 // 菜单分隔线
 export function PopoverSeparator() {
-  return <div className="my-1 h-px bg-border-faint" />;
+  const tone = useContext(PopoverToneContext);
+  return (
+    <div
+      className={`my-1 h-px ${tone === "reader" ? "bg-white/12" : "bg-border-faint"}`}
+    />
+  );
 }
 
 // 菜单分组标签（不可点击的灰色小标题）
 export function PopoverLabel({ children }: { children: ReactNode }) {
+  const tone = useContext(PopoverToneContext);
   return (
-    <div className="px-2.5 pt-2 pb-1.5 text-[12.5px] font-medium text-fg-subtle">
+    <div
+      className={`px-2.5 pt-2 pb-1.5 text-[12.5px] font-medium ${
+        tone === "reader" ? "text-white/50" : "text-fg-subtle"
+      }`}
+    >
       {children}
     </div>
   );
