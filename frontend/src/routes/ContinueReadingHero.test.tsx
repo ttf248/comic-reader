@@ -49,9 +49,9 @@ describe("ContinueReadingHero", () => {
     renderHero([
       makeCard("/a", "A", 5, 20), // 5/20
     ]);
-    // 标题:1 本还没看完
+    // 标题:1 本还没读完（漫画工作台的措辞）
     const heroSection = screen.getByTestId("continue-hero");
-    expect(heroSection.textContent).toMatch(/1\s*本还没看完/);
+    expect(heroSection.textContent).toMatch(/1\s*本还没读完/);
     // 进度文本 读到 6/20(index+1 / total)
     expect(screen.getByText(/读到\s*6\s*\/\s*20/)).toBeInTheDocument();
   });
@@ -113,7 +113,7 @@ describe("ContinueReadingHero", () => {
 
   it("点 清空 链接触发 onClearAll", () => {
     const { onClearAll } = renderHero([makeCard("/a", "A", 1, 10)]);
-    const clearBtn = screen.getByTitle(/把当前所有继续阅读相册标记为已读/);
+    const clearBtn = screen.getByTitle(/把当前所有未读相册标记为已读完/);
     fireEvent.click(clearBtn);
     expect(onClearAll).toHaveBeenCalledTimes(1);
   });

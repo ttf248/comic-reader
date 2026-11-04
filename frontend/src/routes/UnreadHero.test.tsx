@@ -20,6 +20,8 @@ function makeCard(path: string, name: string) {
     videoCount: 0,
     coverPath: path + "/cover.jpg",
     coverKind: "image" as const,
+    // 卡片措辞跟相册自己的用途走：这条用例跑在漫画工作台里。
+    contentKind: "comic" as const,
     to: `/albums/${encodeURIComponent(path)}`,
   };
 }

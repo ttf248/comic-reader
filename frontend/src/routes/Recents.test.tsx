@@ -84,21 +84,21 @@ it("历史请求未完成时显示加载，确认空列表后才显示没有记�
     }),
   );
   renderRecents();
-  expect(screen.getByRole("status")).toHaveTextContent("正在加载最近阅读");
-  expect(screen.queryByText("还没有最近阅读")).not.toBeInTheDocument();
+  expect(screen.getByRole("status")).toHaveTextContent("正在加载最近浏览");
+  expect(screen.queryByText("还没有最近浏览")).not.toBeInTheDocument();
   await act(async () => {
     resolveHistory({ history: [] });
   });
-  expect(await screen.findByText("还没有最近阅读")).toBeInTheDocument();
+  expect(await screen.findByText("还没有最近浏览")).toBeInTheDocument();
 });
 
 it("历史读取失败提示重试，恢复后展示记录", async () => {
   vi.mocked(historyApi.list).mockRejectedValueOnce(new Error("offline"));
   renderRecents();
   expect(await screen.findByRole("alert")).toHaveTextContent(
-    "最近阅读加载失败",
+    "最近浏览加载失败",
   );
-  expect(screen.queryByText("还没有最近阅读")).not.toBeInTheDocument();
+  expect(screen.queryByText("还没有最近浏览")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "重试加载" }));
   expect(await screen.findByText("春游相册")).toBeInTheDocument();
   await waitFor(() =>

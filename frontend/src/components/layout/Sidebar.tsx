@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router-dom";
 import { useEffect, useMemo, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import {
@@ -23,13 +23,13 @@ import { libraryApi } from "../../api/library";
 import { albumRoute } from "../../utils/path";
 import { thumbUrl } from "../../api/thumbs";
 import { nodeSummaryToCard } from "../../utils/libraryCard";
-import { workbenchCopy } from "../../utils/workbench";
+import { copyForAlbum, workbenchCopy } from "../../utils/workbench";
 import {
   continueReadingTarget,
   readingPercent,
 } from "../../utils/continueReading";
 import ModeSwitch from "./ModeSwitch";
-import type { AppMode } from "../../api/library";
+import type { AppMode, ContentKind } from "../../api/library";
 
 interface Props {
   collapsed: boolean;
@@ -148,11 +148,6 @@ export default function Sidebar({
       ? location.pathname === "/"
       : location.pathname.startsWith(entry.to));
 
-  const goEntry = (entry: NavEntry) => {
-    if (mode !== entry.mode) setMode(entry.mode);
-    if (location.pathname !== entry.to) navigate(entry.to);
-  };
-
   const renderGroup = (
     title: string,
     group: Omit<NavEntry, "badge">[],
@@ -174,11 +169,16 @@ export default function Sidebar({
         {group.map((entry) => {
           const isActive = isGroupActive({ ...entry, badge: 0 });
           const badge = badgeFor(entry.mode);
+          // 用 Link 而不是 NavLink：两组指向同一批路径，NavLink 会把
+          // 「照片库」和「漫画库」同时标成当前页。选中态由 isGroupActive
+          // 判定（路径 + 模式），aria-current 也由我们自己给。
           return (
-            <button
+            <Link
               key={`${entry.mode}-${entry.to}-${entry.label}`}
-              type="button"
-              onClick={() => goEntry({ ...entry, badge: 0 })}
+              to={entry.to}
+              onClick={() => {
+                if (mode !== entry.mode) setMode(entry.mode);
+              }}
               className={navItemClass(isActive)}
               aria-current={isActive ? "page" : undefined}
               title={`${entry.label}${badge > 0 ? ` · 还有 ${badge} 本` : ""}`}
@@ -199,7 +199,7 @@ export default function Sidebar({
                   aria-hidden
                 />
               )}
-            </button>
+            </Link>
           );
         })}
       </div>
@@ -278,19 +278,16 @@ export default function Sidebar({
         {renderGroup("漫画", comicGroup, () => unreadCounts.comic)}
 
         {/* 全部相册：逃生舱，不是第三个工作台。它让跨类型的相册仍然找得到。 */}
-        <button
-          type="button"
-          onClick={() => {
-            setMode("all");
-            if (location.pathname !== "/") navigate("/");
-          }}
+        <Link
+          to="/"
+          onClick={() => setMode("all")}
           className={navItemClass(mode === "all")}
           aria-current={mode === "all" ? "page" : undefined}
           title="全部相册：照片与漫画混排"
         >
           <LibraryIcon size={16} className="shrink-0" />
           {!collapsed && <span className="truncate">全部相册</span>}
-        </button>
+        </Link>
 
         {sharedItems.map((it) => (
           <NavLink
@@ -319,7 +316,7 @@ export default function Sidebar({
         <div className="px-4 pt-5 pb-2 min-h-0 overflow-y-auto">
           <div className="px-1 pb-2 flex items-baseline gap-2">
             <span className="text-[12.5px] text-rail-muted">
-              {continueTitle(mode)}
+              {copy.continueTitle}
             </span>
             <span className="text-[12.5px] text-rail-muted tabular-nums">
               {inProgress.length} 本
@@ -346,7 +343,7 @@ export default function Sidebar({
           ))}
           {continueRestCount > 0 && (
             <div className="px-2 pt-1.5 text-[12.5px] text-rail-muted tabular-nums">
-              还有 {continueRestCount} 本没看完
+              还有 {continueRestCount} 本没{copy.finishVerb}
             </div>
           )}
         </div>
@@ -405,13 +402,6 @@ export default function Sidebar({
   );
 }
 
-// continueTitle 是侧栏「继续」区的标题：随工作台换措辞。
-function continueTitle(mode: AppMode): string {
-  if (mode === "comic") return "继续阅读";
-  if (mode === "photo") return "继续浏览";
-  return "继续";
-}
-
 // 品牌方块：纯几何 + 字形，用琥珀品牌色 —— 全局唯一的彩色标记。
 function Logo() {
   // 字母直接放在底板上（不再用一层绝对定位的兄弟节点盖上去）：
@@ -432,7 +422,7 @@ function ContinueRow({
   coverPath?: string;
   index: number;
   total: number;
-  contentKind?: string;
+  contentKind?: ContentKind;
   onOpen: () => void;
 }) {
   const percent = readingPercent({ index, total });
@@ -440,7 +430,7 @@ function ContinueRow({
     <button
       type="button"
       onClick={onOpen}
-      title={`${continueVerb(contentKind)}「${title}」`}
+      title={`${copyForAlbum(contentKind).continueTitle}「${title}」`}
       className="w-full mt-1 rounded-md px-1 py-1 flex items-center gap-2.5 text-left transition-colors hover:bg-rail-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rail-accent"
     >
       <span className="relative w-[26px] h-[34px] shrink-0 rounded overflow-hidden bg-rail-hover block">
@@ -465,21 +455,11 @@ function ContinueRow({
           {title}
         </span>
         <span className="block text-[12.5px] text-rail-muted tabular-nums mt-0.5">
-          {positionVerb(contentKind)} {index + 1} / {total}
+          {copyForAlbum(contentKind).positionVerb} {index + 1} / {total}
         </span>
       </span>
     </button>
   );
-}
-
-// positionVerb 按相册用途给出位置的措辞：照片是「看到」，漫画是「读到」。
-function positionVerb(contentKind?: string): string {
-  return contentKind === "comic" ? "读到" : "看到";
-}
-
-// continueVerb 按相册用途给出「继续」的说法：照片是浏览，漫画是阅读。
-function continueVerb(contentKind?: string): string {
-  return contentKind === "comic" ? "继续阅读" : "继续浏览";
 }
 
 // 「接着读」迷你卡：侧栏常驻最近在读的一本。
@@ -498,7 +478,7 @@ function ContinueMiniCard({
   coverPath?: string;
   index: number;
   total: number;
-  contentKind?: string;
+  contentKind?: ContentKind;
   onOpen: () => void;
 }) {
   const percent = readingPercent({ index, total });
@@ -506,7 +486,7 @@ function ContinueMiniCard({
     <button
       type="button"
       onClick={onOpen}
-      title={`${continueVerb(contentKind)}「${title}」`}
+      title={`${copyForAlbum(contentKind).continueTitle}「${title}」`}
       className="mt-2 w-full rounded-lg bg-rail-hover hover:bg-rail-hover p-2 flex gap-2.5 items-center text-left transition-colors group/mini focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rail-accent"
     >
       <span className="relative w-9 h-12 shrink-0 rounded overflow-hidden bg-rail-hover block">
@@ -535,7 +515,7 @@ function ContinueMiniCard({
           />
         </span>
         <span className="mt-1 block text-[12.5px] text-rail-muted tabular-nums">
-          {positionVerb(contentKind)} {index + 1} / {total}
+          {copyForAlbum(contentKind).positionVerb} {index + 1} / {total}
         </span>
       </span>
     </button>

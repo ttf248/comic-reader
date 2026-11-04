@@ -100,6 +100,20 @@ async function scannedNodes(request: APIRequestContext) {
   return body.page.items;
 }
 
+// 工作台模式是服务端偏好，整条用例链共用同一个临时服务。侧栏的分组条目
+// 点一下就会切模式，所以每个用例开始前把它复位成「照片」，避免上一条用例
+// 留下的模式污染这一条的措辞断言。
+async function resetWorkbenchMode(request: APIRequestContext) {
+  const response = await request.patch("/api/prefs", {
+    data: { appMode: "photo" },
+  });
+  expect(response.ok()).toBeTruthy();
+}
+
+test.beforeEach(async ({ request }) => {
+  await resetWorkbenchMode(request);
+});
+
 const taggedSortPrefix =
   "zz-[测试][空 格][C++][100%][字面%20][字面%2F][字面%25] tagged-";
 
@@ -254,9 +268,9 @@ test("工作台模式切换：侧栏分组随动，模式持久化在服务端�
 }) => {
   await page.goto("/");
   // 侧栏按工作台分成两组，另有一个「全部相册」逃生舱。
-  await expect(page.getByRole("button", { name: "照片库" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "漫画库" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "全部相册" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "照片库" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "漫画库" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "全部相册" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "照片库" })).toBeVisible();
 
   const switcher = page.getByRole("group", { name: "工作台模式" });
@@ -276,8 +290,10 @@ test("工作台模式切换：侧栏分组随动，模式持久化在服务端�
   await expect(page.getByRole("heading", { name: "漫画库" })).toBeVisible();
 
   // 「全部相册」是逃生舱：不过滤，两种相册混排。
-  await page.getByRole("button", { name: "全部相册" }).click();
+  await page.getByRole("link", { name: "全部相册" }).click();
   await expect(page.getByRole("heading", { name: "全部相册" })).toBeVisible();
+  // 用例结束时把模式复位，别把状态留给后面的用例。
+  await page.request.patch("/api/prefs", { data: { appMode: "photo" } });
 });
 
 for (const recovery of ["manual", "automatic"] as const) {
@@ -603,14 +619,14 @@ for (const kind of ["images", "mixed", "videos"] as const) {
 }
 
 // 首页主操作必须落在首屏里：舞台（封面 + 墙签 + 进度 + 主操作）比主区
-// 可用高度高时，"继续阅读"按钮会被滚动容器裁掉（1440×900 实测超出 33px，
+// 可用高度高时，"继续浏览"按钮会被滚动容器裁掉（1440×900 实测超出 33px，
 // 按钮只剩 3px、箭头图标整个不可见）。舞台按视口高度收缩，这条用例守住它。
-test("首页「继续阅读」主操作不被主区裁掉", async ({ page }) => {
+test("首页「继续浏览」主操作不被主区裁掉", async ({ page }) => {
   const nodes = await scannedNodes(page.request);
   const album = nodes.find((node) => (node.imageCount ?? 0) > 0) ?? nodes[0];
   expect(album).toBeDefined();
-  // 进阅读器再离开，产生阅读进度，首页才有「继续阅读」舞台。
-  await page.goto(`/read/${encodeURIComponent(album!.id)}?index=0`);
+  // 打开照片墙再离开，产生浏览进度，首页才有「继续浏览」舞台。
+  await page.goto(`/albums/${encodeURIComponent(album!.id)}`);
   await page.waitForTimeout(1500);
 
   for (const viewport of [
@@ -621,7 +637,7 @@ test("首页「继续阅读」主操作不被主区裁掉", async ({ page }) => 
     await page.setViewportSize(viewport);
     await page.goto("/");
     const cta = page
-      .getByRole("button", { name: "继续阅读", exact: true })
+      .getByRole("button", { name: "继续浏览", exact: true })
       .first();
     await expect(cta).toBeVisible({ timeout: 20_000 });
     const ctaBox = await cta.boundingBox();
@@ -863,7 +879,7 @@ test("新打开相册立即出现在最近阅读，媒体分页不重复记录�
       historyWrites++;
   });
   await page.goto("/recents");
-  await expect(page.getByText("还没有最近阅读", { exact: true })).toBeVisible();
+  await expect(page.getByText("还没有最近浏览", { exact: true })).toBeVisible();
   const search = page.getByRole("combobox");
   await search.fill("sample-paged-images");
   await expect(page.getByRole("option").first()).toBeVisible();
@@ -1405,7 +1421,8 @@ for (const kind of ["image", "video"] as const) {
     } else await expect(page.getByTitle("跳转到指定张 (G)")).toHaveText("1");
     await page.keyboard.press("Escape");
     await expect(dialog).not.toBeVisible();
-    await expect(page).toHaveURL(/\/gallery\?/);
+    // 第一次 Esc 只关帮助，地址仍停在阅读器上。
+    await expect(page).toHaveURL(new RegExp(`/read/${album.id}`));
     await expect(opener).toBeFocused();
     await page.keyboard.press("Escape");
     await expect(page).toHaveURL(new RegExp(`/albums/${album.id}$`));
@@ -1413,7 +1430,7 @@ for (const kind of ["image", "video"] as const) {
 }
 
 for (const failure of ["history", "nodes"] as const) {
-  test(`最近阅读 ${failure} 读取失败不显示为空且可重试`, async ({ page }) => {
+  test(`最近浏览 ${failure} 读取失败不显示为空且可重试`, async ({ page }) => {
     const nodes = await scannedNodes(page.request);
     const album = nodes.find((node) => node.name === "sample-album");
     expect(album).toBeDefined();
@@ -1438,10 +1455,10 @@ for (const failure of ["history", "nodes"] as const) {
     await page.goto("/recents");
     const alert = page.getByRole("alert");
     await expect(alert).toContainText(
-      failure === "history" ? "最近阅读加载失败" : "相册信息加载失败",
+      failure === "history" ? "最近浏览加载失败" : "相册信息加载失败",
       { timeout: 15_000 },
     );
-    await expect(page.getByText("还没有最近阅读", { exact: true })).toHaveCount(
+    await expect(page.getByText("还没有最近浏览", { exact: true })).toHaveCount(
       0,
     );
     await expect(
@@ -1988,7 +2005,7 @@ for (const operation of ["limit", "clear", "visit"] as const) {
       await expect
         .poll(() => failedReads, { timeout: 15_000 })
         .toBeGreaterThanOrEqual(8);
-      await expect(page.getByRole("alert")).toContainText("最近阅读加载失败");
+      await expect(page.getByRole("alert")).toContainText("最近浏览加载失败");
       const firstCard = page
         .locator(`main a[href="/albums/${first.id}"]`)
         .first();
@@ -2039,7 +2056,7 @@ test("失效收藏清理成功后刷新失败也立即更新收藏项数", async
       page.locator(`main a[href="/albums/${album.id}"]`).first(),
     ).toBeVisible();
     const count = page
-      .getByRole("heading", { name: "我收藏的图像", exact: true })
+      .getByRole("heading", { name: "我收藏的照片", exact: true })
       .locator("..")
       .getByText(/^\d+ 项$/);
     await expect(count).toHaveText(`${seededCount} 项`);
@@ -2597,11 +2614,12 @@ test("排序选项支持键盘确认取消和自然移出焦点", async ({ page 
 });
 
 for (const mode of ["grid", "list"] as const) {
-  test(`${mode} 单图相册保持未读并可标记和取消已读`, async ({ page }) => {
+  test(`${mode} 单图相册保持未浏览并可标记和取消已看完`, async ({ page }) => {
     const nodes = await scannedNodes(page.request);
     const album = nodes.find((node) => node.name === taggedSortPrefix + "A")!;
     expect(album).toBeDefined();
-    const activityPath = `/api/activity?albumId=${album.id}&mediaKind=image`;
+    // 照片相册的浏览进度记在 photo 活动里，不是漫画的 image 活动。
+    const activityPath = `/api/activity?albumId=${album.id}&mediaKind=photo`;
     const originalResponse = await page.request.get(activityPath);
     expect([200, 404]).toContain(originalResponse.status());
     const originalActivity = originalResponse.ok()
@@ -2634,10 +2652,11 @@ for (const mode of ["grid", "list"] as const) {
         `main [data-virtuoso-scroller] a[href="/albums/${album.id}"]`,
       );
       await expect(card).toBeVisible();
-      await expect(card.getByText("已读", { exact: true })).toHaveCount(0);
+      await expect(card.getByText("已看完", { exact: true })).toHaveCount(0);
+      // 照片不显示阅读百分比，只给位置。
       await expect(card.getByText("100%", { exact: true })).toHaveCount(0);
       // 未读页整页都是未读，卡片不再逐张挂「新」角标 —— 那是纯视觉噪音。
-      // 未读状态由服务端筛选保证，卡片上只保留「已读」这类真实状态。
+      // 未读状态由服务端筛选保证，卡片上只保留「已看完」这类真实状态。
       if (mode === "grid")
         await expect(card.getByText("新", { exact: true })).toHaveCount(0);
       const menu = page.getByRole("menu", { name: "上下文菜单" });
@@ -2650,10 +2669,10 @@ for (const mode of ["grid", "list"] as const) {
         menu.getByRole("menuitem", { name: "取消收藏", exact: true }),
       ).toBeEnabled();
       await expect(
-        menu.getByRole("menuitem", { name: "标记为已读", exact: true }),
+        menu.getByRole("menuitem", { name: "标记为已看完", exact: true }),
       ).toBeEnabled();
       await expect(
-        menu.getByRole("menuitem", { name: "取消已读", exact: true }),
+        menu.getByRole("menuitem", { name: "取消已看完", exact: true }),
       ).toBeDisabled();
 
       if (mode === "grid") {
@@ -2681,7 +2700,7 @@ for (const mode of ["grid", "list"] as const) {
           });
         });
         await menu
-          .getByRole("menuitem", { name: "标记为已读", exact: true })
+          .getByRole("menuitem", { name: "标记为已看完", exact: true })
           .click();
         await expect(page.getByText("标记失败", { exact: true })).toBeVisible();
         await expect(card).toBeVisible();
@@ -2690,11 +2709,9 @@ for (const mode of ["grid", "list"] as const) {
         await card.click({ button: "right" });
       }
       await menu
-        .getByRole("menuitem", { name: "标记为已读", exact: true })
+        .getByRole("menuitem", { name: "标记为已看完", exact: true })
         .click();
-      await expect(
-        page.getByText("已标记为已读", { exact: true }),
-      ).toBeVisible();
+      await expect(page.getByText("已看完", { exact: true })).toBeVisible();
       await expect(card).toHaveCount(0);
       const marked = await page.request.get(activityPath);
       expect(marked.ok()).toBeTruthy();
@@ -2706,24 +2723,24 @@ for (const mode of ["grid", "list"] as const) {
 
       await page.getByRole("link", { name: "收藏", exact: true }).click();
       await expect(
-        card.getByText("已读", { exact: true }).first(),
+        card.getByText("已看完", { exact: true }).first(),
       ).toBeVisible();
       await card.click({ button: "right" });
       await expect(menu).toHaveCount(1);
       await expect(
-        menu.getByRole("menuitem", { name: "标记为已读", exact: true }),
+        menu.getByRole("menuitem", { name: "标记为已看完", exact: true }),
       ).toBeDisabled();
       await menu
-        .getByRole("menuitem", { name: "取消已读", exact: true })
+        .getByRole("menuitem", { name: "取消已看完", exact: true })
         .click();
       await expect(
-        page.getByText("已重置为未读", { exact: true }),
+        page.getByText("已重置为未浏览", { exact: true }),
       ).toBeVisible();
-      await expect(card.getByText("已读", { exact: true })).toHaveCount(0);
+      await expect(card.getByText("已看完", { exact: true })).toHaveCount(0);
       expect((await page.request.get(activityPath)).status()).toBe(404);
-      await page.getByRole("link", { name: /^未读/ }).click();
+      await page.getByRole("link", { name: /^未浏览/ }).click();
       await expect(card).toBeVisible();
-      await expect(card.getByText("已读", { exact: true })).toHaveCount(0);
+      await expect(card.getByText("已看完", { exact: true })).toHaveCount(0);
     } finally {
       if (originalActivity) {
         expect(
@@ -3414,7 +3431,7 @@ for (const health of ["late", "error"] as const) {
           allowConfig: "1",
         }),
       );
-      await page.getByRole("link", { name: "主页", exact: true }).click();
+      await page.getByRole("link", { name: "照片库", exact: true }).click();
       await page.getByRole("combobox").fill(album.name);
       const card = page.locator(
         `main [data-virtuoso-scroller] a[href="/albums/${album.id}"]`,
@@ -4038,7 +4055,7 @@ for (const failFirst of [false, true]) {
       await page.clock.runFor(700);
       expect(writes).toHaveLength(1);
       await expect(input).toHaveValue("/queue/latest");
-      await page.getByRole("link", { name: /^主页/ }).click();
+      await page.getByRole("link", { name: "照片库", exact: true }).click();
       await page.getByRole("link", { name: "设置", exact: true }).click();
       await expect(input).toHaveValue("/queue/latest");
       release[0]();
@@ -4118,7 +4135,7 @@ test("配置保存失败离开后仍保留输入，按 Enter 显式重试且不�
     await input.fill("/retry/photos");
     await page.clock.runFor(500);
     await expect.poll(() => writes.length).toBe(1);
-    await page.getByRole("link", { name: /^主页/ }).click();
+    await page.getByRole("link", { name: "照片库", exact: true }).click();
     const failed = page.waitForResponse(
       (response) =>
         response.request().method() === "PUT" &&
@@ -4694,18 +4711,18 @@ test("浏览器解不了的图片给出明确提示而不是破图", async ({ pa
   await expect(page.getByText("这张图片无法显示")).toBeVisible();
 });
 
-test("主页的视图筛选条紧贴在「全部图像」网格上方", async ({ page }) => {
+test("主页的视图筛选条紧贴在「全部照片」网格上方", async ({ page }) => {
   await page.goto("/");
   const chip = page.getByRole("button", { name: /^文件夹/ });
   await expect(chip).toBeVisible();
   await chip.scrollIntoViewIfNeeded();
 
-  // 筛选条只作用于「全部图像」网格，必须和网格同处一个 section。
-  // 之前它排在未读 / 继续阅读 / 时间线之前，离网格两千多像素，
+  // 筛选条只作用于「全部照片」网格，必须和网格同处一个 section。
+  // 之前它排在未读 / 继续浏览 / 时间线之前，离网格两千多像素，
   // 用户滚到网格时控件已经不在视野里。
   const order = await page.evaluate(() => {
     const heading = [...document.querySelectorAll("h2")].find(
-      (el) => (el.textContent ?? "").trim() === "全部图像",
+      (el) => (el.textContent ?? "").trim() === "全部照片",
     );
     const chipButton = [...document.querySelectorAll("button")].find((el) =>
       (el.textContent ?? "").trim().startsWith("文件夹"),
@@ -4798,6 +4815,12 @@ test("重设计后的首页把继续阅读放在首屏，未读区不再逐张�
   const nodes = await scannedNodes(page.request);
   const album = nodes.find((node) => node.name === "sample-album")!;
   expect(album).toBeDefined();
+  // 这条用例验的是漫画工作台的首页：把相册归类成漫画并切到漫画工作台，
+  // 用例结束后恢复默认类型与工作台模式，不影响其它用例。
+  await page.request.put(`/api/albums/${album.id}/content-kind`, {
+    data: { kind: "comic" },
+  });
+  await page.request.patch("/api/prefs", { data: { appMode: "comic" } });
   // 造一条「读到一半」的记录，首页才会出现「继续阅读」区块。
   const activityPath = `/api/activity?albumId=${album.id}&mediaKind=image`;
   expect(
@@ -4840,11 +4863,16 @@ test("重设计后的首页把继续阅读放在首屏，未读区不再逐张�
     });
     await resume.focus();
     await resume.press("Enter");
-    await expect(page).toHaveURL(/\/gallery\?/);
+    await expect(page).toHaveURL(new RegExp(`/read/${album.id}`));
     await expect(page.getByRole("toolbar", { name: "阅读控制" })).toBeVisible();
     await page.goto("/");
   } finally {
     expect((await page.request.delete(activityPath)).ok()).toBeTruthy();
+    // 恢复默认归类：相册回到照片墙，下一条用例看到的是默认状态。
+    expect(
+      (await page.request.delete(`/api/albums/${album.id}/content-kind`)).ok(),
+    ).toBeTruthy();
+    await page.request.patch("/api/prefs", { data: { appMode: "photo" } });
   }
 });
 
@@ -4860,11 +4888,11 @@ test("年份索引可用空格筛选，并保留首页上下文", async ({ page 
   await filter.press("Space");
   await expect(page).toHaveURL("/");
   await expect(
-    page.getByRole("heading", { name: "该年份的图像", exact: true }),
+    page.getByRole("heading", { name: "该年份的照片", exact: true }),
   ).toBeVisible();
   await page.getByTitle("清除年份筛选", { exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "全部图像", exact: true }),
+    page.getByRole("heading", { name: "全部照片", exact: true }),
   ).toBeVisible();
 });
 

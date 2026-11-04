@@ -26,6 +26,12 @@ export interface WorkbenchCopy {
   finishVerb: string;
   /** 标记完成的说法。 */
   markFinishedLabel: string;
+  /** 「还没看完 / 还没读完」的计数说明。 */
+  unfinishedCountLabel: string;
+  /** 批量标记完成按钮的说明。 */
+  markAllTitle: string;
+  /** 是否显示阅读百分比：照片不显示，只给位置。 */
+  showReadingPercent: boolean;
   /** 未读区的标题。 */
   unreadTitle: string;
   /** 未读列表页的标题。 */
@@ -44,10 +50,18 @@ export interface WorkbenchCopy {
   unreadEmpty: string;
   /** 主列表区的标题。 */
   sectionTitle: string;
+  /** 年份筛选生效时的主列表区标题。 */
+  yearSectionTitle: string;
   /** 最近访问页的标题。 */
   recentsTitle: string;
   /** 最近访问页的眉标。 */
   recentsEyebrow: string;
+  /** 最近访问页的空态。 */
+  recentsEmpty: string;
+  /** 最近访问页的历史读取失败提示。 */
+  recentsLoadError: string;
+  /** 最近访问页的相册摘要读取失败提示。 */
+  recentsAlbumsLoadError: string;
   /** 收藏页的标题。 */
   favoritesTitle: string;
   /** 收藏页空态。 */
@@ -66,6 +80,9 @@ const PHOTO: WorkbenchCopy = {
   finishedLabel: "已看完",
   finishVerb: "看完",
   markFinishedLabel: "标记为已看完",
+  unfinishedCountLabel: "本还没看完",
+  markAllTitle: "把当前所有未浏览相册标记为已看完(不影响收藏 / 最近)",
+  showReadingPercent: false,
   unreadTitle: "未浏览",
   unreadPageTitle: "未浏览的相册",
   unreadCountVerb: "没看",
@@ -76,8 +93,12 @@ const PHOTO: WorkbenchCopy = {
   unreadButton: "随机一本未浏览",
   unreadEmpty: "照片都看完啦 🎉",
   sectionTitle: "全部照片",
+  yearSectionTitle: "该年份的照片",
   recentsTitle: "最近浏览",
   recentsEyebrow: "浏览足迹",
+  recentsEmpty: "还没有最近浏览",
+  recentsLoadError: "最近浏览加载失败。",
+  recentsAlbumsLoadError: "最近浏览的相册信息加载失败。",
   favoritesTitle: "我收藏的照片",
   favoritesEmpty: "还没有收藏照片",
   randomLabel: "随机翻翻",
@@ -93,6 +114,9 @@ const COMIC: WorkbenchCopy = {
   finishedLabel: "已读完",
   finishVerb: "读完",
   markFinishedLabel: "标记为已读完",
+  unfinishedCountLabel: "本还没读完",
+  markAllTitle: "把当前所有未读相册标记为已读完(不影响收藏 / 最近)",
+  showReadingPercent: true,
   unreadTitle: "未读",
   unreadPageTitle: "未读相册",
   unreadCountVerb: "没读",
@@ -103,8 +127,12 @@ const COMIC: WorkbenchCopy = {
   unreadButton: "随机一本未读",
   unreadEmpty: "全部看完啦 🎉",
   sectionTitle: "全部漫画",
+  yearSectionTitle: "该年份的漫画",
   recentsTitle: "最近阅读",
   recentsEyebrow: "阅读足迹",
+  recentsEmpty: "还没有最近阅读",
+  recentsLoadError: "最近阅读加载失败。",
+  recentsAlbumsLoadError: "最近阅读的相册信息加载失败。",
   favoritesTitle: "我收藏的漫画",
   favoritesEmpty: "还没有收藏漫画",
   randomLabel: "随机一本",
@@ -122,6 +150,9 @@ const ALL: WorkbenchCopy = {
   finishedLabel: "已读完",
   finishVerb: "读完",
   markFinishedLabel: "标记为已读",
+  unfinishedCountLabel: "本还没看完",
+  markAllTitle: "把当前所有未读相册标记为已读(不影响收藏 / 最近)",
+  showReadingPercent: true,
   unreadTitle: "未读",
   unreadPageTitle: "未读相册",
   unreadCountVerb: "没读",
@@ -132,8 +163,12 @@ const ALL: WorkbenchCopy = {
   unreadButton: "随机一本未读",
   unreadEmpty: "全部看完啦 🎉",
   sectionTitle: "全部图像",
+  yearSectionTitle: "该年份的图像",
   recentsTitle: "最近",
   recentsEyebrow: "浏览足迹",
+  recentsEmpty: "还没有最近记录",
+  recentsLoadError: "最近记录加载失败。",
+  recentsAlbumsLoadError: "最近记录的相册信息加载失败。",
   favoritesTitle: "收藏",
   favoritesEmpty: "还没有收藏",
   randomLabel: "随机一本",
@@ -156,8 +191,16 @@ export function copyForContentKind(
   mode: AppMode,
   contentKind?: ContentKind,
 ): WorkbenchCopy {
-  if (mode === "all") {
-    return contentKind === "comic" ? COMIC : PHOTO;
-  }
+  if (mode === "all") return copyForAlbum(contentKind);
   return workbenchCopy(mode);
+}
+
+/**
+ * 按相册自身的用途取措辞，与当前工作台模式无关。
+ *
+ * 卡片与右键菜单讲的是「这一本相册」的状态：照片相册说「看到 / 已看完」，
+ * 漫画相册说「读到 / 已读完」，不跟着工作台模式走。
+ */
+export function copyForAlbum(contentKind?: ContentKind): WorkbenchCopy {
+  return contentKind === "comic" ? COMIC : PHOTO;
 }

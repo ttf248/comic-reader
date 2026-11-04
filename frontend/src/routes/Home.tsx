@@ -458,7 +458,7 @@ export default function Home() {
           <div className="section-heading">
             <span className="section-index">02</span>
             <h2 className="section-title">
-              {yearFilterActive ? "该年份的图像" : copy.sectionTitle}
+              {yearFilterActive ? copy.yearSectionTitle : copy.sectionTitle}
             </h2>
             {!isLoadingInitial && (
               <span className="section-meta tabular-nums">

@@ -185,8 +185,8 @@ export default function Recents() {
           >
             <p>
               {historyFailed
-                ? "最近阅读加载失败。"
-                : "最近阅读的相册信息加载失败。"}
+                ? copy.recentsLoadError
+                : copy.recentsAlbumsLoadError}
               {cards.length > 0 ? "仍显示已加载的记录。" : "请重试加载。"}
             </p>
             <button
@@ -203,12 +203,12 @@ export default function Recents() {
       {cards.length > 0 && <ListFilterBar totalCount={filtered.length} />}
 
       {historyQuery.isLoading ? (
-        <AlbumGridSkeleton variant={viewMode} label="正在加载最近阅读…" />
+        <AlbumGridSkeleton variant={viewMode} label={`正在加载${copy.recentsTitle}…`} />
       ) : history.length > 0 && nodesQuery.isLoading && cards.length === 0 ? (
-        <AlbumGridSkeleton variant={viewMode} label="正在加载最近阅读…" />
+        <AlbumGridSkeleton variant={viewMode} label={`正在加载${copy.recentsTitle}…`} />
       ) : loadFailed && cards.length === 0 ? null : history.length === 0 ? (
         <EmptyState
-          title="还没有最近阅读"
+          title={copy.recentsEmpty}
           description="打开任意一个文件夹开始浏览，它会出现在这里。"
           icon={<ClockIcon size={20} />}
           action={

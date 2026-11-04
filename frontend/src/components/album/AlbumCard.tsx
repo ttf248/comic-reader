@@ -24,7 +24,7 @@ import { formatDuration } from "../../utils/format";
 import { isCompleted, isUnread, progressPercent } from "../../utils/progress";
 import { favoriteResourceId } from "../../utils/path";
 import { useToggleFavorite } from "../../hooks/useFavorites";
-import { copyForContentKind } from "../../utils/workbench";
+import { copyForAlbum } from "../../utils/workbench";
 import type { ContentKind } from "../../api/library";
 import CardCover from "./CardCover";
 
@@ -263,10 +263,7 @@ function GridCard({
   // 照片相册的进度是「翻到了第几张」，不显示百分比。
   const isPhotoAlbum =
     data.variant === "album" && data.contentKind === "photo";
-  const cardCopy = copyForContentKind(
-    data.contentKind === "comic" ? "comic" : "photo",
-    data.contentKind,
-  );
+  const cardCopy = copyForAlbum(data.contentKind);
   // 未读标记（见文件底部 showUnreadMark）：只对相册、且页面不是「整页未读」时出现。
   const unread = showUnreadMark(data, showUnreadBadge);
   // 只有配置了多个媒体根才需要标来源。
@@ -339,7 +336,7 @@ function GridCard({
                 size="sm"
               />
             )}
-            {unread && <UnreadDot />}
+            {unread && <UnreadDot label={cardCopy.unreadTitle} />}
           </div>
 
           {/* 底部暗化蒙版（hover 时让进度条与徽章更清晰） */}
@@ -527,10 +524,7 @@ function ListCard({
   const progressPct = progressPercent(data.progress);
   const isFinished = isCompleted(data.progress);
   // 照片相册的进度是「翻到了第几张」，措辞与漫画分开。
-  const cardCopy = copyForContentKind(
-    data.contentKind === "comic" ? "comic" : "photo",
-    data.contentKind,
-  );
+  const cardCopy = copyForAlbum(data.contentKind);
   // 未读标记与网格视图同源。
   const unread = showUnreadMark(data, showUnreadBadge);
   // 只有配置了多个媒体根才需要标来源。
@@ -581,13 +575,13 @@ function ListCard({
             {unread && (
               <span
                 className="inline-flex items-center gap-1 text-[13px] font-medium text-fg-muted shrink-0"
-                title="未读"
+                title={cardCopy.unreadTitle}
               >
                 <span
                   className="h-2 w-2 rounded-full bg-accent"
                   aria-hidden="true"
                 />
-                <span>未读</span>
+                <span>{cardCopy.unreadTitle}</span>
               </span>
             )}
             {isFinished && data.variant === "album" && (
@@ -697,13 +691,13 @@ function showUnreadMark(data: CardData, showUnreadBadge: boolean): boolean {
 /** 未读：一颗白点 + 深色描边。
  *  白心在深色封面上直接可见，深色描边在白色封面上把点的轮廓兜住 ——
  *  两边都不需要额外的底板，也不会像一个空心的圆环按钮。 */
-function UnreadDot() {
+function UnreadDot({ label }: { label: string }) {
   return (
     <span
       className="inline-flex h-2.5 w-2.5 items-center justify-center rounded-full bg-white ring-2 ring-black/45 shadow-[0_1px_3px_rgba(0,0,0,0.35)]"
-      title="未读"
+      title={label}
     >
-      <span className="sr-only">未读</span>
+      <span className="sr-only">{label}</span>
     </span>
   );
 }
@@ -715,7 +709,7 @@ function UnreadDot() {
  * 照片相册没有「读完」这回事，用户也不该被漫画的说法套住。
  */
 function ReadChip({ contentKind }: { contentKind?: ContentKind }) {
-  const title = contentKind === "photo" ? "已看完" : "已读完";
+  const title = copyForAlbum(contentKind).finishedLabel;
   return (
     <span
       className="inline-flex items-center gap-1 rounded-md bg-black/65 backdrop-blur-sm ring-1 ring-white/20 px-1.5 h-5 text-[12.5px] font-medium text-white shadow-sm"

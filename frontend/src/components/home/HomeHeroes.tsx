@@ -5,7 +5,11 @@ import { previewUrl } from "../../api/images";
 import { useFavorites } from "../../hooks/useFavorites";
 import { decodeFavPath } from "../../utils/path";
 import { readingPercent } from "../../utils/continueReading";
-import { workbenchCopy } from "../../utils/workbench";
+import {
+  copyForAlbum,
+  copyForContentKind,
+  workbenchCopy,
+} from "../../utils/workbench";
 import AlbumCard from "../album/AlbumCard";
 import type { CardData } from "../album/AlbumGrid";
 import type { AppMode } from "../../api/library";
@@ -90,8 +94,8 @@ export function UnreadHero({
                   onMarkRead(card);
                 }}
                 className="w-7 h-7 rounded-full bg-black/65 text-white flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
-                title={`将「${card.title}」${copy.markFinishedLabel}`}
-                aria-label={`将${card.title}${copy.markFinishedLabel}`}
+                title={`将「${card.title}」${copyForAlbum(card.contentKind).markFinishedLabel}`}
+                aria-label={`将${card.title}${copyForAlbum(card.contentKind).markFinishedLabel}`}
               >
                 <CheckIcon size={13} />
               </button>
@@ -134,13 +138,13 @@ export function ContinueHero({
           {copy.continueTitle}
         </h2>
         <span className="reading-desk__muted tabular-nums">
-          {cards.length} 本还没看完
+          {cards.length} {copy.unfinishedCountLabel}
         </span>
         <button
           type="button"
           onClick={onClearAll}
           className="reading-desk__muted inline-flex items-center gap-1 ml-auto min-h-7 px-1 rounded"
-          title={`把当前所有${copy.continueTitle}相册标记为已读(不影响收藏 / 最近)`}
+          title={copy.markAllTitle}
         >
           <CloseIcon size={12} />
           清空
@@ -248,12 +252,15 @@ function StageInfo({
 }) {
   const { index = 0, total = 0 } = card.progress ?? {};
   const percent = readingPercent({ index, total });
-  const copy = workbenchCopy(mode);
+  // 「全部相册」视图里两种相册混排，措辞跟每一本相册自己的用途走。
+  const copy = copyForContentKind(mode, card.contentKind);
   return (
     <div className="mt-4">
       <p className="reading-desk__muted tabular-nums">
         {copy.positionVerb} {index + 1} / {total}
-        <span className="ml-3">已读 {percent}%</span>
+        {copy.showReadingPercent && (
+          <span className="ml-3">已读 {percent}%</span>
+        )}
       </p>
       <div
         className="mt-3 h-1.5 rounded-full bg-accent/15 overflow-hidden"

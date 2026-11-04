@@ -186,7 +186,7 @@ it.each(["grid", "list"] as const)(
       expect(
         useUIStore
           .getState()
-          .toasts.some((toast) => toast.message === "已重置为未读"),
+          .toasts.some((toast) => toast.message === "已重置为未浏览"),
       ).toBe(true),
     );
     expect(client.getQueryState(detailKey)?.isInvalidated).toBe(true);

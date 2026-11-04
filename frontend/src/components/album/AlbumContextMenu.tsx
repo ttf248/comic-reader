@@ -9,7 +9,7 @@ import {
 import { fileManagerErrorMessage } from "../../utils/fileManager";
 import { favoriteResourceId } from "../../utils/path";
 import { isCompleted } from "../../utils/progress";
-import { copyForContentKind } from "../../utils/workbench";
+import { copyForAlbum } from "../../utils/workbench";
 import { useAlbumClassification } from "../../hooks/useAlbumClassification";
 import { useUIStore } from "../../store/uiStore";
 import {
@@ -51,7 +51,7 @@ export default function AlbumContextMenu({
   const completed = isCompleted(item.progress);
   // 措辞跟相册自身的用途走：照片是「已看完」，漫画是「已读完」。
   const kind = item.contentKind ?? "photo";
-  const copy = copyForContentKind(kind, kind);
+  const copy = copyForAlbum(kind);
   // 归类动作：把相册移到另一种打开方式，或恢复默认归类。
   const classification = useAlbumClassification(resourceId);
   const items: AnyMenuItem[] = [
@@ -213,7 +213,7 @@ export default function AlbumContextMenu({
               .then(() =>
                 pushToast({
                   kind: "success",
-                  message: "已重置为未读",
+                  message: `已重置为${copy.unreadTitle}`,
                   ttl: 1200,
                 }),
               )
