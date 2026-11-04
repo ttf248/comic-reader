@@ -260,6 +260,13 @@ export const SHORTCUTS: Shortcut[] = [
     combo: "i",
     group: "image",
   },
+  {
+    id: "overview",
+    label: "T",
+    description: "打开目录（整本缩略图）",
+    combo: "t",
+    group: "image",
+  },
   // 视频
   {
     id: "videoPlay",

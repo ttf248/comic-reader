@@ -29,7 +29,14 @@ export interface ServerConfig {
   skipHidden: boolean;
   systemFiles: string[];
   excludePatterns: string[];
+  // 相册的浏览用途：默认按哪种方式打开相册，以及每个媒体根的按根默认值。
+  // 键是规范化后的媒体根路径（与 mediaRoots 同一套写法）。
+  defaultContentKind: ContentKind;
+  rootContentKinds: Record<string, ContentKind>;
 }
+
+/** 相册的浏览用途：照片墙 / 漫画阅读器。 */
+export type ContentKind = "photo" | "comic";
 
 // PUT /api/config 的请求体。key 缺省视为"不修改"；
 // bool 字段（如 allowOsOpen）必须显式传值以区分 unset / explicit false。
@@ -56,6 +63,8 @@ type ServerConfigFields = Partial<
     | "skipHidden"
     | "systemFiles"
     | "excludePatterns"
+    | "defaultContentKind"
+    | "rootContentKinds"
   >
 >;
 

@@ -28,8 +28,10 @@ import HelpOverlay from "../components/common/HelpOverlay";
 import GalleryHeader from "../components/gallery/GalleryHeader";
 import GalleryToolbar from "../components/gallery/GalleryToolbar";
 import GalleryAlbumNav from "../components/gallery/GalleryAlbumNav";
+import PageOverview from "../components/gallery/PageOverview";
 import ContextMenu, { type AnyMenuItem } from "../components/album/ContextMenu";
 import {
+  CloseIcon,
   ImageIcon,
   RefreshIcon,
   ArrowUpRightIcon,
@@ -96,6 +98,10 @@ export default function Reader() {
 
   const [showInfo, setShowInfo] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  // 目录：整本缩略图，按需打开，不打断连续阅读。
+  const [showOverview, setShowOverview] = useState(false);
+  // 读完一本后的收尾提示（自动切下一本关闭时才出现）。
+  const [showFinished, setShowFinished] = useState(false);
   // 右键菜单位置(阅读器内任意位置右键都触发)。
   const [contextMenu, setContextMenu] = useState<{
     x: number;
@@ -664,6 +670,8 @@ export default function Reader() {
           : "已是最后一张",
       ttl: 1500,
     });
+    // 读完一本后给一个明确的收尾入口：接着读下一本，或回到相册。
+    if (!isVideo) setShowFinished(true);
     if (useGalleryStore.getState().slideshow) {
       toggleSlideshow();
       pushToast({ kind: "info", message: "幻灯片已自动停止" });
@@ -888,6 +896,24 @@ export default function Reader() {
       });
   }, [pathParam, queryClient, pushToast]);
 
+  // 把这本相册改成照片相册：用途切换会持久化，随后离开阅读器回到照片墙。
+  // 漫画的阅读进度与照片的浏览进度分开存放，切换不会互相污染。
+  const switchToPhoto = useCallback(() => {
+    if (!pathParam) return;
+    void albumsApi
+      .setContentKind(pathParam, "photo")
+      .then(() => {
+        void queryClient.invalidateQueries({ queryKey: libraryQueryKeys.root });
+        navigate(albumRoute(pathParam));
+      })
+      .catch((e) => {
+        pushToast({
+          kind: "error",
+          message: apiErrorMessage(e, "切换相册类型失败"),
+        });
+      });
+  }, [navigate, pathParam, pushToast, queryClient]);
+
   useKeyboard({
     // 视频方向键和空格由 VideoPlayer 处理，不注册图片操作。
     ...(isVideo
@@ -902,6 +928,7 @@ export default function Reader() {
           r: () => useGalleryStore.getState().rotate(90),
           space: () => useGalleryStore.getState().toggleSlideshow(),
           i: () => setShowInfo((v) => !v),
+          t: () => setShowOverview((v) => !v),
           "1": () => useGalleryStore.getState().setMode("single"),
           "2": () => useGalleryStore.getState().setMode("continuous"),
           "3": () => useGalleryStore.getState().setMode("double"),
@@ -943,7 +970,9 @@ export default function Reader() {
     "shift+u": () => onClearCover(),
     escape: () => {
       if (showHelp) setShowHelp(false);
+      else if (showOverview) setShowOverview(false);
       else if (showInfo) setShowInfo(false);
+      else if (showFinished) setShowFinished(false);
       // 仅在当前媒体就绪后返回；视频不依赖图片列表。
       else if (ready) goBack();
     },
@@ -1135,6 +1164,8 @@ export default function Reader() {
           onSetCover={onSetCover}
           onClearCover={onClearCover}
           hasCustomCover={hasCustomCover}
+          onToggleOverview={() => setShowOverview((v) => !v)}
+          onSwitchToPhoto={switchToPhoto}
           onJumpToFirst={isVideo ? () => goToVideo(0) : () => setIndex(0)}
           onJumpToLast={
             isVideo
@@ -1185,6 +1216,61 @@ export default function Reader() {
 
       {showInfo && !isVideo && current && (
         <ImageInfoPanel absPath={current} onClose={() => setShowInfo(false)} />
+      )}
+      {showOverview && !isVideo && (
+        <PageOverview
+          images={images}
+          index={index}
+          onJump={(target) => {
+            setShowOverview(false);
+            jumpTo(target);
+          }}
+          onClose={() => setShowOverview(false)}
+        />
+      )}
+      {showFinished && !isVideo && (
+        <div
+          data-testid="reader-finished"
+          className="absolute inset-x-0 bottom-16 z-30 mx-auto flex w-[min(560px,92vw)] items-center gap-3 rounded-lg border border-white/10 bg-neutral-900/95 px-4 py-3 text-white shadow-lg backdrop-blur-md"
+        >
+          <div className="min-w-0 flex-1">
+            <div className="text-[13px] font-medium text-white/90">
+              这本读完了
+            </div>
+            <div className="text-[12px] text-white/55">
+              可以接着读下一本，或回到相册继续浏览。
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setShowFinished(false);
+              goAdjacent(1, { notify: showSwitchNotif, albumsOnly: true });
+            }}
+            className="shrink-0 rounded border border-white/20 px-3 py-1.5 text-[12.5px] text-white/90 transition-colors hover:bg-white/10"
+          >
+            下一本
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setShowFinished(false);
+              goBack();
+            }}
+            className="shrink-0 rounded border border-white/20 px-3 py-1.5 text-[12.5px] text-white/90 transition-colors hover:bg-white/10"
+          >
+            回到相册
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowFinished(false)}
+            className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+            title="关闭"
+            aria-label="关闭读完提示"
+          >
+            <CloseIcon size={13} />
+          </button>
+        </div>
       )}
       <HelpOverlay
         context={isVideo ? "video" : "image"}

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   configApi,
+  type ContentKind,
   type ServerConfig,
   type ServerConfigPatch,
 } from "../../api/config";
@@ -444,7 +445,9 @@ export default function ServerConfigPanel() {
           <div className="flex flex-wrap items-center gap-2">
             {save.isReading ? (
               <>
-                <span className="text-[12.5px] text-fg-muted">正在重新读取配置…</span>
+                <span className="text-[12.5px] text-fg-muted">
+                  正在重新读取配置…
+                </span>
                 <button
                   type="button"
                   onClick={save.cancelRead}
@@ -502,6 +505,34 @@ export default function ServerConfigPanel() {
                     ? { ...s, mediaRoots: "idle" }
                     : s,
                 );
+              }}
+              rootKinds={
+                draft.rootContentKinds ??
+                pendingValues.rootContentKinds ??
+                failedValues.rootContentKinds ??
+                data.rootContentKinds ??
+                {}
+              }
+              defaultKind={
+                draft.defaultContentKind ??
+                pendingValues.defaultContentKind ??
+                failedValues.defaultContentKind ??
+                data.defaultContentKind
+              }
+              onRootKindChange={(root, kind) => {
+                const current =
+                  draft.rootContentKinds ??
+                  pendingValues.rootContentKinds ??
+                  failedValues.rootContentKinds ??
+                  data.rootContentKinds ??
+                  {};
+                const next = { ...current };
+                if (kind === null) delete next[root];
+                else next[root] = kind;
+                setDraft((d) => ({ ...d, rootContentKinds: next }));
+              }}
+              onDefaultKindChange={(kind) => {
+                setDraft((d) => ({ ...d, defaultContentKind: kind }));
               }}
               onOpenInExplorer={openConfiguredDirectory}
               onCancel={() => cancelPathField("mediaRoots")}
@@ -805,7 +836,11 @@ function MediaRootsField({
   roots,
   status,
   allowOsOpen,
+  rootKinds,
+  defaultKind,
   onChange,
+  onRootKindChange,
+  onDefaultKindChange,
   onOpenInExplorer,
   onCancel,
   onConfirm,
@@ -814,7 +849,13 @@ function MediaRootsField({
   roots: string[];
   status: FieldStatus;
   allowOsOpen: boolean;
+  /** 每个媒体根的默认打开方式；缺省表示跟随全局默认。 */
+  rootKinds: Record<string, ContentKind>;
+  /** 全局默认打开方式。 */
+  defaultKind: ContentKind;
   onChange: (next: string[]) => void;
+  onRootKindChange: (root: string, kind: ContentKind | null) => void;
+  onDefaultKindChange: (kind: ContentKind) => void;
   onOpenInExplorer: (path: string) => void;
   onCancel: () => void;
   onConfirm: () => void;
@@ -859,25 +900,38 @@ function MediaRootsField({
       </div>
       <div className="space-y-2">
         {list.map((v, i) => (
-          <PathField
-            key={i}
-            value={v}
-            placeholder="E:\照片 或 /home/user/pics"
-            label={`媒体根目录 ${i + 1}`}
-            // 只在已存在的根上提供"打开资源管理器"(空槽位不算)
-            onOpenInExplorer={
-              i < roots.length && v && allowOsOpen
-                ? () => onOpenInExplorer(v)
-                : undefined
-            }
-            onPick={(picked) => updateAt(i, picked)}
-            onChange={(nv) => updateAt(i, nv)}
-            onCancel={onCancel}
-            onConfirm={onConfirm}
-            onCompositionChange={onCompositionChange}
-            removable={roots.length > 1}
-            onRemove={() => removeAt(i)}
-          />
+          <div key={i} className="space-y-1.5">
+            <PathField
+              value={v}
+              placeholder="E:\照片 或 /home/user/pics"
+              label={`媒体根目录 ${i + 1}`}
+              // 只在已存在的根上提供"打开资源管理器"(空槽位不算)
+              onOpenInExplorer={
+                i < roots.length && v && allowOsOpen
+                  ? () => onOpenInExplorer(v)
+                  : undefined
+              }
+              onPick={(picked) => updateAt(i, picked)}
+              onChange={(nv) => updateAt(i, nv)}
+              onCancel={onCancel}
+              onConfirm={onConfirm}
+              onCompositionChange={onCompositionChange}
+              removable={roots.length > 1}
+              onRemove={() => removeAt(i)}
+            />
+            {i < roots.length && v && (
+              <div className="flex items-center gap-2 pl-1">
+                <span className="text-[12px] text-fg-subtle">默认打开方式</span>
+                <KindSegmentedControl
+                  value={rootKinds[v] ?? null}
+                  onChange={(kind) => onRootKindChange(v, kind)}
+                  inheritLabel={`跟随全局（${
+                    defaultKind === "comic" ? "漫画" : "照片"
+                  }）`}
+                />
+              </div>
+            )}
+          </div>
         ))}
       </div>
       <button
@@ -888,6 +942,68 @@ function MediaRootsField({
         <PlusIcon size={12} />
         添加根目录
       </button>
+
+      <div className="border-t border-border-faint pt-3 mt-3">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-col">
+            <span className="text-fg">全局默认相册类型</span>
+            <span className="text-[12.5px] text-fg-subtle mt-0.5">
+              没有单独指定的相册按这个方式打开：照片墙是平铺浏览，
+              漫画是单页阅读器。也可以在相册页里手动改掉这一本。
+            </span>
+          </div>
+          <KindSegmentedControl
+            value={defaultKind}
+            onChange={(kind) => {
+              if (kind) onDefaultKindChange(kind);
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 用途选择器：照片墙 / 漫画阅读器。
+ *
+ * null 表示「跟随全局默认」，只用在按根设置上。
+ */
+function KindSegmentedControl({
+  value,
+  onChange,
+  inheritLabel,
+}: {
+  value: ContentKind | null;
+  onChange: (kind: ContentKind | null) => void;
+  inheritLabel?: string;
+}) {
+  const options: { key: ContentKind | null; label: string }[] = [
+    { key: "photo", label: "照片" },
+    { key: "comic", label: "漫画" },
+  ];
+  if (inheritLabel) options.push({ key: null, label: inheritLabel });
+  return (
+    <div
+      role="group"
+      aria-label="相册类型"
+      className="inline-flex shrink-0 items-center gap-0.5 rounded-md border border-border-faint p-0.5"
+    >
+      {options.map((option) => (
+        <button
+          key={option.key ?? "inherit"}
+          type="button"
+          onClick={() => onChange(option.key)}
+          aria-pressed={value === option.key}
+          className={`h-7 rounded px-2.5 text-[12.5px] transition-colors ${
+            value === option.key
+              ? "bg-bg-subtle text-fg"
+              : "text-fg-muted hover:text-fg"
+          }`}
+        >
+          {option.label}
+        </button>
+      ))}
     </div>
   );
 }
@@ -941,7 +1057,9 @@ function ConfigRow({
           )}
         </span>
         {def.hint && (
-          <span className="text-[12.5px] text-fg-subtle mt-0.5">{def.hint}</span>
+          <span className="text-[12.5px] text-fg-subtle mt-0.5">
+            {def.hint}
+          </span>
         )}
       </div>
       <div className="flex items-center gap-2 min-w-0 sm:shrink-0">

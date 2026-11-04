@@ -12,6 +12,7 @@ import {
   RefreshIcon,
   ArrowRightLineIcon,
   ArrowLeftLineIcon,
+  GridIcon,
 } from "../common/Icon";
 import Popover, {
   PopoverItem,
@@ -54,6 +55,10 @@ interface Props {
   onClearCover?: () => void;
   /** 当前相册是否已有自定义封面（决定 Popover 显示哪种文案）。 */
   hasCustomCover?: boolean;
+  /** 打开目录（整本缩略图）。可选：不提供时不显示入口。 */
+  onToggleOverview?: () => void;
+  /** 把这本相册改成照片相册并离开阅读器。可选。 */
+  onSwitchToPhoto?: () => void;
 }
 
 // 画廊顶部常驻条：返回 / 名称 / 页码 / 收藏 / 全屏 / 更多
@@ -82,6 +87,8 @@ export default function GalleryHeader({
   hasCustomCover,
   onJumpToFirst,
   onJumpToLast,
+  onToggleOverview,
+  onSwitchToPhoto,
 }: Props) {
   const mode = useGalleryStore((s) => s.mode);
   const direction = useGalleryStore((s) => s.direction);
@@ -191,6 +198,13 @@ export default function GalleryHeader({
             <span className="ml-auto text-[12.5px] text-white/55">I</span>
           </PopoverItem>
         )}
+        {!isVideo && onToggleOverview && (
+          <PopoverItem onClick={onToggleOverview}>
+            <GridIcon size={13} />
+            <span>目录</span>
+            <span className="ml-auto text-[12.5px] text-white/55">T</span>
+          </PopoverItem>
+        )}
         <PopoverItem onClick={onToggleHelp}>
           <KeyboardIcon size={13} />
           <span>快捷键</span>
@@ -222,6 +236,16 @@ export default function GalleryHeader({
             <span>阅读方向：{direction === "ltr" ? "左→右" : "右→左"}</span>
             <span className="ml-auto text-[12.5px] text-white/55">L</span>
           </PopoverItem>
+        )}
+        {onSwitchToPhoto && (
+          <>
+            <PopoverSeparator />
+            <PopoverLabel>相册</PopoverLabel>
+            <PopoverItem onClick={onSwitchToPhoto}>
+              <ImageIcon size={13} />
+              <span>改为照片相册</span>
+            </PopoverItem>
+          </>
         )}
         {hasAlbumNav && <PopoverSeparator />}
         {hasAlbumNav && <PopoverLabel>列表</PopoverLabel>}

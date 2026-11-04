@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 
 	"github.com/tianlongxiang/local-gallery/internal/models"
+	"github.com/tianlongxiang/local-gallery/internal/pathutil"
 )
 
 // ContentKindStore 持久化用户对单个相册的「内容用途」覆盖。
@@ -174,7 +174,8 @@ func (p ContentKindPolicy) KindFor(sourceRoot string) models.ContentKind {
 }
 
 // normalizeRootKey 把媒体根路径归一化成可比较的键：绝对化 + 清理，
-// Windows 下再折叠大小写。
+// 再按平台规则折叠大小写。它与媒体根判定共用 pathutil 的规则，
+// 免得「按根默认用途」和「这个文件属于哪个根」两处标准不一致。
 func normalizeRootKey(path string) string {
 	trimmed := strings.TrimSpace(path)
 	if trimmed == "" {
@@ -186,10 +187,34 @@ func normalizeRootKey(path string) string {
 	} else {
 		abs = filepath.Clean(abs)
 	}
-	if runtime.GOOS == "windows" {
-		abs = strings.ToLower(abs)
+	return pathutil.RootKey(abs)
+}
+
+// NormalizedRootContentKinds 返回按规范化媒体根路径索引的用途映射。
+//
+// 配置里的键可以是相对路径、大小写不同或带尾斜杠；对外一律给出
+// 与 mediaRoots 同一套写法的键，前端才能把「某个根的默认用途」
+// 直接对应到它显示的那一行。
+func NormalizedRootContentKinds(roots []string, rootKinds map[string]string) map[string]string {
+	out := make(map[string]string, len(rootKinds))
+	if len(rootKinds) == 0 {
+		return out
 	}
-	return abs
+	byKey := make(map[string]string, len(rootKinds))
+	for path, kind := range rootKinds {
+		if !models.IsValidContentKind(kind) {
+			continue
+		}
+		byKey[normalizeRootKey(path)] = kind
+	}
+	for _, root := range roots {
+		kind, ok := byKey[normalizeRootKey(root)]
+		if !ok {
+			continue
+		}
+		out[pathutil.RootKey(root)] = kind
+	}
+	return out
 }
 
 // ApplyContentKinds 就地写回每个相册的有效内容用途。

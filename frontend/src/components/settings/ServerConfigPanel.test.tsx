@@ -61,6 +61,9 @@ const baseConfig = {
   skipHidden: true,
   systemFiles: [],
   excludePatterns: [],
+  // 内容用途:全局默认与按媒体根的默认值
+  defaultContentKind: "photo" as const,
+  rootContentKinds: {} as Record<string, "photo" | "comic">,
 };
 
 beforeAll(() => {
