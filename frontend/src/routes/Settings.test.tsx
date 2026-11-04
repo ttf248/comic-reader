@@ -40,6 +40,7 @@ const basePrefs: Prefs = {
   showSwitchNotif: true,
   theme: "system",
   sidebarCollapsed: false,
+  appMode: "photo",
 };
 const clientForTest = () =>
   new QueryClient({ defaultOptions: { queries: { retry: false } } });

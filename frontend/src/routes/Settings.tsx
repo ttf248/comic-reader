@@ -8,8 +8,12 @@ import ThemeSwitcher from "../components/common/ThemeSwitcher";
 import { useUIStore } from "../store/uiStore";
 import { libraryQueryKeys, useLibraryManifest } from "../hooks/useLibrary";
 import ServerConfigPanel from "../components/settings/ServerConfigPanel";
+import ContentKindPolicyPanel from "../components/settings/ContentKindPolicyPanel";
 import ScanWarnings from "../components/common/ScanWarnings";
 import { syncHistoryCache } from "../utils/historyCache";
+import { useAppMode } from "../hooks/useAppMode";
+import { usePhotoStore, WALL_DENSITY_LABEL } from "../store/photoStore";
+import { useGalleryStore } from "../store/galleryStore";
 import {
   RefreshIcon,
   TrashIcon,
@@ -18,6 +22,9 @@ import {
   KeyboardIcon,
   InfoIcon,
   ServerIcon,
+  ImageIcon,
+  ReaderIcon,
+  GridIcon,
 } from "../components/common/Icon";
 
 export default function Settings() {
@@ -34,6 +41,19 @@ export default function Settings() {
   const pushToast = useUIStore((s) => s.pushToast);
   const manifest = useLibraryManifest().data?.manifest;
   const sse = useScanSSE();
+  // 工作台模式走服务端偏好；照片与漫画的偏好各自走本地 store，
+  // 三者落点不同，在设置页里分开写。
+  const { mode: workbenchMode, setMode: setWorkbenchMode } = useAppMode();
+  const density = usePhotoStore((s) => s.density);
+  const setDensity = usePhotoStore((s) => s.setDensity);
+  const showInfo = usePhotoStore((s) => s.showInfo);
+  const setShowInfo = usePhotoStore((s) => s.setShowInfo);
+  const readerMode = useGalleryStore((s) => s.mode);
+  const setReaderMode = useGalleryStore((s) => s.setMode);
+  const fit = useGalleryStore((s) => s.fit);
+  const setFit = useGalleryStore((s) => s.setFit);
+  const direction = useGalleryStore((s) => s.direction);
+  const setDirection = useGalleryStore((s) => s.setDirection);
 
   // 缓存占用统计(后端 30s TTL,前端 staleTime 设小一点保证手动刷新能即时看到)
   const cacheStats = useQuery({
@@ -268,7 +288,136 @@ export default function Settings() {
           </Row>
         </Section>
 
-        <Section title="阅读" icon={<LibraryIcon size={13} />}>
+        {/* 工作台：应用当前面向哪一类相册。它决定列表呈现什么、
+            页面用什么措辞，与每本相册自己的打开方式无关。 */}
+        <Section title="工作台" icon={<LibraryIcon size={13} />}>
+          <Row label="默认工作台">
+            <div className="flex items-center border border-border-faint rounded-md overflow-hidden">
+              {(
+                [
+                  ["photo", "照片"],
+                  ["comic", "漫画"],
+                  ["all", "全部"],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setWorkbenchMode(key)}
+                  className={`h-8 px-3 text-[12.5px] transition-colors ${
+                    workbenchMode === key
+                      ? "bg-bg-subtle text-fg"
+                      : "text-fg-muted hover:text-fg"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </Row>
+        </Section>
+
+        {/* 照片模式的偏好：与漫画模式的偏好分开放，互不污染。 */}
+        <Section title="照片" icon={<ImageIcon size={13} />}>
+          <Row label="照片墙密度">
+            <div className="flex items-center border border-border-faint rounded-md overflow-hidden">
+              {(["compact", "cozy", "large"] as const).map((key) => (
+                <button
+                  key={key}
+                  onClick={() => setDensity(key)}
+                  className={`h-8 px-3 text-[12.5px] transition-colors ${
+                    density === key
+                      ? "bg-bg-subtle text-fg"
+                      : "text-fg-muted hover:text-fg"
+                  }`}
+                >
+                  {WALL_DENSITY_LABEL[key]}
+                </button>
+              ))}
+            </div>
+          </Row>
+          <Row label="大图预览显示信息">
+            <Toggle
+              label="大图预览显示信息"
+              checked={showInfo}
+              onChange={(v) => setShowInfo(v)}
+            />
+          </Row>
+          <p className="px-5 pb-4 text-[12.5px] text-fg-subtle -mt-2">
+            这两项只保存在本机浏览器，不随服务端同步。
+          </p>
+        </Section>
+
+        {/* 漫画模式的偏好：阅读器专属的读法与翻页方式。 */}
+        <Section title="漫画" icon={<ReaderIcon size={13} />}>
+          <Row label="默认显示模式">
+            <div className="flex items-center border border-border-faint rounded-md overflow-hidden">
+              {(
+                [
+                  ["single", "单张"],
+                  ["continuous", "连续"],
+                  ["double", "双页"],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setReaderMode(key)}
+                  className={`h-8 px-3 text-[12.5px] transition-colors ${
+                    readerMode === key
+                      ? "bg-bg-subtle text-fg"
+                      : "text-fg-muted hover:text-fg"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </Row>
+          <Row label="默认图片适配">
+            <div className="flex items-center border border-border-faint rounded-md overflow-hidden">
+              {(
+                [
+                  ["fit", "适应"],
+                  ["width", "按宽"],
+                  ["height", "按高"],
+                  ["original", "原始"],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setFit(key)}
+                  className={`h-8 px-3 text-[12.5px] transition-colors ${
+                    fit === key
+                      ? "bg-bg-subtle text-fg"
+                      : "text-fg-muted hover:text-fg"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </Row>
+          <Row label="双页翻页方向">
+            <div className="flex items-center border border-border-faint rounded-md overflow-hidden">
+              {(
+                [
+                  ["ltr", "左→右"],
+                  ["rtl", "右→左"],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setDirection(key)}
+                  className={`h-8 px-3 text-[12.5px] transition-colors ${
+                    direction === key
+                      ? "bg-bg-subtle text-fg"
+                      : "text-fg-muted hover:text-fg"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </Row>
           <Row label="阅读到末尾自动切换下一本">
             <Toggle
               label="阅读到末尾自动切换下一本"
@@ -285,15 +434,14 @@ export default function Settings() {
               onChange={(v) => patchPrefs.mutate({ showSwitchNotif: v })}
             />
           </Row>
-          <Row label="最近访问保留条数">
-            <NumberInput
-              value={data.maxRecent}
-              disabled={patchPrefs.isPending}
-              min={1}
-              max={50}
-              onChange={(v) => patchPrefs.mutate({ maxRecent: v })}
-            />
-          </Row>
+          <p className="px-5 pb-4 text-[12.5px] text-fg-subtle -mt-2">
+            显示模式、适配与方向只保存在本机浏览器；自动切换与通知保存在服务端，所有设备共享。
+          </p>
+        </Section>
+
+        {/* 相册用途：决定「新相册默认按哪种方式打开」，与工作台模式是两件事。 */}
+        <Section title="相册用途" icon={<GridIcon size={13} />}>
+          <ContentKindPolicyPanel />
         </Section>
 
         <Section title="数据" icon={<LibraryIcon size={13} />}>
@@ -446,6 +594,15 @@ export default function Settings() {
               )}
             </div>
           </Row>
+          <Row label="最近访问保留条数">
+            <NumberInput
+              value={data.maxRecent}
+              disabled={patchPrefs.isPending}
+              min={1}
+              max={50}
+              onChange={(v) => patchPrefs.mutate({ maxRecent: v })}
+            />
+          </Row>
           <Row label="清理失效收藏">
             <button
               onClick={() => pruneFav.mutate()}
@@ -552,12 +709,13 @@ function Row({
 function Toggle({
   label,
   checked,
-  disabled,
+  disabled = false,
   onChange,
 }: {
   label: string;
   checked: boolean;
-  disabled: boolean;
+  /** 保存进行中置灰；本地偏好没有异步保存，直接省略。 */
+  disabled?: boolean;
   onChange: (v: boolean) => void;
 }) {
   return (
