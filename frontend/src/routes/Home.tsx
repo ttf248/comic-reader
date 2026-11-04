@@ -15,8 +15,10 @@ import { ListFilterBar } from "../components/common/ListFilterBar";
 import EmptyState from "../components/common/EmptyState";
 import ViewedSortNotice from "../components/common/ViewedSortNotice";
 import YearTimeline from "../components/home/YearTimeline";
-import { ContinueReadingHero, UnreadHero } from "../components/home/HomeHeroes";
+import { ContinueHero, UnreadHero } from "../components/home/HomeHeroes";
 import { useUIStore } from "../store/uiStore";
+import { useAppMode } from "../hooks/useAppMode";
+import { workbenchCopy } from "../utils/workbench";
 import { albumRoute, decodeFavPath } from "../utils/path";
 import { continueReadingTarget } from "../utils/continueReading";
 import { compareDatesDesc } from "../utils/date";
@@ -50,6 +52,8 @@ export default function Home() {
   const dashboard = dashboardQuery.data?.dashboard;
   const sse = useScanSSE();
   const pushToast = useUIStore((s) => s.pushToast);
+  const { mode } = useAppMode();
+  const copy = workbenchCopy(mode);
 
   // "全部图像" section 的 ref：年份筛选触发后自动滚到这里
   const gridRef = useRef<HTMLDivElement>(null);
@@ -97,7 +101,8 @@ export default function Home() {
   });
 
   const randomAlbum = useMutation({
-    mutationFn: (scope: "all" | "unread") => libraryApi.randomAlbum(scope),
+    mutationFn: (scope: "all" | "unread") =>
+      libraryApi.randomAlbum(mode, scope),
     onSuccess: ({ album }) => navigate(albumRoute(album.id)),
     onError: (_error, scope) =>
       pushToast({
@@ -127,7 +132,7 @@ export default function Home() {
       return;
     }
     markReadContinue.mutate(
-      { albumId, total },
+      { albumId, total, contentKind: card.contentKind },
       {
         onSuccess: () =>
           pushToast({
@@ -147,6 +152,7 @@ export default function Home() {
     const items = inProgressAll.map((c) => ({
       albumId: decodeFavPath(c.to),
       total: c.progress?.total ?? 0,
+      contentKind: c.contentKind,
     }));
     markReadAllContinue.mutate(items, {
       onSuccess: (r) => {
@@ -176,7 +182,7 @@ export default function Home() {
       return;
     }
     markReadOne.mutate(
-      { albumId, total },
+      { albumId, total, contentKind: card.contentKind },
       {
         onSuccess: () =>
           pushToast({
@@ -294,6 +300,7 @@ export default function Home() {
           name: c.title,
           imageCount: c.imageCount,
           videoCount: c.videoCount,
+          contentKind: c.contentKind,
         })),
     [filtered],
   );
@@ -338,12 +345,12 @@ export default function Home() {
       <section className="page-shell page-heading">
         <div className="flex items-end justify-between gap-6 flex-wrap">
           <div className="min-w-0">
-            <p className="page-eyebrow">属于你的影像年鉴</p>
-            <h1 className="page-title">图像库</h1>
+            <p className="page-eyebrow">{copy.libraryEyebrow}</p>
+            <h1 className="page-title">{copy.libraryTitle}</h1>
             <p className="text-[13px] text-fg-muted mt-2">
               {manifest ? (
                 <>
-                  <span>照片、故事与每一次重逢</span>
+                  <span>{copy.libraryDescription}</span>
                   <span className="mx-2 text-fg-subtle">·</span>
                   {manifest.scannedAt && (
                     <span className="text-fg-subtle">
@@ -379,7 +386,7 @@ export default function Home() {
               className="btn btn-primary"
             >
               <ShuffleIcon size={14} />
-              随机一本
+              {copy.randomLabel}
               <span className="text-[12.5px] opacity-70">R</span>
             </button>
             <QuickLink
@@ -387,10 +394,10 @@ export default function Home() {
               icon={<SparkleIcon size={14} />}
               count={unreadCount > 0 ? unreadCount : undefined}
             >
-              未读
+              {copy.unreadTitle}
             </QuickLink>
             <QuickLink to="/recents" icon={<ClockIcon size={14} />}>
-              最近
+              {copy.recentsTitle}
             </QuickLink>
             {favCount > 0 && (
               <QuickLink
@@ -409,8 +416,9 @@ export default function Home() {
         <div className="page-shell">
           <div className="home-overview">
             {inProgressAll.length > 0 && (
-              <ContinueReadingHero
+              <ContinueHero
                 cards={inProgressAll}
+                mode={mode}
                 onContinue={onContinue}
                 onRemove={onRemoveContinue}
                 onClearAll={onClearContinue}
@@ -420,6 +428,7 @@ export default function Home() {
               <UnreadHero
                 cards={unreadCards}
                 count={unreadCount}
+                mode={mode}
                 onShuffle={onShuffleUnread}
                 onMarkRead={onMarkReadUnread}
               />
@@ -449,7 +458,7 @@ export default function Home() {
           <div className="section-heading">
             <span className="section-index">02</span>
             <h2 className="section-title">
-              {yearFilterActive ? "该年份的图像" : "全部图像"}
+              {yearFilterActive ? "该年份的图像" : copy.sectionTitle}
             </h2>
             {!isLoadingInitial && (
               <span className="section-meta tabular-nums">

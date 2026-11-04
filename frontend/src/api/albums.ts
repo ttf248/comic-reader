@@ -1,4 +1,5 @@
 import { api } from "./client";
+import type { ContentKind } from "./library";
 
 export interface SearchHit {
   kind: "album" | "collection" | "smartCollection";
@@ -10,25 +11,25 @@ export interface SearchHit {
   count: number;
   coverImage?: string;
   /** 内容用途："photo" / "comic"。搜索结果据此决定跳转目标。 */
-  contentKind?: "photo" | "comic";
+  contentKind?: ContentKind;
 }
 
 export interface ContentKindState {
   ok: boolean;
   /** 当前生效的用途。 */
-  contentKind: "photo" | "comic";
+  contentKind: ContentKind;
   /** 取消覆盖后会回落到的用途。 */
-  contentKindDefault: "photo" | "comic";
+  contentKindDefault: ContentKind;
   /** 是否是用户手动设置的覆盖。 */
   contentKindOverridden: boolean;
 }
 
 export const albumsApi = {
-  search(q: string, limit = 50) {
+  search(q: string, limit = 50, kind: ContentKind | "all" = "all") {
     return api<{ ok: boolean; results: SearchHit[]; count: number }>(
       `/api/search`,
       {
-        params: { q, limit },
+        params: { q, limit, kind },
       },
     );
   },
@@ -61,7 +62,7 @@ export const albumsApi = {
       `/api/albums/${encodeURIComponent(albumId)}/content-kind`,
     );
   },
-  setContentKind(albumId: string, kind: "photo" | "comic") {
+  setContentKind(albumId: string, kind: ContentKind) {
     return api<ContentKindState>(
       `/api/albums/${encodeURIComponent(albumId)}/content-kind`,
       { method: "PUT", body: { kind } },

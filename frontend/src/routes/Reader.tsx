@@ -23,7 +23,7 @@ import { toggleFullscreen as toggleFullscreenImpl } from "../utils/fullscreen";
 import ImageGallery from "../components/gallery/ImageGallery";
 import VideoPlayer from "../components/gallery/VideoPlayer";
 import PageSlider from "../components/gallery/PageSlider";
-import ImageInfoPanel from "../components/gallery/ImageInfoPanel";
+import ImageInfoPanel from "../components/common/ImageInfoPanel";
 import HelpOverlay from "../components/common/HelpOverlay";
 import GalleryHeader from "../components/gallery/GalleryHeader";
 import GalleryToolbar from "../components/gallery/GalleryToolbar";
@@ -46,6 +46,9 @@ import {
 } from "../utils/galleryContext";
 import { usePrefs } from "../hooks/usePrefs";
 import { useVideoActivity } from "../hooks/useVideoActivity";
+import { useAlbumClassification } from "../hooks/useAlbumClassification";
+import { useAppMode } from "../hooks/useAppMode";
+import type { AppMode, ContentKind } from "../api/library";
 
 // 画廊页面：从 URL 读取 path/index/name。
 // 关闭时持久化阅读进度到后端。
@@ -97,6 +100,7 @@ export default function Reader() {
   const setMode = useGalleryStore((s) => s.setMode);
 
   const [showInfo, setShowInfo] = useState(false);
+  const { mode: workbenchMode, setMode: setWorkbenchMode } = useAppMode();
   const [showHelp, setShowHelp] = useState(false);
   // 目录：整本缩略图，按需打开，不打断连续阅读。
   const [showOverview, setShowOverview] = useState(false);
@@ -772,7 +776,9 @@ export default function Reader() {
         const nextEntry: GalleryContextEntry | undefined = ctx.list[nextIdx];
         if (!nextEntry) continue;
         const readerUrl = entryReaderUrl(nextEntry);
-        if (albumsOnly && !readerUrl) continue;
+        // 没有阅读器入口的条目一律跳过：集合没有，照片相册也没有
+        // （照片要进照片墙，把一本照片丢进漫画阅读器是一次真实的错位）。
+        if (!readerUrl) continue;
         if (albumsOnly) {
           // 跳到没有可读媒体的相册没有意义：图片模式跳进纯视频相册只会
           // 看到「没有图片」。数量未知（undefined）时不跳过。
@@ -801,7 +807,7 @@ export default function Reader() {
         }
         setShowInfo(false);
         setMode(useGalleryStore.getState().mode);
-        navigate(readerUrl ?? nextEntry.to, { replace: false });
+        navigate(readerUrl, { replace: false });
         return true;
       }
       if (notify) {
@@ -896,23 +902,34 @@ export default function Reader() {
       });
   }, [pathParam, queryClient, pushToast]);
 
-  // 把这本相册改成照片相册：用途切换会持久化，随后离开阅读器回到照片墙。
-  // 漫画的阅读进度与照片的浏览进度分开存放，切换不会互相污染。
-  const switchToPhoto = useCallback(() => {
-    if (!pathParam) return;
-    void albumsApi
-      .setContentKind(pathParam, "photo")
-      .then(() => {
-        void queryClient.invalidateQueries({ queryKey: libraryQueryKeys.root });
-        navigate(albumRoute(pathParam));
-      })
-      .catch((e) => {
-        pushToast({
-          kind: "error",
-          message: apiErrorMessage(e, "切换相册类型失败"),
+  // 归类：把本相册移到另一种打开方式。
+  // 移到照片库要离开阅读器（照片墙是另一套外壳）；
+  // 移到漫画库则留在原地——这本相册此刻正在当漫画读。
+  const classification = useAlbumClassification(pathParam);
+  const moveToKind = useCallback(
+    (kind: ContentKind) => {
+      if (!pathParam) return;
+      void classification.moveTo
+        .mutateAsync(kind)
+        .then(() => {
+          if (kind === "photo") navigate(albumRoute(pathParam));
+        })
+        .catch(() => {
+          // toast 由 hook 统一给出。
         });
-      });
-  }, [navigate, pathParam, pushToast, queryClient]);
+    },
+    [classification.moveTo, navigate, pathParam],
+  );
+
+  // 切换工作台：阅读器整屏脱离 AppShell，侧栏不可见，
+  // 这里离开阅读器回到外壳，顺带把工作台换掉。
+  const openWorkbench = useCallback(
+    (next: AppMode) => {
+      setWorkbenchMode(next);
+      navigate("/");
+    },
+    [navigate, setWorkbenchMode],
+  );
 
   useKeyboard({
     // 视频方向键和空格由 VideoPlayer 处理，不注册图片操作。
@@ -1165,7 +1182,11 @@ export default function Reader() {
           onClearCover={onClearCover}
           hasCustomCover={hasCustomCover}
           onToggleOverview={() => setShowOverview((v) => !v)}
-          onSwitchToPhoto={switchToPhoto}
+          onMoveToKind={moveToKind}
+          onResetKind={() => void classification.resetToDefault.mutateAsync()}
+          kindOverridden={albumSummary?.contentKindOverridden === true}
+          workbenchMode={workbenchMode}
+          onOpenWorkbench={openWorkbench}
           onJumpToFirst={isVideo ? () => goToVideo(0) : () => setIndex(0)}
           onJumpToLast={
             isVideo

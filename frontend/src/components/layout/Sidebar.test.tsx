@@ -17,11 +17,19 @@ const dashboard = {
 };
 
 vi.mock("../../hooks/useLibrary", () => ({
-  useLibraryActivitySummary: () => ({
-    data: { summary: { unreadCount: 69 } },
-    isLoading: false,
-  }),
+  useUnreadCountsByKind: () => ({ photo: 12, comic: 69 }),
   useLibraryDashboard: () => ({ data: dashboard }),
+}));
+
+// 工作台模式：默认覆盖漫画工作台（侧栏分组与「继续阅读」措辞），
+// 单个用例可以改写 mode 切到照片工作台。
+const appMode = { mode: "comic" as "comic" | "photo", setMode: vi.fn() };
+vi.mock("../../hooks/useAppMode", () => ({
+  useAppMode: () => ({
+    mode: appMode.mode,
+    ready: true,
+    setMode: appMode.setMode,
+  }),
 }));
 
 vi.mock("../../api/library", () => ({
@@ -36,6 +44,7 @@ const albumNode = {
   imageCount: 20,
   videoCount: 0,
   coverImage: "f_1/cover.jpg",
+  contentKind: "comic" as const,
 };
 
 function renderSidebar(collapsed = false) {
@@ -53,6 +62,8 @@ describe("Sidebar", () => {
   beforeEach(() => {
     dashboard.dashboard.inProgress = [];
     dashboard.dashboard.unreadCount = 69;
+    appMode.mode = "comic";
+    appMode.setMode.mockClear();
   });
 
   it("有在读相册时显示「接着读」迷你卡，含标题与进度", () => {
@@ -63,7 +74,7 @@ describe("Sidebar", () => {
     // 分组标题现在是「继续阅读」（迷你卡内部不再重复写一次）
     expect(screen.getByText("继续阅读")).toBeInTheDocument();
     expect(screen.getByText("某本漫画")).toBeInTheDocument();
-    expect(screen.getByText("看到 6 / 20")).toBeInTheDocument();
+    expect(screen.getByText("读到 6 / 20")).toBeInTheDocument();
   });
 
   it("迷你卡点击后跳到阅读器的上次位置", () => {
@@ -99,8 +110,37 @@ describe("Sidebar", () => {
     ];
     renderSidebar();
     expect(screen.getByText("第二本")).toBeInTheDocument();
-    expect(screen.getByText("看到 3 / 8")).toBeInTheDocument();
+    expect(screen.getByText("读到 3 / 8")).toBeInTheDocument();
     expect(screen.getByText("3 本")).toBeInTheDocument();
+  });
+
+  it("侧栏按照片 / 漫画分成两组，两组各自给出入口", () => {
+    renderSidebar();
+    // 「照片」既是分段控件的一档，也是分组标题。
+    expect(screen.getAllByText("照片").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("漫画").length).toBeGreaterThan(0);
+    expect(screen.getByText("照片库")).toBeInTheDocument();
+    expect(screen.getByText("漫画库")).toBeInTheDocument();
+    expect(screen.getByText("未浏览")).toBeInTheDocument();
+    expect(screen.getByText("未读")).toBeInTheDocument();
+    // 逃生舱：全部相册是独立入口，不是第三个工作台。
+    expect(screen.getByText("全部相册")).toBeInTheDocument();
+  });
+
+  it("点击另一组的条目会先切模式再跳转", () => {
+    renderSidebar();
+    fireEvent.click(screen.getByText("照片库"));
+    expect(appMode.setMode).toHaveBeenCalledWith("photo");
+  });
+
+  it("切换到照片工作台后，「继续」区改用浏览的措辞", () => {
+    appMode.mode = "photo";
+    dashboard.dashboard.inProgress = [
+      { album: albumNode, pageIndex: 5, pageCount: 20 },
+    ];
+    renderSidebar();
+    expect(screen.getByText("继续浏览")).toBeInTheDocument();
+    expect(screen.queryByText("继续阅读")).not.toBeInTheDocument();
   });
 
   it("不再提供「随机未读」：该动作在未读页与首页已有入口", () => {

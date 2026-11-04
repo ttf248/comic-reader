@@ -4,7 +4,9 @@ import { useNavigate } from "react-router-dom";
 import { useSearchStore } from "../store/searchStore";
 import { useUIStore } from "../store/uiStore";
 import { useFavorites } from "../hooks/useFavorites";
-import { useImageActivities } from "../hooks/useImageActivity";
+import { useImageActivities, usePhotoActivities } from "../hooks/useImageActivity";
+import { useAppMode } from "../hooks/useAppMode";
+import { workbenchCopy } from "../utils/workbench";
 import { useGalleryContextSync } from "../hooks/useGalleryContextSync";
 import AlbumGrid, { type CardData } from "../components/album/AlbumGrid";
 import AlbumCard from "../components/album/AlbumCard";
@@ -42,6 +44,8 @@ export default function Favorites() {
   const navigate = useNavigate();
   const viewMode = useUIStore((s) => s.viewMode);
   const pushToast = useUIStore((s) => s.pushToast);
+  const { mode } = useAppMode();
+  const copy = workbenchCopy(mode);
   const query = useSearchStore((s) => s.query);
   const sortBy = useSearchStore((s) => s.sortBy);
   const minImageCount = useSearchStore((s) => s.minImageCount);
@@ -84,14 +88,29 @@ export default function Favorites() {
         const tagName = f.slice(6);
         const tag = tagsByName.get(tagName);
         if (!tag) continue;
+        // 智能标签是导航容器，跨用途成立：两种工作台都留着它。
         out.push({ ...tagSummaryToCard(tag), isFavorite: true });
         continue;
       }
       const node = nodesById.get(f);
-      if (node) out.push({ ...nodeSummaryToCard(node), isFavorite: true });
+      if (!node) continue;
+      // 收藏是用户的显式选择，但工作台只呈现当前这一类：
+      // 照片工作台里不该冒出一本漫画。
+      if (mode !== "all" && node.contentKind !== mode) continue;
+      out.push({ ...nodeSummaryToCard(node), isFavorite: true });
     }
     return out;
-  }, [favorites, nodesById, tagsByName]);
+  }, [favorites, nodesById, tagsByName, mode]);
+
+  // 被当前工作台过滤掉的收藏数要说清楚，否则用户以为收藏丢了。
+  const hiddenCount = useMemo(() => {
+    if (mode === "all") return 0;
+    return favorites.filter((f) => {
+      if (f.startsWith("smart:")) return false;
+      const node = nodesById.get(f);
+      return node?.kind === "album" && node.contentKind !== mode;
+    }).length;
+  }, [favorites, nodesById, mode]);
 
   // 空态推荐位：仪表盘里的未读相册（最多 6 本）。
   // 收藏为空时这一排就是"现在可以马上收藏的东西"。
@@ -112,6 +131,7 @@ export default function Favorites() {
     [cards],
   );
   const { data: progressMap } = useImageActivities(progressPaths);
+  const { data: photoProgressMap } = usePhotoActivities(progressPaths);
 
   const filtered = useMemo(() => {
     const list = cards
@@ -129,7 +149,11 @@ export default function Favorites() {
       .map((c) => {
         if (c.variant !== "album") return c;
         const k = decodeFavPath(c.to);
-        const p = progressMap?.[k];
+        // 进度按相册自己的用途取：照片看浏览位置，漫画看页码。
+        const p =
+          c.contentKind === "photo"
+            ? photoProgressMap?.[k]
+            : progressMap?.[k];
         if (!p) return c;
         return {
           ...c,
@@ -154,7 +178,15 @@ export default function Favorites() {
       default:
         return list.sort((a, b) => a.title.localeCompare(b.title));
     }
-  }, [cards, query, sortBy, progressMap, compareViewed, minImageCount]);
+  }, [
+    cards,
+    query,
+    sortBy,
+    progressMap,
+    photoProgressMap,
+    compareViewed,
+    minImageCount,
+  ]);
 
   // 收藏页的上下文：只让真正的相册参与上一本/下一本（智能合集不是「可翻页」对象）
   const favEntries = useMemo<GalleryContextEntry[]>(
@@ -167,6 +199,7 @@ export default function Favorites() {
           name: c.title,
           imageCount: c.imageCount,
           videoCount: c.videoCount,
+          contentKind: c.contentKind,
         })),
     [filtered],
   );
@@ -223,7 +256,7 @@ export default function Favorites() {
   return (
     <div className="min-h-full">
       <PageHeading
-        title="我收藏的图像"
+        title={copy.favoritesTitle}
         eyebrow="值得反复翻看的"
         description={
           <div className="flex items-baseline gap-2.5 mt-2 flex-wrap">
@@ -232,8 +265,13 @@ export default function Favorites() {
                 ? "正在加载收藏…"
                 : favoritesFailed && favorites.length === 0
                   ? "收藏暂不可用"
-                  : `${favorites.length} 项`}
+                  : `${favorites.length - hiddenCount} 项`}
             </p>
+            {hiddenCount > 0 && (
+              <span className="text-[12.5px] text-fg-subtle">
+                另有 {hiddenCount} 项属于其它类型
+              </span>
+            )}
             {missingCount > 0 && (
               <span className="text-[12.5px] text-fg-subtle">
                 其中 {missingCount} 项暂时找不到
@@ -277,7 +315,7 @@ export default function Favorites() {
       ) : loadFailed && cards.length === 0 ? null : favorites.length === 0 ? (
         <>
           <EmptyState
-            title="还没有收藏"
+            title={copy.favoritesEmpty}
             description="收藏是给相册打星标：点封面右上角的星标，这一本就会出现在这里。下面这几本可以直接点星标试试。"
             icon={<StarIcon size={20} />}
             action={

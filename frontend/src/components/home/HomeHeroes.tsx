@@ -5,8 +5,10 @@ import { previewUrl } from "../../api/images";
 import { useFavorites } from "../../hooks/useFavorites";
 import { decodeFavPath } from "../../utils/path";
 import { readingPercent } from "../../utils/continueReading";
+import { workbenchCopy } from "../../utils/workbench";
 import AlbumCard from "../album/AlbumCard";
 import type { CardData } from "../album/AlbumGrid";
+import type { AppMode } from "../../api/library";
 import {
   ArrowRightLineIcon,
   CheckIcon,
@@ -18,6 +20,8 @@ import {
 interface UnreadHeroProps {
   cards: CardData[];
   count: number;
+  /** 当前工作台模式，决定这一区的措辞。 */
+  mode: AppMode;
   onShuffle: () => void;
   onMarkRead: (card: CardData) => void;
 }
@@ -25,11 +29,13 @@ interface UnreadHeroProps {
 export function UnreadHero({
   cards,
   count,
+  mode,
   onShuffle,
   onMarkRead,
 }: UnreadHeroProps) {
   const { favorites } = useFavorites();
   const favoriteIds = useMemo(() => new Set(favorites), [favorites]);
+  const copy = workbenchCopy(mode);
   return (
     <section
       className="discovery-panel"
@@ -38,11 +44,11 @@ export function UnreadHero({
     >
       <div className="flex items-start justify-between gap-3 mb-5">
         <div>
-          <p className="page-eyebrow mb-2">下一本的灵感</p>
+          <p className="page-eyebrow mb-2">{copy.unreadEyebrow}</p>
           <h2 id="unread-heading" className="section-title">
-            未读{" "}
+            {copy.unreadTitle}{" "}
             <span className="font-sans text-[13px] font-normal text-fg-muted ml-2 tabular-nums">
-              {count} 本等你翻开
+              {count} {copy.unreadCountLabel}
             </span>
           </h2>
         </div>
@@ -51,15 +57,15 @@ export function UnreadHero({
             type="button"
             onClick={onShuffle}
             className="btn btn-sm btn-ghost"
-            title="随机未读"
-            aria-label="随机未读"
+            title={copy.unreadButton}
+            aria-label={copy.unreadButton}
           >
             <ShuffleIcon size={15} />
           </button>
           <Link
             to="/unread"
             className="btn btn-sm btn-ghost"
-            aria-label="查看全部未读相册"
+            aria-label={`查看全部${copy.unreadTitle}相册`}
           >
             全部 <ArrowRightLineIcon size={14} />
           </Link>
@@ -84,8 +90,8 @@ export function UnreadHero({
                   onMarkRead(card);
                 }}
                 className="w-7 h-7 rounded-full bg-black/65 text-white flex items-center justify-center opacity-100 md:opacity-0 md:group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
-                title={`将「${card.title}」标记为已读`}
-                aria-label={`将${card.title}标记为已读`}
+                title={`将「${card.title}」${copy.markFinishedLabel}`}
+                aria-label={`将${card.title}${copy.markFinishedLabel}`}
               >
                 <CheckIcon size={13} />
               </button>
@@ -97,22 +103,26 @@ export function UnreadHero({
   );
 }
 
-interface ContinueReadingHeroProps {
+interface ContinueHeroProps {
   cards: CardData[];
+  /** 当前工作台模式，决定这一区的措辞。 */
+  mode: AppMode;
   onContinue: (card: CardData) => void;
   onRemove: (card: CardData) => void;
   onClearAll: () => void;
 }
 
-export function ContinueReadingHero({
+export function ContinueHero({
   cards,
+  mode,
   onContinue,
   onRemove,
   onClearAll,
-}: ContinueReadingHeroProps) {
+}: ContinueHeroProps) {
   const featured = cards[0];
   if (!featured) return null;
   const rest = cards.slice(1, 4);
+  const copy = workbenchCopy(mode);
   return (
     <section
       className="reading-desk"
@@ -121,7 +131,7 @@ export function ContinueReadingHero({
     >
       <div className="flex items-center gap-3 flex-wrap">
         <h2 id="continue-heading" className="section-title">
-          继续阅读
+          {copy.continueTitle}
         </h2>
         <span className="reading-desk__muted tabular-nums">
           {cards.length} 本还没看完
@@ -130,14 +140,18 @@ export function ContinueReadingHero({
           type="button"
           onClick={onClearAll}
           className="reading-desk__muted inline-flex items-center gap-1 ml-auto min-h-7 px-1 rounded"
-          title="把当前所有继续阅读相册标记为已读(不影响收藏 / 最近)"
+          title={`把当前所有${copy.continueTitle}相册标记为已读(不影响收藏 / 最近)`}
         >
           <CloseIcon size={12} />
           清空
         </button>
       </div>
       <div className="reading-desk__feature">
-        <StagePoster card={featured} onClick={() => onContinue(featured)} />
+        <StagePoster
+          card={featured}
+          mode={mode}
+          onClick={() => onContinue(featured)}
+        />
         <div className="min-w-0">
           <p className="reading-desk__muted">上次，看到这里</p>
           <h3 className="reading-desk__title line-clamp-2">
@@ -145,6 +159,7 @@ export function ContinueReadingHero({
           </h3>
           <StageInfo
             card={featured}
+            mode={mode}
             onContinue={() => onContinue(featured)}
             onRemove={() => onRemove(featured)}
           />
@@ -156,6 +171,7 @@ export function ContinueReadingHero({
             <QueueItem
               key={card.id}
               card={card}
+              mode={mode}
               onOpen={() => onContinue(card)}
               onRemove={() => onRemove(card)}
             />
@@ -199,16 +215,19 @@ function Cover({ card, large = false }: { card: CardData; large?: boolean }) {
 
 function StagePoster({
   card,
+  mode,
   onClick,
 }: {
   card: CardData;
+  mode: AppMode;
   onClick: () => void;
 }) {
+  const copy = workbenchCopy(mode);
   return (
     <button
       type="button"
       onClick={onClick}
-      aria-label={`继续阅读「${card.title}」`}
+      aria-label={`${copy.continueTitle}「${card.title}」`}
       className="reading-cover"
     >
       <Cover card={card} large />
@@ -218,19 +237,22 @@ function StagePoster({
 
 function StageInfo({
   card,
+  mode,
   onContinue,
   onRemove,
 }: {
   card: CardData;
+  mode: AppMode;
   onContinue: () => void;
   onRemove: () => void;
 }) {
   const { index = 0, total = 0 } = card.progress ?? {};
   const percent = readingPercent({ index, total });
+  const copy = workbenchCopy(mode);
   return (
     <div className="mt-4">
       <p className="reading-desk__muted tabular-nums">
-        看到 {index + 1} / {total}
+        {copy.positionVerb} {index + 1} / {total}
         <span className="ml-3">已读 {percent}%</span>
       </p>
       <div
@@ -239,7 +261,7 @@ function StageInfo({
         aria-valuenow={percent}
         aria-valuemin={0}
         aria-valuemax={100}
-        aria-label={`「${card.title}」阅读进度`}
+        aria-label={`「${card.title}」${copy.continueTitle}进度`}
       >
         <div
           className="h-full bg-accent rounded-full transition-[width]"
@@ -248,17 +270,17 @@ function StageInfo({
       </div>
       <div className="mt-5 flex flex-wrap items-center gap-2">
         <button type="button" onClick={onContinue} className="btn btn-primary">
-          继续阅读 <ArrowRightLineIcon size={14} />
+          {copy.continueButton} <ArrowRightLineIcon size={14} />
         </button>
         <button
           type="button"
           onClick={onRemove}
           className="btn btn-sm btn-ghost"
-          title={`将「${card.title}」标记为已读`}
-          aria-label={`将${card.title}标记为已读`}
+          title={`将「${card.title}」${copy.markFinishedLabel}`}
+          aria-label={`将${card.title}${copy.markFinishedLabel}`}
         >
           <CheckIcon size={13} />
-          <span className="hidden sm:inline">标记为已读</span>
+          <span className="hidden sm:inline">{copy.markFinishedLabel}</span>
         </button>
       </div>
     </div>
@@ -267,20 +289,23 @@ function StageInfo({
 
 function QueueItem({
   card,
+  mode,
   onOpen,
   onRemove,
 }: {
   card: CardData;
+  mode: AppMode;
   onOpen: () => void;
   onRemove: () => void;
 }) {
+  const copy = workbenchCopy(mode);
   return (
     <div className="reading-queue__item group">
       <button
         type="button"
         className="reading-queue__open"
         onClick={onOpen}
-        aria-label={`继续阅读「${card.title}」`}
+        aria-label={`${copy.continueTitle}「${card.title}」`}
       >
         <span className="w-10 h-12 shrink-0 rounded-md overflow-hidden bg-bg-media">
           <Cover card={card} />
@@ -290,7 +315,8 @@ function QueueItem({
             {card.displayTitle ?? card.title}
           </span>
           <span className="reading-desk__muted block mt-1 tabular-nums">
-            看到 {(card.progress?.index ?? 0) + 1} / {card.progress?.total ?? 0}
+            {copy.positionVerb} {(card.progress?.index ?? 0) + 1} /{" "}
+            {card.progress?.total ?? 0}
           </span>
         </span>
       </button>
@@ -298,8 +324,8 @@ function QueueItem({
         type="button"
         onClick={onRemove}
         className="reading-queue__remove"
-        title={`将「${card.title}」标记为已读`}
-        aria-label={`将${card.title}标记为已读`}
+        title={`将「${card.title}」${copy.markFinishedLabel}`}
+        aria-label={`将${card.title}${copy.markFinishedLabel}`}
       >
         <CheckIcon size={12} />
       </button>

@@ -9,6 +9,8 @@ import {
 import { fileManagerErrorMessage } from "../../utils/fileManager";
 import { favoriteResourceId } from "../../utils/path";
 import { isCompleted } from "../../utils/progress";
+import { copyForContentKind } from "../../utils/workbench";
+import { useAlbumClassification } from "../../hooks/useAlbumClassification";
 import { useUIStore } from "../../store/uiStore";
 import {
   ArrowRightLineIcon,
@@ -18,6 +20,8 @@ import {
   InfoIcon,
   CheckIcon,
   RewindIcon,
+  ImageIcon,
+  RefreshIcon,
 } from "../common/Icon";
 
 interface Props {
@@ -45,6 +49,11 @@ export default function AlbumContextMenu({
   const resourceId = favoriteResourceId(item);
   const imageCount = item.imageCount ?? item.progress?.total ?? item.count;
   const completed = isCompleted(item.progress);
+  // 措辞跟相册自身的用途走：照片是「已看完」，漫画是「已读完」。
+  const kind = item.contentKind ?? "photo";
+  const copy = copyForContentKind(kind, kind);
+  // 归类动作：把相册移到另一种打开方式，或恢复默认归类。
+  const classification = useAlbumClassification(resourceId);
   const items: AnyMenuItem[] = [
     { id: "open", label: "打开", icon: <ArrowRightLineIcon size={12} /> },
     {
@@ -58,17 +67,42 @@ export default function AlbumContextMenu({
       { id: "separator", separator: true },
       {
         id: "mark-read",
-        label: "标记为已读",
+        label: copy.markFinishedLabel,
         icon: <CheckIcon size={12} />,
         disabled: completed,
       },
       {
         id: "unmark-read",
-        label: "取消已读",
+        label: `取消${copy.finishedLabel}`,
         icon: <RewindIcon size={12} />,
         disabled: !completed,
       },
     );
+  }
+  // 归类：把相册移到另一种打开方式。它会清掉另一种用途留下的进度，
+  // 所以放在菜单里当一次明确的动作，而不是页头常驻的开关。
+  if (isAlbum) {
+    items.push({ id: "separator", separator: true });
+    if (item.contentKind === "comic") {
+      items.push({
+        id: "classify-photo",
+        label: "移到照片库",
+        icon: <ImageIcon size={12} />,
+      });
+    } else {
+      items.push({
+        id: "classify-comic",
+        label: "移到漫画库",
+        icon: <ImageIcon size={12} />,
+      });
+    }
+    if (item.contentKindOverridden) {
+      items.push({
+        id: "classify-reset",
+        label: "恢复默认类型",
+        icon: <RefreshIcon size={12} />,
+      });
+    }
   }
   items.push(
     { id: "separator", separator: true },
@@ -156,11 +190,15 @@ export default function AlbumContextMenu({
           case "mark-read":
             // 菜单随即卸载；使用 Promise 继续反馈写入结果，缓存由 mutation 同步。
             void markRead
-              .mutateAsync({ albumId: resourceId, total: imageCount })
+              .mutateAsync({
+                albumId: resourceId,
+                total: imageCount,
+                contentKind: kind,
+              })
               .then(() =>
                 pushToast({
                   kind: "success",
-                  message: "已标记为已读",
+                  message: `已${copy.finishVerb}`,
                   ttl: 1200,
                 }),
               )
@@ -168,7 +206,10 @@ export default function AlbumContextMenu({
             break;
           case "unmark-read":
             void resetRead
-              .mutateAsync(resourceId)
+              .mutateAsync({
+                albumId: resourceId,
+                contentKind: item.contentKind,
+              })
               .then(() =>
                 pushToast({
                   kind: "success",
@@ -177,6 +218,15 @@ export default function AlbumContextMenu({
                 }),
               )
               .catch(() => pushToast({ kind: "error", message: "重置失败" }));
+            break;
+          case "classify-photo":
+            void classification.moveTo.mutateAsync("photo");
+            break;
+          case "classify-comic":
+            void classification.moveTo.mutateAsync("comic");
+            break;
+          case "classify-reset":
+            void classification.resetToDefault.mutateAsync();
             break;
         }
         onClose();

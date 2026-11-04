@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeAll, expect, it, vi } from "vitest";
 import HelpOverlay from "./HelpOverlay";
+import { useAppModeStore } from "../../store/appModeStore";
 
 // jsdom 不提供原生 dialog 行为；焦点循环和背景点击由浏览器用例验证。
 beforeAll(() => {
@@ -145,6 +146,36 @@ it.each(["library", "image", "video"] as const)(
     }
   },
 );
+
+// 照片墙是主页面的一种形态：全局操作照旧，再多一组大图预览的操作。
+it("photo 场景展示全局操作与大图预览操作", () => {
+  render(<HelpOverlay context="photo" open onClose={vi.fn()} />);
+  expect(screen.getByText("回到主页")).toBeInTheDocument();
+  expect(screen.getByText("照片墙")).toBeInTheDocument();
+  expect(screen.getByText("恢复适应屏幕")).toBeInTheDocument();
+  expect(screen.getByText("关闭预览，回到照片墙")).toBeInTheDocument();
+  // 阅读器的专属操作不该出现在照片墙。
+  expect(screen.queryByText("当前内容设为封面")).not.toBeInTheDocument();
+  expect(screen.queryByText(/旋转 90°/)).not.toBeInTheDocument();
+});
+
+// 少数全局操作的措辞随工作台模式变化：照片工作台讲「未浏览」。
+it("全局操作的措辞随工作台模式变化", () => {
+  useAppModeStore.setState({ mode: "photo" });
+  const view = render(<HelpOverlay context="library" open onClose={vi.fn()} />);
+  expect(screen.getByText("未浏览相册页")).toBeInTheDocument();
+  expect(screen.getByText("随机翻翻")).toBeInTheDocument();
+
+  act(() => {
+    useAppModeStore.setState({ mode: "comic" });
+  });
+  expect(screen.getByText("未读相册页")).toBeInTheDocument();
+  expect(screen.getByText("随机一本")).toBeInTheDocument();
+  view.rerender(<HelpOverlay context="library" open onClose={vi.fn()} />);
+  act(() => {
+    useAppModeStore.setState({ mode: "photo" });
+  });
+});
 
 it("视频帮助搜索不显示图片操作，并可按视频别名查找播放操作", () => {
   render(<HelpOverlay context="video" open onClose={vi.fn()} />);

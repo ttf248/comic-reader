@@ -5,6 +5,7 @@ import { useUIStore } from "../../store/uiStore";
 import { useKeyboard } from "../../hooks/useKeyboard";
 import { albumRoute } from "../../utils/path";
 import { useFsCapabilities } from "../../hooks/useFsCapabilities";
+import { useAppMode } from "../../hooks/useAppMode";
 import { scanApi } from "../../api/scan";
 import { useScanSSE } from "../../hooks/useScanSSE";
 import Sidebar from "./Sidebar";
@@ -23,15 +24,19 @@ export default function AppShell() {
   const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
   const pushToast = useUIStore((s) => s.pushToast);
+  const { mode } = useAppMode();
+  const immersiveOverlay = useUIStore((s) => s.immersiveOverlay);
+  const helpContext = useUIStore((s) => s.helpContext);
   const [helpOpen, setHelpOpen] = useState(false);
   const [isCancellingScan, setIsCancellingScan] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
   const wasMobileNavOpen = useRef(false);
   // 阅读器（/read）占用单键快捷键：r 是旋转，u 不是「未读」。
-  const onGallery =
-    location.pathname.startsWith("/read") ||
-    location.pathname.startsWith("/gallery");
+  // 大图预览（照片墙上的浮层）同样占用单键：它自己处理方向键与缩放，
+  // 全局的 r / u 必须在它打开时让位，否则按 r 会一边旋转一边跳走整页。
+  const immersive =
+    location.pathname.startsWith("/read") || immersiveOverlay;
   // 扫描进度 + 取消（提升到 AppShell 后所有路由都能看到顶部进度条）
   const scanSse = useScanSSE();
   useFsCapabilities();
@@ -56,10 +61,10 @@ export default function AppShell() {
 
   useEffect(() => {
     const titles: Record<string, string> = {
-      "/": "图像库",
+      "/": mode === "comic" ? "漫画库" : mode === "photo" ? "照片库" : "全部相册",
       "/recents": "最近",
       "/favorites": "收藏",
-      "/unread": "未读",
+      "/unread": mode === "comic" ? "未读" : mode === "photo" ? "未浏览" : "未读",
       "/settings": "设置",
     };
     const path = location.pathname;
@@ -68,14 +73,12 @@ export default function AppShell() {
       if (path.startsWith("/tags/")) {
         const raw = decodeURIComponent(path.slice("/tags/".length));
         base = raw || "标签";
-      } else if (path.startsWith("/albums")) {
-        base = "文件夹";
       } else {
         base = "文件夹";
       }
     }
     document.title = `${base} · Local Gallery`;
-  }, [location.pathname]);
+  }, [location.pathname, mode]);
 
   useEffect(() => {
     const fn = () => setHelpOpen(true);
@@ -85,7 +88,7 @@ export default function AppShell() {
   }, []);
 
   const randomAlbum = useMutation({
-    mutationFn: () => libraryApi.randomAlbum(),
+    mutationFn: () => libraryApi.randomAlbum(mode),
     onSuccess: ({ album }) => navigate(albumRoute(album.id)),
     onError: () => pushToast({ kind: "info", message: "没有可随机打开的相册" }),
   });
@@ -121,14 +124,14 @@ export default function AppShell() {
       );
       el?.focus();
     },
-    // 随机一本：仅在非 gallery 页面生效（gallery 的 r 用于旋转）
+    // 随机一本：仅在非沉浸场景生效（阅读器与大图预览的 r 有别的含义）
     r: () => {
-      if (onGallery) return;
+      if (immersive) return;
       goShuffle();
     },
     // U → 未读页
     u: () => {
-      if (onGallery) return;
+      if (immersive) return;
       navigate("/unread");
     },
   });
@@ -175,7 +178,7 @@ export default function AppShell() {
         onStopTracking={scanSse.reset}
       />
       <HelpOverlay
-        context="library"
+        context={helpContext}
         open={helpOpen}
         onClose={() => setHelpOpen(false)}
       />

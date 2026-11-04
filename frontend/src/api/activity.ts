@@ -188,6 +188,22 @@ export const activityApi = {
     return response;
   },
 
+  queryPhotos: async (albumIds: string[]) => {
+    const response = await api<{ activities: PhotoActivity[]; count: number }>(
+      "/api/activity/query",
+      {
+        method: "POST",
+        body: {
+          items: albumIds.map((albumId) => ({
+            albumId,
+            mediaKind: "photo" as const,
+          })),
+        },
+      },
+    );
+    return response;
+  },
+
   setBatch: (activities: ActivityInput[]) =>
     withActivityChanged(
       api<{ ok: boolean; updated: number }>("/api/activity/batch", {

@@ -34,6 +34,7 @@ vi.mock("../hooks/useGalleryContextSync", () => ({
 }));
 vi.mock("../hooks/useImageActivity", () => ({
   useImageActivities: () => ({ data: {} }),
+  usePhotoActivities: () => ({ data: {} }),
   useMarkAlbumRead: () => ({ mutateAsync: vi.fn() }),
   useMarkAlbumsRead: () => ({ mutateAsync: vi.fn() }),
 }));
@@ -44,7 +45,7 @@ vi.mock("../components/home/YearTimeline", () => ({
 vi.mock("../components/home/HomeHeroes", () => ({
   // rightSlot 是真实组件的右栏（只有一本在读时，首页把「未读」塞进去），
   // 占位组件也要渲染它，否则 DOM 顺序断言会漏掉未读区的位置。
-  ContinueReadingHero: ({ rightSlot }: { rightSlot?: React.ReactNode }) => (
+  ContinueHero: ({ rightSlot }: { rightSlot?: React.ReactNode }) => (
     <div data-testid="continue-hero">{rightSlot}</div>
   ),
   UnreadHero: () => <div data-testid="unread-hero" />,
@@ -153,7 +154,7 @@ it("筛选条紧贴在「全部图像」网格上方，不被英雄区 / 时间�
 
   await waitFor(() => expect(screen.getByTestId("album-grid")).toBeTruthy());
 
-  const heading = screen.getByText("全部图像");
+  const heading = screen.getByText("全部照片");
   const chip = screen.getByRole("button", { name: /文件夹/ });
   const grid = screen.getByTestId("album-grid");
 

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { scanApi } from "../../api/scan";
 import { useScanSSE } from "../../hooks/useScanSSE";
@@ -33,12 +33,14 @@ export default function Toolbar({
   mobileMenuButtonRef?: RefObject<HTMLButtonElement>;
 }) {
   const navigate = useNavigate();
-  const location = useLocation();
   const sse = useScanSSE();
   const queryClient = useQueryClient();
   const pushToast = useUIStore((s) => s.pushToast);
 
-  const onGallery = location.pathname.startsWith("/gallery");
+  // 沉浸场景（照片墙的大图预览）里，顶栏的搜索与库规模会与浮层抢注意力，
+  // 收起来更干净。阅读器整屏脱离 AppShell，不经过这里。
+  const immersiveOverlay = useUIStore((s) => s.immersiveOverlay);
+  const onGallery = immersiveOverlay;
   // 媒体库规模：放在顶栏左槽，作为全局上下文（底部状态栏不再重复）。
   const manifest = useLibraryManifest().data?.manifest;
   const libraryContext = manifest

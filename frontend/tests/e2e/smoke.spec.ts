@@ -249,6 +249,37 @@ test("扫描并打开示例相册", async ({ page }) => {
   await expect(page.getByTitle("跳转到指定张 (G)")).toHaveText("2");
 });
 
+test("工作台模式切换：侧栏分组随动，模式持久化在服务端偏好里", async ({
+  page,
+}) => {
+  await page.goto("/");
+  // 侧栏按工作台分成两组，另有一个「全部相册」逃生舱。
+  await expect(page.getByRole("button", { name: "照片库" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "漫画库" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "全部相册" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "照片库" })).toBeVisible();
+
+  const switcher = page.getByRole("group", { name: "工作台模式" });
+  await switcher.getByRole("button", { name: "漫画" }).click();
+  await expect(page.getByRole("heading", { name: "漫画库" })).toBeVisible();
+
+  // 模式写在服务端偏好里，刷新后仍然是漫画工作台。
+  await expect
+    .poll(async () => {
+      const response = await page.request.get("/api/prefs");
+      if (!response.ok()) return "";
+      const prefs = (await response.json()) as { appMode?: string };
+      return prefs.appMode ?? "";
+    })
+    .toBe("comic");
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "漫画库" })).toBeVisible();
+
+  // 「全部相册」是逃生舱：不过滤，两种相册混排。
+  await page.getByRole("button", { name: "全部相册" }).click();
+  await expect(page.getByRole("heading", { name: "全部相册" })).toBeVisible();
+});
+
 for (const recovery of ["manual", "automatic"] as const) {
   test(`扫描进度连接中断后${recovery === "manual" ? "手动" : "自动"}恢复同一任务，不重复启动扫描`, async ({
     page,

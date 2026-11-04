@@ -12,6 +12,7 @@ vi.mock("../hooks/useLibrary", () => ({ useTagAlbums: vi.fn() }));
 vi.mock("../hooks/useFavorites", () => ({ useFavorites: vi.fn() }));
 vi.mock("../hooks/useImageActivity", () => ({
   useImageActivities: vi.fn(),
+  usePhotoActivities: () => ({ data: {} }),
 }));
 vi.mock("../hooks/useGalleryContextSync", () => ({
   useGalleryContextSync: vi.fn(),

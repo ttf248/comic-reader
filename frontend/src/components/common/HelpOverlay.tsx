@@ -4,6 +4,7 @@ import {
   type Shortcut,
   type ShortcutContext,
 } from "../../utils/shortcuts";
+import { useAppMode } from "../../hooks/useAppMode";
 import { CloseIcon, SearchIcon, KeyboardIcon } from "./Icon";
 
 interface Props {
@@ -26,6 +27,7 @@ const GROUP_ORDER: Array<{
   title: string;
 }> = [
   { key: "global", title: "全局" },
+  { key: "photo", title: "照片墙" },
   { key: "reader", title: "阅读器" },
   { key: "image", title: "图片" },
   { key: "video", title: "视频" },
@@ -47,6 +49,11 @@ export default function HelpOverlay({
   const searchRef = useRef<HTMLInputElement>(null);
   const titleId = useId();
   const dark = tone === "reader";
+  // 少数全局操作的措辞随工作台模式变化（照片工作台讲「未浏览」）。
+  const { mode } = useAppMode();
+
+  const describe = (s: Shortcut) =>
+    s.modeDescriptions?.[mode] ?? s.description;
 
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -78,14 +85,19 @@ export default function HelpOverlay({
     if (!lc) return true;
     return (
       s.id.toLowerCase().includes(lc) ||
-      s.description.toLowerCase().includes(lc) ||
+      describe(s).toLowerCase().includes(lc) ||
       s.label.toLowerCase().includes(lc)
     );
   };
 
   // 按 group 字段分组，渲染顺序由 GROUP_ORDER 决定
+  // 照片墙是主页面的一种形态：全局操作照旧，再多一组大图预览的操作。
   const activeGroups: Shortcut["group"][] =
-    context === "library" ? ["global"] : ["reader", context];
+    context === "library"
+      ? ["global"]
+      : context === "photo"
+        ? ["global", "photo"]
+        : ["reader", context];
   const filteredGroups = GROUP_ORDER.filter((g) => activeGroups.includes(g.key))
     .map((g) => ({
       title: g.title,
@@ -247,7 +259,7 @@ export default function HelpOverlay({
                     className="flex items-center justify-between text-[13px] py-1.5"
                   >
                     <span className={dark ? "text-white/75" : "text-fg-muted"}>
-                      {s.description}
+                      {describe(s)}
                     </span>
                     <kbd
                       className={`shrink-0 ml-3 ${dark ? "kbd-light" : "kbd"}`}

@@ -15,6 +15,7 @@ import { activityApi } from "../api/activity";
 import { albumsApi } from "../api/albums";
 
 vi.mock("../hooks/useLibrary", () => ({
+  libraryQueryKeys: { root: ["library"] },
   useAlbumMedia: vi.fn(),
   useLibraryChildren: vi.fn(),
   useLibraryNodes: vi.fn(),
@@ -180,10 +181,12 @@ describe("PhotoAlbum", () => {
     }
   });
 
-  it("切换成漫画相册后进入阅读器", async () => {
+  it("从「更多」菜单归类成漫画相册后进入阅读器", async () => {
     renderPhotoAlbum();
 
-    fireEvent.click(screen.getByRole("button", { name: "漫画" }));
+    // 用途切换不再是页头常驻控件，而是「更多」菜单里的一次明确动作。
+    fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "移到漫画库" }));
 
     await waitFor(() =>
       expect(albumsApi.setContentKind).toHaveBeenCalledWith("a_trip", "comic"),
@@ -199,5 +202,12 @@ describe("PhotoAlbum", () => {
     await waitFor(() =>
       expect(activityApi.setPhoto).toHaveBeenCalledWith("a_trip", 0, 4),
     );
+  });
+
+  it("照片墙期间帮助浮层切到照片场景，离开后复位", () => {
+    const { unmount } = renderPhotoAlbum();
+    expect(useUIStore.getState().helpContext).toBe("photo");
+    unmount();
+    expect(useUIStore.getState().helpContext).toBe("library");
   });
 });

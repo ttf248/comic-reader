@@ -14,6 +14,8 @@ import type { GalleryContextEntry } from "../utils/galleryContext";
 import { albumRoute, decodeFavPath } from "../utils/path";
 import { compareDatesDesc } from "../utils/date";
 import { useViewedSort } from "../hooks/useHistory";
+import { useAppMode } from "../hooks/useAppMode";
+import { workbenchCopy } from "../utils/workbench";
 import { cardMatchesQuery } from "../utils/libraryCard";
 import ViewedSortNotice from "../components/common/ViewedSortNotice";
 
@@ -32,6 +34,8 @@ export default function Unread() {
   const minImageCount = useSearchStore((s) => s.minImageCount);
   const pushToast = useUIStore((s) => s.pushToast);
   const { cards, count, total, isLoading } = useUnreadAlbums();
+  const { mode } = useAppMode();
+  const copy = workbenchCopy(mode);
   const needsHistory = sortBy === "viewed" && cards.length > 0;
   const { query: historyQuery, compareViewed } = useViewedSort(needsHistory);
 
@@ -74,6 +78,7 @@ export default function Unread() {
         name: c.title,
         imageCount: c.imageCount,
         videoCount: c.videoCount,
+        contentKind: c.contentKind,
       })),
     [filtered],
   );
@@ -91,8 +96,8 @@ export default function Unread() {
   return (
     <div className="min-h-full">
       <PageHeading
-        title="未读相册"
-        eyebrow="下一本的灵感"
+        title={copy.unreadPageTitle}
+        eyebrow={copy.unreadEyebrow}
         description={
           <p className="text-[13px] text-fg-muted mt-2 tabular-nums flex items-center gap-3 flex-wrap">
             {isLoading ? (
@@ -100,7 +105,7 @@ export default function Unread() {
               <span>正在统计未读相册…</span>
             ) : (
               <span>
-                还有 <span className="text-fg">{count}</span> 本没看
+                还有 <span className="text-fg">{count}</span> 本{copy.unreadCountVerb}
                 <span className="text-fg-subtle mx-1.5">·</span>
                 全库 <span className="text-fg">{total}</span> 本
               </span>
@@ -109,10 +114,10 @@ export default function Unread() {
               <button
                 onClick={onShuffleUnread}
                 className="btn btn-sm btn-outline"
-                title="从未读里随机挑一本"
+                title={`从${copy.unreadTitle}里随机挑一本`}
               >
                 <ShuffleIcon size={11} />
-                随机一本未读
+                {copy.unreadButton}
               </button>
             )}
           </p>
@@ -126,11 +131,11 @@ export default function Unread() {
         <AlbumGridSkeleton variant={viewMode} label="正在加载未读相册…" />
       ) : count === 0 ? (
         <EmptyState
-          title={total === 0 ? "尚未加载图像库" : "全部看完啦 🎉"}
+          title={total === 0 ? "尚未加载图像库" : copy.unreadEmpty}
           description={
             total === 0
               ? "先去设置里指定一个媒体根目录,然后回来扫一遍就有了。"
-              : "未读列表为空,可以在「主页」随机翻一卷,或去「收藏」里找回老朋友。"
+              : copy.unreadEmptyHint
           }
           icon={<SparkleIcon size={20} />}
           action={

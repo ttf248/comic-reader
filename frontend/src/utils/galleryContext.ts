@@ -6,6 +6,7 @@
 // 关闭标签页或点开完全不同的来源时由写入方覆盖。
 
 import { decodeFavPath } from "./path";
+import type { ContentKind } from "../api/library";
 
 export type GallerySource =
   | {
@@ -37,16 +38,25 @@ export interface GalleryContextEntry {
   imageCount?: number;
   /** 视频数：同上，用于视频模式。 */
   videoCount?: number;
+  /**
+   * 相册的浏览用途。漫画相册有阅读器入口，照片相册没有——
+   * 照片要进照片墙。把照片相册丢进漫画阅读器是一次真实的错位，
+   * 所以跳本只认漫画相册。
+   */
+  contentKind?: ContentKind;
 }
 
 /**
- * 条目在阅读器里的地址；集合没有阅读器入口，返回 null。
+ * 条目在阅读器里的地址；集合与照片相册没有阅读器入口，返回 null。
  *
  * 跳本（上一本 / 下一本、读到末尾自动切换）时用它留在阅读器里继续读，
  * 而不是跳到相册首页再让用户重新点「开始浏览」。
  */
 export function entryReaderUrl(entry: GalleryContextEntry): string | null {
   if (entry.kind === "collection") return null;
+  if (entry.contentKind !== undefined && entry.contentKind !== "comic") {
+    return null;
+  }
   if (!entry.to.startsWith("/albums/")) return null;
   const id = decodeFavPath(entry.to);
   if (!id) return null;

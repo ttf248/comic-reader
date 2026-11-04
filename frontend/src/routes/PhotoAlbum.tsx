@@ -7,6 +7,7 @@ import { useAlbumMedia } from "../hooks/useLibrary";
 import { useFavorites } from "../hooks/useFavorites";
 import { usePhotoActivity } from "../hooks/usePhotoActivity";
 import { useAlbumActions } from "../hooks/useAlbumActions";
+import { useAlbumClassification } from "../hooks/useAlbumClassification";
 import { useUIStore } from "../store/uiStore";
 import {
   usePhotoStore,
@@ -15,7 +16,6 @@ import {
 } from "../store/photoStore";
 import PhotoWall from "../components/wall/PhotoWall";
 import PhotoViewer from "../components/wall/PhotoViewer";
-import ContentKindSwitch from "../components/common/ContentKindSwitch";
 import ContextMenu, { type AnyMenuItem } from "../components/album/ContextMenu";
 import PropertiesDialog from "../components/common/PropertiesDialog";
 import Popover, {
@@ -32,6 +32,8 @@ import {
   InfoIcon,
   MoreHorizontalIcon,
   StarIcon,
+  ReaderIcon,
+  RefreshIcon,
 } from "../components/common/Icon";
 import { fileManagerErrorMessage } from "../utils/fileManager";
 import { useSafeBack } from "../utils/navigation";
@@ -75,6 +77,7 @@ export default function PhotoAlbum({ album }: Props) {
   } | null>(null);
   const [propertiesFileId, setPropertiesFileId] = useState<string | null>(null);
   const { record } = usePhotoActivity(album.id);
+  const classification = useAlbumClassification(album.id);
 
   const title = album.virtual
     ? album.location || album.displayName || album.name
@@ -96,6 +99,13 @@ export default function PhotoAlbum({ album }: Props) {
   useEffect(() => {
     if (total > 0) record(0, total);
   }, [record, total]);
+
+  // 照片墙的帮助浮层多一组大图预览的操作；离开本页时复位。
+  const setHelpContext = useUIStore((s) => s.setHelpContext);
+  useEffect(() => {
+    setHelpContext("photo");
+    return () => setHelpContext("library");
+  }, [setHelpContext]);
 
   const loadMore = useCallback(() => {
     void mediaQuery.fetchNextPage({ cancelRefetch: false });
@@ -125,15 +135,6 @@ export default function PhotoAlbum({ album }: Props) {
       pushToast({ kind: "error", message: "设置封面失败" });
     }
   }, [album.id, mediaItems, pushToast, queryClient, viewerIndex]);
-
-  const switchKind = useCallback(
-    (kind: "photo" | "comic") => {
-      if (kind === "comic") {
-        navigate(readerRoute(album.id));
-      }
-    },
-    [album.id, navigate],
-  );
 
   const copyLink = useCallback(async () => {
     try {
@@ -229,14 +230,6 @@ export default function PhotoAlbum({ album }: Props) {
             </div>
           </div>
 
-          <ContentKindSwitch
-            albumId={album.id}
-            kind="photo"
-            defaultKind={album.contentKindDefault ?? "photo"}
-            overridden={album.contentKindOverridden === true}
-            onChanged={switchKind}
-          />
-
           <button
             type="button"
             onClick={toggleFavorite}
@@ -281,6 +274,30 @@ export default function PhotoAlbum({ album }: Props) {
               <GridIcon size={13} />
               <span>用当前查看的图片设为封面</span>
             </PopoverItem>
+            {/* 归类：把相册移到漫画库。它是一次写操作（会清掉另一种
+                打开方式的进度），所以留在菜单里而不是页头常驻控件。 */}
+            <PopoverItem
+              onClick={() => {
+                // 归类成漫画相册后，这本相册该用阅读器打开：
+                // 继续停在照片墙上会显示一个「漫画」相册的照片墙。
+                void classification.moveTo
+                  .mutateAsync("comic")
+                  .then(() => navigate(readerRoute(album.id)));
+              }}
+              title="移到漫画库 · 会清空照片浏览进度"
+            >
+              <ReaderIcon size={13} />
+              <span>移到漫画库</span>
+            </PopoverItem>
+            {album.contentKindOverridden && (
+              <PopoverItem
+                onClick={() => void classification.resetToDefault.mutateAsync()}
+                title="恢复成媒体根的默认打开方式"
+              >
+                <RefreshIcon size={13} />
+                <span>恢复默认类型</span>
+              </PopoverItem>
+            )}
           </Popover>
         </div>
       </header>

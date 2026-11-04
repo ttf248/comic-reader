@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useSearchStore } from "../../store/searchStore";
 import { SearchIcon } from "./Icon";
 import { useDebounce } from "../../hooks/useDebounce";
+import { useAppMode } from "../../hooks/useAppMode";
 import { albumsApi, type SearchHit } from "../../api/albums";
 import { thumbUrl } from "../../api/thumbs";
 import { albumRoute, tagRoute } from "../../utils/path";
@@ -17,12 +18,13 @@ export default function GlobalSearch() {
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+  const { mode } = useAppMode();
   const debounced = useDebounce(query, 200);
   const searchTerm = debounced.trim();
   const searchEnabled = searchTerm.length >= 2;
   const searchQuery = useQuery({
-    queryKey: ["library", "search", searchTerm],
-    queryFn: () => albumsApi.search(searchTerm, 10),
+    queryKey: ["library", "search", mode, searchTerm],
+    queryFn: () => albumsApi.search(searchTerm, 10, mode),
     enabled: searchEnabled,
     staleTime: 30_000,
     retry: false,

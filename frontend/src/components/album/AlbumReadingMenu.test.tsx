@@ -15,7 +15,12 @@ import { activityApi } from "../../api/activity";
 import { useUIStore } from "../../store/uiStore";
 
 vi.mock("../../api/activity", () => ({
-  activityApi: { setImage: vi.fn(), removeImage: vi.fn() },
+  activityApi: {
+    setImage: vi.fn(),
+    removeImage: vi.fn(),
+    setPhoto: vi.fn(),
+    removePhoto: vi.fn(),
+  },
 }));
 vi.mock("../../hooks/useFavorites", () => ({
   useFavorites: () => ({
@@ -75,6 +80,7 @@ function renderCards(
     videoCount: 0,
     coverPath: "f_cover",
     to: "/albums/a_one",
+    contentKind: "photo",
     ...overrides,
   };
   const client = new QueryClient({
@@ -103,15 +109,15 @@ function renderCards(
 
 beforeEach(() => {
   vi.resetAllMocks();
-  vi.mocked(activityApi.setImage).mockResolvedValue({
+  vi.mocked(activityApi.setPhoto).mockResolvedValue({
     albumId: "a_one",
-    mediaKind: "image",
+    mediaKind: "photo",
     pageIndex: 0,
     pageCount: 1,
     status: "completed",
     updated: "2026-11-01T00:00:00Z",
   });
-  vi.mocked(activityApi.removeImage).mockResolvedValue({
+  vi.mocked(activityApi.removePhoto).mockResolvedValue({
     ok: true,
     removed: true,
   });
@@ -130,19 +136,19 @@ it.each(["grid", "list"] as const)(
     const menu = within(screen.getByRole("menu"));
     expect(menu.getByRole("menuitem", { name: "打开" })).toBeEnabled();
     expect(menu.getByRole("menuitem", { name: "收藏" })).toBeEnabled();
-    expect(menu.getByRole("menuitem", { name: "取消已读" })).toBeDisabled();
-    fireEvent.click(menu.getByRole("menuitem", { name: "标记为已读" }));
+    expect(menu.getByRole("menuitem", { name: "取消已看完" })).toBeDisabled();
+    fireEvent.click(menu.getByRole("menuitem", { name: "标记为已看完" }));
     await waitFor(() =>
-      expect(activityApi.setImage).toHaveBeenCalledWith("a_one", 0, 1),
+      expect(activityApi.setPhoto).toHaveBeenCalledWith("a_one", 0, 1),
     );
     await waitFor(() =>
       expect(
         useUIStore
           .getState()
-          .toasts.some((toast) => toast.message === "已标记为已读"),
+          .toasts.some((toast) => toast.message === "已看完"),
       ).toBe(true),
     );
-    expect(activityApi.setImage).toHaveBeenCalledTimes(1);
+    expect(activityApi.setPhoto).toHaveBeenCalledTimes(1);
     expect(client.getQueryState(batchKey)?.isInvalidated).toBe(true);
     expect(client.getQueryState(detailKey)?.isInvalidated).toBe(true);
   },
@@ -157,9 +163,9 @@ it.each(["grid", "list"] as const)(
       progress: { index: 0, total: 2 },
     });
     expect(screen.getAllByRole("menu")).toHaveLength(1);
-    fireEvent.click(screen.getByRole("menuitem", { name: "标记为已读" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "标记为已看完" }));
     await waitFor(() =>
-      expect(activityApi.setImage).toHaveBeenCalledWith("a_one", 2, 3),
+      expect(activityApi.setPhoto).toHaveBeenCalledWith("a_one", 2, 3),
     );
   },
 );
@@ -171,10 +177,10 @@ it.each(["grid", "list"] as const)(
     const detailKey = ["activity", "image", "a_one"];
     client.setQueryData(detailKey, { pageIndex: 0, pageCount: 1 });
     expect(screen.getAllByRole("menu")).toHaveLength(1);
-    expect(screen.getByRole("menuitem", { name: "标记为已读" })).toBeDisabled();
-    fireEvent.click(screen.getByRole("menuitem", { name: "取消已读" }));
+    expect(screen.getByRole("menuitem", { name: "标记为已看完" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("menuitem", { name: "取消已看完" }));
     await waitFor(() =>
-      expect(activityApi.removeImage).toHaveBeenCalledWith("a_one"),
+      expect(activityApi.removePhoto).toHaveBeenCalledWith("a_one"),
     );
     await waitFor(() =>
       expect(
@@ -193,9 +199,9 @@ it.each(["grid", "list"] as const)(
     renderCards(variant, {}, true);
     expect(screen.getAllByRole("menu")).toHaveLength(1);
     expect(screen.getByRole("menuitem", { name: "收藏" })).toBeEnabled();
-    fireEvent.click(screen.getByRole("menuitem", { name: "标记为已读" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "标记为已看完" }));
     await waitFor(() =>
-      expect(activityApi.setImage).toHaveBeenCalledWith("a_one", 0, 1),
+      expect(activityApi.setPhoto).toHaveBeenCalledWith("a_one", 0, 1),
     );
   },
 );
@@ -209,16 +215,16 @@ it.each(["grid", "list"] as const)(
       videoCount: 2,
       coverKind: "video",
     });
-    expect(screen.queryByRole("menuitem", { name: "标记为已读" })).toBeNull();
-    expect(screen.queryByRole("menuitem", { name: "取消已读" })).toBeNull();
-    expect(activityApi.setImage).not.toHaveBeenCalled();
+    expect(screen.queryByRole("menuitem", { name: "标记为已看完" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "取消已看完" })).toBeNull();
+    expect(activityApi.setPhoto).not.toHaveBeenCalled();
   },
 );
 
 it("标记失败提示错误，保留未读显示并允许重新操作", async () => {
-  vi.mocked(activityApi.setImage).mockRejectedValueOnce(new Error("offline"));
+  vi.mocked(activityApi.setPhoto).mockRejectedValueOnce(new Error("offline"));
   renderCards("grid");
-  fireEvent.click(screen.getByRole("menuitem", { name: "标记为已读" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "标记为已看完" }));
   await waitFor(() =>
     expect(
       useUIStore
@@ -228,8 +234,8 @@ it("标记失败提示错误，保留未读显示并允许重新操作", async (
   );
   expect(screen.queryByText("已读", { exact: true })).toBeNull();
   fireEvent.contextMenu(screen.getByRole("link"));
-  fireEvent.click(screen.getByRole("menuitem", { name: "标记为已读" }));
-  await waitFor(() => expect(activityApi.setImage).toHaveBeenCalledTimes(2));
+  fireEvent.click(screen.getByRole("menuitem", { name: "标记为已看完" }));
+  await waitFor(() => expect(activityApi.setPhoto).toHaveBeenCalledTimes(2));
 });
 
 it.each(["collection", "smart"] as const)(
@@ -241,7 +247,7 @@ it.each(["collection", "smart"] as const)(
       "disabled",
       variant === "smart",
     );
-    expect(screen.queryByRole("menuitem", { name: "标记为已读" })).toBeNull();
-    expect(screen.queryByRole("menuitem", { name: "取消已读" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "标记为已看完" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "取消已看完" })).toBeNull();
   },
 );

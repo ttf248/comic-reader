@@ -37,7 +37,15 @@ function seedUnread(
     isLoading: false,
   } as never);
   vi.mocked(useLibraryManifest).mockReturnValue({
-    data: { manifest: { statistics: { albumCount } } },
+    data: {
+      manifest: {
+        statistics: {
+          albumCount,
+          photoAlbumCount: albumCount,
+          comicAlbumCount: albumCount,
+        },
+      },
+    },
     isLoading: false,
   } as never);
 }

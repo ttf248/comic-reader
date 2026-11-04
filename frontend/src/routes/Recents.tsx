@@ -5,7 +5,9 @@ import { useSearchStore } from "../store/searchStore";
 import { useUIStore } from "../store/uiStore";
 import type { Prefs } from "../api/prefs";
 import { useHistory } from "../hooks/useHistory";
-import { useImageActivities } from "../hooks/useImageActivity";
+import { useImageActivities, usePhotoActivities } from "../hooks/useImageActivity";
+import { useAppMode } from "../hooks/useAppMode";
+import { workbenchCopy } from "../utils/workbench";
 import { useGalleryContextSync } from "../hooks/useGalleryContextSync";
 import AlbumGrid, { type CardData } from "../components/album/AlbumGrid";
 import AlbumGridSkeleton from "../components/album/AlbumGridSkeleton";
@@ -29,6 +31,8 @@ export default function Recents() {
   const minImageCount = useSearchStore((s) => s.minImageCount);
 
   const historyQuery = useHistory();
+  const { mode } = useAppMode();
+  const copy = workbenchCopy(mode);
 
   // history 顺序:OpenedAt 倒序
   const history = historyQuery.data?.history ?? EMPTY_HISTORY;
@@ -48,16 +52,31 @@ export default function Recents() {
     for (const h of history) {
       const node = nodesById.get(h.albumId);
       if (!node || node.kind !== "album") continue;
+      // 最近访问是用户的真实足迹，但工作台只呈现当前这一类：
+      // 照片工作台里不该冒出一本漫画。
+      if (mode !== "all" && node.contentKind !== mode) continue;
       out.push({ ...nodeSummaryToCard(node), lastSeenAt: h.openedAt });
     }
     return out;
-  }, [history, nodesById]);
+  }, [history, nodesById, mode]);
+
+  // 被当前工作台过滤掉的条数要说清楚，否则用户以为记录丢了。
+  const hiddenCount = useMemo(() => {
+    if (mode === "all") return 0;
+    return history.filter((h) => {
+      const node = nodesById.get(h.albumId);
+      return node?.kind === "album" && node.contentKind !== mode;
+    }).length;
+  }, [history, nodesById, mode]);
 
   const progressPaths = useMemo(
     () => cards.map((c) => decodeFavPath(c.to)).filter(Boolean),
     [cards],
   );
-  const { data: progressMap } = useImageActivities(progressPaths);
+  // 进度要按相册用途取：照片相册的位置在 photo 活动里，
+  // 漫画相册的页码在 image 活动里，取错就是张冠李戴。
+  const { data: imageProgressMap } = useImageActivities(progressPaths);
+  const { data: photoProgressMap } = usePhotoActivities(progressPaths);
 
   const filtered = useMemo(() => {
     const list = cards
@@ -74,7 +93,11 @@ export default function Recents() {
       })
       .map((c) => {
         const k = decodeFavPath(c.to);
-        const p = progressMap?.[k];
+        // 按相册自身的用途取对应的那份活动：漫画看页码，照片看浏览位置。
+        const p =
+          c.contentKind === "photo"
+            ? photoProgressMap?.[k]
+            : imageProgressMap?.[k];
         if (!p) return c;
         return {
           ...c,
@@ -97,7 +120,7 @@ export default function Recents() {
         // 最近看沿用服务端按 openedAt 倒序的访问记录。
         return list;
     }
-  }, [cards, query, sortBy, progressMap, minImageCount]);
+  }, [cards, query, sortBy, imageProgressMap, photoProgressMap, minImageCount]);
 
   const recentsEntries = useMemo<GalleryContextEntry[]>(
     () =>
@@ -107,6 +130,7 @@ export default function Recents() {
         name: c.title,
         imageCount: c.imageCount,
         videoCount: c.videoCount,
+        contentKind: c.contentKind,
       })),
     [filtered],
   );
@@ -124,13 +148,18 @@ export default function Recents() {
   return (
     <div className="min-h-full">
       <PageHeading
-        title="最近阅读"
-        eyebrow="阅读足迹"
+        title={copy.recentsTitle}
+        eyebrow={copy.recentsEyebrow}
         description={
           <p className="text-[13px] text-fg-muted mt-2 tabular-nums">
             {history.length > 0 ? (
               <>
-                <span className="text-fg font-medium">{history.length}</span> 个
+                <span className="text-fg font-medium">{cards.length}</span> 个
+                {hiddenCount > 0 && (
+                  <span className="text-fg-subtle">
+                    （另有 {hiddenCount} 个属于其它类型）
+                  </span>
+                )}
                 <span className="text-fg-subtle mx-1.5">·</span>
                 最近打开{" "}
                 <span className="text-fg">

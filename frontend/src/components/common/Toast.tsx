@@ -7,10 +7,10 @@ import { CloseIcon, InfoIcon, CheckIcon, AlertIcon } from './Icon'
 export default function ToastViewport() {
   const toasts = useUIStore((s) => s.toasts)
   const dismiss = useUIStore((s) => s.dismissToast)
-  // 阅读器（/gallery）是恒定深色的沉浸场景：沿用应用主题的浅色 toast
+  // 阅读器（/read）是恒定深色的沉浸场景：沿用应用主题的浅色 toast
   // 会变成"黑底里浮一块白板"，与阅读器里的其它浮层自相矛盾。
   const { pathname } = useLocation()
-  const dark = pathname.startsWith('/gallery')
+  const dark = pathname.startsWith('/read')
   if (!toasts.length) return null
   return (
     <div

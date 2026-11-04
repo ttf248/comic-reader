@@ -3,8 +3,10 @@ import { previewUrl } from "../../api/images";
 import type { LibraryMediaItem } from "../../api/library";
 import { isFullscreen, toggleFullscreen } from "../../utils/fullscreen";
 import { shouldIgnoreShortcut } from "../../utils/shortcuts";
+import { usePhotoStore } from "../../store/photoStore";
+import { useUIStore } from "../../store/uiStore";
 import VideoPlayer from "../gallery/VideoPlayer";
-import ImageInfoPanel from "../gallery/ImageInfoPanel";
+import ImageInfoPanel from "../common/ImageInfoPanel";
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -55,8 +57,18 @@ export default function PhotoViewer({
 }: Props) {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [showInfo, setShowInfo] = useState(false);
+  const [showInfo, setShowInfo] = useState(
+    () => usePhotoStore.getState().showInfo,
+  );
   const [failed, setFailed] = useState(false);
+
+  // 浮层打开时接管单键：全局的 r / u 必须让位，否则按 r 会一边旋转
+  // 一边跳走整页。关掉时立刻交还。
+  const setImmersiveOverlay = useUIStore((s) => s.setImmersiveOverlay);
+  useEffect(() => {
+    setImmersiveOverlay(true);
+    return () => setImmersiveOverlay(false);
+  }, [setImmersiveOverlay]);
 
   const imageRef = useRef<HTMLImageElement | null>(null);
   const stageRef = useRef<HTMLDivElement | null>(null);
@@ -202,7 +214,13 @@ export default function PhotoViewer({
         case "i":
         case "I":
           event.preventDefault();
-          setShowInfo((value) => !value);
+          setShowInfo((value) => {
+            const next = !value;
+            // 信息面板的开合是照片模式的偏好：记在本地 store 里，
+            // 下次打开大图预览时沿用。
+            usePhotoStore.getState().setShowInfo(next);
+            return next;
+          });
           break;
         default:
           break;

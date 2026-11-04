@@ -33,6 +33,23 @@ interface UIState {
   multiRoot: boolean
   setMultiRoot: (v: boolean) => void
 
+  /**
+   * 是否有一个沉浸浮层正开着（照片墙的大图预览）。
+   * 浮层自己处理方向键与缩放，全局单键必须让位，
+   * 否则按 r 会一边旋转一边跳走整页。
+   * 它不进 localStorage：刷新后浮层早没了。
+   */
+  immersiveOverlay: boolean
+  setImmersiveOverlay: (v: boolean) => void
+
+  /**
+   * 全局帮助浮层展示哪一组操作。主页面用 'library'，照片墙用 'photo'
+   * （多一组大图预览的操作）。页面挂载时设置，卸载时复位。
+   * 不进 localStorage：它由当前页面决定，不是用户偏好。
+   */
+  helpContext: 'library' | 'photo'
+  setHelpContext: (v: 'library' | 'photo') => void
+
   toasts: Toast[]
   pushToast: (t: Omit<Toast, 'id' | 'ttl'> & { ttl?: number }) => string
   dismissToast: (id: string) => void
@@ -53,6 +70,12 @@ export const useUIStore = create<UIState>()(
 
       multiRoot: false,
       setMultiRoot: (v) => set({ multiRoot: v }),
+
+      immersiveOverlay: false,
+      setImmersiveOverlay: (v) => set({ immersiveOverlay: v }),
+
+      helpContext: 'library',
+      setHelpContext: (v) => set({ helpContext: v }),
 
       toasts: [],
       pushToast: (t) => {

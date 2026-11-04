@@ -24,6 +24,8 @@ import { formatDuration } from "../../utils/format";
 import { isCompleted, isUnread, progressPercent } from "../../utils/progress";
 import { favoriteResourceId } from "../../utils/path";
 import { useToggleFavorite } from "../../hooks/useFavorites";
+import { copyForContentKind } from "../../utils/workbench";
+import type { ContentKind } from "../../api/library";
 import CardCover from "./CardCover";
 
 export type CardVariant = "album" | "collection" | "smart";
@@ -70,9 +72,14 @@ export interface CardData {
   sourceName?: string;
   /**
    * 内容用途："photo"（照片墙）/ "comic"（漫画阅读器）。
-   * 列表里的「继续」入口按它决定跳照片墙还是阅读器。
+   * 列表里的「继续」入口按它决定跳照片墙还是阅读器，
+   * 卡片的进度措辞也按它走：照片是「看到」，漫画是「读到」。
    */
-  contentKind?: "photo" | "comic";
+  contentKind?: ContentKind;
+  /** 取消相册级用途覆盖后会回落到的用途。 */
+  contentKindDefault?: ContentKind;
+  /** 用户是否手动切换过这一本的用途。 */
+  contentKindOverridden?: boolean;
 }
 
 interface Props {
@@ -253,6 +260,13 @@ function GridCard({
   const progressPct = progressPercent(data.progress);
   // 0-based 页码到达 total - 1 即已读完。
   const isFinished = isCompleted(data.progress);
+  // 照片相册的进度是「翻到了第几张」，不显示百分比。
+  const isPhotoAlbum =
+    data.variant === "album" && data.contentKind === "photo";
+  const cardCopy = copyForContentKind(
+    data.contentKind === "comic" ? "comic" : "photo",
+    data.contentKind,
+  );
   // 未读标记（见文件底部 showUnreadMark）：只对相册、且页面不是「整页未读」时出现。
   const unread = showUnreadMark(data, showUnreadBadge);
   // 只有配置了多个媒体根才需要标来源。
@@ -336,10 +350,14 @@ function GridCard({
 
           {/* 阅读进度：百分比放深色蒙版 chip，进度条压在封面底边的暗色条上。
               以前整块用一层渐变蒙版，白字在亮封面（照片里的白墙、白纸）上
-              会直接糊掉 —— 蒙版越往上越透明，而文字正好在透明那一侧。 */}
+              会直接糊掉 —— 蒙版越往上越透明，而文字正好在透明那一侧。
+
+              照片相册不显示百分比：它是「翻到了第几张」，不是「读完了一本」，
+              百分比读数会让人误以为在读漫画。照片卡片只保留底边那条进度条，
+              位置数字挪到元信息行。 */}
           {progressPct !== null && progressPct > 0 && (
             <>
-              {!isFinished && (
+              {!isFinished && !isPhotoAlbum && (
                 <div className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-md bg-black/65 backdrop-blur-sm ring-1 ring-white/20 px-1.5 h-5 text-[11.5px] font-medium text-white shadow-sm">
                   <ReaderIcon size={11} className="shrink-0" />
                   <span className="tabular-nums">{progressPct}%</span>
@@ -408,6 +426,20 @@ function GridCard({
                 <span className="truncate">{data.subtitle}</span>
               </>
             )}
+            {/* 照片相册的封面角位不挂百分比（那是漫画的读法），
+                位置数字挪到这里，才不至于把「翻到第几张」这件事丢掉。 */}
+            {isPhotoAlbum &&
+              data.progress &&
+              data.progress.total > 0 &&
+              data.progress.index >= 0 && (
+                <>
+                  <span className="text-fg-subtle">·</span>
+                  <span className="shrink-0 whitespace-nowrap">
+                    {cardCopy.positionVerb} {data.progress.index + 1} /{" "}
+                    {data.progress.total}
+                  </span>
+                </>
+              )}
           </div>
           {/* 多根来源 badge：与标签副标题独立，作为视觉小标签放在元数据行。
               单一媒体根下每张卡片都挂同一句来源是噪音，multiRoot 为 false 时隐藏。 */}
@@ -428,7 +460,8 @@ function GridCard({
                 data.progress.index >= 0 && (
                   <>
                     <span>
-                      看到 {data.progress.index + 1} / {data.progress.total}
+                      {cardCopy.positionVerb} {data.progress.index + 1} /{" "}
+                      {data.progress.total}
                     </span>
                     <span className="text-fg-subtle">·</span>
                   </>
@@ -493,6 +526,11 @@ function ListCard({
   // 与 GridCard 一致：直接依赖 <img loading="lazy">，不重复自写 IO。
   const progressPct = progressPercent(data.progress);
   const isFinished = isCompleted(data.progress);
+  // 照片相册的进度是「翻到了第几张」，措辞与漫画分开。
+  const cardCopy = copyForContentKind(
+    data.contentKind === "comic" ? "comic" : "photo",
+    data.contentKind,
+  );
   // 未读标记与网格视图同源。
   const unread = showUnreadMark(data, showUnreadBadge);
   // 只有配置了多个媒体根才需要标来源。
@@ -555,7 +593,7 @@ function ListCard({
             {isFinished && data.variant === "album" && (
               <span className="inline-flex items-center gap-0.5 text-[13px] font-medium text-fg-muted shrink-0">
                 <CheckIcon size={11} className="text-success" />
-                <span>已读</span>
+                <span>{cardCopy.finishedLabel}</span>
               </span>
             )}
           </div>
@@ -578,7 +616,8 @@ function ListCard({
                 />
               </div>
               <span className="text-[13px] text-fg-subtle tabular-nums shrink-0">
-                {data.progress!.index + 1} / {data.progress!.total}
+                {cardCopy.positionVerb} {data.progress!.index + 1} /{" "}
+                {data.progress!.total}
               </span>
             </div>
           )}
@@ -675,7 +714,7 @@ function UnreadDot() {
  * 说法跟相册用途走：漫画是「已读完」，照片是「已看完」——
  * 照片相册没有「读完」这回事，用户也不该被漫画的说法套住。
  */
-function ReadChip({ contentKind }: { contentKind?: "photo" | "comic" }) {
+function ReadChip({ contentKind }: { contentKind?: ContentKind }) {
   const title = contentKind === "photo" ? "已看完" : "已读完";
   return (
     <span
@@ -683,7 +722,7 @@ function ReadChip({ contentKind }: { contentKind?: "photo" | "comic" }) {
       title={title}
     >
       <CheckIcon size={10} className="text-overlay-success" />
-      <span>已读</span>
+      <span>{title}</span>
     </span>
   );
 }

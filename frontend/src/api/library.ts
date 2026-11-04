@@ -1,11 +1,27 @@
-import { api } from "./client";
+import { api, ApiError } from "./client";
 
 export const LIBRARY_PAGE_LIMIT = 200;
 export const LIBRARY_NODE_BATCH_LIMIT = 500;
 
+/** 相册的浏览用途：照片墙还是漫画阅读器。 */
+export type ContentKind = "photo" | "comic";
+
+/**
+ * 全局工作台模式。
+ *
+ * photo / comic 让列表只呈现该用途的相册，all 不过滤（逃生舱）。
+ * 它与相册自身的 contentKind 正交：模式只决定「我现在看哪一类」，
+ * 不改变任何一本相册自己的打开方式。
+ */
+export type AppMode = ContentKind | "all";
+
 export interface LibraryStatistics {
   rootCount: number;
+  /** 全库相册总数。它不随工作台模式变化。 */
   albumCount: number;
+  /** 按用途拆分的相册数。 */
+  photoAlbumCount?: number;
+  comicAlbumCount?: number;
   collectionCount: number;
   tagCount: number;
   warningCount: number;
@@ -71,9 +87,6 @@ export interface LibraryNodeSummary {
   contentKindOverridden?: boolean;
 }
 
-/** 相册的浏览用途。 */
-export type ContentKind = "photo" | "comic";
-
 export interface LibraryMediaItem {
   id: string;
   kind: "image" | "video";
@@ -102,6 +115,8 @@ export interface LibraryDashboardProgress {
   album: LibraryNodeSummary;
   pageIndex: number;
   pageCount: number;
+  /** 位置的语义：photo 是照片墙里翻到第几张，image 是漫画读到第几页。 */
+  mediaKind?: "photo" | "image";
   updated: string;
 }
 
@@ -144,8 +159,23 @@ async function collectPages<T>(
   let revision: number | undefined;
   let total = 0;
   const items: T[] = [];
+  // 切换工作台模式后旧游标会失效（游标作用域含用途）：这时从第一页重来，
+  // 而不是把整页加载判成失败。
+  let restarted = false;
   do {
-    const response = await load(cursor);
+    let response: PageResponse<T>;
+    try {
+      response = await load(cursor);
+    } catch (error: unknown) {
+      if (!restarted && cursor && isInvalidCursor(error)) {
+        restarted = true;
+        cursor = undefined;
+        items.length = 0;
+        revision = undefined;
+        continue;
+      }
+      throw error;
+    }
     const page = response.page;
     if (revision !== undefined && page.revision !== revision) {
       throw new LibraryRevisionChangedError();
@@ -156,6 +186,11 @@ async function collectPages<T>(
     cursor = page.nextCursor;
   } while (cursor);
   return { revision: revision ?? 0, items, total };
+}
+
+// isInvalidCursor 识别「游标对不上当前作用域」这一类 400。
+function isInvalidCursor(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 400 && error.code === "invalid_cursor";
 }
 
 async function queryNodes(ids: string[]): Promise<LibraryNodeQueryResult> {
@@ -188,57 +223,70 @@ async function queryNodes(ids: string[]): Promise<LibraryNodeQueryResult> {
 export const libraryApi = {
   manifest: () =>
     api<{ ok: boolean; manifest: LibraryManifest }>("/api/library/manifest"),
-  activitySummary: () =>
+  activitySummary: (kind: AppMode) =>
     api<{ ok: boolean; summary: LibraryActivitySummary }>(
       "/api/library/activity-summary",
+      { params: { kind } },
     ),
-  dashboard: () =>
+  dashboard: (kind: AppMode) =>
     api<{ ok: boolean; dashboard: LibraryHomeDashboard }>(
       "/api/library/dashboard",
+      { params: { kind } },
     ),
-  unreadAlbumPage: (cursor?: string, limit = LIBRARY_PAGE_LIMIT) =>
+  unreadAlbumPage: (
+    kind: AppMode,
+    cursor?: string,
+    limit = LIBRARY_PAGE_LIMIT,
+  ) =>
     api<PageResponse<LibraryNodeSummary>>("/api/library/unread", {
-      params: { cursor, limit },
+      params: { cursor, limit, kind },
     }),
   childrenPage: (
     parentId: string,
+    kind: AppMode,
     cursor?: string,
     limit = LIBRARY_PAGE_LIMIT,
   ) =>
     api<PageResponse<LibraryNodeSummary>>(
       `/api/library/${encodeURIComponent(parentId)}/children`,
-      { params: { cursor, limit } },
+      { params: { cursor, limit, kind } },
     ),
   mediaPage: (albumId: string, cursor?: string, limit = LIBRARY_PAGE_LIMIT) =>
     api<PageResponse<LibraryMediaItem>>(
       `/api/albums/${encodeURIComponent(albumId)}/media`,
       { params: { cursor, limit } },
     ),
-  tagPage: (cursor?: string, limit = LIBRARY_PAGE_LIMIT) =>
+  tagPage: (kind: AppMode, cursor?: string, limit = LIBRARY_PAGE_LIMIT) =>
     api<PageResponse<LibraryTagSummary>>("/api/tags", {
-      params: { cursor, limit },
+      params: { cursor, limit, kind },
     }),
-  tagAlbumsPage: (tag: string, cursor?: string, limit = LIBRARY_PAGE_LIMIT) =>
+  tagAlbumsPage: (
+    tag: string,
+    kind: AppMode,
+    cursor?: string,
+    limit = LIBRARY_PAGE_LIMIT,
+  ) =>
     api<PageResponse<LibraryNodeSummary>>(
       `/api/tags/${encodeURIComponent(tag)}/albums`,
-      { params: { cursor, limit } },
+      { params: { cursor, limit, kind } },
     ),
-  randomAlbum: (scope: "all" | "unread" = "all") =>
+  randomAlbum: (kind: AppMode, scope: "all" | "unread" = "all") =>
     api<{
       ok: boolean;
       album: LibraryNodeSummary;
       revision: number;
     }>("/api/albums/random", {
-      params: { scope: scope === "unread" ? "unread" : undefined },
+      params: { scope: scope === "unread" ? "unread" : undefined, kind },
     }),
-  allUnreadAlbums: () =>
-    collectPages((cursor) => libraryApi.unreadAlbumPage(cursor)),
-  allChildren: (parentId: string) =>
-    collectPages((cursor) => libraryApi.childrenPage(parentId, cursor)),
+  allUnreadAlbums: (kind: AppMode) =>
+    collectPages((cursor) => libraryApi.unreadAlbumPage(kind, cursor)),
+  allChildren: (parentId: string, kind: AppMode) =>
+    collectPages((cursor) => libraryApi.childrenPage(parentId, kind, cursor)),
   allMedia: (albumId: string) =>
     collectPages((cursor) => libraryApi.mediaPage(albumId, cursor)),
-  allTags: () => collectPages((cursor) => libraryApi.tagPage(cursor)),
-  allTagAlbums: (tag: string) =>
-    collectPages((cursor) => libraryApi.tagAlbumsPage(tag, cursor)),
+  allTags: (kind: AppMode) =>
+    collectPages((cursor) => libraryApi.tagPage(kind, cursor)),
+  allTagAlbums: (tag: string, kind: AppMode) =>
+    collectPages((cursor) => libraryApi.tagAlbumsPage(tag, kind, cursor)),
   queryNodes,
 };

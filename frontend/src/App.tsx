@@ -6,6 +6,7 @@ import AccessGate from "./components/auth/AccessGate";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import ToastViewport from "./components/common/Toast";
 import { useTheme } from "./hooks/useTheme";
+import { useAppModeHydration } from "./hooks/useAppMode";
 import { useLibraryActivitySync } from "./hooks/useLibrary";
 
 const Home = lazy(() => import("./routes/Home"));
@@ -30,6 +31,8 @@ function lazyPage(Page: ComponentType) {
 
 export default function App() {
   useTheme();
+  // 工作台模式来自服务端偏好：先水合，列表查询才知道该按哪种用途收敛。
+  useAppModeHydration();
   useLibraryActivitySync();
   return (
     <AccessGate>

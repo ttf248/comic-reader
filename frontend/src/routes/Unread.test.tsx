@@ -50,6 +50,8 @@ const baseAlbum = (
   videoCount: 0,
   mediaCount: imageCount,
   coverImage: id + "-cover",
+  // 工作台默认是照片：相册要带上用途，否则会被模式过滤掉。
+  contentKind: "photo" as const,
   coverImages: [id + "-cover"],
   folderSize: 0,
   tags: [] as string[],
@@ -66,7 +68,11 @@ function seedUnread(
     isLoading: false,
   } as never);
   vi.mocked(useLibraryManifest).mockReturnValue({
-    data: { manifest: { statistics: { albumCount } } },
+    data: {
+      manifest: {
+        statistics: { albumCount, photoAlbumCount: albumCount },
+      },
+    },
     isLoading: false,
   } as never);
 }
@@ -90,7 +96,11 @@ describe("Unread", () => {
       isLoading: false,
     } as never);
     vi.mocked(useLibraryManifest).mockReturnValue({
-      data: { manifest: { statistics: { albumCount: 0 } } },
+      data: {
+        manifest: {
+          statistics: { albumCount: 0, photoAlbumCount: 0 },
+        },
+      },
       isLoading: false,
     } as never);
     useSearchStore.getState().reset();
@@ -116,14 +126,14 @@ describe("Unread", () => {
       const headerHasCount = screen.queryAllByText(/还有/).length > 0;
       expect(headerHasCount).toBe(true);
     });
-    expect(screen.getByText("随机一本未读")).toBeInTheDocument();
+    expect(screen.getByText("随机一本未浏览")).toBeInTheDocument();
   });
 
   it("全部看完时显示「看完了」空态", async () => {
     seedUnread([], 1);
     renderUnread();
     await waitFor(() => {
-      expect(screen.getByText(/全部看完啦/)).toBeInTheDocument();
+      expect(screen.getByText(/照片都看完啦/)).toBeInTheDocument();
     });
   });
 

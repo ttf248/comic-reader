@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { ContinueReadingHero } from "../components/home/HomeHeroes";
+import { ContinueHero } from "../components/home/HomeHeroes";
 
 function makeCard(path: string, name: string, index: number, total: number) {
   return {
@@ -28,8 +28,9 @@ function renderHero(cards: ReturnType<typeof makeCard>[]) {
     onClearAll,
     ...render(
       <MemoryRouter>
-        <ContinueReadingHero
+        <ContinueHero
           cards={cards}
+          mode="comic"
           onContinue={onContinue}
           onRemove={onRemove}
           onClearAll={onClearAll}
@@ -51,8 +52,8 @@ describe("ContinueReadingHero", () => {
     // 标题:1 本还没看完
     const heroSection = screen.getByTestId("continue-hero");
     expect(heroSection.textContent).toMatch(/1\s*本还没看完/);
-    // 进度文本 看到 6/20(index+1 / total)
-    expect(screen.getByText(/看到\s*6\s*\/\s*20/)).toBeInTheDocument();
+    // 进度文本 读到 6/20(index+1 / total)
+    expect(screen.getByText(/读到\s*6\s*\/\s*20/)).toBeInTheDocument();
   });
 
   it("点击卡片触发 onContinue + 拿到对应 card", () => {
@@ -74,7 +75,7 @@ describe("ContinueReadingHero", () => {
     );
     const { container } = renderHero(many);
     const cardButtons = container.querySelectorAll(
-      'button[aria-label^="将"][aria-label$="标记为已读"]',
+      'button[aria-label^="将"][aria-label$="标记为已读完"]',
     );
     expect(cardButtons.length).toBe(4);
     expect(
@@ -89,7 +90,7 @@ describe("ContinueReadingHero", () => {
 
   it("点 X 触发 onRemove 且不冒泡到外层 onContinue", () => {
     const { onContinue, onRemove } = renderHero([makeCard("/a", "A", 5, 20)]);
-    const xBtn = screen.getByLabelText("将A标记为已读");
+    const xBtn = screen.getByLabelText("将A标记为已读完");
     fireEvent.click(xBtn);
     expect(onRemove).toHaveBeenCalledTimes(1);
     expect(onRemove.mock.calls[0][0].title).toBe("A");
@@ -98,7 +99,7 @@ describe("ContinueReadingHero", () => {
 
   it("焦点在 X 按钮上按 Enter 时不会触发外层跳转", () => {
     const { onContinue } = renderHero([makeCard("/a", "A", 5, 20)]);
-    const xBtn = screen.getByLabelText("将A标记为已读");
+    const xBtn = screen.getByLabelText("将A标记为已读完");
     // keydown 从按钮冒泡；外层卡片不得把它当成自己的主操作。
     fireEvent.keyDown(xBtn, { key: "Enter" });
     expect(onContinue).not.toHaveBeenCalled();

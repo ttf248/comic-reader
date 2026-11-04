@@ -14,6 +14,11 @@ vi.mock("../api/library", () => ({
   libraryApi: { allUnreadAlbums: vi.fn() },
 }));
 
+// 列表查询等模式水合后才发请求；这里直接给出就绪状态。
+vi.mock("./useAppMode", () => ({
+  useAppMode: () => ({ mode: "photo", ready: true, setMode: vi.fn() }),
+}));
+
 function setup() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: Infinity } },
@@ -27,9 +32,9 @@ function setup() {
 it("活动变化同时失效未打开页面的阅读摘要，并保留静态库缓存", () => {
   const { client, wrapper } = setup();
   const keys = [
-    libraryQueryKeys.activitySummary(),
-    libraryQueryKeys.dashboard(),
-    libraryQueryKeys.unreadAlbums(),
+    libraryQueryKeys.activitySummary("photo"),
+    libraryQueryKeys.dashboard("photo"),
+    libraryQueryKeys.unreadAlbums("photo"),
   ];
   const staticKey = libraryQueryKeys.nodes(["a_one"]);
   for (const key of [...keys, staticKey]) client.setQueryData(key, {});
@@ -82,7 +87,7 @@ it("离开未读页后变化不下载列表，返回时立即刷新未过期的�
 
 it("应用卸载后移除活动同步监听", () => {
   const { client, wrapper } = setup();
-  const key = libraryQueryKeys.unreadAlbums();
+  const key = libraryQueryKeys.unreadAlbums("photo");
   client.setQueryData(key, {});
   const { unmount } = renderHook(() => useLibraryActivitySync(), { wrapper });
   unmount();

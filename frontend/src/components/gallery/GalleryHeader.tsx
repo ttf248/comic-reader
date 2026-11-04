@@ -13,6 +13,8 @@ import {
   ArrowRightLineIcon,
   ArrowLeftLineIcon,
   GridIcon,
+  LibraryIcon,
+  ReaderIcon,
 } from "../common/Icon";
 import Popover, {
   PopoverItem,
@@ -21,6 +23,7 @@ import Popover, {
 } from "../common/Popover";
 import { useGalleryStore } from "../../store/galleryStore";
 import { toggleFullscreen as toggleFullscreenImpl } from "../../utils/fullscreen";
+import type { AppMode, ContentKind } from "../../api/library";
 
 interface Props {
   name: string;
@@ -57,8 +60,20 @@ interface Props {
   hasCustomCover?: boolean;
   /** 打开目录（整本缩略图）。可选：不提供时不显示入口。 */
   onToggleOverview?: () => void;
-  /** 把这本相册改成照片相册并离开阅读器。可选。 */
-  onSwitchToPhoto?: () => void;
+  /**
+   * 归类：把本相册移到另一种打开方式，或恢复默认归类。
+   * 它们是写操作（会清掉另一种用途留下的进度），所以只在菜单里出现。
+   */
+  onMoveToKind?: (kind: ContentKind) => void;
+  onResetKind?: () => void;
+  /** 本相册的用途是否被用户手动覆盖过。 */
+  kindOverridden?: boolean;
+  /**
+   * 工作台切换。阅读器整屏脱离 AppShell，侧栏不可见，
+   * 想换工作台只能从这里走——切模式意味着离开阅读器回到外壳。
+   */
+  workbenchMode?: AppMode;
+  onOpenWorkbench?: (mode: AppMode) => void;
 }
 
 // 画廊顶部常驻条：返回 / 名称 / 页码 / 收藏 / 全屏 / 更多
@@ -88,7 +103,11 @@ export default function GalleryHeader({
   onJumpToFirst,
   onJumpToLast,
   onToggleOverview,
-  onSwitchToPhoto,
+  onMoveToKind,
+  onResetKind,
+  kindOverridden,
+  workbenchMode,
+  onOpenWorkbench,
 }: Props) {
   const mode = useGalleryStore((s) => s.mode);
   const direction = useGalleryStore((s) => s.direction);
@@ -139,6 +158,45 @@ export default function GalleryHeader({
           {counterText}
         </span>
       </h1>
+
+      {/* 工作台切换：阅读器没有侧栏，这里是唯一能换工作台的地方。
+          切换意味着离开阅读器回到外壳，所以它是一个「打开某个库」的动作。 */}
+      {onOpenWorkbench && workbenchMode && (
+        <Popover
+          align="end"
+          tone="reader"
+          trigger={
+            <button
+              type="button"
+              className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-[12.5px] text-white/75 transition-colors hover:bg-white/10"
+              title="切换工作台"
+            >
+              <LibraryIcon size={13} />
+              <span className="hidden sm:inline">
+                {workbenchMode === "comic"
+                  ? "漫画库"
+                  : workbenchMode === "photo"
+                    ? "照片库"
+                    : "全部相册"}
+              </span>
+            </button>
+          }
+        >
+          <PopoverLabel>工作台</PopoverLabel>
+          <PopoverItem onClick={() => onOpenWorkbench("photo")}>
+            <ImageIcon size={13} />
+            <span>打开照片库</span>
+          </PopoverItem>
+          <PopoverItem onClick={() => onOpenWorkbench("comic")}>
+            <ReaderIcon size={13} />
+            <span>打开漫画库</span>
+          </PopoverItem>
+          <PopoverItem onClick={() => onOpenWorkbench("all")}>
+            <LibraryIcon size={13} />
+            <span>打开全部相册</span>
+          </PopoverItem>
+        </Popover>
+      )}
 
       {/* 视频模式没有底部工具条（<video> 自带 controls），
           换片按钮留在顶栏；图片模式的翻页在底部工具条里。 */}
@@ -237,14 +295,33 @@ export default function GalleryHeader({
             <span className="ml-auto text-[12.5px] text-white/55">L</span>
           </PopoverItem>
         )}
-        {onSwitchToPhoto && (
+        {onMoveToKind && (
           <>
             <PopoverSeparator />
-            <PopoverLabel>相册</PopoverLabel>
-            <PopoverItem onClick={onSwitchToPhoto}>
+            <PopoverLabel>相册归类</PopoverLabel>
+            <PopoverItem
+              onClick={() => onMoveToKind("photo")}
+              title="移到照片库 · 会清空漫画阅读进度"
+            >
               <ImageIcon size={13} />
-              <span>改为照片相册</span>
+              <span>移到照片库</span>
             </PopoverItem>
+            <PopoverItem
+              onClick={() => onMoveToKind("comic")}
+              title="移到漫画库 · 会清空照片浏览进度"
+            >
+              <ReaderIcon size={13} />
+              <span>移到漫画库</span>
+            </PopoverItem>
+            {kindOverridden && onResetKind && (
+              <PopoverItem
+                onClick={onResetKind}
+                title="恢复成媒体根的默认打开方式"
+              >
+                <RefreshIcon size={13} />
+                <span>恢复默认类型</span>
+              </PopoverItem>
+            )}
           </>
         )}
         {hasAlbumNav && <PopoverSeparator />}

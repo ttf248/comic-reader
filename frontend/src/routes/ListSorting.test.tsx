@@ -42,12 +42,13 @@ vi.mock("../hooks/useGalleryContextSync", () => ({
 }));
 vi.mock("../hooks/useImageActivity", () => ({
   useImageActivities: () => ({ data: {} }),
+  usePhotoActivities: () => ({ data: {} }),
   useMarkAlbumRead: () => ({ mutateAsync: vi.fn() }),
   useMarkAlbumsRead: () => ({ mutateAsync: vi.fn() }),
 }));
 vi.mock("../components/home/YearTimeline", () => ({ default: () => null }));
 vi.mock("../components/home/HomeHeroes", () => ({
-  ContinueReadingHero: () => null,
+  ContinueHero: () => null,
   UnreadHero: () => null,
 }));
 vi.mock("../components/album/AlbumGrid", () => ({
@@ -155,6 +156,8 @@ beforeEach(() => {
     displayName: item.name,
     imageCount: 3,
     coverImages: [],
+    // 工作台默认是照片：相册要带上用途，否则会被模式过滤掉。
+    contentKind: "photo",
   }));
   vi.mocked(historyApi.list).mockResolvedValue({
     history: mocks.items.map((item) => ({

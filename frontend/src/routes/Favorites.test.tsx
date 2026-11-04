@@ -28,6 +28,7 @@ vi.mock("../hooks/useLibrary", () => ({
 }));
 vi.mock("../hooks/useImageActivity", () => ({
   useImageActivities: () => ({ data: {} }),
+  usePhotoActivities: () => ({ data: {} }),
 }));
 vi.mock("../hooks/useGalleryContextSync", () => ({
   useGalleryContextSync: vi.fn(),
@@ -49,6 +50,8 @@ const node = {
   displayName: "春游相册",
   imageCount: 3,
   coverImages: [],
+  // 工作台默认是照片：相册要带上用途，否则会被模式过滤掉。
+  contentKind: "photo",
 };
 const clientForTest = () =>
   new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -99,18 +102,18 @@ it("收藏请求未完成时不显示没有收藏", async () => {
   );
   renderFavorites();
   expect(screen.getByRole("status")).toHaveTextContent("正在加载收藏");
-  expect(screen.queryByText("还没有收藏")).not.toBeInTheDocument();
+  expect(screen.queryByText("还没有收藏照片")).not.toBeInTheDocument();
   await act(async () => {
     resolveList({ favorites: [] });
   });
-  expect(await screen.findByText("还没有收藏")).toBeInTheDocument();
+  expect(await screen.findByText("还没有收藏照片")).toBeInTheDocument();
 });
 
 it("收藏读取失败提供重试，恢复后展示收藏", async () => {
   vi.mocked(favoritesApi.list).mockRejectedValueOnce(new Error("offline"));
   renderFavorites();
   expect(await screen.findByRole("alert")).toHaveTextContent("收藏加载失败");
-  expect(screen.queryByText("还没有收藏")).not.toBeInTheDocument();
+  expect(screen.queryByText("还没有收藏照片")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "重试加载" }));
   expect(await screen.findByText("春游相册")).toBeInTheDocument();
   await waitFor(() =>
@@ -272,7 +275,7 @@ it("收藏为空时给出可收藏的推荐位，而不是只留一片空白", a
     refetch: vi.fn(),
   } as never);
   renderFavorites();
-  expect(await screen.findByText("还没有收藏")).toBeInTheDocument();
+  expect(await screen.findByText("还没有收藏照片")).toBeInTheDocument();
   // 推荐位：真实封面 + 常驻的星标（文案在教用户点哪里，星标不能藏起来）
   expect(screen.getByText("从这里挑一个收藏")).toBeInTheDocument();
   expect(screen.getByText("野餐那本")).toBeInTheDocument();

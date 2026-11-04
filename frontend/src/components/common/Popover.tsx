@@ -216,6 +216,8 @@ interface MenuItemProps {
   onClick?: () => void;
   disabled?: boolean;
   active?: boolean;
+  /** 悬停提示。用来讲清某个动作的副作用（例如「会清空另一种进度」）。 */
+  title?: string;
   children: ReactNode;
 }
 
@@ -224,6 +226,7 @@ export function PopoverItem({
   onClick,
   disabled,
   active,
+  title,
   children,
 }: MenuItemProps) {
   const close = useContext(PopoverCloseContext);
@@ -241,6 +244,7 @@ export function PopoverItem({
       type="button"
       role="menuitem"
       disabled={disabled}
+      title={title}
       onClick={(e) => {
         e.stopPropagation();
         if (!disabled) {

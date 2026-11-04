@@ -2,7 +2,7 @@
 // 单一来源：所有快捷键在此集中声明，UI/帮助文档共用。
 
 export type ShortcutHandler = (e: KeyboardEvent) => void;
-export type ShortcutContext = "library" | "image" | "video";
+export type ShortcutContext = "library" | "photo" | "image" | "video";
 
 export interface Shortcut {
   id: string;
@@ -13,7 +13,14 @@ export interface Shortcut {
   /** 触发条件：包含 ctrl/alt/shift 等修饰键 */
   combo: string;
   /** 所属分组（用于 HelpOverlay） */
-  group: "global" | "reader" | "image" | "video";
+  group: "global" | "reader" | "photo" | "image" | "video";
+  /**
+   * 随工作台模式变化的措辞。
+   *
+   * 少数全局操作在照片与漫画工作台下该用不同的说法（「未读相册页」
+   * 在照片工作台里是「未浏览相册页」）。缺省时用 description。
+   */
+  modeDescriptions?: Partial<Record<"photo" | "comic" | "all", string>>;
 }
 
 // 按页面和媒体类型声明快捷键；reader 分组由图片与视频阅读器共用。
@@ -73,6 +80,7 @@ export const SHORTCUTS: Shortcut[] = [
     id: "shuffle",
     label: "R",
     description: "随机一本",
+    modeDescriptions: { photo: "随机翻翻" },
     combo: "r",
     group: "global",
   },
@@ -80,6 +88,7 @@ export const SHORTCUTS: Shortcut[] = [
     id: "unread",
     label: "U",
     description: "未读相册页",
+    modeDescriptions: { photo: "未浏览相册页" },
     combo: "u",
     group: "global",
   },
@@ -337,6 +346,77 @@ export const SHORTCUTS: Shortcut[] = [
     description: "最后一个视频",
     combo: "end",
     group: "video",
+  },
+  // 照片墙与大图预览
+  {
+    id: "photoPrev",
+    label: "←",
+    description: "上一张",
+    combo: "arrowleft",
+    group: "photo",
+  },
+  {
+    id: "photoNext",
+    label: "→",
+    description: "下一张",
+    combo: "arrowright",
+    group: "photo",
+  },
+  {
+    id: "photoFirst",
+    label: "Home",
+    description: "第一张",
+    combo: "home",
+    group: "photo",
+  },
+  {
+    id: "photoLast",
+    label: "End",
+    description: "最后一张",
+    combo: "end",
+    group: "photo",
+  },
+  {
+    id: "photoZoomIn",
+    label: "+ / =",
+    description: "放大",
+    combo: "+",
+    group: "photo",
+  },
+  {
+    id: "photoZoomOut",
+    label: "-",
+    description: "缩小",
+    combo: "-",
+    group: "photo",
+  },
+  {
+    id: "photoZoomReset",
+    label: "0",
+    description: "恢复适应屏幕",
+    combo: "0",
+    group: "photo",
+  },
+  {
+    id: "photoFullscreen",
+    label: "F",
+    description: "全屏切换",
+    combo: "f",
+    group: "photo",
+  },
+  {
+    id: "photoInfo",
+    label: "I",
+    description: "切换图片信息面板",
+    combo: "i",
+    group: "photo",
+  },
+  {
+    id: "photoClose",
+    label: "Esc",
+    description: "关闭预览，回到照片墙",
+    combo: "escape",
+    group: "photo",
   },
 ];
 

@@ -1,5 +1,5 @@
-import { CloseIcon } from "../common/Icon";
-import CopyButton from "../common/CopyButton";
+import { CloseIcon } from "./Icon";
+import CopyButton from "./CopyButton";
 import { useImageInfo } from "../../hooks/useImageInfo";
 import { formatSize } from "../../utils/format";
 import { formatDateTime } from "../../utils/date";

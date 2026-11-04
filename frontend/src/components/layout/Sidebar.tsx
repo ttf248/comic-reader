@@ -10,21 +10,26 @@ import {
   ChevronRightIcon,
   ShuffleIcon,
   SparkleIcon,
+  LibraryIcon,
 } from "../common/Icon";
 import { useNavigate } from "react-router-dom";
 import { useUIStore } from "../../store/uiStore";
 import {
-  useLibraryActivitySummary,
   useLibraryDashboard,
+  useUnreadCountsByKind,
 } from "../../hooks/useLibrary";
+import { useAppMode } from "../../hooks/useAppMode";
 import { libraryApi } from "../../api/library";
 import { albumRoute } from "../../utils/path";
 import { thumbUrl } from "../../api/thumbs";
 import { nodeSummaryToCard } from "../../utils/libraryCard";
+import { workbenchCopy } from "../../utils/workbench";
 import {
   continueReadingTarget,
   readingPercent,
 } from "../../utils/continueReading";
+import ModeSwitch from "./ModeSwitch";
+import type { AppMode } from "../../api/library";
 
 interface Props {
   collapsed: boolean;
@@ -32,8 +37,32 @@ interface Props {
   mobileOpen?: boolean;
 }
 
-const items = [
-  { to: "/", label: "主页", Icon: HomeIcon, end: true },
+interface NavEntry {
+  /** 这一项属于哪个工作台；跨模式的组用它决定点击时先切模式。 */
+  mode: Exclude<AppMode, "all">;
+  to: string;
+  label: string;
+  Icon: typeof HomeIcon;
+  /** 徽标数字（未浏览 / 未读计数）。 */
+  badge?: number;
+}
+
+// 侧栏按工作台分成两组：照片组与漫画组。
+//
+// 两组指向同一批路由，差别在模式与措辞——「照片库 / 未浏览」与
+// 「漫画库 / 未读」是同一批页面在两种工作台下的两种读法。
+// 点击非当前模式的条目会先切模式再跳转。
+const photoGroup: Omit<NavEntry, "badge">[] = [
+  { mode: "photo", to: "/", label: "照片库", Icon: HomeIcon },
+  { mode: "photo", to: "/unread", label: "未浏览", Icon: SparkleIcon },
+];
+const comicGroup: Omit<NavEntry, "badge">[] = [
+  { mode: "comic", to: "/", label: "漫画库", Icon: HomeIcon },
+  { mode: "comic", to: "/unread", label: "未读", Icon: SparkleIcon },
+];
+
+// 与模式无关的公共入口：收藏与最近都是用户的显式选择，跨类型成立。
+const sharedItems = [
   { to: "/recents", label: "最近", Icon: ClockIcon, end: false },
   { to: "/favorites", label: "收藏", Icon: StarIcon, end: false },
 ];
@@ -43,7 +72,7 @@ const secondaryItems = [
   { to: "/settings", label: "设置", Icon: SettingsIcon, end: false },
 ];
 
-// 侧边栏：
+// 侧栏：
 // - 品牌区只留「图标 + Local Gallery」，不再叠一行 10px 副标题
 // - 导航项统一 36px 高 / 13.5px 文字，选中态 = 亮一档的灰块 + 白字
 // - 「随机」类操作沉到底部一组，与主导航分开，避免平铺抢注意力
@@ -55,27 +84,26 @@ export default function Sidebar({
   const navigate = useNavigate();
   const location = useLocation();
   const pushToast = useUIStore((s) => s.pushToast);
+  const { mode, setMode } = useAppMode();
+  const copy = workbenchCopy(mode);
   // 常驻导航只消费服务端派生的计数，不能为 badge 常驻下载全库相册摘要。
-  const activitySummary = useLibraryActivitySummary();
-  const unreadCount = activitySummary.data?.summary.unreadCount ?? 0;
+  const unreadCounts = useUnreadCountsByKind();
   const navRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     if (!mobileOpen) return;
     navRef.current?.querySelector<HTMLElement>("a, button")?.focus();
   }, [mobileOpen]);
+
   const randomAlbum = useMutation({
-    mutationFn: (scope: "all" | "unread") => libraryApi.randomAlbum(scope),
+    mutationFn: () => libraryApi.randomAlbum(mode),
     onSuccess: ({ album }) => navigate(albumRoute(album.id)),
-    onError: (_error, scope) =>
-      pushToast({
-        kind: "info",
-        message: scope === "unread" ? "没有未读相册可跳" : "尚未加载图像库",
-      }),
+    onError: () =>
+      pushToast({ kind: "info", message: "没有可随机打开的相册" }),
   });
 
   const onShuffle = () => {
-    if (!randomAlbum.isPending) randomAlbum.mutate("all");
+    if (!randomAlbum.isPending) randomAlbum.mutate();
   };
 
   // 当前侧栏复用首页 dashboard 的在读摘要，React Query 共享查询缓存。
@@ -91,6 +119,7 @@ export default function Sidebar({
     return {
       ...nodeSummaryToCard(first.album),
       progress: { index: first.pageIndex, total: first.pageCount },
+      mediaKind: first.mediaKind,
     };
   }, [inProgress]);
   // 其余在读：最多 5 条紧凑行，再多就只给一个总数提示。
@@ -99,6 +128,7 @@ export default function Sidebar({
       inProgress.slice(1, 6).map((item) => ({
         ...nodeSummaryToCard(item.album),
         progress: { index: item.pageIndex, total: item.pageCount },
+        mediaKind: item.mediaKind,
       })),
     [inProgress],
   );
@@ -109,6 +139,72 @@ export default function Sidebar({
   // 整条导航才不会被第二个颜色带跑。
   const navItemClass = (isActive: boolean) =>
     `nav-entry group ${collapsed ? "nav-entry--compact" : ""} ${isActive ? "is-active" : ""}`;
+
+  // 工作台组的选中态要带模式：照片库与漫画库指向同一个路径，
+  // 只看路径会同时点亮两个条目。
+  const isGroupActive = (entry: NavEntry) =>
+    mode === entry.mode &&
+    (entry.to === "/"
+      ? location.pathname === "/"
+      : location.pathname.startsWith(entry.to));
+
+  const goEntry = (entry: NavEntry) => {
+    if (mode !== entry.mode) setMode(entry.mode);
+    if (location.pathname !== entry.to) navigate(entry.to);
+  };
+
+  const renderGroup = (
+    title: string,
+    group: Omit<NavEntry, "badge">[],
+    badgeFor: (mode: Exclude<AppMode, "all">) => number,
+  ) => {
+    const groupMode = group[0].mode;
+    const active = mode === groupMode;
+    return (
+      <div className="mt-5 first:mt-0">
+        <div className="px-4 pb-1 flex items-center gap-2">
+          <span
+            className={`text-[11.5px] tracking-wide transition-colors ${
+              active ? "text-rail-fg" : "text-rail-muted/70"
+            }`}
+          >
+            {title}
+          </span>
+        </div>
+        {group.map((entry) => {
+          const isActive = isGroupActive({ ...entry, badge: 0 });
+          const badge = badgeFor(entry.mode);
+          return (
+            <button
+              key={`${entry.mode}-${entry.to}-${entry.label}`}
+              type="button"
+              onClick={() => goEntry({ ...entry, badge: 0 })}
+              className={navItemClass(isActive)}
+              aria-current={isActive ? "page" : undefined}
+              title={`${entry.label}${badge > 0 ? ` · 还有 ${badge} 本` : ""}`}
+            >
+              <entry.Icon size={16} className="shrink-0" />
+              {!collapsed && <span className="truncate">{entry.label}</span>}
+              {!collapsed && badge > 0 && (
+                <span
+                  className="inline-flex items-center justify-center min-w-[22px] h-[20px] px-1.5 rounded-full bg-rail-hover text-rail-fg text-[12.5px] font-semibold tabular-nums"
+                  aria-label={`还有 ${badge} 本`}
+                >
+                  {badge > 999 ? "999+" : badge}
+                </span>
+              )}
+              {collapsed && badge > 0 && (
+                <span
+                  className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-rail-accent"
+                  aria-hidden
+                />
+              )}
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
 
   return (
     <aside
@@ -170,8 +266,33 @@ export default function Sidebar({
         </button>
       </div>
 
-      <nav ref={navRef} className="pt-6 pb-3 px-4 space-y-1.5">
-        {items.map((it) => (
+      {/* 工作台模式切换：它决定下面所有列表呈现哪一类相册。 */}
+      {!collapsed && (
+        <div className="px-4 pt-4">
+          <ModeSwitch mode={mode} onChange={setMode} />
+        </div>
+      )}
+
+      <nav ref={navRef} className="pt-5 pb-3 px-4 space-y-1.5">
+        {renderGroup("照片", photoGroup, () => unreadCounts.photo)}
+        {renderGroup("漫画", comicGroup, () => unreadCounts.comic)}
+
+        {/* 全部相册：逃生舱，不是第三个工作台。它让跨类型的相册仍然找得到。 */}
+        <button
+          type="button"
+          onClick={() => {
+            setMode("all");
+            if (location.pathname !== "/") navigate("/");
+          }}
+          className={navItemClass(mode === "all")}
+          aria-current={mode === "all" ? "page" : undefined}
+          title="全部相册：照片与漫画混排"
+        >
+          <LibraryIcon size={16} className="shrink-0" />
+          {!collapsed && <span className="truncate">全部相册</span>}
+        </button>
+
+        {sharedItems.map((it) => (
           <NavLink
             key={it.to}
             to={it.to}
@@ -189,44 +310,17 @@ export default function Sidebar({
             )}
           </NavLink>
         ))}
-
-        {/* 未读 — 独立一行,有 count badge。位置放在「收藏」之后、「随机」之前,
-            跟「按重要度排列」的视觉顺序一致:主页 / 最近 / 收藏 / 未读 / 随机。 */}
-        <NavLink
-          to="/unread"
-          end={false}
-          className={({ isActive }) => navItemClass(isActive)}
-          title={`未读相册 (U)${unreadCount > 0 ? ` · 还有 ${unreadCount} 本没看` : ""}`}
-        >
-          <SparkleIcon size={16} className="shrink-0" />
-          {!collapsed && (
-            <>
-              <span className="truncate flex-1">未读</span>
-              {unreadCount > 0 && (
-                <span
-                  className="inline-flex items-center justify-center min-w-[22px] h-[20px] px-1.5 rounded-full bg-rail-hover text-rail-fg text-[12.5px] font-semibold tabular-nums"
-                  aria-label={`还有 ${unreadCount} 本未读`}
-                >
-                  {unreadCount > 999 ? "999+" : unreadCount}
-                </span>
-              )}
-            </>
-          )}
-          {collapsed && unreadCount > 0 && (
-            <span
-              className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-rail-accent"
-              aria-hidden
-            />
-          )}
-        </NavLink>
       </nav>
 
-      {/* 「继续阅读」区：紧跟导航，填掉侧栏中段的空白。
-          上面是"正在读的那本"，下面是"接下来几本"。 */}
+      {/* 「继续」区：紧跟导航，填掉侧栏中段的空白。
+          上面是"正在翻的那本"，下面是"接下来几本"。
+          它只列当前工作台的在读 / 在浏览。 */}
       {!collapsed && continueCard && (
         <div className="px-4 pt-5 pb-2 min-h-0 overflow-y-auto">
           <div className="px-1 pb-2 flex items-baseline gap-2">
-            <span className="text-[12.5px] text-rail-muted">继续阅读</span>
+            <span className="text-[12.5px] text-rail-muted">
+              {continueTitle(mode)}
+            </span>
             <span className="text-[12.5px] text-rail-muted tabular-nums">
               {inProgress.length} 本
             </span>
@@ -236,6 +330,7 @@ export default function Sidebar({
             coverPath={continueCard.coverPath}
             index={continueCard.progress?.index ?? 0}
             total={continueCard.progress?.total ?? 0}
+            contentKind={continueCard.contentKind}
             onOpen={() => navigate(continueReadingTarget(continueCard))}
           />
           {continueRest.map((card) => (
@@ -245,6 +340,7 @@ export default function Sidebar({
               coverPath={card.coverPath}
               index={card.progress?.index ?? 0}
               total={card.progress?.total ?? 0}
+              contentKind={card.contentKind}
               onOpen={() => navigate(continueReadingTarget(card))}
             />
           ))}
@@ -284,37 +380,36 @@ export default function Sidebar({
         <button
           onClick={onShuffle}
           disabled={randomAlbum.isPending}
-          title="随机一本 (R)"
+          title={`${copy.randomLabel} (R)`}
           className={`w-full flex items-center gap-2.5 h-9 rounded-md text-[13.5px] transition-colors ${
             collapsed ? "justify-center px-0" : "px-2.5"
           } text-rail-muted hover:bg-rail-hover hover:text-rail-fg disabled:opacity-50`}
         >
           <ShuffleIcon size={16} className="shrink-0" />
-          {!collapsed && <span className="truncate">随机一本</span>}
+          {!collapsed && <span className="truncate">{copy.randomLabel}</span>}
         </button>
 
-        {/* 「随机未读」原本也在这里，与「未读」页 / 首页的"随机未读"重复，
+        {/* 「随机未读」原本也在这里，与「未读」页 / 首页的"随机未读"重复,
             已移除 —— 同一动作只保留一个入口。 */}
       </div>
 
       {!collapsed && (
         <div className="px-4 pb-3.5">
           <div className="flex items-center gap-2 text-[12.5px] text-rail-muted">
-            <span
-              className={`inline-block w-1.5 h-1.5 rounded-full ${
-                location.pathname.startsWith("/gallery")
-                  ? "bg-rail-accent"
-                  : "bg-success"
-              }`}
-            />
-            <span>
-              {location.pathname.startsWith("/gallery") ? "阅读中" : "已就绪"}
-            </span>
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-success" />
+            <span>已就绪</span>
           </div>
         </div>
       )}
     </aside>
   );
+}
+
+// continueTitle 是侧栏「继续」区的标题：随工作台换措辞。
+function continueTitle(mode: AppMode): string {
+  if (mode === "comic") return "继续阅读";
+  if (mode === "photo") return "继续浏览";
+  return "继续";
 }
 
 // 品牌方块：纯几何 + 字形，用琥珀品牌色 —— 全局唯一的彩色标记。
@@ -324,18 +419,20 @@ function Logo() {
   return <div className="brand-mark">L</div>;
 }
 
-// 紧凑行：侧栏「继续阅读」区里其余在读书目的单行形态。
+// 紧凑行：侧栏「继续」区里其余在读书目的单行形态。
 function ContinueRow({
   title,
   coverPath,
   index,
   total,
+  contentKind,
   onOpen,
 }: {
   title: string;
   coverPath?: string;
   index: number;
   total: number;
+  contentKind?: string;
   onOpen: () => void;
 }) {
   const percent = readingPercent({ index, total });
@@ -343,7 +440,7 @@ function ContinueRow({
     <button
       type="button"
       onClick={onOpen}
-      title={`继续阅读「${title}」`}
+      title={`${continueVerb(contentKind)}「${title}」`}
       className="w-full mt-1 rounded-md px-1 py-1 flex items-center gap-2.5 text-left transition-colors hover:bg-rail-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rail-accent"
     >
       <span className="relative w-[26px] h-[34px] shrink-0 rounded overflow-hidden bg-rail-hover block">
@@ -368,11 +465,21 @@ function ContinueRow({
           {title}
         </span>
         <span className="block text-[12.5px] text-rail-muted tabular-nums mt-0.5">
-          看到 {index + 1} / {total}
+          {positionVerb(contentKind)} {index + 1} / {total}
         </span>
       </span>
     </button>
   );
+}
+
+// positionVerb 按相册用途给出位置的措辞：照片是「看到」，漫画是「读到」。
+function positionVerb(contentKind?: string): string {
+  return contentKind === "comic" ? "读到" : "看到";
+}
+
+// continueVerb 按相册用途给出「继续」的说法：照片是浏览，漫画是阅读。
+function continueVerb(contentKind?: string): string {
+  return contentKind === "comic" ? "继续阅读" : "继续浏览";
 }
 
 // 「接着读」迷你卡：侧栏常驻最近在读的一本。
@@ -384,12 +491,14 @@ function ContinueMiniCard({
   coverPath,
   index,
   total,
+  contentKind,
   onOpen,
 }: {
   title: string;
   coverPath?: string;
   index: number;
   total: number;
+  contentKind?: string;
   onOpen: () => void;
 }) {
   const percent = readingPercent({ index, total });
@@ -397,7 +506,7 @@ function ContinueMiniCard({
     <button
       type="button"
       onClick={onOpen}
-      title={`继续阅读「${title}」`}
+      title={`${continueVerb(contentKind)}「${title}」`}
       className="mt-2 w-full rounded-lg bg-rail-hover hover:bg-rail-hover p-2 flex gap-2.5 items-center text-left transition-colors group/mini focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rail-accent"
     >
       <span className="relative w-9 h-12 shrink-0 rounded overflow-hidden bg-rail-hover block">
@@ -426,7 +535,7 @@ function ContinueMiniCard({
           />
         </span>
         <span className="mt-1 block text-[12.5px] text-rail-muted tabular-nums">
-          看到 {index + 1} / {total}
+          {positionVerb(contentKind)} {index + 1} / {total}
         </span>
       </span>
     </button>

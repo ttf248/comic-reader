@@ -38,6 +38,7 @@ function card(overrides: Partial<CardData> = {}): CardData {
     coverPath: "cover-main",
     coverKind: "image",
     to: "/albums/album-1",
+    contentKind: "comic",
     ...overrides,
   };
 }
@@ -202,13 +203,13 @@ describe("AlbumCard 状态表达", () => {
     expect(screen.getByText("未读")).toBeInTheDocument();
     expect(screen.queryByText("新", { exact: true })).not.toBeInTheDocument();
     // 未读相册不能同时显示「已读」。
-    expect(screen.queryByText("已读", { exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByText("已读完", { exact: true })).not.toBeInTheDocument();
   });
 
   it("已读完的相册在封面右下角显示已读 chip，且不再显示未读点", () => {
     renderCard(card({ progress: { index: 11, total: 12 } }));
 
-    expect(screen.getByText("已读", { exact: true })).toBeInTheDocument();
+    expect(screen.getByText("已读完", { exact: true })).toBeInTheDocument();
     expect(screen.queryByText("未读")).not.toBeInTheDocument();
   });
 
@@ -217,6 +218,21 @@ describe("AlbumCard 状态表达", () => {
 
     expect(screen.queryByText("未读")).not.toBeInTheDocument();
     expect(screen.getByText("27%")).toBeInTheDocument();
+  });
+
+  it("照片相册不显示百分比：那是漫画的读法，位置改在元信息行", () => {
+    renderCard(
+      card({ contentKind: "photo", progress: { index: 3, total: 12 } }),
+    );
+
+    expect(screen.queryByText("27%")).not.toBeInTheDocument();
+    expect(screen.getByText("看到 4 / 12")).toBeInTheDocument();
+  });
+
+  it("照片相册完成时说的是「已看完」", () => {
+    renderCard(card({ contentKind: "photo", progress: { index: 11, total: 12 } }));
+
+    expect(screen.getByText("已看完", { exact: true })).toBeInTheDocument();
   });
 
   it("整页都是未读的列表关掉逐卡未读标记", () => {
@@ -256,7 +272,7 @@ describe("AlbumCard 状态表达", () => {
   it("列表视图把状态写在标题行，不再在缩略图上重复已读", () => {
     renderCard(card({ progress: { index: 11, total: 12 } }), "list");
 
-    const marks = screen.getAllByText("已读", { exact: true });
+    const marks = screen.getAllByText("已读完", { exact: true });
     expect(marks).toHaveLength(1);
     expect(screen.getByTestId("card-cover").contains(marks[0])).toBe(false);
   });

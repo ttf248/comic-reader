@@ -17,6 +17,7 @@ vi.mock("../api/prefs", () => ({ historyApi: { list: vi.fn() } }));
 vi.mock("../hooks/useLibrary", () => ({ useLibraryNodes: vi.fn() }));
 vi.mock("../hooks/useImageActivity", () => ({
   useImageActivities: () => ({ data: {} }),
+  usePhotoActivities: () => ({ data: {} }),
 }));
 vi.mock("../hooks/useGalleryContextSync", () => ({
   useGalleryContextSync: vi.fn(),
@@ -46,6 +47,8 @@ const node = {
   displayName: "春游相册",
   imageCount: 3,
   coverImages: [],
+  // 工作台默认是照片：相册要带上用途，否则会被模式过滤掉。
+  contentKind: "photo",
 };
 const clientForTest = () =>
   new QueryClient({ defaultOptions: { queries: { retry: false } } });

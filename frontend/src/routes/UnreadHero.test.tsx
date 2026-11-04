@@ -42,6 +42,7 @@ function renderHero(
           <UnreadHero
             cards={cards}
             count={count}
+            mode="comic"
             onShuffle={onShuffle}
             onMarkRead={onMarkRead}
           />
@@ -77,7 +78,7 @@ describe("UnreadHero", () => {
     const heroSection = screen.getByTestId("unread-hero");
     expect(heroSection.textContent).toMatch(/2\s*本等你翻开/);
     // 随机未读按钮
-    const shuffleBtn = screen.getByRole("button", { name: "随机未读" });
+    const shuffleBtn = screen.getByRole("button", { name: "随机一本未读" });
     fireEvent.click(shuffleBtn);
     expect(onShuffle).toHaveBeenCalledTimes(1);
     // 全部 → 链接跳到 /unread
@@ -119,7 +120,7 @@ describe("UnreadHero", () => {
       makeCard("/b", "B"),
     ]);
     // 第一张「A」卡上的 X 按钮
-    const xBtnA = screen.getByLabelText("将A标记为已读");
+    const xBtnA = screen.getByLabelText("将A标记为已读完");
     fireEvent.click(xBtnA);
     expect(onMarkRead).toHaveBeenCalledTimes(1);
     expect(onMarkRead.mock.calls[0][0].title).toBe("A");

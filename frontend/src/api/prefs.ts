@@ -1,4 +1,5 @@
 import { api } from './client'
+import type { AppMode } from './library'
 
 export interface Prefs {
   favorites: string[]
@@ -13,6 +14,11 @@ export interface Prefs {
   showSwitchNotif: boolean
   theme: 'light' | 'dark' | 'system'
   sidebarCollapsed: boolean
+  /**
+   * 全局工作台模式。photo / comic 让列表只呈现该用途的相册，
+   * all 不过滤（逃生舱）。它与相册自身的 contentKind 正交。
+   */
+  appMode: AppMode
 }
 
 export const prefsApi = {

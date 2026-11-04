@@ -339,6 +339,7 @@ function CollectionView({
         kind: c.variant === "collection" ? "collection" : "album",
         imageCount: c.imageCount,
         videoCount: c.videoCount,
+        contentKind: c.contentKind,
       })),
     [cards],
   );

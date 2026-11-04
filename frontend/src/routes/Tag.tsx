@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useSearchStore } from "../store/searchStore";
 import { useUIStore } from "../store/uiStore";
 import { useFavorites } from "../hooks/useFavorites";
-import { useImageActivities } from "../hooks/useImageActivity";
+import { useImageActivities, usePhotoActivities } from "../hooks/useImageActivity";
+import type { LibraryNodeSummary } from "../api/library";
 import { useGalleryContextSync } from "../hooks/useGalleryContextSync";
 import AlbumGrid, { type CardData } from "../components/album/AlbumGrid";
 import EmptyState from "../components/common/EmptyState";
@@ -17,6 +18,7 @@ import {
 import { thumbUrl } from "../api/thumbs";
 import type { GalleryContextEntry } from "../utils/galleryContext";
 import { useTagAlbums } from "../hooks/useLibrary";
+import { useAppMode } from "../hooks/useAppMode";
 import { nodeSummaryToCard } from "../utils/libraryCard";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import { compareDatesDesc } from "../utils/date";
@@ -39,6 +41,7 @@ export default function Tag() {
 
   const [coverIdx, setCoverIdx] = useState(0);
   const albumsQuery = useTagAlbums(tag);
+  const { mode } = useAppMode();
   const reducedMotion = useReducedMotion();
   const albums = useMemo(
     () => albumsQuery.data?.items ?? [],
@@ -62,11 +65,22 @@ export default function Tag() {
     [albums],
   );
   const { data: progressMap } = useImageActivities(progressPaths);
+  const { data: photoProgressMap } = usePhotoActivities(progressPaths);
+  // 进度按相册自己的用途取：照片看浏览位置，漫画看页码。
+  const activityFor = useCallback(
+    (album: LibraryNodeSummary) =>
+      album.contentKind === "photo"
+        ? photoProgressMap?.[album.id]
+        : progressMap?.[album.id],
+    [photoProgressMap, progressMap],
+  );
   const readCount = useMemo(() => {
-    if (!progressMap) return 0;
-    return progressPaths.filter((id) => progressMap[id]?.status === "completed")
-      .length;
-  }, [progressMap, progressPaths]);
+    let count = 0;
+    for (const album of albums) {
+      if (activityFor(album)?.status === "completed") count++;
+    }
+    return count;
+  }, [albums, activityFor]);
 
   const recentDate = useMemo(() => {
     const dates = albums.map((a) => a.modTime).filter(Boolean) as string[];
@@ -100,15 +114,18 @@ export default function Tag() {
     }
   }, [albums, query, sortBy, compareViewed]);
 
-  const cards: CardData[] = filtered.map((album) => ({
-    ...nodeSummaryToCard(album),
-    progress: progressMap?.[album.id]
-      ? {
-          index: progressMap[album.id].pageIndex,
-          total: album.imageCount ?? 0,
-        }
-      : undefined,
-  }));
+  const cards: CardData[] = filtered.map((album) => {
+    const activity = activityFor(album);
+    return {
+      ...nodeSummaryToCard(album),
+      progress: activity
+        ? {
+            index: activity.pageIndex,
+            total: album.imageCount ?? 0,
+          }
+        : undefined,
+    };
+  });
 
   // 标签页作为上下文源
   const tagEntries = useMemo<GalleryContextEntry[]>(
@@ -119,6 +136,7 @@ export default function Tag() {
         name: c.title,
         imageCount: c.imageCount,
         videoCount: c.videoCount,
+        contentKind: c.contentKind,
       })),
     [cards],
   );
@@ -209,7 +227,7 @@ export default function Tag() {
               />
               <Stat
                 icon={<ClockIcon size={13} />}
-                label="已读"
+                label={mode === "photo" ? "已看完" : "已读完"}
                 value={`${readCount}/${albums.length}`}
               />
               <Stat
