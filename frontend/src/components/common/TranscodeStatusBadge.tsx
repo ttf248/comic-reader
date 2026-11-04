@@ -29,9 +29,10 @@ const SIZE_CLASS = {
 } as const;
 
 // 状态 → 用户可见的简短文本 + 颜色
-// running / queued → 蓝色 (处理中)
-// cached → 绿色 (完成,直接隐藏就行;这里主要是兜底)
-// failed → 红色
+// 界面外壳无彩，状态靠灰阶与语义色区分，不引入第二个色相。
+// running / queued → 中性灰（处理中，与失败形成轻重对比）
+// cached → 直接隐藏就行；这里主要是兜底
+// failed → 危险色
 const STATUS_STYLE: Record<
   TranscodeStatusValue,
   { text: string; cls: string } | null
@@ -41,9 +42,9 @@ const STATUS_STYLE: Record<
   unavailable: null,
   not_needed: null,
   cached: null, // 缓存命中时直接不显示
-  queued: { text: "排队", cls: "bg-blue-500/85 text-white" },
-  running: { text: "转码中", cls: "bg-blue-500/85 text-white" },
-  failed: { text: "转码失败", cls: "bg-red-500/85 text-white" },
+  queued: { text: "排队", cls: "bg-bg-strong text-fg-muted" },
+  running: { text: "转码中", cls: "bg-bg-strong text-fg" },
+  failed: { text: "转码失败", cls: "bg-danger text-white" },
   // pending：需要转码但还没开始（按需触发，播放时才启动）。
   // 这不是故障，不显示角标。
   pending: null,

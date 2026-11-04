@@ -1742,7 +1742,7 @@ test("主题菜单隔离页面快捷键，支持键盘连续选择并持久保�
   const root = page.locator("html");
   const trigger = page.getByRole("button", { name: /^主题:/ });
   await trigger.click();
-  const menu = page.getByRole("menu", { name: "主题与强调色" });
+  const menu = page.getByRole("menu", { name: "主题" });
   const light = menu.getByRole("menuitemradio", { name: "浅色", exact: true });
   const dark = menu.getByRole("menuitemradio", { name: "深色", exact: true });
   await expect(light).toBeFocused();
@@ -1766,27 +1766,20 @@ test("主题菜单隔离页面快捷键，支持键盘连续选择并持久保�
   await expect(root).toHaveAttribute("data-theme", "dark");
   await expect(dark).toHaveAttribute("aria-checked", "true");
   await expect(menu).toBeVisible();
+  // 菜单只有主题一组：Home/End 在三项之间往返。
   await page.keyboard.press("End");
   await expect(
-    menu.getByRole("menuitemradio", { name: "紫罗兰" }),
+    menu.getByRole("menuitemradio", { name: "系统", exact: true }),
   ).toBeFocused();
   await page.keyboard.press("ArrowDown");
   await expect(light).toBeFocused();
-  const indigo = menu.getByRole("menuitemradio", { name: "靛蓝" });
-  await indigo.focus();
-  await page.keyboard.press("Space");
-  await expect(root).toHaveAttribute("data-accent", "indigo");
-  await expect(indigo).toHaveAttribute("aria-checked", "true");
-  await expect(menu).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(menu).not.toBeVisible();
   await expect(trigger).toBeFocused();
   await page.reload();
   await expect(root).toHaveAttribute("data-theme", "dark");
-  await expect(root).toHaveAttribute("data-accent", "indigo");
   await trigger.click();
   await expect(dark).toHaveAttribute("aria-checked", "true");
-  await expect(indigo).toHaveAttribute("aria-checked", "true");
   expect(errors).toEqual([]);
 });
 
@@ -1796,7 +1789,7 @@ test("主题菜单保留 Tab 操作和外部焦点，关闭后恢复页面快捷
   await scannedNodes(page.request);
   await page.goto("/settings");
   const trigger = page.getByRole("button", { name: /^主题:/ });
-  const menu = page.getByRole("menu", { name: "主题与强调色" });
+  const menu = page.getByRole("menu", { name: "主题" });
   await trigger.click();
   await expect(
     menu.getByRole("menuitemradio", { name: "浅色", exact: true }),
@@ -1823,7 +1816,7 @@ test("主题菜单保留 Tab 操作和外部焦点，关闭后恢复页面快捷
   await expect(page).toHaveURL(/\/unread$/);
 });
 
-test("主题令牌在明暗模式和六种强调色下保持边框及透明背景", async ({ page }) => {
+test("主题令牌在明暗模式下保持边框及透明背景", async ({ page }) => {
   await page.goto("/settings");
   const root = page.locator("html");
   const themeSwitcher = page
@@ -1852,38 +1845,30 @@ test("主题令牌在明暗模式和六种强调色下保持边框及透明背�
       expect(
         Math.abs(subtleBackground[channel] - expectedSubtle[channel]),
       ).toBeLessThanOrEqual(2);
-    for (const [accent, name] of [
-      ["graphite", "石墨"],
-      ["indigo", "靛蓝"],
-      ["rose", "绯红"],
-      ["forest", "森林"],
-      ["ochre", "琥珀"],
-      ["plum", "紫罗兰"],
-    ]) {
-      await page.getByRole("button", { name, exact: true }).click();
-      await expect(root).toHaveAttribute("data-accent", accent);
-      const navigationColors = await renderedColors(root, [
-        "--rail-active",
-        "--rail-active-fg",
-      ]);
-      expect(
-        await renderedColors(activeNavigation, ["background-color", "color"]),
-      ).toEqual(navigationColors);
-      await page.getByRole("button", { name: /^主题: .* · 强调色$/ }).click();
-      const activeTheme = page.getByRole("menuitemradio", {
-        name: "系统",
-        exact: true,
-      });
-      await expect(activeTheme).toHaveAttribute("aria-checked", "true");
-      const expected = await renderedColors(root, [
-        "--accent",
-        "--accent-contrast",
-      ]);
-      await expect
-        .poll(() => renderedColors(activeTheme, ["background-color", "color"]))
-        .toEqual(expected);
-      await page.keyboard.press("Escape");
-    }
+    // 侧栏选中态的颜色来自 --rail-active / --rail-active-fg，
+    // 而不是组件里另写一份色值。
+    const navigationColors = await renderedColors(root, [
+      "--rail-active",
+      "--rail-active-fg",
+    ]);
+    expect(
+      await renderedColors(activeNavigation, ["background-color", "color"]),
+    ).toEqual(navigationColors);
+    // 强调色由主题方案本身决定：主题菜单里的选中项直接取 --accent 家族。
+    await page.getByRole("button", { name: /^主题:/ }).click();
+    const activeTheme = page.getByRole("menuitemradio", {
+      name: "系统",
+      exact: true,
+    });
+    await expect(activeTheme).toHaveAttribute("aria-checked", "true");
+    const expected = await renderedColors(root, [
+      "--accent",
+      "--accent-contrast",
+    ]);
+    await expect
+      .poll(() => renderedColors(activeTheme, ["background-color", "color"]))
+      .toEqual(expected);
+    await page.keyboard.press("Escape");
     await page.screenshot({
       path: test.info().outputPath(`theme-tokens-${theme}.png`),
     });
@@ -4330,6 +4315,7 @@ test("阅读器加载态沿用深色画布，不闪白底", async ({ page }) => 
   const album = nodes.find((node) => node.name === "sample-paged-images");
   expect(album).toBeDefined();
   // 固定成浅色主题：只有浅色主题下"加载态跟着主题变"才会露出白底。
+  // 这里刻意写旧版本的存储（带已废弃的 accent 键），顺带覆盖偏好迁移。
   await page.addInitScript(() => {
     localStorage.setItem(
       "local-gallery-ui",
@@ -4362,6 +4348,14 @@ test("阅读器加载态沿用深色画布，不闪白底", async ({ page }) => 
   expect(r).toBeLessThan(60);
   expect(g).toBeLessThan(60);
   expect(b).toBeLessThan(60);
+
+  // 旧版本存储里的 accent 偏好已作废：迁移后主题照常生效，存储里不再留这个键。
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  const stored = await page.evaluate(() =>
+    JSON.parse(localStorage.getItem("local-gallery-ui") ?? "{}"),
+  );
+  expect(stored.state?.theme).toBe("light");
+  expect(stored.state).not.toHaveProperty("accent");
 });
 
 test("阅读器放大与旋转真正作用到图片上", async ({ page }) => {

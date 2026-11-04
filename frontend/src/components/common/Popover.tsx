@@ -158,7 +158,7 @@ export default function Popover({
   // 默认菜单样式 + 用户覆盖
   const baseCls =
     tone === "reader"
-      ? "min-w-[180px] bg-neutral-900/95 border border-white/15 rounded-lg shadow-2xl p-1.5 text-[13px] text-white backdrop-blur-md"
+      ? "min-w-[180px] bg-overlay-panel border border-overlay-border rounded-lg shadow-2xl p-1.5 text-[13px] text-overlay-fg backdrop-blur-md"
       : "min-w-[180px] bg-bg-elevated border border-border rounded-lg shadow-lg p-1.5 text-[13px]";
   const enhancedTrigger = isValidElement(trigger)
     ? cloneElement(trigger as ReactElement<TriggerProps>, {

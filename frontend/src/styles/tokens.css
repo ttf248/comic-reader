@@ -1,50 +1,49 @@
-/* 私人影像年鉴：暖纸色、墨绿与陶土色。视觉值集中维护，主题保持成套。 */
+/* 中性灰阶：界面外壳无彩，照片是页面上唯一的彩色。
+   琥珀只出现在品牌标记、页眉眉标与章节序号，作为克制的品牌点缀。
+   视觉值集中维护，主题保持成套。 */
 :root,
 :root[data-theme="light"] {
-  --bg: #f6f4ee;
-  --bg-elevated: #fffefa;
-  --bg-subtle: #eeece4;
-  --bg-strong: #e1e3d9;
-  --bg-inset: #f1efe7;
-  --bg-media: #1d2923;
-  --fg: #25372e;
-  --fg-muted: #586258;
-  --fg-subtle: #60685b;
-  --fg-disabled: #9a9f93;
-  --accent: #263c32;
-  --accent-hover: #3a5546;
-  --accent-soft: #e4eade;
-  --accent-fg: #fffdf4;
-  --accent-contrast: #fffdf4;
-  --brand: #a34d2c;
-  --brand-soft: #f1d9c5;
-  --brand-ink: #6e351f;
-  --rail-bg: #203a30;
-  --rail-fg: #f7f3e9;
-  --rail-muted: #bdcabe;
-  --rail-hover: #314c3e;
-  --rail-line: #496052;
-  --rail-active: #edf0e1;
-  --rail-active-fg: #21372b;
-  --feature-bg: #e8ece0;
-  --feature-fg: #25372e;
-  --feature-muted: #57654e;
-  --reader-bg: #101b16;
-  --reader-panel: #203028;
-  --danger: #ba3e37;
-  --success: #376448;
-  --warning: #8b5b16;
-  --border: #deded2;
-  --border-strong: #bcc3b2;
-  --border-faint: #e9e7dd;
+  --bg: #f4f5f7;
+  --bg-elevated: #ffffff;
+  --bg-subtle: #eaecf0;
+  --bg-strong: #dfe2e7;
+  --bg-media: #17191a;
+  --fg: #16181c;
+  --fg-muted: #545a63;
+  --fg-subtle: #5a6069;
+  --accent: #1f242b;
+  --accent-hover: #2b3138;
+  --accent-soft: #e7e9ed;
+  --accent-contrast: #ffffff;
+  --danger: #b42318;
+  --success: #1a7a52;
+  --warning: #8a5a00;
+  --border: #e2e5ea;
+  --border-strong: #c3c8d0;
+  --border-faint: #edeff3;
+  --brand: #a35a1e;
+  --brand-soft: #f2e6d8;
+  --brand-ink: #7a3f10;
+  --rail-bg: #16181c;
+  --rail-fg: #f2f4f7;
+  --rail-muted: #99a0aa;
+  --rail-hover: #23262c;
+  --rail-line: #2b2f36;
+  --rail-active: #2a2e35;
+  --rail-active-fg: #ffffff;
+  --rail-accent: #e9ebee;
+  --rail-accent-fg: #16181c;
+  --feature-bg: #e9ebef;
+  --feature-fg: #16181c;
+  --feature-muted: #545a63;
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
   --radius-xl: 22px;
-  --shadow-xs: 0 2px 5px rgba(37, 55, 46, 0.035);
-  --shadow-sm: 0 3px 12px rgba(37, 55, 46, 0.06);
-  --shadow-md: 0 12px 32px rgba(37, 55, 46, 0.1);
-  --shadow-lg: 0 22px 60px rgba(37, 55, 46, 0.16);
+  --shadow-xs: 0 2px 5px rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 3px 12px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 22px 60px rgba(0, 0, 0, 0.16);
   --font-sans:
     "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
     "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
@@ -74,118 +73,60 @@
 }
 
 :root[data-theme="dark"] {
-  --bg: #151f19;
-  --bg-elevated: #1d2a22;
-  --bg-subtle: #26342b;
-  --bg-strong: #354638;
-  --bg-inset: #19251e;
-  --bg-media: #111c16;
-  --fg: #eeeadd;
-  --fg-muted: #bec7b8;
-  --fg-subtle: #a1af9e;
-  --fg-disabled: #73836f;
-  --accent: #f1ebdd;
+  --bg: #0e0f12;
+  --bg-elevated: #17191d;
+  --bg-subtle: #1e2126;
+  --bg-strong: #282c32;
+  --bg-media: #0d0e10;
+  --fg: #eef0f3;
+  --fg-muted: #a7aeb7;
+  --fg-subtle: #8c939c;
+  --accent: #f2f4f7;
   --accent-hover: #ffffff;
-  --accent-soft: #354638;
-  --accent-fg: #152019;
-  --accent-contrast: #152019;
-  --brand: #e0a178;
-  --brand-soft: #49382c;
-  --brand-ink: #f4c8a6;
-  --rail-bg: #101c15;
-  --rail-fg: #f2efdf;
-  --rail-muted: #b6c4b1;
-  --rail-hover: #26392c;
-  --rail-line: #344b38;
-  --rail-active: #dce4cf;
-  --rail-active-fg: #1d3222;
-  --feature-bg: #2d3e2e;
-  --feature-fg: #f0eedf;
-  --feature-muted: #c1cdb6;
-  --danger: #ffa39a;
-  --success: #a6cea3;
-  --warning: #edc688;
-  --border: #3b4c3b;
-  --border-strong: #63735b;
-  --border-faint: #2c3b2d;
+  --accent-soft: #24272d;
+  --accent-contrast: #16181c;
+  --danger: #ff9a90;
+  --success: #79d3a4;
+  --warning: #e0b169;
+  --border: #26292f;
+  --border-strong: #3d424a;
+  --border-faint: #1b1e23;
+  --brand: #d9a066;
+  --brand-soft: #2b2119;
+  --brand-ink: #e9bb88;
+  --rail-bg: #08090a;
+  --rail-fg: #f2f4f7;
+  --rail-muted: #8b929b;
+  --rail-hover: #141619;
+  --rail-line: #1d2026;
+  --rail-active: #1c1f24;
+  --rail-active-fg: #ffffff;
+  --rail-accent: #e9ebee;
+  --rail-accent-fg: #08090a;
+  --feature-bg: #191b20;
+  --feature-fg: #eef0f3;
+  --feature-muted: #a7aeb7;
   --shadow-xs: 0 2px 5px rgba(0, 0, 0, 0.1);
   --shadow-sm: 0 3px 12px rgba(0, 0, 0, 0.15);
   --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.25);
   --shadow-lg: 0 22px 60px rgba(0, 0, 0, 0.35);
 }
 
-/* === Accent color swatches (light) === */
-:root[data-accent="graphite"] {
-  --accent: #263c32;
-  --accent-hover: #3a5546;
-  --accent-soft: #e4eade;
-  --accent-contrast: #fffdf4;
-}
-:root[data-accent="indigo"] {
-  --accent: #4f46e5;
-  --accent-hover: #4338ca;
-  --accent-soft: #eef2ff;
-  --accent-contrast: #ffffff;
-}
-:root[data-accent="rose"] {
-  --accent: #e11d48;
-  --accent-hover: #be123c;
-  --accent-soft: #fff1f2;
-  --accent-contrast: #ffffff;
-}
-:root[data-accent="forest"] {
-  --accent: #059669;
-  --accent-hover: #047857;
-  --accent-soft: #ecfdf5;
-  --accent-contrast: #ffffff;
-}
-:root[data-accent="ochre"] {
-  --accent: #d97706;
-  --accent-hover: #b45309;
-  --accent-soft: #fffbeb;
-  --accent-contrast: #ffffff;
-}
-:root[data-accent="plum"] {
-  --accent: #7c3aed;
-  --accent-hover: #6d28d9;
-  --accent-soft: #f5f3ff;
-  --accent-contrast: #ffffff;
-}
-
-/* === Accent color swatches (dark) === */
-:root[data-theme="dark"][data-accent="graphite"] {
-  --accent: #f1ebdd;
-  --accent-hover: #ffffff;
-  --accent-soft: #354638;
-  --accent-contrast: #152019;
-}
-:root[data-theme="dark"][data-accent="indigo"] {
-  --accent: #818cf8;
-  --accent-hover: #a5b4fc;
-  --accent-soft: #1e1b4b;
-  --accent-contrast: #0a0917;
-}
-:root[data-theme="dark"][data-accent="rose"] {
-  --accent: #fb7185;
-  --accent-hover: #fda4af;
-  --accent-soft: #4c0519;
-  --accent-contrast: #1a0309;
-}
-:root[data-theme="dark"][data-accent="forest"] {
-  --accent: #34d399;
-  --accent-hover: #6ee7b7;
-  --accent-soft: #064e3b;
-  --accent-contrast: #022c22;
-}
-:root[data-theme="dark"][data-accent="ochre"] {
-  --accent: #fbbf24;
-  --accent-hover: #fcd34d;
-  --accent-soft: #451a03;
-  --accent-contrast: #1a0a01;
-}
-:root[data-theme="dark"][data-accent="plum"] {
-  --accent: #a78bfa;
-  --accent-hover: #c4b5fd;
-  --accent-soft: #2e1065;
-  --accent-contrast: #14052a;
+/* === 沉浸暗场 ===
+   阅读器、大图预览与浮层不跟随主题：它们是同一套灰阶的深端，
+   独立成家族，组件里不再散落 bg-neutral-900 之类的硬编码中性色。 */
+:root {
+  --reader-bg: #0a0b0d;
+  --reader-panel: #16181c;
+  --overlay-bg: #0a0b0d;
+  --overlay-panel: #16181c;
+  --overlay-panel-strong: #22262c;
+  --overlay-border: rgba(255, 255, 255, 0.12);
+  /* 压在照片上的高光描边：比面板描边更亮，用来把封面从背景里托出来 */
+  --media-highlight: rgba(255, 255, 255, 0.25);
+  --overlay-fg: #f2f4f7;
+  --overlay-scrim: rgba(0, 0, 0, 0.55);
+  --overlay-danger: #ff9a90;
+  --overlay-warning: #e0b169;
+  --overlay-success: #79d3a4;
 }

@@ -42,7 +42,7 @@ describe("Popover", () => {
     fireEvent.click(screen.getByRole("button", { name: "更多" }));
 
     const menu = await screen.findByRole("menu");
-    expect(menu.className).toContain("bg-neutral-900/95");
+    expect(menu.className).toContain("bg-overlay-panel");
     expect(menu.className).not.toContain("bg-bg-elevated");
 
     const item = screen.getByRole("menuitem", { name: "图片信息" });
@@ -60,6 +60,6 @@ describe("Popover", () => {
 
     const menu = await screen.findByRole("menu");
     expect(menu.className).toContain("bg-bg-elevated");
-    expect(menu.className).not.toContain("bg-neutral-900/95");
+    expect(menu.className).not.toContain("bg-overlay-panel");
   });
 });

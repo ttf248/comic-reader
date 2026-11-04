@@ -61,7 +61,7 @@ describe("ImageInfoPanel", () => {
     render(<ImageInfoPanel absPath="f_1" onClose={() => {}} />);
 
     const panel = screen.getByTestId("image-info-panel");
-    expect(panel.className).toContain("bg-neutral-900/95");
+    expect(panel.className).toContain("bg-overlay-panel");
     expect(panel.className).not.toContain("glass");
     expect(panel.className).not.toContain("border-border-faint");
   });

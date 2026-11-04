@@ -269,7 +269,7 @@ export default function PhotoViewer({
   return (
     <div
       data-testid="photo-viewer"
-      className="fixed inset-0 z-50 flex flex-col bg-neutral-950/96 text-white"
+      className="fixed inset-0 z-50 flex flex-col bg-overlay-bg text-overlay-fg"
       role="dialog"
       aria-modal="true"
       aria-label={`${albumName} 大图预览`}

@@ -176,7 +176,7 @@ export default function TranscodeProgress({ src, onReady, onDismiss }: Props) {
 
         {/* 失败 */}
         {status.status === 'failed' && (
-          <div className="text-[12.5px] text-red-300/90 text-center max-w-xs break-words">
+          <div className="text-[12.5px] text-overlay-danger text-center max-w-xs break-words">
             {status.error || '未知错误'}
           </div>
         )}

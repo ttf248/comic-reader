@@ -174,7 +174,7 @@ it("tone=reader 时帮助浮层走深色，并标记 data-tone 供焦点环取�
   render(<HelpOverlay context="image" open onClose={vi.fn()} tone="reader" />);
   const dialog = screen.getByRole("dialog");
   expect(dialog).toHaveAttribute("data-tone", "reader");
-  expect(dialog.className).toContain("bg-neutral-900/95");
+  expect(dialog.className).toContain("bg-overlay-panel");
   expect(dialog.className).not.toContain("bg-bg-elevated");
   // 键帽走暗色变体（.kbd-light），否则白底键帽浮在深色浮层上很扎眼。
   expect(document.querySelector(".kbd-light")).not.toBeNull();

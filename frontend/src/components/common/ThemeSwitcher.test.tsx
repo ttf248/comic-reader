@@ -4,7 +4,7 @@ import { useUIStore } from "../../store/uiStore";
 import ThemeSwitcher from "./ThemeSwitcher";
 
 beforeEach(() => {
-  useUIStore.setState({ theme: "light", accent: "graphite" });
+  useUIStore.setState({ theme: "light" });
 });
 
 async function openTheme() {
@@ -17,23 +17,19 @@ async function openTheme() {
   const trigger = screen.getByRole("button", { name: /^主题:/ });
   trigger.focus();
   fireEvent.click(trigger);
-  const menu = await screen.findByRole("menu", { name: "主题与强调色" });
+  const menu = await screen.findByRole("menu", { name: "主题" });
   return { trigger, menu };
 }
 
-it("打开后聚焦第一项，分别公开主题和强调色的当前选择", async () => {
+it("打开后聚焦第一项，公开主题的当前选择", async () => {
   const { trigger, menu } = await openTheme();
   expect(trigger).toHaveAttribute("aria-haspopup", "menu");
   expect(trigger).toHaveAttribute("aria-expanded", "true");
-  expect(within(menu).getAllByRole("menuitemradio")).toHaveLength(9);
+  expect(within(menu).getAllByRole("menuitemradio")).toHaveLength(3);
   const themes = within(menu).getByRole("group", { name: "主题" });
-  const accents = within(menu).getByRole("group", { name: "强调色" });
   expect(
     within(themes).getByRole("menuitemradio", { checked: true }),
   ).toHaveTextContent("浅色");
-  expect(
-    within(accents).getByRole("menuitemradio", { checked: true }),
-  ).toHaveAccessibleName("石墨");
   expect(
     within(themes).getByRole("menuitemradio", { name: "浅色" }),
   ).toHaveFocus();
@@ -44,37 +40,29 @@ it("方向键和 Home/End 遍历全部选项，移动焦点不改变外观偏好
   const items = within(menu).getAllByRole("menuitemradio");
   for (const [key, index] of [
     ["ArrowDown", 1],
-    ["End", 8],
-    ["ArrowUp", 7],
+    ["End", 2],
+    ["ArrowUp", 1],
     ["Home", 0],
-    ["ArrowUp", 8],
+    ["ArrowUp", 2],
     ["ArrowDown", 0],
   ] as const) {
     fireEvent.keyDown(document.activeElement ?? menu, { key });
     expect(items[index]).toHaveFocus();
   }
   expect(useUIStore.getState().theme).toBe("light");
-  expect(useUIStore.getState().accent).toBe("graphite");
 });
 
-it("选择后更新对应分组，保持面板打开以便连续调整主题和强调色", async () => {
+it("选择后更新主题，保持面板打开以便连续调整", async () => {
   const { menu } = await openTheme();
   fireEvent.click(within(menu).getByRole("menuitemradio", { name: "深色" }));
-  fireEvent.click(within(menu).getByRole("menuitemradio", { name: "绯红" }));
   expect(useUIStore.getState().theme).toBe("dark");
-  expect(useUIStore.getState().accent).toBe("rose");
   expect(menu).toBeInTheDocument();
-  for (const [group, name] of [
-    ["主题", "深色"],
-    ["强调色", "绯红"],
-  ]) {
-    expect(
-      within(within(menu).getByRole("group", { name: group })).getByRole(
-        "menuitemradio",
-        { checked: true },
-      ),
-    ).toHaveAccessibleName(name);
-  }
+  expect(
+    within(within(menu).getByRole("group", { name: "主题" })).getByRole(
+      "menuitemradio",
+      { checked: true },
+    ),
+  ).toHaveAccessibleName("深色");
 });
 
 it("隔离背景快捷键，Esc 关闭后恢复主题按钮焦点", async () => {

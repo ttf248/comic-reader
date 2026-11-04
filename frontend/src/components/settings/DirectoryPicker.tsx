@@ -85,7 +85,7 @@ export default function DirectoryPicker({
       ref={dialogRef}
       aria-modal="true"
       aria-labelledby={titleId}
-      className="fixed inset-0 m-auto w-[640px] max-w-[94vw] max-h-[85dvh] overflow-hidden rounded-xl border border-border bg-bg-elevated p-0 text-fg shadow-lg backdrop:bg-black/40 backdrop:backdrop-blur-[2px]"
+      className="fixed inset-0 m-auto w-[640px] max-w-[94vw] max-h-[85dvh] overflow-hidden rounded-xl border border-border bg-bg-elevated p-0 text-fg shadow-lg backdrop:bg-overlay-scrim backdrop:backdrop-blur-[2px]"
       onCancel={(event) => {
         event.preventDefault();
         onClose();

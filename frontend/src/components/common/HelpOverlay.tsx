@@ -101,8 +101,8 @@ export default function HelpOverlay({
       data-tone={dark ? "reader" : undefined}
       className={`fixed inset-0 m-auto w-[680px] max-w-[94vw] max-h-[80dvh] overflow-hidden rounded-xl border p-0 shadow-lg scale-fade ${
         dark
-          ? "border-white/15 bg-neutral-900/95 text-white backdrop:bg-black/60 backdrop:backdrop-blur-sm"
-          : "border-border bg-bg-elevated text-fg backdrop:bg-black/40 backdrop:backdrop-blur-sm"
+          ? "border-overlay-border bg-overlay-panel text-overlay-fg backdrop:bg-overlay-scrim backdrop:backdrop-blur-sm"
+          : "border-border bg-bg-elevated text-fg backdrop:bg-overlay-scrim backdrop:backdrop-blur-sm"
       }`}
       aria-modal="true"
       aria-labelledby={titleId}

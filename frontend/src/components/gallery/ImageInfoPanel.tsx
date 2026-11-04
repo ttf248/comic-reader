@@ -29,7 +29,7 @@ export default function ImageInfoPanel({ absPath, onClose }: Props) {
       data-testid="image-info-panel"
       className="
         absolute inset-x-0 bottom-0 top-[76px] z-30 flex flex-col
-        border-t border-white/10 bg-neutral-900/95 backdrop-blur-md
+        border-t border-overlay-border bg-overlay-panel backdrop-blur-md
         md:static md:inset-auto md:z-auto md:w-72 md:shrink-0 md:border-l md:border-t-0
       "
     >
@@ -49,7 +49,7 @@ export default function ImageInfoPanel({ absPath, onClose }: Props) {
       <div className="flex-1 overflow-auto p-4 text-sm space-y-3 scroll-thin">
         {loading && <div className="text-white/60 text-[12.5px]">加载中…</div>}
         {err !== null && (
-          <div className="text-red-300/90 text-[12.5px]">
+          <div className="text-overlay-danger text-[12.5px]">
             错误: {apiErrorMessage(err, "无法读取图片信息")}
           </div>
         )}

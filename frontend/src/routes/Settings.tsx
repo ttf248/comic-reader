@@ -5,9 +5,8 @@ import { scanApi } from "../api/scan";
 import { cacheApi, formatBytes } from "../api/cache";
 import { useScanSSE } from "../hooks/useScanSSE";
 import ThemeSwitcher from "../components/common/ThemeSwitcher";
-import { useUIStore, type AccentKey } from "../store/uiStore";
+import { useUIStore } from "../store/uiStore";
 import { libraryQueryKeys, useLibraryManifest } from "../hooks/useLibrary";
-import { ACCENT_SWATCHES } from "../hooks/useTheme";
 import ServerConfigPanel from "../components/settings/ServerConfigPanel";
 import ScanWarnings from "../components/common/ScanWarnings";
 import { syncHistoryCache } from "../utils/historyCache";
@@ -18,7 +17,6 @@ import {
   SunIcon,
   KeyboardIcon,
   InfoIcon,
-  CheckIcon,
   ServerIcon,
 } from "../components/common/Icon";
 
@@ -33,8 +31,6 @@ export default function Settings() {
   const sidebarCollapsed = useUIStore((s) => s.sidebarCollapsed);
   const viewMode = useUIStore((s) => s.viewMode);
   const setViewMode = useUIStore((s) => s.setViewMode);
-  const accent = useUIStore((s) => s.accent);
-  const setAccent = useUIStore((s) => s.setAccent);
   const pushToast = useUIStore((s) => s.pushToast);
   const manifest = useLibraryManifest().data?.manifest;
   const sse = useScanSSE();
@@ -244,29 +240,6 @@ export default function Settings() {
         <Section title="外观" icon={<SunIcon size={13} />}>
           <Row label="主题">
             <ThemeSwitcher />
-          </Row>
-          <Row label="强调色">
-            <div className="flex items-center gap-2">
-              {ACCENT_SWATCHES.map((s) => {
-                const active = accent === s.id;
-                return (
-                  <button
-                    key={s.id}
-                    onClick={() => setAccent(s.id as AccentKey)}
-                    className="relative w-7 h-7 rounded-full transition-transform hover:scale-110 focus:outline-none"
-                    style={{ background: s.light }}
-                    title={s.name}
-                    aria-label={s.name}
-                  >
-                    {active && (
-                      <span className="absolute inset-0 ring-2 ring-fg ring-offset-2 ring-offset-bg-elevated rounded-full flex items-center justify-center">
-                        <CheckIcon size={12} className="text-white" />
-                      </span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
           </Row>
           <Row label="侧边栏">
             <button

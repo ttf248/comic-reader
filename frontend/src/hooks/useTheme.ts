@@ -1,11 +1,13 @@
 import { useEffect } from "react";
-import { useUIStore, type ThemePref, type AccentKey } from "../store/uiStore";
+import { useUIStore, type ThemePref } from "../store/uiStore";
 
-// 把 store 中的主题与强调色同步到 :root[data-theme] / :root[data-accent]。
+// 把 store 中的主题同步到 :root[data-theme]。
 // 'system' 时跟随 prefers-color-scheme。
+//
+// 强调色不再可切换：它由主题方案本身决定（中性灰阶 + 琥珀点缀），
+// 所以这里只处理主题一个维度。
 export function useTheme() {
   const theme = useUIStore((s) => s.theme);
-  const accent = useUIStore((s) => s.accent);
 
   useEffect(() => {
     const mql = window.matchMedia("(prefers-color-scheme: dark)");
@@ -22,24 +24,5 @@ export function useTheme() {
     }
   }, [theme]);
 
-  useEffect(() => {
-    document.documentElement.setAttribute("data-accent", accent);
-  }, [accent]);
-
-  return { theme, accent };
+  return { theme };
 }
-
-// 强调色调色板（用于设置页的色块）
-export const ACCENT_SWATCHES: {
-  id: AccentKey;
-  name: string;
-  light: string;
-  dark: string;
-}[] = [
-  { id: "graphite", name: "石墨", light: "#263c32", dark: "#f1ebdd" },
-  { id: "indigo", name: "靛蓝", light: "#4f46e5", dark: "#818cf8" },
-  { id: "rose", name: "绯红", light: "#e11d48", dark: "#fb7185" },
-  { id: "forest", name: "森林", light: "#059669", dark: "#34d399" },
-  { id: "ochre", name: "琥珀", light: "#d97706", dark: "#fbbf24" },
-  { id: "plum", name: "紫罗兰", light: "#7c3aed", dark: "#a78bfa" },
-];

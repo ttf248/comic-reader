@@ -682,7 +682,7 @@ function ReadChip({ contentKind }: { contentKind?: "photo" | "comic" }) {
       className="inline-flex items-center gap-1 rounded-md bg-black/65 backdrop-blur-sm ring-1 ring-white/20 px-1.5 h-5 text-[12.5px] font-medium text-white shadow-sm"
       title={title}
     >
-      <CheckIcon size={10} className="text-emerald-300" />
+      <CheckIcon size={10} className="text-overlay-success" />
       <span>已读</span>
     </span>
   );

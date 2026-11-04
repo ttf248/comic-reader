@@ -17,7 +17,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    color: var(--brand);
+    color: var(--brand-ink);
     font-size: 12.5px;
     font-weight: 600;
     letter-spacing: 0.06em;
@@ -26,7 +26,7 @@
     content: "";
     width: 18px;
     height: 2px;
-    background: currentColor;
+    background: var(--brand);
   }
   .page-heading {
     padding-top: 34px;
@@ -77,7 +77,6 @@
     background: var(--rail-active);
     color: var(--rail-active-fg);
     font-weight: 600;
-    box-shadow: 0 3px 10px rgb(0 0 0 / 7%);
   }
   .nav-entry--compact {
     justify-content: center;
@@ -103,7 +102,7 @@
     flex-direction: column;
     min-width: 0;
     padding: 26px;
-    border: 1px solid color-mix(in srgb, var(--feature-fg) 10%, transparent);
+    border: 1px solid var(--border);
     border-radius: 22px;
     background: var(--feature-bg);
     color: var(--feature-fg);
@@ -125,7 +124,7 @@
     overflow: hidden;
     border-radius: 12px 16px 16px 12px;
     background: var(--bg-media);
-    box-shadow: 8px 12px 22px rgb(15 31 20 / 16%);
+    box-shadow: 8px 12px 22px rgb(0 0 0 / 18%);
     transform: rotate(-3deg);
     transition: transform 240ms var(--ease-out);
   }
@@ -135,7 +134,7 @@
     inset: 0;
     box-shadow: inset 5px 0 8px rgb(0 0 0 / 18%);
     pointer-events: none;
-    border: 1px solid rgb(255 255 255 / 25%);
+    border: 1px solid var(--media-highlight);
     border-radius: inherit;
   }
   .reading-cover:hover {
@@ -154,7 +153,7 @@
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 12px;
-    border-top: 1px solid color-mix(in srgb, var(--feature-fg) 15%, transparent);
+    border-top: 1px solid var(--border);
     padding-top: 18px;
   }
   .reading-queue__item {
@@ -212,7 +211,7 @@
     margin-bottom: 18px;
   }
   .section-index {
-    color: var(--brand);
+    color: var(--brand-ink);
     font: 500 12.5px/1 var(--font-mono);
   }
   .album-tile {
@@ -416,7 +415,7 @@
     left: 16px;
     right: 16px;
     height: 48px;
-    border: 1px solid rgb(255 255 255 / 14%);
+    border: 1px solid var(--overlay-border);
     border-radius: 14px;
     background: color-mix(in srgb, var(--reader-panel) 95%, transparent);
     box-shadow: 0 4px 20px rgb(0 0 0 / 12%);
@@ -629,7 +628,7 @@ a:focus-visible,
 }
 
 /* 阅读器的浮层是暗色的，而浅色主题的强调色恰好是近黑的石墨色
-   （--accent: #18181b）—— 焦点环会变成"黑底上的黑框"，等于没有焦点
+   （--accent: #1f242b）—— 焦点环会变成"黑底上的黑框"，等于没有焦点
    指示。暗色浮层里改用半透明白作为焦点环颜色。
    这条规则必须不分层写：未分层的声明优先级高于 @layer utilities，
    否则压不过上面的 :focus-visible 与 Tailwind 的 outline-none。 */
@@ -835,7 +834,7 @@ button:not(:disabled):active {
     border-radius: var(--radius-sm);
   }
 
-  /* 主操作使用可切换的强调色。 */
+  /* 主操作使用强调色：浅色主题是近黑的石墨，深色主题是近白。 */
   .btn-primary {
     background: var(--accent);
     color: var(--accent-contrast);

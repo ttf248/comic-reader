@@ -140,7 +140,7 @@ export default function PageSlider({ total, index, onJump, images }: Props) {
             return (
               <div
                 key={i}
-                className={`bg-neutral-900 border-2 rounded overflow-hidden shadow-lg transition-all ${
+                className={`bg-overlay-panel border-2 rounded overflow-hidden shadow-lg transition-all ${
                   isCenter
                     ? "border-white scale-105"
                     : "border-white/30 opacity-80"
@@ -155,7 +155,7 @@ export default function PageSlider({ total, index, onJump, images }: Props) {
                     draggable={false}
                   />
                 ) : (
-                  <div className="w-full h-full bg-neutral-800" />
+                  <div className="w-full h-full bg-overlay-panel-strong" />
                 )}
               </div>
             );
@@ -184,7 +184,7 @@ export default function PageSlider({ total, index, onJump, images }: Props) {
           }}
           onBlur={commit}
           autoFocus
-          className="w-12 h-7 px-1.5 text-center text-[12.5px] tabular-nums bg-neutral-900/80 text-white rounded border border-white/30 outline-none"
+          className="w-12 h-7 px-1.5 text-center text-[12.5px] tabular-nums bg-overlay-panel/80 text-white rounded border border-overlay-border outline-none"
           inputMode="numeric"
         />
       ) : (

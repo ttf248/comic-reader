@@ -28,7 +28,7 @@ describe("ToastViewport", () => {
     });
     const card = renderAt("/");
     expect(card.className).toContain("bg-bg-elevated/95");
-    expect(card.className).not.toContain("bg-neutral-900/95");
+    expect(card.className).not.toContain("bg-overlay-panel");
   });
 
   it("阅读器路由下 toast 走深色底", () => {
@@ -38,7 +38,7 @@ describe("ToastViewport", () => {
       ],
     });
     const card = renderAt("/gallery?path=abc");
-    expect(card.className).toContain("bg-neutral-900/95");
+    expect(card.className).toContain("bg-overlay-panel");
     expect(card.className).not.toContain("bg-bg-elevated/95");
   });
 });

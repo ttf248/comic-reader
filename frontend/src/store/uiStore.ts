@@ -3,11 +3,10 @@ import { persist } from 'zustand/middleware'
 
 export type ThemePref = 'light' | 'dark' | 'system'
 export type ViewMode = 'grid' | 'list'
-export type AccentKey = 'graphite' | 'indigo' | 'rose' | 'forest' | 'ochre' | 'plum'
 
-// UI 状态：侧边栏、主题、强调色、视图模式、toast 通知。
+// UI 状态：侧边栏、主题、视图模式、toast 通知。
 //
-// 持久化只覆盖外观偏好（侧边栏折叠、主题、视图模式、强调色）→ localStorage。
+// 持久化只覆盖外观偏好（侧边栏折叠、主题、视图模式）→ localStorage。
 // toast、面包屑等临时状态不进 localStorage。
 interface Toast {
   id: string
@@ -23,9 +22,6 @@ interface UIState {
 
   theme: ThemePref
   setTheme: (t: ThemePref) => void
-
-  accent: AccentKey
-  setAccent: (a: AccentKey) => void
 
   viewMode: ViewMode
   setViewMode: (v: ViewMode) => void
@@ -52,9 +48,6 @@ export const useUIStore = create<UIState>()(
       theme: 'system',
       setTheme: (t) => set({ theme: t }),
 
-      accent: 'graphite',
-      setAccent: (a) => set({ accent: a }),
-
       viewMode: 'grid',
       setViewMode: (v) => set({ viewMode: v }),
 
@@ -80,10 +73,17 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: 'local-gallery-ui',
+      version: 1,
+      // v0 曾持久化过一组可切换的强调色；强调色改为跟随主题方案后，
+      // 那个偏好作废，迁移时把旧键丢掉，避免残留在 localStorage 里。
+      migrate: (persisted) => {
+        const state = persisted as Partial<UIState> & { accent?: unknown }
+        if ('accent' in state) delete state.accent
+        return state as UIState
+      },
       partialize: (s) => ({
         sidebarCollapsed: s.sidebarCollapsed,
         theme: s.theme,
-        accent: s.accent,
         viewMode: s.viewMode,
       }),
     },

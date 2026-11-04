@@ -45,7 +45,7 @@ const secondaryItems = [
 
 // 侧边栏：
 // - 品牌区只留「图标 + Local Gallery」，不再叠一行 10px 副标题
-// - 导航项统一 36px 高 / 13.5px 文字，选中态 = 强调色浅底 + 强调色字
+// - 导航项统一 36px 高 / 13.5px 文字，选中态 = 亮一档的灰块 + 白字
 // - 「随机」类操作沉到底部一组，与主导航分开，避免平铺抢注意力
 export default function Sidebar({
   collapsed,
@@ -104,9 +104,9 @@ export default function Sidebar({
   );
   const continueRestCount = Math.max(0, inProgress.length - 6);
 
-  // 选中态：强调色浅底 + 前景色文字（文字保持 --fg，图标用强调色）。
-  // 这样在六套强调色下都能保持稳定对比度 —— 选中文字直接用强调色时，
-  // 浅色背景 + 靛蓝/琥珀这类中明度强调色的对比度并不总是够。
+  // 选中态：比侧栏亮一档的灰块 + 白字。
+  // 侧栏是墨黑表面，选中态靠明度差而不是色相来区分，
+  // 整条导航才不会被第二个颜色带跑。
   const navItemClass = (isActive: boolean) =>
     `nav-entry group ${collapsed ? "nav-entry--compact" : ""} ${isActive ? "is-active" : ""}`;
 
@@ -139,7 +139,9 @@ export default function Sidebar({
         }
         {/* 折叠/展开按钮:
             折叠态是用户「想找回菜单」的关键时刻 —— 按钮必须一眼可见,
-            所以用 accent 主色填充的"药丸"按钮悬浮在右缘。
+            所以用亮色填充的"药丸"按钮悬浮在右缘。
+            侧栏是墨黑表面,应用级 --accent 在浅色主题下也是近黑,
+            压上去看不见 —— 这里用侧栏专用的 --rail-accent。
             展开态时侧边栏本来就在视野里,按钮保持低调(灰图标 + hover 背景)
             即可,避免和品牌名挤。 */}
         <button
@@ -148,7 +150,7 @@ export default function Sidebar({
           title={collapsed ? "展开侧边栏 (Ctrl+B)" : "折叠侧边栏 (Ctrl+B)"}
           className={
             collapsed
-              ? "group/toggle relative z-10 inline-flex items-center gap-1 h-7 pl-2 pr-2.5 rounded-full bg-accent text-accent-contrast shadow-md ring-1 ring-accent/40 hover:ring-2 hover:ring-accent/70 hover:scale-105 active:scale-95 transition-all"
+              ? "group/toggle relative z-10 inline-flex items-center gap-1 h-7 pl-2 pr-2.5 rounded-full bg-rail-accent text-rail-accent-fg shadow-md ring-1 ring-rail-accent/40 hover:ring-2 hover:ring-rail-accent/70 hover:scale-105 active:scale-95 transition-all"
               : "shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-md text-rail-muted hover:text-rail-fg hover:bg-rail-hover transition-colors"
           }
         >
@@ -212,7 +214,7 @@ export default function Sidebar({
           )}
           {collapsed && unreadCount > 0 && (
             <span
-              className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-accent"
+              className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-rail-accent"
               aria-hidden
             />
           )}
@@ -301,7 +303,7 @@ export default function Sidebar({
             <span
               className={`inline-block w-1.5 h-1.5 rounded-full ${
                 location.pathname.startsWith("/gallery")
-                  ? "bg-accent"
+                  ? "bg-rail-accent"
                   : "bg-success"
               }`}
             />
@@ -315,7 +317,7 @@ export default function Sidebar({
   );
 }
 
-// 品牌方块：纯几何 + 字形，使用 accent 颜色
+// 品牌方块：纯几何 + 字形，用琥珀品牌色 —— 全局唯一的彩色标记。
 function Logo() {
   // 字母直接放在底板上（不再用一层绝对定位的兄弟节点盖上去）：
   // 兄弟节点的方式会让对比度检查工具读不到深色底板，把白字判成白底白字。
@@ -342,7 +344,7 @@ function ContinueRow({
       type="button"
       onClick={onOpen}
       title={`继续阅读「${title}」`}
-      className="w-full mt-1 rounded-md px-1 py-1 flex items-center gap-2.5 text-left transition-colors hover:bg-rail-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      className="w-full mt-1 rounded-md px-1 py-1 flex items-center gap-2.5 text-left transition-colors hover:bg-rail-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rail-accent"
     >
       <span className="relative w-[26px] h-[34px] shrink-0 rounded overflow-hidden bg-rail-hover block">
         {coverPath ? (
@@ -396,7 +398,7 @@ function ContinueMiniCard({
       type="button"
       onClick={onOpen}
       title={`继续阅读「${title}」`}
-      className="mt-2 w-full rounded-lg bg-rail-hover hover:bg-rail-hover p-2 flex gap-2.5 items-center text-left transition-colors group/mini focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      className="mt-2 w-full rounded-lg bg-rail-hover hover:bg-rail-hover p-2 flex gap-2.5 items-center text-left transition-colors group/mini focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rail-accent"
     >
       <span className="relative w-9 h-12 shrink-0 rounded overflow-hidden bg-rail-hover block">
         {coverPath ? (
@@ -414,12 +416,12 @@ function ContinueMiniCard({
             这里再写一遍是重复信息。
             用 --fg-muted 而不是 --fg-subtle：卡片底色是 bg-rail-hover，
             fg-subtle 在这个底上只有 4.4:1（AA 要求 4.5:1）。 */}
-        <span className="block text-[13px] font-medium text-rail-fg truncate leading-tight group-hover/mini:text-accent transition-colors">
+        <span className="block text-[13px] font-medium text-rail-fg truncate leading-tight group-hover/mini:text-rail-accent transition-colors">
           {title}
         </span>
         <span className="mt-1.5 block h-[3px] rounded-full bg-rail-hover overflow-hidden">
           <span
-            className="block h-full rounded-full bg-accent"
+            className="block h-full rounded-full bg-rail-accent"
             style={{ width: `${percent}%` }}
           />
         </span>

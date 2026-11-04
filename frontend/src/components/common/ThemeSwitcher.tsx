@@ -1,14 +1,9 @@
-import {
-  useUIStore,
-  type ThemePref,
-  type AccentKey,
-} from "../../store/uiStore";
+import { useUIStore, type ThemePref } from "../../store/uiStore";
 import { SunIcon, MoonIcon, MonitorIcon, CheckIcon } from "./Icon";
-import { ACCENT_SWATCHES } from "../../hooks/useTheme";
 import Popover from "./Popover";
 
 // 主题切换：
-//  - compact：主题与强调色菜单，可连续选择后用 Esc 或外部焦点关闭
+//  - compact：主题菜单，可连续选择后用 Esc 或外部焦点关闭
 //  - default：设置页内联的三态主题按钮
 export default function ThemeSwitcher({
   compact = false,
@@ -17,18 +12,9 @@ export default function ThemeSwitcher({
 }) {
   const theme = useUIStore((s) => s.theme);
   const setTheme = useUIStore((s) => s.setTheme);
-  const accent = useUIStore((s) => s.accent);
-  const setAccent = useUIStore((s) => s.setAccent);
 
   if (compact) {
-    return (
-      <CompactSwitch
-        theme={theme}
-        setTheme={setTheme}
-        accent={accent}
-        setAccent={setAccent}
-      />
-    );
+    return <CompactSwitch theme={theme} setTheme={setTheme} />;
   }
 
   return (
@@ -55,47 +41,34 @@ export default function ThemeSwitcher({
   );
 }
 
-// compact：单按钮 + 下拉面板（同时切换主题与强调色）
+// compact：单按钮 + 下拉面板（切换主题）
 function CompactSwitch({
   theme,
   setTheme,
-  accent,
-  setAccent,
 }: {
   theme: ThemePref;
   setTheme: (t: ThemePref) => void;
-  accent: AccentKey;
-  setAccent: (a: AccentKey) => void;
 }) {
   const cur =
     theme === "light" ? SunIcon : theme === "dark" ? MoonIcon : MonitorIcon;
   const Icon = cur;
-  const accentColor =
-    ACCENT_SWATCHES.find((a) => a.id === accent)?.light ??
-    ACCENT_SWATCHES[0].light;
 
   return (
     <Popover
-      aria-label="主题与强调色"
-      className="w-[240px] p-2 fade-in"
+      aria-label="主题"
+      className="w-[180px] p-2 fade-in"
       trigger={
         <button
           type="button"
-          className="inline-flex items-center justify-center w-8 h-8 rounded-md text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors relative"
-          title={`主题: ${theme === "light" ? "浅色" : theme === "dark" ? "深色" : "系统"} · 强调色`}
-          aria-label={`主题: ${theme === "light" ? "浅色" : theme === "dark" ? "深色" : "系统"} · 强调色`}
+          className="inline-flex items-center justify-center w-8 h-8 rounded-md text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors"
+          title={`主题: ${theme === "light" ? "浅色" : theme === "dark" ? "深色" : "系统"}`}
+          aria-label={`主题: ${theme === "light" ? "浅色" : theme === "dark" ? "深色" : "系统"}`}
         >
           <Icon size={14} />
-          <span
-            className="absolute bottom-1 right-1 w-1.5 h-1.5 rounded-full ring-2 ring-bg-elevated"
-            style={{ background: accentColor }}
-          />
         </button>
       }
     >
-      <div className="text-[12.5px] text-fg-subtle px-2 py-1.5">
-        主题
-      </div>
+      <div className="text-[12.5px] text-fg-subtle px-2 py-1.5">主题</div>
       <div
         role="group"
         aria-label="主题"
@@ -123,35 +96,6 @@ function CompactSwitch({
               {o.l}
               {active && (
                 <CheckIcon size={10} className="absolute top-0.5 right-0.5" />
-              )}
-            </button>
-          );
-        })}
-      </div>
-      <div className="text-[12.5px] text-fg-subtle px-2 pt-3 pb-1.5">
-        强调色
-      </div>
-      <div
-        role="group"
-        aria-label="强调色"
-        className="grid grid-cols-6 gap-1.5 px-1"
-      >
-        {ACCENT_SWATCHES.map((a) => {
-          const active = accent === a.id;
-          return (
-            <button
-              key={a.id}
-              type="button"
-              role="menuitemradio"
-              aria-checked={active}
-              onClick={() => setAccent(a.id)}
-              className="relative w-7 h-7 rounded-full transition-transform hover:scale-110"
-              style={{ background: a.light }}
-              title={a.name}
-              aria-label={a.name}
-            >
-              {active && (
-                <span className="absolute inset-0 ring-2 ring-fg ring-offset-2 ring-offset-bg-elevated rounded-full" />
               )}
             </button>
           );

@@ -169,7 +169,7 @@ export default function GalleryHeader({
         <StarIcon
           size={14}
           filled={isFavorite}
-          className={isFavorite ? "text-amber-300" : ""}
+          className={isFavorite ? "text-overlay-warning" : ""}
         />
       </HeaderIconButton>
 

@@ -62,7 +62,7 @@ function NavButton({
       onClick={onClick}
       title={title}
       aria-label={title}
-      className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-neutral-900/55 text-white backdrop-blur-[2px] ring-1 ring-white/10 transition-colors hover:bg-neutral-900/75 hover:text-white"
+      className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-overlay-panel/55 text-overlay-fg backdrop-blur-[2px] ring-1 ring-overlay-border transition-colors hover:bg-overlay-panel/75 hover:text-overlay-fg"
     >
       {children}
     </button>
