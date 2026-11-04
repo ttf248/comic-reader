@@ -87,6 +87,16 @@ type Config struct {
 	SkipHiddenSet   bool     `yaml:"-"` // YAML 显式提供标记(支持 false 覆盖)
 	SystemFiles     []string `yaml:"systemFiles"`
 	ExcludePatterns []string `yaml:"excludePatterns"`
+
+	// DefaultContentKind 是相册的全局默认浏览用途："photo"（照片墙）或
+	// "comic"（漫画阅读器）。缺省为 photo。
+	//
+	// RootContentKinds 是「媒体根 → 用途」的按根默认值，键是媒体根路径
+	// （相对路径按进程 CWD 解析）。单个相册可以在界面上手动切换并覆盖它。
+	//
+	// 用途只决定「这本相册用什么方式打开」，与文件是图片还是视频无关。
+	DefaultContentKind string            `yaml:"defaultContentKind"`
+	RootContentKinds   map[string]string `yaml:"rootContentKinds"`
 }
 
 // Roots 返回规范化后的所有媒体根目录（绝对路径、去空、去重、保序）。
@@ -119,6 +129,9 @@ func Default() *Config {
 		SkipHidden:      true,
 		SystemFiles:     nil,
 		ExcludePatterns: nil,
+		// 内容用途默认按照片墙打开；漫画库在设置页按媒体根单独指定。
+		DefaultContentKind: "photo",
+		RootContentKinds:   nil,
 	}
 }
 
@@ -227,6 +240,17 @@ func mergeFile(dst, file *Config) {
 	if file.ExcludePatterns != nil {
 		dst.ExcludePatterns = append([]string(nil), file.ExcludePatterns...)
 	}
+	// 内容用途:defaultContentKind 非空即覆盖;rootContentKinds 非 nil 即替换
+	// (含显式空 map → 清空按根默认值)。
+	if file.DefaultContentKind != "" {
+		dst.DefaultContentKind = file.DefaultContentKind
+	}
+	if file.RootContentKinds != nil {
+		dst.RootContentKinds = make(map[string]string, len(file.RootContentKinds))
+		for k, v := range file.RootContentKinds {
+			dst.RootContentKinds[k] = v
+		}
+	}
 }
 
 // Validate 校验运行参数，不要求媒体目录在线；管理员仍可进入设置页修复目录。
@@ -256,6 +280,14 @@ func (c *Config) Validate() error {
 	}
 	if c.CacheMaxSizeMB < 0 || c.CacheMaxSizeMB > 1048576 {
 		return errors.New("cacheMaxSizeMB must be between 0 and 1048576")
+	}
+	if c.DefaultContentKind != "" && c.DefaultContentKind != "photo" && c.DefaultContentKind != "comic" {
+		return errors.New("defaultContentKind must be photo or comic")
+	}
+	for path, kind := range c.RootContentKinds {
+		if kind != "photo" && kind != "comic" {
+			return fmt.Errorf("rootContentKinds[%s] must be photo or comic", path)
+		}
 	}
 	return nil
 }

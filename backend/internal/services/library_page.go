@@ -81,6 +81,14 @@ type LibraryNodeSummary struct {
 	// 例如 "2020年" / "2011年/10.1一号公馆"。前端用它替代
 	// “本目录媒体”作为卡片标题。普通相册为空。
 	Location string `json:"location,omitempty"`
+	// ContentKind 是相册的浏览用途："photo" / "comic"。
+	// 前端据此决定点击相册后进入照片墙还是漫画阅读器。
+	ContentKind string `json:"contentKind,omitempty"`
+	// ContentKindDefault 是取消相册级覆盖后会回落到的用途
+	// （媒体根默认值，没有则等于全局默认值）。
+	ContentKindDefault string `json:"contentKindDefault,omitempty"`
+	// ContentKindOverridden 表示用户手动切换过这本相册的用途。
+	ContentKindOverridden bool `json:"contentKindOverridden,omitempty"`
 }
 
 type LibraryMediaItem struct {
@@ -89,6 +97,10 @@ type LibraryMediaItem struct {
 	Name      string `json:"name"`
 	Index     int    `json:"index"`
 	KindIndex int    `json:"kindIndex"`
+	// Width / Height 是媒体的原始像素尺寸；未知时为 0。
+	// 照片墙据此按真实宽高比排布，不必在浏览器里逐张探测。
+	Width  int `json:"width,omitempty"`
+	Height int `json:"height,omitempty"`
 }
 
 type LibraryTagSummary struct {
@@ -109,6 +121,8 @@ type LibrarySearchHit struct {
 	Tags       []string `json:"tags,omitempty"`
 	Count      int      `json:"count"`
 	CoverImage string   `json:"coverImage,omitempty"`
+	// ContentKind 让搜索结果不必再查一次相册摘要就能决定跳转目标。
+	ContentKind string `json:"contentKind,omitempty"`
 }
 
 // LibraryActivitySummary 是常驻导航所需的轻量阅读计数，不携带相册清单或活动详情。
@@ -272,10 +286,11 @@ func buildLibrarySearchIndex(index *libraryPageIndex) []LibrarySearchHit {
 	for _, album := range index.albums {
 		hits = append(hits, LibrarySearchHit{
 			Kind: "album", Path: album.ID, Name: searchHitName(album),
-			Virtual:    album.Virtual,
-			Tags:       append([]string(nil), album.Tags...),
-			Count:      album.ImageCount,
-			CoverImage: album.CoverImage,
+			Virtual:     album.Virtual,
+			Tags:        append([]string(nil), album.Tags...),
+			Count:       album.ImageCount,
+			CoverImage:  album.CoverImage,
+			ContentKind: album.ContentKind,
 		})
 	}
 	collections := make([]LibraryNodeSummary, 0, len(index.nodes))
@@ -743,6 +758,11 @@ func albumSummary(state *resourceCatalogState, album models.Album) LibraryNodeSu
 		Virtual:        album.Virtual,
 		HasCustomCover: state.customCovers[filepath.Clean(album.Path)],
 		Location:       album.Location,
+		ContentKind:    album.ContentKind,
+		ContentKindDefault: string(
+			state.contentPolicy.KindFor(album.SourceRoot),
+		),
+		ContentKindOverridden: album.ContentKindOverridden,
 	}
 }
 

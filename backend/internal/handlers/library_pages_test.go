@@ -41,6 +41,11 @@ func TestLibraryPageHandlersCursorStatusAndResponseShape(t *testing.T) {
 	rootID := catalog.ExternalID(root, services.ResourceRoot)
 	albumID := catalog.ExternalID(album1Path, services.ResourceAlbum)
 
+	dimensions, err := services.NewMediaDimensionService(filepath.Join(t.TempDir(), "dimensions.jsonl"))
+	if err != nil {
+		t.Fatalf("create media dimension service: %v", err)
+	}
+
 	app := fiber.New()
 	app.Get("/api/library/manifest", LibraryManifestHandler(catalog))
 	app.Get("/api/library/:id/children", LibraryChildrenPageHandler(catalog))
@@ -51,7 +56,7 @@ func TestLibraryPageHandlersCursorStatusAndResponseShape(t *testing.T) {
 	app.Get("/api/library/activity-summary", LibraryActivitySummaryHandler(catalog, activities, unreadIndex))
 	app.Get("/api/library/dashboard", LibraryHomeDashboardHandler(catalog, activities, unreadIndex))
 	app.Get("/api/library/unread", LibraryUnreadAlbumsPageHandler(catalog, activities, unreadIndex))
-	app.Get("/api/albums/:id/media", AlbumMediaPageHandler(catalog))
+	app.Get("/api/albums/:id/media", AlbumMediaPageHandler(catalog, dimensions))
 	app.Get("/api/tags", LibraryTagsPageHandler(catalog))
 	app.Get("/api/tags/:tag/albums", TagAlbumsPageHandler(catalog))
 	app.Get("/api/search", SearchHandler(catalog))

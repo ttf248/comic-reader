@@ -35,6 +35,10 @@ type ConfigResponse struct {
 	SkipHidden      bool     `json:"skipHidden"`
 	SystemFiles     []string `json:"systemFiles"`
 	ExcludePatterns []string `json:"excludePatterns"`
+
+	// 内容用途：默认按哪种方式打开相册，以及每个媒体根的按根默认值。
+	DefaultContentKind  string            `json:"defaultContentKind"`
+	RootContentKinds    map[string]string `json:"rootContentKinds"`
 }
 
 // ConfigUpdateResponse PUT /api/config 的响应体。
@@ -78,6 +82,8 @@ func ConfigGetHandler(mgr *config.Manager) fiber.Handler {
 			SkipHidden:            cfg.SkipHidden,
 			SystemFiles:           cfg.SystemFiles,
 			ExcludePatterns:       cfg.ExcludePatterns,
+			DefaultContentKind:    cfg.DefaultContentKind,
+			RootContentKinds:      copyStringMap(cfg.RootContentKinds),
 		})
 	}
 }
@@ -133,9 +139,20 @@ func ConfigUpdateHandler(mgr *config.Manager, onUpdate func(c *config.Config, me
 				SkipHidden:            newCfg.SkipHidden,
 				SystemFiles:           newCfg.SystemFiles,
 				ExcludePatterns:       newCfg.ExcludePatterns,
+				DefaultContentKind:    newCfg.DefaultContentKind,
+				RootContentKinds:      copyStringMap(newCfg.RootContentKinds),
 			},
 			RequiresRestart:   requiresRestart,
 			MediaRootsChanged: mediaRootsChanged,
 		})
 	}
+}
+
+// copyStringMap 返回配置映射的副本，避免响应体与配置共享底层 map。
+func copyStringMap(source map[string]string) map[string]string {
+	out := make(map[string]string, len(source))
+	for k, v := range source {
+		out[k] = v
+	}
+	return out
 }

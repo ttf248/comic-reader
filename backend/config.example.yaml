@@ -92,3 +92,15 @@ skipHidden: true
 # 额外的系统噪声文件(在 Thumbs.db / desktop.ini / .DS_Store 之上追加)。
 # 一行一条;大小写不敏感。空数组即「不追加,只走内置」。
 systemFiles: []
+
+# 相册的「内容用途」：决定点击相册后进入照片墙还是漫画阅读器。
+#   - photo：平铺照片墙 + 沉浸式看图，没有阅读进度与双页模式
+#   - comic：单页阅读器 + 阅读进度 + 双页 / RTL / 连续滚动
+# 与文件是图片还是视频无关；不按图片数量自动判断。
+# defaultContentKind 是全局默认值；rootContentKinds 给单个媒体根指定默认值，
+# 键写媒体根路径（相对路径按进程 CWD 解析），值写 photo 或 comic。
+# 个别相册可以在界面上手动切换并覆盖这里的设置，切换结果持久化在
+# state/content_kinds.json。
+defaultContentKind: "photo"
+rootContentKinds:
+  "F:\\漫画": "comic"

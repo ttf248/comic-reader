@@ -35,15 +35,16 @@ type ResourceRef struct {
 }
 
 type resourceCatalogState struct {
-	revision     uint64
-	byID         map[string]ResourceRef
-	byPathKind   map[string]string
-	roots        []ResourceRef
-	result       *models.ScanResult
-	albums       map[string]models.Album
-	collections  map[string]models.Collection
-	customCovers map[string]bool
-	library      *libraryPageIndex
+	revision      uint64
+	byID          map[string]ResourceRef
+	byPathKind    map[string]string
+	roots         []ResourceRef
+	result        *models.ScanResult
+	albums        map[string]models.Album
+	collections   map[string]models.Collection
+	customCovers  map[string]bool
+	contentPolicy ContentKindPolicy
+	library       *libraryPageIndex
 }
 
 // CatalogSnapshot 是一次请求期间固定的资源视图。它把扫描结果、
@@ -59,6 +60,10 @@ type ResourceCatalog struct {
 	state     atomic.Pointer[resourceCatalogState]
 	revision  atomic.Uint64
 	publishMu sync.Mutex
+	// contentKinds 是内容用途的默认策略与相册级覆盖。
+	// 只在 publishMu 保护下读写，随每次发布一起进入快照。
+	contentPolicy   ContentKindPolicy
+	contentOverrides map[string]models.ContentKind
 }
 
 func NewResourceCatalog() *ResourceCatalog {
@@ -134,6 +139,46 @@ func (c *ResourceCatalog) RefreshCovers(cache *ScanResultCache, covers *CoverOve
 	return next, revision, true
 }
 
+// SetContentKindPolicy 更新内容用途的默认策略并重新发布快照。
+//
+// 媒体根默认值或全局默认值变化时调用：用途不影响扫描结果，
+// 因此只需重算相册元数据，不必重新扫描磁盘。
+func (c *ResourceCatalog) SetContentKindPolicy(policy ContentKindPolicy) uint64 {
+	c.publishMu.Lock()
+	defer c.publishMu.Unlock()
+	c.contentPolicy = policy
+	return c.republishLocked()
+}
+
+// SetContentKindOverrides 替换相册级内容用途覆盖并重新发布快照。
+func (c *ResourceCatalog) SetContentKindOverrides(overrides map[string]models.ContentKind) uint64 {
+	c.publishMu.Lock()
+	defer c.publishMu.Unlock()
+	c.contentOverrides = overrides
+	return c.republishLocked()
+}
+
+// ContentKindPolicySnapshot 返回当前生效的默认策略（副本）。
+func (c *ResourceCatalog) ContentKindPolicySnapshot() ContentKindPolicy {
+	c.publishMu.Lock()
+	defer c.publishMu.Unlock()
+	return c.contentPolicy
+}
+
+// republishLocked 用当前已发布的结果重新构造快照。
+// 调用方必须已持有 publishMu。
+func (c *ResourceCatalog) republishLocked() uint64 {
+	current := c.state.Load()
+	if current == nil || current.result == nil {
+		return current.revision
+	}
+	roots := make([]string, 0, len(current.roots))
+	for _, root := range current.roots {
+		roots = append(roots, root.AbsolutePath)
+	}
+	return c.publish(current.result, roots, current.customCovers)
+}
+
 // ClearWithCache 在同一提交锁下清空请求快照与重启恢复副本。
 func (c *ResourceCatalog) ClearWithCache(cache *ScanResultCache) error {
 	c.publishMu.Lock()
@@ -151,12 +196,13 @@ func (c *ResourceCatalog) ClearWithCache(cache *ScanResultCache) error {
 func (c *ResourceCatalog) publish(result *models.ScanResult, roots []string, customCovers map[string]bool) uint64 {
 	revision := c.revision.Add(1)
 	state := &resourceCatalogState{
-		revision:     revision,
-		byID:         make(map[string]ResourceRef),
-		byPathKind:   make(map[string]string),
-		albums:       make(map[string]models.Album),
-		collections:  make(map[string]models.Collection),
-		customCovers: cloneCustomCoverPaths(customCovers),
+		revision:      revision,
+		byID:          make(map[string]ResourceRef),
+		byPathKind:    make(map[string]string),
+		albums:        make(map[string]models.Album),
+		collections:   make(map[string]models.Collection),
+		customCovers:  cloneCustomCoverPaths(customCovers),
+		contentPolicy: c.contentPolicy,
 	}
 	for _, root := range pathutil.NormalizeRoots(roots) {
 		abs, err := filepath.Abs(root)
@@ -181,6 +227,9 @@ func (c *ResourceCatalog) publish(result *models.ScanResult, roots []string, cus
 	})
 	if result != nil {
 		state.result = cloneScanResult(result)
+		// 内容用途在发布这一刻定稿：相册级覆盖优先，其次媒体根默认值，
+		// 最后全局默认值。它不依赖文件内容，因此重扫也不会改变用户的选择。
+		ApplyContentKinds(state.result, c.contentOverrides, c.contentPolicy)
 		for i := range state.result.Albums {
 			indexAlbum(state, &state.result.Albums[i])
 		}
@@ -351,6 +400,18 @@ func (s CatalogSnapshot) RelativeLabel(id string) string {
 		return rootName
 	}
 	return rootName + "/" + filepath.ToSlash(ref.RelativePath)
+}
+
+// AlbumSummary 返回相册的对外摘要（含内容用途）。相册不存在或不是相册时返回 false。
+func (s CatalogSnapshot) AlbumSummary(id string) (LibraryNodeSummary, bool) {
+	if s.state == nil || s.state.library == nil {
+		return LibraryNodeSummary{}, false
+	}
+	summary, ok := s.state.library.nodes[id]
+	if !ok || summary.Kind != string(ResourceAlbum) {
+		return LibraryNodeSummary{}, false
+	}
+	return summary, true
 }
 
 // Result 返回内部路径快照，仅供需要文件系统路径的服务端代码只读使用。

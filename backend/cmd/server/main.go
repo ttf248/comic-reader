@@ -148,6 +148,35 @@ func main() {
 		log.Fatalf("初始化缓存目录失败: %v", err)
 	}
 
+	// 媒体尺寸缓存：照片墙按真实宽高比排布需要像素尺寸，
+	// 读一次图片头即可，代价很低；结果缓存后重复打开相册零成本。
+	mediaDimensions, err := services.NewMediaDimensionService(
+		filepath.Join(cacheLayout.DerivedDir, "media_dimensions.jsonl"),
+	)
+	if err != nil {
+		log.Fatalf("初始化媒体尺寸缓存失败: %v", err)
+	}
+	defer func() { _ = mediaDimensions.Close() }()
+
+	// 内容用途（照片墙 / 漫画阅读器）：默认策略来自配置，个别相册可手动覆盖。
+	// 两者只影响「这本相册用什么方式打开」，不影响扫描结果，因此可热更新。
+	contentKinds := services.NewContentKindStore(cacheLayout.ContentKindsPath)
+	if err := contentKinds.Load(); err != nil {
+		log.Printf("警告：加载内容用途覆盖失败 %v", err)
+	}
+	contentKindPolicy := func(snapshot *config.Config) services.ContentKindPolicy {
+		return services.NewContentKindPolicy(
+			snapshot.DefaultContentKind,
+			snapshot.Roots(),
+			snapshot.RootContentKinds,
+		)
+	}
+	resourceCatalog.SetContentKindPolicy(contentKindPolicy(cfg))
+	resourceCatalog.SetContentKindOverrides(contentKinds.Snapshot())
+	mgr.OnChange("content_kind", func(snapshot *config.Config) {
+		resourceCatalog.SetContentKindPolicy(contentKindPolicy(snapshot))
+	})
+
 	// 视频 faststart 化服务(可选):把 moov 移到 mdat 前面,解决
 	// "非 faststart MP4 在浏览器里无法边下边播"问题。ffmpeg 不可用
 	// 时 VideoHandler 静默回退到原文件,不阻断播放。
@@ -314,11 +343,15 @@ func main() {
 	api.Delete("/library", handlers.ScanCacheClearHandler(scanCache, resourceCatalog, runner))
 	resourceParam := middleware.ResourceParam(resourceCatalog, safetyState)
 	api.Get("/albums/random", handlers.LibraryRandomAlbumHandler(resourceCatalog, activities, unreadIndex))
-	api.Get("/albums/:id/media", handlers.AlbumMediaPageHandler(resourceCatalog))
+	api.Get("/albums/:id/media", handlers.AlbumMediaPageHandler(resourceCatalog, mediaDimensions))
 	// 自定义封面：用户可在阅读器内手动设置/清除每本相册的封面。
 	// file 必须是 path 子路径 + 真实存在的文件；越权请求会被 400 拒绝。
 	api.Put("/albums/:id/cover", resourceParam, handlers.AlbumSetCoverHandler(scanCache, coverOverrides, resourceCatalog))
 	api.Delete("/albums/:id/cover", resourceParam, handlers.AlbumClearCoverHandler(scanCache, coverOverrides, resourceCatalog))
+	// 内容用途：用户手动切换相册的打开方式（照片墙 / 漫画阅读器）。
+	api.Get("/albums/:id/content-kind", resourceParam, handlers.AlbumContentKindHandler(resourceCatalog, contentKinds))
+	api.Put("/albums/:id/content-kind", resourceParam, handlers.AlbumContentKindHandler(resourceCatalog, contentKinds))
+	api.Delete("/albums/:id/content-kind", resourceParam, handlers.AlbumContentKindHandler(resourceCatalog, contentKinds))
 	api.Get("/search", handlers.SearchHandler(resourceCatalog))
 	api.Get("/tags", handlers.LibraryTagsPageHandler(resourceCatalog))
 	api.Get("/tags/:tag/albums", handlers.TagAlbumsPageHandler(resourceCatalog))

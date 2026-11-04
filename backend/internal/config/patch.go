@@ -48,6 +48,13 @@ type ConfigPatch struct {
 	SystemFilesSet     bool     `json:"-"`
 	ExcludePatterns    []string `json:"excludePatterns,omitempty"`
 	ExcludePatternsSet bool     `json:"-"`
+
+	// 内容用途:DefaultContentKind 是全局默认值;RootContentKinds 是
+	// 「媒体根路径 → 用途」映射,用 map 替换语义(显式空 map = 清空)。
+	DefaultContentKind    string            `json:"defaultContentKind,omitempty"`
+	DefaultContentKindSet bool              `json:"-"`
+	RootContentKinds      map[string]string `json:"rootContentKinds,omitempty"`
+	RootContentKindsSet   bool              `json:"-"`
 }
 
 // DefaultsPatch 返回一个所有 Set 标志为 false 的空 patch（用于"读"语义）。
@@ -118,6 +125,12 @@ func (p *ConfigPatch) UnmarshalJSON(data []byte) error {
 	}
 	if _, ok := raw["excludePatterns"]; ok {
 		p.ExcludePatternsSet = true
+	}
+	if _, ok := raw["defaultContentKind"]; ok {
+		p.DefaultContentKindSet = true
+	}
+	if _, ok := raw["rootContentKinds"]; ok {
+		p.RootContentKindsSet = true
 	}
 	return nil
 }

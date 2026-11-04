@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"sync/atomic"
 
@@ -228,6 +229,12 @@ func cloneConfig(c *Config) *Config {
 	if c.ExcludePatterns != nil {
 		cp.ExcludePatterns = append([]string(nil), c.ExcludePatterns...)
 	}
+	if c.RootContentKinds != nil {
+		cp.RootContentKinds = make(map[string]string, len(c.RootContentKinds))
+		for k, v := range c.RootContentKinds {
+			cp.RootContentKinds[k] = v
+		}
+	}
 	return &cp
 }
 
@@ -304,6 +311,8 @@ func marshalConfig(cfg *Config) ([]byte, error) {
 	addKV("skipHidden", scalarBool(cfg.SkipHidden))
 	addKV("systemFiles", stringSliceNode(cfg.SystemFiles))
 	addKV("excludePatterns", stringSliceNode(cfg.ExcludePatterns))
+	addKV("defaultContentKind", scalarString(normalizedDefaultContentKind(cfg.DefaultContentKind)))
+	addKV("rootContentKinds", stringMapNode(cfg.RootContentKinds))
 	return yaml.Marshal(root)
 }
 
@@ -331,6 +340,37 @@ func stringSliceNode(s []string) *yaml.Node {
 	}
 	for _, v := range s {
 		n.Content = append(n.Content, scalarString(v))
+	}
+	return n
+}
+
+// normalizedDefaultContentKind 把空值补成默认的 photo。
+// 空值只可能来自「代码里手工构造的 Config」，YAML 落盘后总是显式值。
+func normalizedDefaultContentKind(value string) string {
+	if value == "" {
+		return "photo"
+	}
+	return value
+}
+
+// stringMapNode 序列化为 YAML 映射。nil 与空映射都输出空映射 `{}`，
+// 让用户明确「可配置但当前为空」,而不是看上去缺字段。
+func stringMapNode(m map[string]string) *yaml.Node {
+	n := &yaml.Node{
+		Kind:    yaml.MappingNode,
+		Tag:     "!!map",
+		Content: make([]*yaml.Node, 0, len(m)*2),
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		n.Content = append(n.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: k, Style: yaml.DoubleQuotedStyle},
+			scalarString(m[k]),
+		)
 	}
 	return n
 }
@@ -388,6 +428,15 @@ func applyPatch(dst *Config, p *ConfigPatch) {
 	}
 	if p.ExcludePatternsSet {
 		dst.ExcludePatterns = append([]string(nil), p.ExcludePatterns...)
+	}
+	if p.DefaultContentKindSet {
+		dst.DefaultContentKind = p.DefaultContentKind
+	}
+	if p.RootContentKindsSet {
+		dst.RootContentKinds = make(map[string]string, len(p.RootContentKinds))
+		for k, v := range p.RootContentKinds {
+			dst.RootContentKinds[k] = v
+		}
 	}
 }
 

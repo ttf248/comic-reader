@@ -139,7 +139,11 @@ func newHarness(t *testing.T) *harness {
 	api.Get("/library/dashboard", handlers.LibraryHomeDashboardHandler(catalog, activityStore, unreadIndex))
 	api.Get("/library/unread", handlers.LibraryUnreadAlbumsPageHandler(catalog, activityStore, unreadIndex))
 	api.Get("/albums/random", handlers.LibraryRandomAlbumHandler(catalog, activityStore, unreadIndex))
-	api.Get("/albums/:id/media", handlers.AlbumMediaPageHandler(catalog))
+	dimensions, err := services.NewMediaDimensionService(filepath.Join(t.TempDir(), "dimensions.jsonl"))
+	if err != nil {
+		t.Fatalf("create media dimension service: %v", err)
+	}
+	api.Get("/albums/:id/media", handlers.AlbumMediaPageHandler(catalog, dimensions))
 	api.Get("/tags", handlers.LibraryTagsPageHandler(catalog))
 	api.Get("/tags/:tag/albums", handlers.TagAlbumsPageHandler(catalog))
 	api.Get("/search", handlers.SearchHandler(catalog))

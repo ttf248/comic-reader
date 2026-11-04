@@ -145,6 +145,11 @@ type Album struct {
 	// 列表里几十张卡片同名，用户无法分辨归属目录；Location 提供唯一且
 	// 稳定的展示标识。
 	Location string `json:"location,omitempty"`
+	// ContentKind 是相册的浏览用途："photo"（照片墙）或 "comic"（漫画阅读）。
+	// 由媒体根默认值与相册级覆盖共同决定，不按图片数量推断。
+	ContentKind string `json:"contentKind,omitempty"`
+	// ContentKindOverridden 标记用户是否手动切换过这本相册的用途。
+	ContentKindOverridden bool `json:"contentKindOverridden,omitempty"`
 }
 
 // MarshalJSON 保证当前 API 的媒体列表始终是数组，避免调用方区分 null 与 []。
