@@ -131,39 +131,41 @@ export default function PhotoWall({
                 }
                 const isVideo = item.kind === "video";
                 return (
+                  // 触发层是覆盖在封面之上的独立按钮：视频封面自带「重试」
+                  // 按钮，把它包进 <button> 会产生嵌套按钮（无效 HTML，
+                  // 键盘与读屏都会失灵）。
                   <div
                     key={tile.id}
-                    className="shrink-0 overflow-hidden rounded bg-bg-subtle"
+                    className="group relative shrink-0 overflow-hidden rounded bg-bg-subtle"
                     style={{ width: tile.width, height: row.tileHeight }}
                   >
+                    {isVideo ? (
+                      <VideoCoverImage
+                        videoPath={item.id}
+                        alt={item.name}
+                        loading="lazy"
+                      />
+                    ) : (
+                      <ThumbImage
+                        fileId={item.id}
+                        alt={item.name}
+                        loading="lazy"
+                        className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                      />
+                    )}
                     <button
                       type="button"
                       onClick={() => onOpen(item, index)}
                       onContextMenu={(event) => onContextMenu?.(item, event)}
-                      className="group relative block h-full w-full overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
+                      className="absolute inset-0 z-0 block h-full w-full cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
                       title={item.name}
                       aria-label={isVideo ? `播放 ${item.name}` : `查看 ${item.name}`}
-                    >
-                      {isVideo ? (
-                        <VideoCoverImage
-                          videoPath={item.id}
-                          alt={item.name}
-                          loading="lazy"
-                        />
-                      ) : (
-                        <ThumbImage
-                          fileId={item.id}
-                          alt={item.name}
-                          loading="lazy"
-                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
-                        />
-                      )}
-                      {isVideo && (
-                        <span className="absolute top-1.5 right-1.5 rounded-md bg-black/60 p-1 text-white/90 backdrop-blur">
-                          <PlayFilledIcon size={10} />
-                        </span>
-                      )}
-                    </button>
+                    />
+                    {isVideo && (
+                      <span className="pointer-events-none absolute right-1.5 top-1.5 z-0 rounded-md bg-black/60 p-1 text-white/90 backdrop-blur">
+                        <PlayFilledIcon size={10} />
+                      </span>
+                    )}
                   </div>
                 );
               })}

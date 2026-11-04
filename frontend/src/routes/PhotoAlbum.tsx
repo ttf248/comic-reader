@@ -16,15 +16,20 @@ import {
 import PhotoWall from "../components/wall/PhotoWall";
 import PhotoViewer from "../components/wall/PhotoViewer";
 import ContentKindSwitch from "../components/common/ContentKindSwitch";
+import ContextMenu, { type AnyMenuItem } from "../components/album/ContextMenu";
+import PropertiesDialog from "../components/common/PropertiesDialog";
 import Popover, {
   PopoverItem,
   PopoverLabel,
 } from "../components/common/Popover";
 import {
+  ArrowUpRightIcon,
   ChevronLeftIcon,
+  ImageIcon,
   CopyIcon,
   FolderIcon,
   GridIcon,
+  InfoIcon,
   MoreHorizontalIcon,
   StarIcon,
 } from "../components/common/Icon";
@@ -62,6 +67,13 @@ export default function PhotoAlbum({ album }: Props) {
   const total = mediaQuery.data?.pages[0]?.total ?? mediaItems.length;
 
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  // 右键菜单：照片墙上的图片同样能查看属性、在资源管理器中定位。
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    item: LibraryMediaItem;
+  } | null>(null);
+  const [propertiesFileId, setPropertiesFileId] = useState<string | null>(null);
   const { record } = usePhotoActivity(album.id);
 
   const title = album.virtual
@@ -154,8 +166,26 @@ export default function PhotoAlbum({ album }: Props) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
+      {mediaQuery.isFetchNextPageError && (
+        <div
+          role="alert"
+          className="flex shrink-0 items-center justify-between gap-3 bg-warning/10 px-4 py-2.5 text-[13px] text-fg sm:px-6"
+        >
+          <span>后续媒体加载失败，已加载内容仍可浏览。</span>
+          <button
+            type="button"
+            onClick={loadMore}
+            disabled={mediaQuery.isFetchingNextPage}
+            className="shrink-0 text-accent hover:underline disabled:opacity-50"
+          >
+            {mediaQuery.isFetchingNextPage ? "正在重试…" : "重试加载"}
+          </button>
+        </div>
+      )}
       <header className="shrink-0 border-b border-border-faint bg-bg">
-        <div className="flex items-center gap-3 px-3 py-2.5 sm:px-5">
+        {/* 照片墙与其它页面的内容左缘保持一致：留白用同一套 gutter，
+            宽屏时照片铺满但边缘不跑掉。 */}
+        <div className="flex items-center gap-3 px-[clamp(20px,3vw,48px)] py-2.5">
           <button
             type="button"
             onClick={goBack}
@@ -255,7 +285,7 @@ export default function PhotoAlbum({ album }: Props) {
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 px-2 pb-2 sm:px-3">
+      <div className="min-h-0 flex-1 px-[clamp(20px,3vw,48px)] pb-2">
         {mediaQuery.isError ? (
           <div className="flex h-full items-center justify-center text-[13px] text-fg-muted">
             媒体加载失败，请重试。
@@ -269,9 +299,78 @@ export default function PhotoAlbum({ album }: Props) {
             isLoadingMore={mediaQuery.isFetchingNextPage}
             onLoadMore={loadMore}
             onOpen={onOpen}
+            onContextMenu={(item, event) => {
+              event.preventDefault();
+              event.currentTarget.focus({ preventScroll: true });
+              setContextMenu({ x: event.clientX, y: event.clientY, item });
+            }}
           />
         )}
       </div>
+
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={[
+            {
+              id: "open",
+              label: "查看大图",
+              icon: <GridIcon size={12} />,
+            },
+            {
+              id: "cover",
+              label: "设为封面",
+              icon: <ImageIcon size={12} />,
+            },
+            { id: "sep1", separator: true } as AnyMenuItem,
+            {
+              id: "properties",
+              label: "属性",
+              icon: <InfoIcon size={12} />,
+            },
+            {
+              id: "explorer",
+              label: "在资源管理器中打开",
+              icon: <ArrowUpRightIcon size={12} />,
+              disabled: !actions.canOpenInExplorer,
+            },
+          ]}
+          onSelect={(id) => {
+            const item = contextMenu.item;
+            setContextMenu(null);
+            if (id === "open") {
+              const index = mediaItems.findIndex((it) => it.id === item.id);
+              if (index >= 0) onOpen(item, index);
+              return;
+            }
+            if (id === "cover") {
+              setPropertiesFileId(null);
+              void albumsApi
+                .setCover(album.id, item.id)
+                .then(() => {
+                  void queryClient.invalidateQueries({ queryKey: ["library"] });
+                  pushToast({ kind: "success", message: "已设为封面" });
+                })
+                .catch(() =>
+                  pushToast({ kind: "error", message: "设置封面失败" }),
+                );
+              return;
+            }
+            if (id === "properties") {
+              setPropertiesFileId(item.id);
+            }
+          }}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
+
+      <PropertiesDialog
+        target={
+          propertiesFileId ? { kind: "image", id: propertiesFileId } : null
+        }
+        onClose={() => setPropertiesFileId(null)}
+      />
 
       {viewerIndex !== null && (
         <PhotoViewer

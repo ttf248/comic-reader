@@ -358,7 +358,7 @@ function GridCard({
               （原来的实心绿块在深色主题 / 浅色封面上都会糊掉）。 */}
           {isFinished && data.variant === "album" && (
             <div className="absolute bottom-2 right-2">
-              <ReadChip />
+              <ReadChip contentKind={data.contentKind} />
             </div>
           )}
         </div>
@@ -669,12 +669,18 @@ function UnreadDot() {
   );
 }
 
-/** 已读：蒙版 chip + 绿色对勾。 */
-function ReadChip() {
+/**
+ * 已读：蒙版 chip + 绿色对勾。
+ *
+ * 说法跟相册用途走：漫画是「已读完」，照片是「已看完」——
+ * 照片相册没有「读完」这回事，用户也不该被漫画的说法套住。
+ */
+function ReadChip({ contentKind }: { contentKind?: "photo" | "comic" }) {
+  const title = contentKind === "photo" ? "已看完" : "已读完";
   return (
     <span
       className="inline-flex items-center gap-1 rounded-md bg-black/65 backdrop-blur-sm ring-1 ring-white/20 px-1.5 h-5 text-[12.5px] font-medium text-white shadow-sm"
-      title="已读完"
+      title={title}
     >
       <CheckIcon size={10} className="text-emerald-300" />
       <span>已读</span>

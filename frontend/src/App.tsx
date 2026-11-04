@@ -49,7 +49,7 @@ export default function App() {
           </Route>
           {/* 漫画阅读器：/read/<album id>。它不在 AppShell 下，
               没有侧栏也没有工具栏，沉浸在一张画布里。 */}
-          <Route path="/read/*" element={lazyPage(Reader)} />
+          <Route path="/read/:albumId" element={lazyPage(Reader)} />
           {/* 旧链接（/gallery?path=…）仍然可用，重定向到新地址。 */}
           <Route path="/gallery/*" element={lazyPage(LegacyGalleryRedirect)} />
         </Routes>

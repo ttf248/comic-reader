@@ -76,7 +76,9 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 读取或更新 `config.yaml`。与下文的目录选择接口同属允许处理绝对路径的本机配置管理例外，只接受服务端回环地址请求；远程请求返回 `403 local_access_required`。
 
-可更新字段：`mediaRoots`、`host`、`port`、`accessMode`、`accessToken`、`cacheDir`、`thumbSizeW`、`thumbSizeH`、`thumbCacheSize`、`cacheMaxAgeDays`、`cacheMaxSizeMB`、`ffmpegPath`、`allowOsOpen`、`staticDir`、`skipHidden`、`excludePatterns`、`systemFiles`。`accessToken` 永不在 GET/PUT 响应中回显，只返回 `accessTokenConfigured`。
+可更新字段：`mediaRoots`、`host`、`port`、`accessMode`、`accessToken`、`cacheDir`、`thumbSizeW`、`thumbSizeH`、`thumbCacheSize`、`cacheMaxAgeDays`、`cacheMaxSizeMB`、`ffmpegPath`、`allowOsOpen`、`staticDir`、`skipHidden`、`excludePatterns`、`systemFiles`、`defaultContentKind`、`rootContentKinds`。`accessToken` 永不在 GET/PUT 响应中回显，只返回 `accessTokenConfigured`。
+
+`defaultContentKind` 是相册的全局默认浏览用途（`photo` / `comic`，缺省 `photo`）；`rootContentKinds` 是「媒体根路径 → 用途」映射，键用与 `mediaRoots` 同一套规范化路径。两者都可热更新：用途只决定「相册用什么方式打开」，不影响扫描结果，改完立即生效，不需要重新扫描。
 
 `mediaRoots` 相对进程 CWD 绝对化、清理路径分隔与 `.`、去空并保序去重，响应和写回 YAML 均使用规范化后的路径，保留首次出现的大小写。Windows 比较时忽略大小写，其他平台区分大小写；不通过解析符号链接或 junction 合并不同路径。仅增加等价写法、重复项或调整顺序时，`mediaRootsChanged=false`，保留现有媒体库、revision 和有效扫描缓存。
 
@@ -126,7 +128,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 - `GET /api/library/unread?limit=60&cursor=...`：分页返回尚未翻开过的相册摘要；已读和在读相册不会传输。有图片的相册以图片阅读活动判定，纯视频相册以视频播放活动判定（没有图片活动可依）。
 - `GET /api/library/:rootOrCollectionId/children?limit=60&cursor=...`：分页返回直属相册与子集合摘要。
 - `GET /api/albums/random?scope=unread`：随机返回一个相册摘要；不传 `scope` 时从全库抽取，`scope=unread` 时只从尚未保存图片阅读活动的相册中抽取。没有匹配相册返回 `404 no_matching_album`。
-- `GET /api/albums/:albumId/media?limit=60&cursor=...`：按统一自然顺序返回媒体；`index` 是相册内总序号，`kindIndex` 是图片或视频各自序号。
+- `GET /api/albums/:albumId/media?limit=60&cursor=...`：按统一自然顺序返回媒体；`index` 是相册内总序号，`kindIndex` 是图片或视频各自序号。图片项另带 `width` / `height`（原始像素宽高，未知时为 0），照片墙据此按真实宽高比排布，不必在浏览器里逐张探测。
 - `POST /api/library/nodes/query`：body 为 `{ "ids": ["a_...", "c_..."] }`，按输入顺序批量解析相册/集合摘要；单批最多 500 项，失效 ID 返回在 `missing` 中。
 - `GET /api/tags?limit=60&cursor=...`：分页返回标签摘要。
 - `GET /api/tags/:tag/albums?limit=60&cursor=...`：分页返回标签下的相册摘要。`tag` 按单个 URL 路径段编码，服务端只解码一次，支持中文、空格、`+`、`%` 及字面 `%xx`；非法百分号编码返回 `400 invalid_tag`，解码后为空返回 `400 missing_tag`，不存在的标签返回 `404 tag_not_found`。
@@ -142,6 +144,11 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 `mediaCount` 和 `folderSize` 均包含所有后代，`childCount` 仍只表示直属子项数量。
 相册摘要的 `hasCustomCover` 为 `true` 时表示当前 revision 已应用用户设置的人工封面；
 失效的覆盖记录不会出现在此字段中。
+
+相册摘要另带内容用途三件套：`contentKind` 是当前生效的用途（`photo` 照片墙 /
+`comic` 漫画阅读器），`contentKindDefault` 是取消覆盖后会回落到的用途，
+`contentKindOverridden` 表示用户是否手动切换过这一本。用途决定点击相册后进入
+照片墙还是阅读器，与相册里是图片还是视频无关，也不按图片数量推断。
 
 ### `DELETE /api/library`
 
@@ -162,6 +169,21 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 ### `DELETE /api/albums/:albumId/cover`
 
 清除自定义封面并恢复扫描器默认封面。
+
+### `GET /api/albums/:albumId/content-kind`
+
+返回这本相册的内容用途：`{ "ok": true, "contentKind": "photo", "contentKindDefault": "photo", "contentKindOverridden": false }`。
+
+### `PUT /api/albums/:albumId/content-kind`
+
+body 为 `{ "kind": "photo" | "comic" }`。写入相册级覆盖并立即生效：用途只影响「这本相册
+用什么方式打开」，不影响扫描结果，因此覆盖在重扫后依然保留。切换用途会清除这本相册在
+另一种用途下的进度记录，避免「照片看到第 12 张」被当成「漫画读到第 12 页」。
+非法 `kind` 返回 `400 invalid_content_kind`。
+
+### `DELETE /api/albums/:albumId/content-kind`
+
+撤销相册级覆盖，回落到媒体根默认值（没有则回落到全局默认值 `defaultContentKind`）。
 
 ## 媒体、缩略图与视频
 
@@ -280,16 +302,17 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 - `GET /api/history`、`DELETE /api/history`。
 - `POST /api/history`：body 为 `{ "albumId": "a_...", "name": "...", "imageCount": 42 }`。
 
-媒体活动使用复合标识：图片为 `albumId + mediaKind=image`，视频为
-`albumId + mediaKind=video + itemId`。图片页码与每个视频的播放位置不会互相覆盖。
+媒体活动使用复合标识：漫画阅读为 `albumId + mediaKind=image`，照片浏览为
+`albumId + mediaKind=photo`，视频为 `albumId + mediaKind=video + itemId`。
+漫画页码、照片位置与每个视频的播放位置互不覆盖。
 
-- `GET /api/activity?albumId=<albumId>&mediaKind=image`：读取图片活动。视频查询还必须传 `itemId=<fileId>`。
-- `PUT /api/activity`：幂等写入单条活动。图片 body 为 `{ "albumId": "a_...", "mediaKind": "image", "pageIndex": 12, "pageCount": 30 }`；视频 body 为 `{ "albumId": "a_...", "mediaKind": "video", "itemId": "f_...", "positionMs": 42000, "durationMs": 120000 }`。
+- `GET /api/activity?albumId=<albumId>&mediaKind=image`：读取漫画阅读活动；`mediaKind=photo` 读取照片浏览活动。视频查询还必须传 `itemId=<fileId>`。
+- `PUT /api/activity`：幂等写入单条活动。漫画 body 为 `{ "albumId": "a_...", "mediaKind": "image", "pageIndex": 12, "pageCount": 30 }`；照片 body 把 `mediaKind` 换成 `photo`（`pageIndex` 是最后看到的那一张）；视频 body 为 `{ "albumId": "a_...", "mediaKind": "video", "itemId": "f_...", "positionMs": 42000, "durationMs": 120000 }`。
 - `POST /api/activity/query`：body 为 `{ "items": [{ "albumId": "a_...", "mediaKind": "image" }] }`，按精确标识批量读取，返回 `{ "activities": [], "count": 0 }`。
 - `PUT /api/activity/batch`：body 为 `{ "activities": [...] }`，整批校验后一次原子落盘；单批最多 10000 条。
 - `DELETE /api/activity?...`：幂等删除单条；`DELETE /api/activity/all` 清空全部图片和视频活动。
 
-`/api/library/activity-summary`、`/api/library/dashboard` 与 `/api/library/unread` 均按相册的实际媒体判定未读：有图片的相册以是否存在图片阅读活动为准，纯视频相册没有图片活动，改以是否存在视频播放活动为准——播放过就不再计入未读，避免视频相册永久停留在未读列表。前者用于常驻导航，仪表盘用于首页，专用分页端点用于完整未读列表。
+`/api/library/activity-summary`、`/api/library/dashboard` 与 `/api/library/unread` 均按相册的实际媒体判定未读：有图片的相册按它的内容用途选择活动类型（漫画相册看 `image`，照片相册看 `photo`），纯视频相册没有图片活动，改以是否存在视频播放活动为准——播放过就不再计入未读，避免视频相册永久停留在未读列表。两种用途拆分之前的所有相册都只有 `image` 活动，这些旧记录仍然算作「翻过」，不会让已读相册重新变成未读。前者用于常驻导航，仪表盘用于首页，专用分页端点用于完整未读列表。
 
 响应中 `status` 为 `in_progress` / `completed`，由服务端按实际位置派生。图片到达
 `pageCount - 1` 完成；视频到达 98% 完成。`/api/progress` 不提供。
