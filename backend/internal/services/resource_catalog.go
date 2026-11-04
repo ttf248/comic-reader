@@ -67,7 +67,9 @@ type ResourceCatalog struct {
 }
 
 func NewResourceCatalog() *ResourceCatalog {
-	c := &ResourceCatalog{}
+	c := &ResourceCatalog{
+		contentPolicy: ContentKindPolicy{Default: models.DefaultContentKind},
+	}
 	c.state.Store(emptyCatalogState(0))
 	return c
 }

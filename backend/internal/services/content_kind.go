@@ -162,14 +162,15 @@ func NewContentKindPolicy(defaultKind string, roots []string, rootKinds map[stri
 }
 
 // KindFor 返回某个媒体根下的默认用途；未配置时返回全局默认值。
+//
+// 全局默认值本身也做归一化：零值策略（Default 为空）等同于「默认按照片打开」。
 func (p ContentKindPolicy) KindFor(sourceRoot string) models.ContentKind {
-	if sourceRoot == "" {
-		return p.Default
+	if sourceRoot != "" {
+		if kind, ok := p.Roots[normalizeRootKey(sourceRoot)]; ok {
+			return kind
+		}
 	}
-	if kind, ok := p.Roots[normalizeRootKey(sourceRoot)]; ok {
-		return kind
-	}
-	return p.Default
+	return models.NormalizeContentKind(string(p.Default))
 }
 
 // normalizeRootKey 把媒体根路径归一化成可比较的键：绝对化 + 清理，

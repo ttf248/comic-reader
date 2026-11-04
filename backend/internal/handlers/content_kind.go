@@ -7,6 +7,7 @@ import (
 
 	"github.com/tianlongxiang/local-gallery/internal/models"
 	"github.com/tianlongxiang/local-gallery/internal/services"
+	"github.com/tianlongxiang/local-gallery/internal/store"
 )
 
 // AlbumContentKindHandler 读取或修改相册的浏览用途。
@@ -21,7 +22,9 @@ import (
 func AlbumContentKindHandler(
 	catalog *services.ResourceCatalog,
 	kinds *services.ContentKindStore,
+	activities ...*store.ActivityStore,
 ) fiber.Handler {
+	activityStore := optionalActivityStore(activities)
 	return func(c *fiber.Ctx) error {
 		albumID := strings.TrimSpace(c.Params("id"))
 		if albumID == "" {
@@ -57,6 +60,9 @@ func AlbumContentKindHandler(
 				return writeError(c, fiber.StatusInternalServerError, "content_kind_save_failed", "save content kind")
 			}
 			catalog.SetContentKindOverrides(kinds.Snapshot())
+			// 切换用途等于这本相册换一套读法：另一种用途留下的位置不再适用，
+			// 清掉它才能保证两种模式的进度互不污染。
+			resetOtherKindProgress(activityStore, albumID, models.NormalizeContentKind(body.Kind))
 			return c.JSON(contentKindResponse(reloadAlbumSummary(catalog, albumID)))
 		case fiber.MethodDelete:
 			if err := kinds.Clear(ref.AbsolutePath); err != nil {
@@ -68,6 +74,29 @@ func AlbumContentKindHandler(
 			return writeError(c, fiber.StatusMethodNotAllowed, "method_not_allowed", "method is not supported")
 		}
 	}
+}
+
+// optionalActivityStore 取可选的活动存储。
+func optionalActivityStore(stores []*store.ActivityStore) *store.ActivityStore {
+	if len(stores) == 0 {
+		return nil
+	}
+	return stores[0]
+}
+
+// resetOtherKindProgress 清除相册在另一种用途下的进度记录。
+func resetOtherKindProgress(activities *store.ActivityStore, albumID string, kind models.ContentKind) {
+	if activities == nil {
+		return
+	}
+	other := models.MediaKindImage
+	if kind == models.ContentKindComic {
+		other = models.MediaKindPhoto
+	}
+	_, _ = activities.Delete(models.ActivityIdentity{
+		AlbumID:   albumID,
+		MediaKind: other,
+	})
 }
 
 // contentKindResponse 是内容用途接口的统一响应体。

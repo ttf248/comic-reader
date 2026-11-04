@@ -169,13 +169,21 @@ func LibraryHomeDashboardHandler(catalog *services.ResourceCatalog, activities *
 		if err != nil {
 			return httputil.Internal(c, "activity_unavailable", "activity storage is unavailable")
 		}
-		startedImage, startedVideo, activityRevision, err := activities.StartedAlbumIDsSnapshot()
+		photoActivities, _, _, err := activities.PhotoActivitySnapshot()
 		if err != nil {
 			return httputil.Internal(c, "activity_unavailable", "activity storage is unavailable")
 		}
-		started := services.StartedAlbums{Image: startedImage, Video: startedVideo}
+		startedImage, startedPhoto, startedVideo, activityRevision, err := activities.StartedAlbumIDsSnapshot()
+		if err != nil {
+			return httputil.Internal(c, "activity_unavailable", "activity storage is unavailable")
+		}
+		started := services.StartedAlbums{
+			Image: startedImage,
+			Photo: startedPhoto,
+			Video: startedVideo,
+		}
 		snapshot := catalog.Acquire()
-		dashboard, err := unreadIndex.Dashboard(snapshot, imageActivities, started, activityRevision)
+		dashboard, err := unreadIndex.Dashboard(snapshot, imageActivities, photoActivities, started, activityRevision)
 		if err != nil {
 			return writeLibraryPageError(c, err, snapshot.Revision())
 		}
@@ -298,11 +306,15 @@ func setLibraryRevisionETag(c *fiber.Ctx, revision uint64) {
 	c.Set(fiber.HeaderETag, `W/"library-`+strconv.FormatUint(revision, 10)+`"`)
 }
 
-// startedAlbums 汇总图片与视频活动派生的相册 ID 集合，供未读统计使用。
+// startedAlbums 汇总漫画、照片与视频活动派生的相册 ID 集合，供未读统计使用。
 func startedAlbums(activities *store.ActivityStore) (services.StartedAlbums, uint64, error) {
-	image, video, revision, err := activities.StartedAlbumIDsSnapshot()
+	image, photo, video, revision, err := activities.StartedAlbumIDsSnapshot()
 	if err != nil {
 		return services.StartedAlbums{}, 0, err
 	}
-	return services.StartedAlbums{Image: image, Video: video}, revision, nil
+	return services.StartedAlbums{
+		Image: image,
+		Photo: photo,
+		Video: video,
+	}, revision, nil
 }

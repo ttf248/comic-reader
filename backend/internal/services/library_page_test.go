@@ -428,7 +428,7 @@ func TestLibraryHomeDashboardUsesCurrentImageCountAndLimitedUnreadPreview(t *tes
 	dashboard, err := unreadIndex.Dashboard(snapshot, []models.Activity{{
 		AlbumID: fixture.albumID, MediaKind: models.MediaKindImage,
 		PageIndex: 1, PageCount: 99, Updated: time.Now().UTC(),
-	}}, started, 1)
+	}}, nil, started, 1)
 	if err != nil {
 		t.Fatal(err)
 	}

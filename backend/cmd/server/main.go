@@ -349,9 +349,9 @@ func main() {
 	api.Put("/albums/:id/cover", resourceParam, handlers.AlbumSetCoverHandler(scanCache, coverOverrides, resourceCatalog))
 	api.Delete("/albums/:id/cover", resourceParam, handlers.AlbumClearCoverHandler(scanCache, coverOverrides, resourceCatalog))
 	// 内容用途：用户手动切换相册的打开方式（照片墙 / 漫画阅读器）。
-	api.Get("/albums/:id/content-kind", resourceParam, handlers.AlbumContentKindHandler(resourceCatalog, contentKinds))
-	api.Put("/albums/:id/content-kind", resourceParam, handlers.AlbumContentKindHandler(resourceCatalog, contentKinds))
-	api.Delete("/albums/:id/content-kind", resourceParam, handlers.AlbumContentKindHandler(resourceCatalog, contentKinds))
+	api.Get("/albums/:id/content-kind", resourceParam, handlers.AlbumContentKindHandler(resourceCatalog, contentKinds, activities))
+	api.Put("/albums/:id/content-kind", resourceParam, handlers.AlbumContentKindHandler(resourceCatalog, contentKinds, activities))
+	api.Delete("/albums/:id/content-kind", resourceParam, handlers.AlbumContentKindHandler(resourceCatalog, contentKinds, activities))
 	api.Get("/search", handlers.SearchHandler(resourceCatalog))
 	api.Get("/tags", handlers.LibraryTagsPageHandler(resourceCatalog))
 	api.Get("/tags/:tag/albums", handlers.TagAlbumsPageHandler(resourceCatalog))

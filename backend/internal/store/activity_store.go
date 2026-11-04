@@ -133,31 +133,49 @@ func (s *ActivityStore) StartedVideoAlbumIDsSnapshot() (map[string]struct{}, uin
 	return ids, s.revision, nil
 }
 
-// StartedAlbumIDsSnapshot 在一次加锁内返回图片与视频活动各自派生的相册 ID
-// 集合以及当前活动版本。未读统计同时需要两种集合，用同一版本号缓存派生索引。
-func (s *ActivityStore) StartedAlbumIDsSnapshot() (image, video map[string]struct{}, revision uint64, err error) {
+// StartedAlbumIDsSnapshot 在一次加锁内返回漫画、照片与视频活动各自派生的
+// 相册 ID 集合以及当前活动版本。未读统计同时需要三种集合，用同一版本号
+// 缓存派生索引。
+//
+// 漫画与照片分开统计：同一本相册可以在两种用途之间切换，
+// 「照片看到第 12 张」不应该让「漫画读到第 12 页」变成已读。
+func (s *ActivityStore) StartedAlbumIDsSnapshot() (image, photo, video map[string]struct{}, revision uint64, err error) {
 	if err = s.ensureLoaded(); err != nil {
-		return nil, nil, 0, err
+		return nil, nil, nil, 0, err
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	image = make(map[string]struct{})
+	photo = make(map[string]struct{})
 	video = make(map[string]struct{})
 	for _, activity := range s.items {
 		switch activity.MediaKind {
 		case models.MediaKindImage:
 			image[activity.AlbumID] = struct{}{}
+		case models.MediaKindPhoto:
+			photo[activity.AlbumID] = struct{}{}
 		case models.MediaKindVideo:
 			video[activity.AlbumID] = struct{}{}
 		}
 	}
-	return image, video, s.revision, nil
+	return image, photo, video, s.revision, nil
 }
 
-// ImageActivitySnapshot 返回全部图片阅读活动、对应相册 ID 集合和当前活动版本。
+// ImageActivitySnapshot 返回全部漫画阅读活动、对应相册 ID 集合和当前活动版本。
 // 首页仪表盘使用这一致性快照构建在读与未读摘要；它不会返回视频播放记录，
 // 也不读取媒体库或文件系统路径。
 func (s *ActivityStore) ImageActivitySnapshot() ([]models.Activity, map[string]struct{}, uint64, error) {
+	return s.activitySnapshot(models.MediaKindImage)
+}
+
+// PhotoActivitySnapshot 返回全部照片浏览活动、对应相册 ID 集合和当前活动版本。
+// 它与漫画阅读活动分开：两种用途的进度互不影响。
+func (s *ActivityStore) PhotoActivitySnapshot() ([]models.Activity, map[string]struct{}, uint64, error) {
+	return s.activitySnapshot(models.MediaKindPhoto)
+}
+
+// activitySnapshot 返回指定媒体类型的全部活动及其相册 ID 集合。
+func (s *ActivityStore) activitySnapshot(kind models.MediaKind) ([]models.Activity, map[string]struct{}, uint64, error) {
 	if err := s.ensureLoaded(); err != nil {
 		return nil, nil, 0, err
 	}
@@ -166,7 +184,7 @@ func (s *ActivityStore) ImageActivitySnapshot() ([]models.Activity, map[string]s
 	activities := make([]models.Activity, 0, len(s.items))
 	ids := make(map[string]struct{})
 	for _, activity := range s.items {
-		if activity.MediaKind == models.MediaKindImage {
+		if activity.MediaKind == kind {
 			activities = append(activities, activity)
 			ids[activity.AlbumID] = struct{}{}
 		}

@@ -8,11 +8,15 @@ import (
 	"github.com/tianlongxiang/local-gallery/internal/models"
 )
 
-// StartedAlbums 描述哪些相册已经翻开过。图片与视频活动分开统计：纯视频
-// 相册没有图片活动，未读判定只能依据视频活动；分开存放也避免一种媒体的
-// 记录误判另一种媒体的相册。
+// StartedAlbums 描述哪些相册已经翻开过。三类活动分开统计：漫画阅读、照片
+// 浏览与视频播放互不替代——照片看到第 12 张不代表漫画读到第 12 页，
+// 纯视频相册则只能依据视频活动判定。
 type StartedAlbums struct {
+	// Image 是漫画阅读活动派生的相册集合。
 	Image map[string]struct{}
+	// Photo 是照片浏览活动派生的相册集合。
+	Photo map[string]struct{}
+	// Video 是视频播放活动派生的相册集合。
 	Video map[string]struct{}
 }
 
@@ -83,7 +87,7 @@ func (i *UnreadLibraryIndex) Random(snapshot CatalogSnapshot, started StartedAlb
 
 // Dashboard 使用未读下标生成首页有限预览；在读部分只遍历已有图片活动，
 // 不再为少量首页卡片遍历完整相册列表。
-func (i *UnreadLibraryIndex) Dashboard(snapshot CatalogSnapshot, imageActivities []models.Activity, started StartedAlbums, activityRevision uint64) (LibraryHomeDashboard, error) {
+func (i *UnreadLibraryIndex) Dashboard(snapshot CatalogSnapshot, imageActivities, photoActivities []models.Activity, started StartedAlbums, activityRevision uint64) (LibraryHomeDashboard, error) {
 	indexes, err := i.albumIndexesFor(snapshot, started, activityRevision)
 	if err != nil {
 		return LibraryHomeDashboard{}, err
@@ -95,9 +99,17 @@ func (i *UnreadLibraryIndex) Dashboard(snapshot CatalogSnapshot, imageActivities
 		Unread:      i.summaries(snapshot, indexes[:min(len(indexes), libraryDashboardUnreadPreviewLimit)]),
 		InProgress:  []LibraryDashboardProgress{},
 	}
-	activitiesByAlbum := make(map[string]models.Activity, len(imageActivities))
+	activitiesByAlbum := make(map[string]models.Activity, len(imageActivities)+len(photoActivities))
 	for _, activity := range imageActivities {
 		if activity.MediaKind != models.MediaKindImage {
+			continue
+		}
+		if current, exists := activitiesByAlbum[activity.AlbumID]; !exists || activity.Updated.After(current.Updated) {
+			activitiesByAlbum[activity.AlbumID] = activity
+		}
+	}
+	for _, activity := range photoActivities {
+		if activity.MediaKind != models.MediaKindPhoto {
 			continue
 		}
 		if current, exists := activitiesByAlbum[activity.AlbumID]; !exists || activity.Updated.After(current.Updated) {
@@ -107,6 +119,12 @@ func (i *UnreadLibraryIndex) Dashboard(snapshot CatalogSnapshot, imageActivities
 	for albumID, activity := range activitiesByAlbum {
 		album, exists := snapshot.state.library.nodes[albumID]
 		if !exists || album.ImageCount == 0 || activity.PageIndex < 0 || activity.PageIndex >= album.ImageCount-1 {
+			continue
+		}
+		// 在读位置必须来自相册当前用途对应的活动：漫画相册看漫画阅读记录，
+		// 照片相册看照片浏览记录（旧的漫画记录只作兼容兜底）。
+		if album.ContentKind == string(models.ContentKindComic) &&
+			activity.MediaKind != models.MediaKindImage {
 			continue
 		}
 		dashboard.InProgress = append(dashboard.InProgress, LibraryDashboardProgress{
@@ -147,17 +165,8 @@ func (i *UnreadLibraryIndex) albumIndexesFor(snapshot CatalogSnapshot, started S
 	albums := snapshot.state.library.albums
 	indexes := make([]int, 0, len(albums))
 	for albumIndex, album := range albums {
-		// 有图片的相册看图片活动，纯视频相册没有图片活动，只能看视频活动；
-		// 打开过其中一种就算翻开过，不再计入未读。
-		if album.ImageCount > 0 {
-			if _, opened := started.Image[album.ID]; opened {
-				continue
-			}
-		}
-		if album.VideoCount > 0 {
-			if _, opened := started.Video[album.ID]; opened {
-				continue
-			}
+		if albumOpened(album, started) {
+			continue
 		}
 		indexes = append(indexes, albumIndex)
 	}
@@ -166,6 +175,37 @@ func (i *UnreadLibraryIndex) albumIndexesFor(snapshot CatalogSnapshot, started S
 	i.activityRevision = activityRevision
 	i.albumIndexes = indexes
 	return i.albumIndexes, nil
+}
+
+// albumOpened 判断相册是否已经翻开过。
+//
+// 有图片的相册看它所属用途对应的活动：漫画相册看漫画阅读记录，照片相册看
+// 照片浏览记录。纯视频相册只有视频活动，只能依据视频活动判定。
+//
+// 照片相册额外认领旧的漫画阅读记录：两种用途拆分之前，所有相册都用同一
+// 条 image 活动记录位置。那些记录属于用户已经翻过的相册，不能因为拆分
+// 就让它们重新变成未读。
+func albumOpened(album LibraryNodeSummary, started StartedAlbums) bool {
+	if album.ImageCount > 0 {
+		if album.ContentKind == string(models.ContentKindComic) {
+			if _, opened := started.Image[album.ID]; opened {
+				return true
+			}
+		} else {
+			if _, opened := started.Photo[album.ID]; opened {
+				return true
+			}
+			if _, opened := started.Image[album.ID]; opened {
+				return true
+			}
+		}
+	}
+	if album.VideoCount > 0 {
+		if _, opened := started.Video[album.ID]; opened {
+			return true
+		}
+	}
+	return false
 }
 
 func (i *UnreadLibraryIndex) summaries(snapshot CatalogSnapshot, indexes []int) []LibraryNodeSummary {
