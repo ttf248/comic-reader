@@ -27,6 +27,57 @@ var (
 	ErrLibraryNoMatchingAlbum   = errors.New("library has no matching album")
 )
 
+// LibraryKindScope 是一次列表请求覆盖的相册用途。
+//
+// 它对应前端的「工作台模式」：photo / comic 只返回该用途的相册，
+// 空串与 "all" 等价于不过滤。集合与标签页是导航容器，不参与用途过滤。
+type LibraryKindScope string
+
+const (
+	// LibraryKindAll 不过滤，返回全部相册。
+	LibraryKindAll LibraryKindScope = ""
+	// LibraryKindPhoto 只返回照片相册。
+	LibraryKindPhoto LibraryKindScope = "photo"
+	// LibraryKindComic 只返回漫画相册。
+	LibraryKindComic LibraryKindScope = "comic"
+)
+
+// LibraryKindScopeFromMode 把工作台模式换算成列表作用域。
+func LibraryKindScopeFromMode(mode models.AppMode) LibraryKindScope {
+	switch mode {
+	case models.AppModePhoto:
+		return LibraryKindPhoto
+	case models.AppModeComic:
+		return LibraryKindComic
+	default:
+		return LibraryKindAll
+	}
+}
+
+// libraryScope 把用途折进分页游标的作用域：不同用途的游标互不通用，
+// 跨用途复用会得到 invalid_cursor，而不是把「换了模式」误判成「库变了」。
+func libraryScope(base string, kind LibraryKindScope) string {
+	if kind == LibraryKindAll {
+		return base
+	}
+	return base + ":" + string(kind)
+}
+
+// filterNodesByKind 保留用途匹配的相册；集合没有用途，永远保留。
+// 过滤是稳定筛选，不改变原有顺序，因此分页不会漏项或重复。
+func filterNodesByKind(items []LibraryNodeSummary, kind LibraryKindScope) []LibraryNodeSummary {
+	if kind == LibraryKindAll {
+		return items
+	}
+	filtered := make([]LibraryNodeSummary, 0, len(items))
+	for _, item := range items {
+		if item.Kind != string(ResourceAlbum) || item.ContentKind == string(kind) {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
+}
+
 // LibraryManifest 是首页启动所需的轻量目录描述，不包含相册树或媒体列表。
 type LibraryManifest struct {
 	Revision   uint64               `json:"revision"`
@@ -43,6 +94,11 @@ type LibraryStatistics struct {
 	CollectionCount int `json:"collectionCount"`
 	TagCount        int `json:"tagCount"`
 	WarningCount    int `json:"warningCount"`
+	// PhotoAlbumCount / ComicAlbumCount 是按用途拆分的相册数。
+	// AlbumCount 恒为全库总数：它出现在「我的媒体库 N 本相册」这类常驻文案里，
+	// 若随工作台模式跳变，用户会以为库变小了。
+	PhotoAlbumCount int `json:"photoAlbumCount"`
+	ComicAlbumCount int `json:"comicAlbumCount"`
 }
 
 type LibraryRootSummary struct {
@@ -140,7 +196,10 @@ type LibraryDashboardProgress struct {
 	Album     LibraryNodeSummary `json:"album"`
 	PageIndex int                `json:"pageIndex"`
 	PageCount int                `json:"pageCount"`
-	Updated   time.Time          `json:"updated"`
+	// MediaKind 是这个位置的语义："photo" 是照片墙里翻到第几张，
+	// "image" 是漫画读到第几页。前端据此措辞，不必自己猜。
+	MediaKind string    `json:"mediaKind"`
+	Updated   time.Time `json:"updated"`
 }
 
 // LibraryHomeDashboard 只包含首页立即可见的阅读状态：未读总数及最多六本预览，
@@ -183,16 +242,22 @@ type libraryPageIndex struct {
 	tags      []LibraryTagSummary
 	tagAlbums map[string][]LibraryNodeSummary
 	search    []LibrarySearchHit
+	// albumIndexesByKind 是全库相册按用途分桶的下标表（存下标不存摘要副本）。
+	// 用途过滤只需要在已物化的切片上做一次稳定筛选，不必另存一份摘要。
+	albumIndexesByKind map[models.ContentKind][]int
+	kindAlbumCounts    map[models.ContentKind]int
 }
 
 func buildLibraryPageIndex(state *resourceCatalogState) *libraryPageIndex {
 	index := &libraryPageIndex{
-		children:  make(map[string][]LibraryNodeSummary),
-		media:     make(map[string][]LibraryMediaItem),
-		albums:    []LibraryNodeSummary{},
-		nodes:     make(map[string]LibraryNodeSummary),
-		tags:      []LibraryTagSummary{},
-		tagAlbums: make(map[string][]LibraryNodeSummary),
+		children:           make(map[string][]LibraryNodeSummary),
+		media:              make(map[string][]LibraryMediaItem),
+		albums:             []LibraryNodeSummary{},
+		nodes:              make(map[string]LibraryNodeSummary),
+		tags:               []LibraryTagSummary{},
+		tagAlbums:          make(map[string][]LibraryNodeSummary),
+		albumIndexesByKind: make(map[models.ContentKind][]int),
+		kindAlbumCounts:    make(map[models.ContentKind]int),
 	}
 	if state == nil || state.result == nil {
 		return index
@@ -256,6 +321,13 @@ func buildLibraryPageIndex(state *resourceCatalogState) *libraryPageIndex {
 		}
 		return left.ID < right.ID
 	})
+	// 按用途给全库相册分桶：只存下标不存摘要副本，内存代价可忽略，
+	// 却让「按用途随机抽一本」「按用途算相册数」不必每次扫全库。
+	for i, album := range index.albums {
+		kind := models.NormalizeContentKind(album.ContentKind)
+		index.albumIndexesByKind[kind] = append(index.albumIndexesByKind[kind], i)
+		index.kindAlbumCounts[kind]++
+	}
 
 	smartCollections := append([]models.SmartCollection(nil), state.result.SmartCollections...)
 	sort.SliceStable(smartCollections, func(i, j int) bool {
@@ -376,6 +448,8 @@ func buildIndexedLibraryManifest(state *resourceCatalogState, index *libraryPage
 			CollectionCount: result.CollectionCount,
 			TagCount:        len(index.tags),
 			WarningCount:    len(result.Warnings),
+			PhotoAlbumCount: index.kindAlbumCounts[models.ContentKindPhoto],
+			ComicAlbumCount: index.kindAlbumCounts[models.ContentKindComic],
 		},
 	}
 }
@@ -390,8 +464,8 @@ func BuildLibraryManifest(snapshot CatalogSnapshot) (LibraryManifest, error) {
 	return manifest, nil
 }
 
-func PageLibraryChildren(snapshot CatalogSnapshot, parentID, cursor string, limit int) (LibraryPage[LibraryNodeSummary], error) {
-	scope := "library-children:" + parentID
+func PageLibraryChildren(snapshot CatalogSnapshot, parentID string, kind LibraryKindScope, cursor string, limit int) (LibraryPage[LibraryNodeSummary], error) {
+	scope := libraryScope("library-children:"+parentID, kind)
 	offset, err := pageOffset(snapshot, cursor, scope)
 	if err != nil {
 		return LibraryPage[LibraryNodeSummary]{}, err
@@ -413,6 +487,8 @@ func PageLibraryChildren(snapshot CatalogSnapshot, parentID, cursor string, limi
 	if !exists {
 		return LibraryPage[LibraryNodeSummary]{}, ErrLibraryResourceNotFound
 	}
+	// 过滤发生在分页之前：游标里的 offset 是「过滤后列表」的偏移。
+	items = filterNodesByKind(items, kind)
 	total := len(items)
 	start, end, next, err := pageBounds(snapshot.Revision(), scope, cursor != "", offset, total, limit)
 	if err != nil {
@@ -480,8 +556,8 @@ type LibraryNodeQueryResult struct {
 	Missing  []string             `json:"missing"`
 }
 
-func PageLibraryTags(snapshot CatalogSnapshot, cursor string, limit int) (LibraryPage[LibraryTagSummary], error) {
-	const scope = "library-tags"
+func PageLibraryTags(snapshot CatalogSnapshot, kind LibraryKindScope, cursor string, limit int) (LibraryPage[LibraryTagSummary], error) {
+	scope := libraryScope("library-tags", kind)
 	offset, err := pageOffset(snapshot, cursor, scope)
 	if err != nil {
 		return LibraryPage[LibraryTagSummary]{}, err
@@ -490,6 +566,25 @@ func PageLibraryTags(snapshot CatalogSnapshot, cursor string, limit int) (Librar
 		return LibraryPage[LibraryTagSummary]{}, ErrLibraryNotReady
 	}
 	tags := snapshot.state.library.tags
+	if kind != LibraryKindAll {
+		// 标签是导航容器，但它下面的相册分属不同用途：按用途重算册数，
+		// 归零的标签整个不出现，避免点进去是一个空标签。
+		filtered := make([]LibraryTagSummary, 0, len(tags))
+		for _, tag := range tags {
+			count := 0
+			for _, album := range snapshot.state.library.tagAlbums[tag.Tag] {
+				if album.ContentKind == string(kind) {
+					count++
+				}
+			}
+			if count == 0 {
+				continue
+			}
+			tag.AlbumCount = count
+			filtered = append(filtered, tag)
+		}
+		tags = filtered
+	}
 	start, end, next, err := pageBounds(snapshot.Revision(), scope, cursor != "", offset, len(tags), limit)
 	if err != nil {
 		return LibraryPage[LibraryTagSummary]{}, err
@@ -499,9 +594,9 @@ func PageLibraryTags(snapshot CatalogSnapshot, cursor string, limit int) (Librar
 	}, nil
 }
 
-func PageTagAlbums(snapshot CatalogSnapshot, tag, cursor string, limit int) (LibraryPage[LibraryNodeSummary], error) {
+func PageTagAlbums(snapshot CatalogSnapshot, tag string, kind LibraryKindScope, cursor string, limit int) (LibraryPage[LibraryNodeSummary], error) {
 	tag = strings.TrimSpace(tag)
-	scope := "tag-albums:" + tag
+	scope := libraryScope("tag-albums:"+tag, kind)
 	offset, err := pageOffset(snapshot, cursor, scope)
 	if err != nil {
 		return LibraryPage[LibraryNodeSummary]{}, err
@@ -513,6 +608,7 @@ func PageTagAlbums(snapshot CatalogSnapshot, tag, cursor string, limit int) (Lib
 	if !exists {
 		return LibraryPage[LibraryNodeSummary]{}, ErrLibraryTagNotFound
 	}
+	albums = filterNodesByKind(albums, kind)
 	start, end, next, err := pageBounds(snapshot.Revision(), scope, cursor != "", offset, len(albums), limit)
 	if err != nil {
 		return LibraryPage[LibraryNodeSummary]{}, err
@@ -524,7 +620,9 @@ func PageTagAlbums(snapshot CatalogSnapshot, tag, cursor string, limit int) (Lib
 
 // SearchLibrary 从当前不可变 revision 的预计算摘要中进行大小写不敏感匹配。
 // 搜索请求不再递归遍历完整扫描树，也不会触发路径转换。
-func SearchLibrary(snapshot CatalogSnapshot, query string, limit int) []LibrarySearchHit {
+//
+// kind 只过滤相册命中：集合与智能标签是导航容器，不参与用途过滤。
+func SearchLibrary(snapshot CatalogSnapshot, query string, kind LibraryKindScope, limit int) []LibrarySearchHit {
 	if !snapshot.Ready() || snapshot.state == nil || snapshot.state.library == nil {
 		return []LibrarySearchHit{}
 	}
@@ -534,6 +632,9 @@ func SearchLibrary(snapshot CatalogSnapshot, query string, limit int) []LibraryS
 	}
 	results := make([]LibrarySearchHit, 0, min(limit, len(snapshot.state.library.search)))
 	for _, hit := range snapshot.state.library.search {
+		if kind != LibraryKindAll && hit.Kind == string(ResourceAlbum) && hit.ContentKind != string(kind) {
+			continue
+		}
 		if !strings.Contains(strings.ToLower(hit.Name), needle) && !containsTag(hit.Tags, needle) {
 			continue
 		}
@@ -555,17 +656,29 @@ func containsTag(tags []string, needle string) bool {
 }
 
 // RandomLibraryAlbum 从当前 revision 的预计算相册摘要中安全地抽取一项。
-func RandomLibraryAlbum(snapshot CatalogSnapshot) (LibraryNodeSummary, error) {
+// kind 限定用途时只在该用途的相册里抽。
+func RandomLibraryAlbum(snapshot CatalogSnapshot, kind LibraryKindScope) (LibraryNodeSummary, error) {
 	if !snapshot.Ready() || snapshot.state == nil || snapshot.state.library == nil {
 		return LibraryNodeSummary{}, ErrLibraryNotReady
 	}
 	albums := snapshot.state.library.albums
-	if len(albums) == 0 {
+	indexes := snapshot.state.library.albumIndexesByKind[models.ContentKind(kind)]
+	if kind == LibraryKindAll {
+		indexes = nil
+	}
+	total := len(albums)
+	if len(indexes) > 0 {
+		total = len(indexes)
+	}
+	if total == 0 {
 		return LibraryNodeSummary{}, ErrLibraryNoMatchingAlbum
 	}
-	picked, err := randomLibraryIndex(len(albums))
+	picked, err := randomLibraryIndex(total)
 	if err != nil {
 		return LibraryNodeSummary{}, fmt.Errorf("select random library album: %w", err)
+	}
+	if len(indexes) > 0 {
+		picked = indexes[picked]
 	}
 	return cloneNodeSummary(albums[picked]), nil
 }

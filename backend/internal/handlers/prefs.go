@@ -31,12 +31,16 @@ func PrefsPatchHandler(s *store.PrefsStore) fiber.Handler {
 		ShowSwitchNotif  *bool   `json:"showSwitchNotif"`
 		SidebarCollapsed *bool   `json:"sidebarCollapsed"`
 		MaxRecent        *int    `json:"maxRecent"`
+		AppMode          *string `json:"appMode"`
 	}
 
 	return func(c *fiber.Ctx) error {
 		var p patch
 		if err := c.BodyParser(&p); err != nil {
 			return writeError(c, fiber.StatusBadRequest, "invalid_prefs_body", "invalid preferences body")
+		}
+		if p.AppMode != nil && !models.IsValidAppMode(*p.AppMode) {
+			return writeError(c, fiber.StatusBadRequest, "invalid_app_mode", "appMode must be photo, comic or all")
 		}
 
 		cur, err := s.Patch(func(cur *models.Prefs) {
@@ -54,6 +58,9 @@ func PrefsPatchHandler(s *store.PrefsStore) fiber.Handler {
 			}
 			if p.MaxRecent != nil && *p.MaxRecent > 0 {
 				cur.MaxRecent = *p.MaxRecent
+			}
+			if p.AppMode != nil {
+				cur.AppMode = models.NormalizeAppMode(*p.AppMode)
 			}
 
 		})

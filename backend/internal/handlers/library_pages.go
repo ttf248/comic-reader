@@ -34,12 +34,16 @@ func LibraryChildrenPageHandler(catalog *services.ResourceCatalog) fiber.Handler
 		if !ok {
 			return nil
 		}
+		kind, ok := parseLibraryKind(c)
+		if !ok {
+			return nil
+		}
 		parentID := strings.TrimSpace(c.Params("id"))
 		if parentID == "" {
 			return httputil.BadRequest(c, "missing_resource_id", "resource id is required")
 		}
 		snapshot := requestCatalogSnapshot(c, catalog)
-		page, err := services.PageLibraryChildren(snapshot, parentID, c.Query("cursor"), limit)
+		page, err := services.PageLibraryChildren(snapshot, parentID, kind, c.Query("cursor"), limit)
 		if err != nil {
 			return writeLibraryPageError(c, err, snapshot.Revision())
 		}
@@ -102,12 +106,16 @@ func LibraryUnreadAlbumsPageHandler(catalog *services.ResourceCatalog, activitie
 		if !ok {
 			return nil
 		}
+		kind, ok := parseLibraryKind(c)
+		if !ok {
+			return nil
+		}
 		started, activityRevision, err := startedAlbums(activities)
 		if err != nil {
 			return httputil.Internal(c, "activity_unavailable", "activity storage is unavailable")
 		}
 		snapshot := catalog.Acquire()
-		page, err := unreadIndex.Page(snapshot, started, activityRevision, c.Query("cursor"), limit)
+		page, err := unreadIndex.Page(snapshot, started, activityRevision, kind, c.Query("cursor"), limit)
 		if err != nil {
 			return writeLibraryPageError(c, err, snapshot.Revision())
 		}
@@ -123,20 +131,24 @@ func LibraryRandomAlbumHandler(catalog *services.ResourceCatalog, activities *st
 		if scope != "" && scope != "unread" {
 			return httputil.BadRequest(c, "invalid_random_scope", "scope must be empty or unread")
 		}
+		kind, ok := parseLibraryKind(c)
+		if !ok {
+			return nil
+		}
 		snapshot := catalog.Acquire()
 		if scope == "unread" {
 			started, activityRevision, err := startedAlbums(activities)
 			if err != nil {
 				return httputil.Internal(c, "activity_unavailable", "activity storage is unavailable")
 			}
-			album, pageErr := unreadIndex.Random(snapshot, started, activityRevision)
+			album, pageErr := unreadIndex.Random(snapshot, started, activityRevision, kind)
 			if pageErr != nil {
 				return writeLibraryPageError(c, pageErr, snapshot.Revision())
 			}
 			setLibraryRevisionETag(c, snapshot.Revision())
 			return c.JSON(fiber.Map{"ok": true, "album": album, "revision": snapshot.Revision()})
 		}
-		album, err := services.RandomLibraryAlbum(snapshot)
+		album, err := services.RandomLibraryAlbum(snapshot, kind)
 		if err != nil {
 			return writeLibraryPageError(c, err, snapshot.Revision())
 		}
@@ -148,12 +160,16 @@ func LibraryRandomAlbumHandler(catalog *services.ResourceCatalog, activities *st
 // LibraryActivitySummaryHandler 为常驻侧边栏返回未读计数，避免下载全量相册摘要。
 func LibraryActivitySummaryHandler(catalog *services.ResourceCatalog, activities *store.ActivityStore, unreadIndex *services.UnreadLibraryIndex) fiber.Handler {
 	return func(c *fiber.Ctx) error {
+		kind, ok := parseLibraryKind(c)
+		if !ok {
+			return nil
+		}
 		started, activityRevision, err := startedAlbums(activities)
 		if err != nil {
 			return httputil.Internal(c, "activity_unavailable", "activity storage is unavailable")
 		}
 		snapshot := catalog.Acquire()
-		summary, err := unreadIndex.Summary(snapshot, started, activityRevision)
+		summary, err := unreadIndex.Summary(snapshot, started, activityRevision, kind)
 		if err != nil {
 			return writeLibraryPageError(c, err, snapshot.Revision())
 		}
@@ -165,6 +181,10 @@ func LibraryActivitySummaryHandler(catalog *services.ResourceCatalog, activities
 // 它避免首页为了几个入口下载跨根的完整相册列表和活动映射。
 func LibraryHomeDashboardHandler(catalog *services.ResourceCatalog, activities *store.ActivityStore, unreadIndex *services.UnreadLibraryIndex) fiber.Handler {
 	return func(c *fiber.Ctx) error {
+		kind, ok := parseLibraryKind(c)
+		if !ok {
+			return nil
+		}
 		imageActivities, _, _, err := activities.ImageActivitySnapshot()
 		if err != nil {
 			return httputil.Internal(c, "activity_unavailable", "activity storage is unavailable")
@@ -183,7 +203,7 @@ func LibraryHomeDashboardHandler(catalog *services.ResourceCatalog, activities *
 			Video: startedVideo,
 		}
 		snapshot := catalog.Acquire()
-		dashboard, err := unreadIndex.Dashboard(snapshot, imageActivities, photoActivities, started, activityRevision)
+		dashboard, err := unreadIndex.Dashboard(snapshot, imageActivities, photoActivities, started, activityRevision, kind)
 		if err != nil {
 			return writeLibraryPageError(c, err, snapshot.Revision())
 		}
@@ -231,8 +251,12 @@ func LibraryTagsPageHandler(catalog *services.ResourceCatalog) fiber.Handler {
 		if !ok {
 			return nil
 		}
+		kind, ok := parseLibraryKind(c)
+		if !ok {
+			return nil
+		}
 		snapshot := catalog.Acquire()
-		page, err := services.PageLibraryTags(snapshot, c.Query("cursor"), limit)
+		page, err := services.PageLibraryTags(snapshot, kind, c.Query("cursor"), limit)
 		if err != nil {
 			return writeLibraryPageError(c, err, snapshot.Revision())
 		}
@@ -248,6 +272,10 @@ func TagAlbumsPageHandler(catalog *services.ResourceCatalog) fiber.Handler {
 		if !ok {
 			return nil
 		}
+		kind, ok := parseLibraryKind(c)
+		if !ok {
+			return nil
+		}
 		tag, err := url.PathUnescape(c.Params("tag"))
 		if err != nil {
 			return httputil.BadRequest(c, "invalid_tag", "tag path encoding is invalid")
@@ -257,7 +285,7 @@ func TagAlbumsPageHandler(catalog *services.ResourceCatalog) fiber.Handler {
 			return httputil.BadRequest(c, "missing_tag", "tag is required")
 		}
 		snapshot := catalog.Acquire()
-		page, err := services.PageTagAlbums(snapshot, tag, c.Query("cursor"), limit)
+		page, err := services.PageTagAlbums(snapshot, tag, kind, c.Query("cursor"), limit)
 		if err != nil {
 			return writeLibraryPageError(c, err, snapshot.Revision())
 		}
@@ -277,6 +305,23 @@ func parseLibraryPageLimit(c *fiber.Ctx) (int, bool) {
 		return 0, false
 	}
 	return services.NormalizeLibraryPageLimit(limit), true
+}
+
+// parseLibraryKind 读取 kind 查询参数：photo / comic / all，缺省为 all（不过滤）。
+//
+// 它对应前端的「工作台模式」：列表只呈现该用途的相册。
+func parseLibraryKind(c *fiber.Ctx) (services.LibraryKindScope, bool) {
+	switch strings.TrimSpace(c.Query("kind")) {
+	case "", "all":
+		return services.LibraryKindAll, true
+	case "photo":
+		return services.LibraryKindPhoto, true
+	case "comic":
+		return services.LibraryKindComic, true
+	default:
+		_ = httputil.BadRequest(c, "invalid_kind", "kind must be photo, comic or all")
+		return services.LibraryKindAll, false
+	}
 }
 
 func writeLibraryPageError(c *fiber.Ctx, err error, revision uint64) error {

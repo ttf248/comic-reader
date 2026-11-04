@@ -130,15 +130,20 @@ func coverKindFromExt(p string) string {
 	return models.FileMediaKind(p)
 }
 
-//	GET /api/search?q=<keyword>&limit=<n>
+//	GET /api/search?q=<keyword>&limit=<n>&kind=<photo|comic|all>
 //
 // 关键字匹配 name/tag 子串（不区分大小写）。limit 默认 50。
+// kind 只过滤相册命中；集合与智能标签是导航容器，不参与用途过滤。
 // 搜索索引与分页摘要随同一个 catalog revision 一次性发布。
 func SearchHandler(catalog *services.ResourceCatalog) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		q := strings.TrimSpace(c.Query("q"))
 		if q == "" {
 			return c.JSON(fiber.Map{"ok": true, "results": []services.LibrarySearchHit{}})
+		}
+		kind, ok := parseLibraryKind(c)
+		if !ok {
+			return nil
 		}
 		limit := c.QueryInt("limit", 50)
 		if limit <= 0 || limit > 500 {
@@ -148,7 +153,7 @@ func SearchHandler(catalog *services.ResourceCatalog) fiber.Handler {
 		if !snapshot.Ready() {
 			return c.JSON(fiber.Map{"ok": true, "results": []services.LibrarySearchHit{}, "scanned": false})
 		}
-		results := services.SearchLibrary(snapshot, q, limit)
+		results := services.SearchLibrary(snapshot, q, kind, limit)
 		return c.JSON(fiber.Map{"ok": true, "results": results, "count": len(results), "revision": snapshot.Revision()})
 	}
 }

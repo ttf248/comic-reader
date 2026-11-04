@@ -73,6 +73,10 @@ func normalize(p models.Prefs) models.Prefs {
 	if p.Theme == "" {
 		p.Theme = d.Theme
 	}
+	// 旧版偏好文件没有 appMode 字段，反序列化后是零值：归一化成默认工作台。
+	if !models.IsValidAppMode(string(p.AppMode)) {
+		p.AppMode = d.AppMode
+	}
 
 	// 偏好文件会直接通过 API 返回，绝对路径或畸形标识不得暴露；
 	// 仅保留当前不透明资源 ID 契约。

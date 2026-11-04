@@ -30,6 +30,10 @@ type UnreadLibraryIndex struct {
 	catalogRevision  uint64
 	activityRevision uint64
 	albumIndexes     []int
+	// albumIndexesByKind 是同一批未读下标按相册用途分桶的结果。
+	// 缓存本身与用途无关：用途过滤是请求期的后置筛选，
+	// 一份缓存就能服务照片 / 漫画 / 全部三种工作台。
+	albumIndexesByKind map[models.ContentKind][]int
 }
 
 func NewUnreadLibraryIndex() *UnreadLibraryIndex {
@@ -38,8 +42,8 @@ func NewUnreadLibraryIndex() *UnreadLibraryIndex {
 
 // Page 返回未读相册的一页。目录 revision 保持既有分页游标契约；活动 revision
 // 只用作内部缓存键，因此响应字段和 URL 参数无需变化。
-func (i *UnreadLibraryIndex) Page(snapshot CatalogSnapshot, started StartedAlbums, activityRevision uint64, cursor string, limit int) (LibraryPage[LibraryNodeSummary], error) {
-	const scope = "library-unread"
+func (i *UnreadLibraryIndex) Page(snapshot CatalogSnapshot, started StartedAlbums, activityRevision uint64, kind LibraryKindScope, cursor string, limit int) (LibraryPage[LibraryNodeSummary], error) {
+	scope := libraryScope("library-unread", kind)
 	offset, err := pageOffset(snapshot, cursor, scope)
 	if err != nil {
 		return LibraryPage[LibraryNodeSummary]{}, err
@@ -48,6 +52,7 @@ func (i *UnreadLibraryIndex) Page(snapshot CatalogSnapshot, started StartedAlbum
 	if err != nil {
 		return LibraryPage[LibraryNodeSummary]{}, err
 	}
+	indexes = filterIndexesByKind(snapshot, indexes, kind)
 	start, end, next, err := pageBounds(snapshot.Revision(), scope, cursor != "", offset, len(indexes), limit)
 	if err != nil {
 		return LibraryPage[LibraryNodeSummary]{}, err
@@ -59,22 +64,24 @@ func (i *UnreadLibraryIndex) Page(snapshot CatalogSnapshot, started StartedAlbum
 
 // Summary 为常驻导航返回未读计数。它与分页、首页和随机未读共用同一份下标，
 // 避免多个常驻入口分别筛选完整相册列表。
-func (i *UnreadLibraryIndex) Summary(snapshot CatalogSnapshot, started StartedAlbums, activityRevision uint64) (LibraryActivitySummary, error) {
+func (i *UnreadLibraryIndex) Summary(snapshot CatalogSnapshot, started StartedAlbums, activityRevision uint64, kind LibraryKindScope) (LibraryActivitySummary, error) {
 	indexes, err := i.albumIndexesFor(snapshot, started, activityRevision)
 	if err != nil {
 		return LibraryActivitySummary{}, err
 	}
+	unread := filterIndexesByKind(snapshot, indexes, kind)
 	return LibraryActivitySummary{
-		Revision: snapshot.Revision(), AlbumCount: len(snapshot.state.library.albums), UnreadCount: len(indexes),
+		Revision: snapshot.Revision(), AlbumCount: albumCountForKind(snapshot, kind), UnreadCount: len(unread),
 	}, nil
 }
 
 // Random 从当前未读下标中安全抽取一项；没有匹配项时返回 ErrLibraryNoMatchingAlbum。
-func (i *UnreadLibraryIndex) Random(snapshot CatalogSnapshot, started StartedAlbums, activityRevision uint64) (LibraryNodeSummary, error) {
+func (i *UnreadLibraryIndex) Random(snapshot CatalogSnapshot, started StartedAlbums, activityRevision uint64, kind LibraryKindScope) (LibraryNodeSummary, error) {
 	indexes, err := i.albumIndexesFor(snapshot, started, activityRevision)
 	if err != nil {
 		return LibraryNodeSummary{}, err
 	}
+	indexes = filterIndexesByKind(snapshot, indexes, kind)
 	if len(indexes) == 0 {
 		return LibraryNodeSummary{}, ErrLibraryNoMatchingAlbum
 	}
@@ -87,50 +94,59 @@ func (i *UnreadLibraryIndex) Random(snapshot CatalogSnapshot, started StartedAlb
 
 // Dashboard 使用未读下标生成首页有限预览；在读部分只遍历已有图片活动，
 // 不再为少量首页卡片遍历完整相册列表。
-func (i *UnreadLibraryIndex) Dashboard(snapshot CatalogSnapshot, imageActivities, photoActivities []models.Activity, started StartedAlbums, activityRevision uint64) (LibraryHomeDashboard, error) {
+func (i *UnreadLibraryIndex) Dashboard(snapshot CatalogSnapshot, imageActivities, photoActivities []models.Activity, started StartedAlbums, activityRevision uint64, kind LibraryKindScope) (LibraryHomeDashboard, error) {
 	indexes, err := i.albumIndexesFor(snapshot, started, activityRevision)
 	if err != nil {
 		return LibraryHomeDashboard{}, err
 	}
+	unread := filterIndexesByKind(snapshot, indexes, kind)
 	dashboard := LibraryHomeDashboard{
 		Revision:    snapshot.Revision(),
-		AlbumCount:  len(snapshot.state.library.albums),
-		UnreadCount: len(indexes),
-		Unread:      i.summaries(snapshot, indexes[:min(len(indexes), libraryDashboardUnreadPreviewLimit)]),
+		AlbumCount:  albumCountForKind(snapshot, kind),
+		UnreadCount: len(unread),
+		Unread:      i.summaries(snapshot, unread[:min(len(unread), libraryDashboardUnreadPreviewLimit)]),
 		InProgress:  []LibraryDashboardProgress{},
 	}
-	activitiesByAlbum := make(map[string]models.Activity, len(imageActivities)+len(photoActivities))
+	// 在读位置按 (相册, 活动类型) 建索引，不能把两类活动合并成「每个相册一条」：
+	// 同一本相册可能同时有一条 photo 活动与一条用途拆分之前留下的 image 活动，
+	// 合并后取到较新的那条就可能把漫画页码当成照片浏览位置。
+	activitiesByAlbumKind := make(map[string]map[models.MediaKind]models.Activity, len(imageActivities)+len(photoActivities))
+	record := func(activity models.Activity) {
+		if activity.MediaKind != models.MediaKindImage && activity.MediaKind != models.MediaKindPhoto {
+			return
+		}
+		byKind, exists := activitiesByAlbumKind[activity.AlbumID]
+		if !exists {
+			byKind = make(map[models.MediaKind]models.Activity, 2)
+			activitiesByAlbumKind[activity.AlbumID] = byKind
+		}
+		if current, exists := byKind[activity.MediaKind]; !exists || activity.Updated.After(current.Updated) {
+			byKind[activity.MediaKind] = activity
+		}
+	}
 	for _, activity := range imageActivities {
-		if activity.MediaKind != models.MediaKindImage {
-			continue
-		}
-		if current, exists := activitiesByAlbum[activity.AlbumID]; !exists || activity.Updated.After(current.Updated) {
-			activitiesByAlbum[activity.AlbumID] = activity
-		}
+		record(activity)
 	}
 	for _, activity := range photoActivities {
-		if activity.MediaKind != models.MediaKindPhoto {
-			continue
-		}
-		if current, exists := activitiesByAlbum[activity.AlbumID]; !exists || activity.Updated.After(current.Updated) {
-			activitiesByAlbum[activity.AlbumID] = activity
-		}
+		record(activity)
 	}
-	for albumID, activity := range activitiesByAlbum {
+	for albumID, byKind := range activitiesByAlbumKind {
 		album, exists := snapshot.state.library.nodes[albumID]
-		if !exists || album.ImageCount == 0 || activity.PageIndex < 0 || activity.PageIndex >= album.ImageCount-1 {
+		if !exists || album.ImageCount == 0 {
 			continue
 		}
-		// 在读位置必须来自相册当前用途对应的活动：漫画相册看漫画阅读记录，
-		// 照片相册看照片浏览记录（旧的漫画记录只作兼容兜底）。
-		if album.ContentKind == string(models.ContentKindComic) &&
-			activity.MediaKind != models.MediaKindImage {
+		activity, mediaKind, ok := progressActivity(album, byKind)
+		if !ok {
+			continue
+		}
+		if activity.PageIndex < 0 || activity.PageIndex >= album.ImageCount-1 {
 			continue
 		}
 		dashboard.InProgress = append(dashboard.InProgress, LibraryDashboardProgress{
 			Album:     cloneNodeSummary(album),
 			PageIndex: activity.PageIndex,
 			PageCount: album.ImageCount,
+			MediaKind: string(mediaKind),
 			Updated:   activity.Updated,
 		})
 	}
@@ -141,7 +157,59 @@ func (i *UnreadLibraryIndex) Dashboard(snapshot CatalogSnapshot, imageActivities
 		}
 		return left.Album.ID < right.Album.ID
 	})
+	if kind != LibraryKindAll {
+		filtered := dashboard.InProgress[:0]
+		for _, progress := range dashboard.InProgress {
+			if progress.Album.ContentKind == string(kind) {
+				filtered = append(filtered, progress)
+			}
+		}
+		dashboard.InProgress = filtered
+	}
 	return dashboard, nil
+}
+
+// progressActivity 按相册当前用途挑选在读位置。
+//
+// 漫画相册只认漫画阅读记录；照片相册优先照片浏览记录，
+// 缺少时回退到用途拆分之前遗留的漫画阅读记录（那些记录同样代表「翻过」）。
+//
+// 返回的媒体类型是「位置的语义」而不是记录的来源：照片相册即使取到遗留的
+// image 记录，它表示的仍然是照片墙里翻到第几张，前端应当按「看到 N / M」呈现。
+func progressActivity(album LibraryNodeSummary, byKind map[models.MediaKind]models.Activity) (models.Activity, models.MediaKind, bool) {
+	if album.ContentKind == string(models.ContentKindComic) {
+		activity, exists := byKind[models.MediaKindImage]
+		return activity, models.MediaKindImage, exists
+	}
+	if activity, exists := byKind[models.MediaKindPhoto]; exists {
+		return activity, models.MediaKindPhoto, true
+	}
+	activity, exists := byKind[models.MediaKindImage]
+	return activity, models.MediaKindPhoto, exists
+}
+
+// filterIndexesByKind 把未读下标按相册用途过滤。缓存本身与用途无关，
+// 过滤是请求期的后置筛选。
+func filterIndexesByKind(snapshot CatalogSnapshot, indexes []int, kind LibraryKindScope) []int {
+	if kind == LibraryKindAll {
+		return indexes
+	}
+	filtered := make([]int, 0, len(indexes))
+	for _, index := range indexes {
+		album := snapshot.state.library.albums[index]
+		if album.ContentKind == string(kind) {
+			filtered = append(filtered, index)
+		}
+	}
+	return filtered
+}
+
+// albumCountForKind 返回该用途下的相册总数。
+func albumCountForKind(snapshot CatalogSnapshot, kind LibraryKindScope) int {
+	if kind == LibraryKindAll {
+		return len(snapshot.state.library.albums)
+	}
+	return snapshot.state.library.kindAlbumCounts[models.ContentKind(kind)]
 }
 
 func (i *UnreadLibraryIndex) albumIndexesFor(snapshot CatalogSnapshot, started StartedAlbums, activityRevision uint64) ([]int, error) {

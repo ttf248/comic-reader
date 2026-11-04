@@ -37,7 +37,7 @@ func TestScanEquivalentRootSpellingsProduceOneLibrary(t *testing.T) {
 	if manifest.Statistics.RootCount != 1 || manifest.Statistics.AlbumCount != 1 {
 		t.Fatalf("aliases duplicated manifest: %+v", manifest.Statistics)
 	}
-	page, err := PageLibraryChildren(catalog.Acquire(), manifest.Roots[0].ID, "", 10)
+	page, err := PageLibraryChildren(catalog.Acquire(), manifest.Roots[0].ID, LibraryKindAll, "", 10)
 	if err != nil || page.Total != 1 || len(page.Items) != 1 {
 		t.Fatalf("aliases duplicated children: total=%d items=%d err=%v", page.Total, len(page.Items), err)
 	}

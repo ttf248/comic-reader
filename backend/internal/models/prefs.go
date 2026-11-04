@@ -22,6 +22,7 @@ type HistoryEntry struct {
 //   - Theme：light / dark / system
 //   - AutoSwitchAlbum：画廊末尾自动跳到下个相册
 //   - ShowSwitchNotif：跨相册切换时显示通知
+//   - AppMode：全局工作台模式（photo / comic / all）
 type Prefs struct {
 	Favorites        []string       `json:"favorites"`
 	History          []HistoryEntry `json:"history"`
@@ -30,6 +31,8 @@ type Prefs struct {
 	ShowSwitchNotif  bool           `json:"showSwitchNotif"`
 	Theme            string         `json:"theme"`
 	SidebarCollapsed bool           `json:"sidebarCollapsed"`
+	// AppMode 是全局工作台模式。它只影响列表与措辞，不影响单本相册的打开方式。
+	AppMode AppMode `json:"appMode"`
 }
 
 // IsAlbumID 校验公共相册 ID 的稳定格式：a_ + 16 字节哈希的 base64url。
@@ -81,5 +84,6 @@ func DefaultPrefs() Prefs {
 		ShowSwitchNotif:  true,
 		Theme:            "system",
 		SidebarCollapsed: false,
+		AppMode:          DefaultAppMode,
 	}
 }
