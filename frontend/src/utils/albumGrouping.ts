@@ -57,6 +57,7 @@ export type AlbumLike = {
   sourceRoot?: string;
   sourceName?: string;
   virtual?: boolean;
+  modTime?: string;
 };
 
 export type CollectionLike = {

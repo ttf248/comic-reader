@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import {
+  useParams,
+  useSearchParams,
+  useNavigate,
+} from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useGalleryStore } from "../store/galleryStore";
 import { useKeyboard } from "../hooks/useKeyboard";
@@ -46,13 +50,16 @@ import { useVideoActivity } from "../hooks/useVideoActivity";
 //
 // 视觉：沉浸式画廊 — 暗色背景让图片突出，常驻 UI 只留顶部（返回/名称/页码）+ 顶部右侧
 //（全屏/菜单），其余控件在鼠标移动时浮出，2s 无操作后自动隐藏。
-export default function Gallery() {
+export default function Reader() {
   const [params] = useSearchParams();
+  const routeParams = useParams();
   const navigate = useNavigate();
   const pushToast = useUIStore((s) => s.pushToast);
   const queryClient = useQueryClient();
 
-  const pathParam = params.get("path") ?? "";
+  // 漫画阅读器的路由是 /read/<album id>；旧链接里的 ?path= 仍然可用，
+  // 由 LegacyGalleryRedirect 负责转换。
+  const pathParam = decodeURIComponent(routeParams["albumId"] ?? "");
   const initialIndex = Math.max(
     0,
     Math.floor(Number(params.get("index") ?? 0) || 0),
@@ -606,9 +613,11 @@ export default function Gallery() {
       const i = Math.max(0, Math.min(videos.length - 1, targetIdx));
       const next = new URLSearchParams(params);
       next.set("index", String(i));
-      navigate(`/gallery?${next.toString()}`, { replace: true });
+      navigate(`/read/${encodeURIComponent(pathParam)}?${next.toString()}`, {
+        replace: true,
+      });
     },
-    [isVideo, videos.length, params, navigate],
+    [isVideo, videos.length, params, navigate, pathParam],
   );
 
   function prev() {

@@ -1,5 +1,5 @@
 import type { CardData } from "../components/album/AlbumGrid";
-import { decodeFavPath } from "./path";
+import { decodeFavPath, readerRoute } from "./path";
 
 /**
  * 「继续阅读」的跳转目标。
@@ -11,13 +11,17 @@ import { decodeFavPath } from "./path";
  * 注意：不经过相册详情页 —— 进入首页最大的目的是"接着看"，
  * 中转一次详情会多一次点击。
  *
- * type 的推断：
- *  - imageCount > 0（混合 / 纯图）→ type=image（Gallery 缺省值，显式传更稳）
+ * 落点按相册的内容用途决定：
+ *  - 漫画相册 → 阅读器，并带上页码，从上次的位置接着读；
+ *  - 照片相册 → 照片墙（相册入口按用途分派），照片墙自己管浏览位置。
+ *
+ * type 的推断（只在漫画相册里有意义）：
+ *  - imageCount > 0（混合 / 纯图）→ type=image
  *  - imageCount === 0 && videoCount > 0（纯视频相册）→ type=video
- * 不传 type 时 Gallery 把当前相册当图库，纯视频相册会显示「这个文件夹没有图片」。
  */
 export function continueReadingTarget(card: CardData): string {
   if (card.variant !== "album") return card.to;
+  if (card.contentKind !== "comic") return card.to;
 
   const idx = card.progress?.index ?? 0;
   const imgs = card.imageCount ?? 0;
@@ -26,12 +30,11 @@ export function continueReadingTarget(card: CardData): string {
     imgs > 0 ? "image" : vids > 0 ? "video" : "image";
 
   const qs = new URLSearchParams({
-    path: decodeFavPath(card.to),
     index: String(idx),
     name: card.title,
     type: galleryType,
   });
-  return `/gallery?${qs.toString()}`;
+  return `${readerRoute(decodeFavPath(card.to))}?${qs.toString()}`;
 }
 
 /** 阅读百分比：已翻页数 / 可翻页数。 */

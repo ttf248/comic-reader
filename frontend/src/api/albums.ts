@@ -9,6 +9,18 @@ export interface SearchHit {
   tags?: string[];
   count: number;
   coverImage?: string;
+  /** 内容用途："photo" / "comic"。搜索结果据此决定跳转目标。 */
+  contentKind?: "photo" | "comic";
+}
+
+export interface ContentKindState {
+  ok: boolean;
+  /** 当前生效的用途。 */
+  contentKind: "photo" | "comic";
+  /** 取消覆盖后会回落到的用途。 */
+  contentKindDefault: "photo" | "comic";
+  /** 是否是用户手动设置的覆盖。 */
+  contentKindOverridden: boolean;
 }
 
 export const albumsApi = {
@@ -40,6 +52,25 @@ export const albumsApi = {
       {
         method: "DELETE",
       },
+    );
+  },
+  // 内容用途：切换相册的打开方式（照片墙 / 漫画阅读器）。
+  // 覆盖会持久化，删除覆盖后回落到媒体根默认值。
+  getContentKind(albumId: string) {
+    return api<ContentKindState>(
+      `/api/albums/${encodeURIComponent(albumId)}/content-kind`,
+    );
+  },
+  setContentKind(albumId: string, kind: "photo" | "comic") {
+    return api<ContentKindState>(
+      `/api/albums/${encodeURIComponent(albumId)}/content-kind`,
+      { method: "PUT", body: { kind } },
+    );
+  },
+  clearContentKind(albumId: string) {
+    return api<ContentKindState>(
+      `/api/albums/${encodeURIComponent(albumId)}/content-kind`,
+      { method: "DELETE" },
     );
   },
 };

@@ -10,7 +10,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useGalleryStore } from "../store/galleryStore";
 import { useUIStore } from "../store/uiStore";
-import Gallery from "./Gallery";
+import Reader from "./Reader";
 
 const mocks = vi.hoisted(() => ({
   getImage: vi.fn(),
@@ -92,7 +92,7 @@ function Location() {
   );
 }
 
-function renderGallery(type = "video") {
+function renderReader(type = "video") {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -101,12 +101,12 @@ function renderGallery(type = "video") {
       <MemoryRouter
         initialEntries={[
           "/albums/a_test",
-          `/gallery?path=a_test&type=${type}&index=1`,
+          `/read/a_test?type=${type}&index=1`,
         ]}
       >
         <Location />
         <Routes>
-          <Route path="/gallery" element={<Gallery />} />
+          <Route path="/read/:albumId" element={<Reader />} />
           <Route path="/albums/a_test" element={<div>相册列表</div>} />
         </Routes>
       </MemoryRouter>
@@ -130,7 +130,7 @@ async function pressKey(key: string) {
   });
 }
 
-describe("Gallery 按媒体类型隔离快捷键", () => {
+describe("Reader 按媒体类型隔离快捷键", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.getImage.mockResolvedValue({ pageIndex: 1 });
@@ -148,7 +148,7 @@ describe("Gallery 按媒体类型隔离快捷键", () => {
   });
 
   it("视频左右键只定位当前文件，不同时切换到另一个视频", async () => {
-    renderGallery();
+    renderReader();
     const video = await currentVideo();
     video.currentTime = 20;
     await pressKey("ArrowRight");
@@ -165,7 +165,7 @@ describe("Gallery 按媒体类型隔离快捷键", () => {
   });
 
   it("视频空格仅切换播放，图片专属按键不修改图片偏好", async () => {
-    renderGallery();
+    renderReader();
     const video = await currentVideo();
     const play = vi.spyOn(video, "play").mockResolvedValue();
     await pressKey(" ");
@@ -180,7 +180,7 @@ describe("Gallery 按媒体类型隔离快捷键", () => {
 
   it("视频 PageUp/PageDown 与首尾定位独立于图片显示模式", async () => {
     useGalleryStore.setState({ mode: "continuous" });
-    renderGallery();
+    renderReader();
     await currentVideo();
     for (const [key, index] of [
       ["PageDown", 2],
@@ -196,7 +196,7 @@ describe("Gallery 按媒体类型隔离快捷键", () => {
   });
 
   it("视频 Esc 返回相册，不受空图片列表阻挡", async () => {
-    renderGallery();
+    renderReader();
     await currentVideo();
     await pressKey("Escape");
     expect(screen.getByTestId("location")).toHaveTextContent("/albums/a_test");
@@ -205,7 +205,7 @@ describe("Gallery 按媒体类型隔离快捷键", () => {
 
   it("视频计数不沿用图片双页显示，并提示独立的换片按键", async () => {
     useGalleryStore.setState({ mode: "double" });
-    renderGallery();
+    renderReader();
     await currentVideo();
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
       "2 / 3",
@@ -215,7 +215,7 @@ describe("Gallery 按媒体类型隔离快捷键", () => {
   });
 
   it("图片模式保留左右翻页与空格幻灯片", async () => {
-    renderGallery("image");
+    renderReader("image");
     await screen.findByTestId("image-gallery");
     await waitFor(() => expect(useGalleryStore.getState().index).toBe(1));
     await pressKey("ArrowRight");
@@ -229,7 +229,7 @@ describe("Gallery 按媒体类型隔离快捷键", () => {
 
   it("视频播到末尾的提示用视频的说法，并说明相册里还有图片", async () => {
     useUIStore.setState({ toasts: [] });
-    renderGallery("video");
+    renderReader("video");
     await currentVideo();
     await pressKey("End");
     await pressKey("PageDown");
@@ -240,7 +240,7 @@ describe("Gallery 按媒体类型隔离快捷键", () => {
 
   it("图片播到末尾的提示说明相册里还有视频", async () => {
     useUIStore.setState({ toasts: [] });
-    renderGallery("image");
+    renderReader("image");
     await screen.findByTestId("image-gallery");
     await waitFor(() => expect(useGalleryStore.getState().index).toBe(1));
     await pressKey("End");
@@ -251,7 +251,7 @@ describe("Gallery 按媒体类型隔离快捷键", () => {
   });
 
   it("视频阅读器的更多菜单不说图片，也不提供没有实现的图片信息", async () => {
-    renderGallery("video");
+    renderReader("video");
     await currentVideo();
     await act(async () => {
       fireEvent.click(screen.getByTitle("更多"));
@@ -266,7 +266,7 @@ describe("Gallery 按媒体类型隔离快捷键", () => {
   });
 
   it("图片阅读器的更多菜单保留图片信息与张数说法", async () => {
-    renderGallery("image");
+    renderReader("image");
     await screen.findByTestId("image-gallery");
     await act(async () => {
       fireEvent.click(screen.getByTitle("更多"));
@@ -282,7 +282,7 @@ describe("Gallery 按媒体类型隔离快捷键", () => {
 
   it("阅读器右键菜单可以在系统文件管理器中定位当前文件", async () => {
     mocks.openInExplorer.mockResolvedValue({ ok: true });
-    renderGallery("image");
+    renderReader("image");
     await screen.findByTestId("image-gallery");
     await waitFor(() => expect(useGalleryStore.getState().index).toBe(1));
     await act(async () => {

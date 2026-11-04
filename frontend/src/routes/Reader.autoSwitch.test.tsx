@@ -10,7 +10,7 @@ import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useGalleryStore } from "../store/galleryStore";
 import { useUIStore } from "../store/uiStore";
-import Gallery from "./Gallery";
+import Reader from "./Reader";
 
 const mocks = vi.hoisted(() => ({
   getImage: vi.fn(),
@@ -82,25 +82,25 @@ function setContext(entries: Array<{ key: string; to: string; name: string }>) {
   );
 }
 
-function renderGallery(index: number) {
+function renderReader(index: number) {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={client}>
       <MemoryRouter
-        initialEntries={[`/gallery?path=a_test&index=${index}&name=当前相册`]}
+        initialEntries={[`/read/a_test?index=${index}&name=当前相册`]}
       >
         <Location />
         <Routes>
-          <Route path="/gallery" element={<Gallery />} />
+          <Route path="/read/:albumId" element={<Reader />} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
   );
 }
 
-describe("Gallery 读到末尾自动切换下一本", () => {
+describe("Reader 读到末尾自动切换下一本", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     sessionStorage.clear();
@@ -131,7 +131,7 @@ describe("Gallery 读到末尾自动切换下一本", () => {
       { key: "a_test", to: "/albums/a_test", name: "当前相册" },
       { key: "a_next", to: "/albums/a_next", name: "下一本" },
     ]);
-    renderGallery(2);
+    renderReader(2);
     await waitFor(() => expect(screen.getByTestId("image-gallery")).toBeInTheDocument());
 
     await act(async () => {
@@ -141,7 +141,7 @@ describe("Gallery 读到末尾自动切换下一本", () => {
     // 下一本要在阅读器里继续读，而不是回到相册首页。
     await waitFor(() => {
       expect(screen.getByTestId("location")).toHaveTextContent(
-        "/gallery?path=a_next&index=0",
+        "/read/a_next?index=0",
       );
     });
   });
@@ -160,7 +160,7 @@ describe("Gallery 读到末尾自动切换下一本", () => {
       { key: "a_test", to: "/albums/a_test", name: "当前相册" },
       { key: "a_next", to: "/albums/a_next", name: "下一本" },
     ]);
-    renderGallery(2);
+    renderReader(2);
     await waitFor(() => expect(screen.getByTestId("image-gallery")).toBeInTheDocument());
 
     await act(async () => {
@@ -168,7 +168,7 @@ describe("Gallery 读到末尾自动切换下一本", () => {
     });
 
     expect(screen.getByTestId("location")).toHaveTextContent(
-      "/gallery?path=a_test&index=2",
+      "/read/a_test?index=2",
     );
   });
 });

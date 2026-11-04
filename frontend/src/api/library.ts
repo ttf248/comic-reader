@@ -60,7 +60,19 @@ export interface LibraryNodeSummary {
    * 普通相册为空。
    */
   location?: string;
+  /**
+   * 内容用途："photo"（照片墙）或 "comic"（漫画阅读器）。
+   * 它决定点击相册后进入哪套交互，与文件是图片还是视频无关。
+   */
+  contentKind?: ContentKind;
+  /** 取消相册级覆盖后会回落到的用途（媒体根默认值）。 */
+  contentKindDefault?: ContentKind;
+  /** 用户是否手动切换过这本相册的用途。 */
+  contentKindOverridden?: boolean;
 }
+
+/** 相册的浏览用途。 */
+export type ContentKind = "photo" | "comic";
 
 export interface LibraryMediaItem {
   id: string;
@@ -68,6 +80,9 @@ export interface LibraryMediaItem {
   name: string;
   index: number;
   kindIndex: number;
+  /** 原始像素宽高；未知时为 0，照片墙据此按真实宽高比排布。 */
+  width?: number;
+  height?: number;
 }
 
 export interface LibraryTagSummary {

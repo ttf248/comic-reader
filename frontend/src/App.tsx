@@ -14,7 +14,10 @@ const Favorites = lazy(() => import("./routes/Favorites"));
 const Unread = lazy(() => import("./routes/Unread"));
 const Album = lazy(() => import("./routes/Album"));
 const Tag = lazy(() => import("./routes/Tag"));
-const Gallery = lazy(() => import("./routes/Gallery"));
+const Reader = lazy(() => import("./routes/Reader"));
+const LegacyGalleryRedirect = lazy(
+  () => import("./routes/LegacyGalleryRedirect"),
+);
 const Settings = lazy(() => import("./routes/Settings"));
 
 function lazyPage(Page: ComponentType) {
@@ -30,7 +33,7 @@ export default function App() {
   useLibraryActivitySync();
   return (
     <AccessGate>
-      {/* 阅读器（/gallery）不挂在 AppShell 下，没有内层错误边界；
+      {/* 阅读器（/read）不挂在 AppShell 下，没有内层错误边界；
           这里再兜一层，渲染异常时至少给出提示和重试，而不是整页空白。 */}
       <ErrorBoundary>
         <Routes>
@@ -44,7 +47,11 @@ export default function App() {
             <Route path="/settings" element={lazyPage(Settings)} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
-          <Route path="/gallery/*" element={lazyPage(Gallery)} />
+          {/* 漫画阅读器：/read/<album id>。它不在 AppShell 下，
+              没有侧栏也没有工具栏，沉浸在一张画布里。 */}
+          <Route path="/read/*" element={lazyPage(Reader)} />
+          {/* 旧链接（/gallery?path=…）仍然可用，重定向到新地址。 */}
+          <Route path="/gallery/*" element={lazyPage(LegacyGalleryRedirect)} />
         </Routes>
       </ErrorBoundary>
       <ToastViewport />

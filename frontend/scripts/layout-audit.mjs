@@ -257,8 +257,7 @@ async function resolveAlbumRoute(page) {
 // 进入阅读器：阅读器是沉浸场景（顶栏 + 画面 + 浮动工具条 + 底部翻页条），
 // 它的控件尺寸与字号自成一套，从没被布局审计量过。
 //
-// 取仪表盘里一本图多的**图片**相册（视频相册进的是 /gallery 的视频模式，
-// 版式不同）再点「开始浏览 / 继续上次」进阅读器；
+// 阅读器有独立地址 /read/<相册 id>，直接构造即可，不必先经过相册页。
 // 用 domcontentloaded 而不是 networkidle —— 阅读器里有 SSE 与预览图请求，
 // networkidle 会一直等不到。
 async function openReader(page) {
@@ -276,17 +275,13 @@ async function openReader(page) {
     return hit?.id ?? null;
   });
   if (!albumId) return false;
-  await page.goto(`${BASE}/albums/${encodeURIComponent(albumId)}`, {
+  await page.goto(`${BASE}/read/${encodeURIComponent(albumId)}?index=0`, {
     waitUntil: "domcontentloaded",
     timeout: 60000,
   });
-  await page.waitForTimeout(1500);
-  // 图片相册的主操作是「开始浏览」；读过一点的相册是「继续上次」。
-  const start = page.getByRole("button", { name: /开始浏览|继续上次/ }).first();
-  if ((await start.count()) > 0) await start.click();
-  // 等路由真的切到阅读器，再等画面与工具条渲染完。
+  // 等画面与工具条渲染完。
   const opened = await page
-    .waitForURL(/\/gallery/, { timeout: 15000 })
+    .waitForURL(/\/read\//, { timeout: 15000 })
     .then(() => true)
     .catch(() => false);
   if (!opened) return false;

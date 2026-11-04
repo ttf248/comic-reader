@@ -28,7 +28,10 @@ export default function AppShell() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
   const wasMobileNavOpen = useRef(false);
-  const onGallery = location.pathname.startsWith("/gallery");
+  // 阅读器（/read）占用单键快捷键：r 是旋转，u 不是「未读」。
+  const onGallery =
+    location.pathname.startsWith("/read") ||
+    location.pathname.startsWith("/gallery");
   // 扫描进度 + 取消（提升到 AppShell 后所有路由都能看到顶部进度条）
   const scanSse = useScanSSE();
   useFsCapabilities();

@@ -1,27 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-  act,
   cleanup,
-  fireEvent,
   render,
   screen,
   waitFor,
-  within,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import Album from "./Album";
-import {
-  useAlbumMedia,
-  useLibraryChildren,
-  useLibraryNodes,
-  useTagAlbums,
-} from "../hooks/useLibrary";
+import { useAlbumMedia, useLibraryChildren, useLibraryNodes } from "../hooks/useLibrary";
 import { useFavorites } from "../hooks/useFavorites";
-import { useImageActivity } from "../hooks/useImageActivity";
 import { useSearchStore } from "../store/searchStore";
 import { historyApi } from "../api/prefs";
-import { useUIStore } from "../store/uiStore";
 
 vi.mock("../hooks/useLibrary", () => ({
   useAlbumMedia: vi.fn(),
@@ -30,9 +20,6 @@ vi.mock("../hooks/useLibrary", () => ({
   useTagAlbums: vi.fn(),
 }));
 vi.mock("../hooks/useFavorites", () => ({ useFavorites: vi.fn() }));
-vi.mock("../hooks/useImageActivity", () => ({
-  useImageActivity: vi.fn(() => ({ data: undefined })),
-}));
 vi.mock("../api/fs", () => ({
   fsApi: { capabilities: vi.fn().mockResolvedValue({ allowOsOpen: false }) },
 }));
@@ -49,6 +36,19 @@ vi.mock("../components/album/AlbumGrid", () => ({
     </div>
   ),
 }));
+// 照片墙与阅读器各自有自己的测试；这里只验证「按用途分派」。
+vi.mock("./PhotoAlbum", () => ({
+  default: ({ album }: { album: { id: string } }) => (
+    <div data-testid="photo-album">照片墙:{album.id}</div>
+  ),
+}));
+
+function Location() {
+  const location = useLocation();
+  return (
+    <output data-testid="location">{location.pathname + location.search}</output>
+  );
+}
 
 function renderAlbum(path = "/albums/c_year") {
   const client = new QueryClient({
@@ -57,8 +57,10 @@ function renderAlbum(path = "/albums/c_year") {
   const ui = () => (
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[path]}>
+        <Location />
         <Routes>
           <Route path="/albums/*" element={<Album />} />
+          <Route path="/read/:albumId" element={<div>阅读器</div>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>
@@ -83,10 +85,6 @@ describe("Album", () => {
       toggle: vi.fn(),
     });
     vi.mocked(useAlbumMedia).mockReturnValue({
-      data: undefined,
-      isLoading: false,
-    } as never);
-    vi.mocked(useTagAlbums).mockReturnValue({
       data: undefined,
       isLoading: false,
     } as never);
@@ -214,230 +212,67 @@ describe("Album", () => {
     expect(screen.queryByText("找不到此文件夹")).not.toBeInTheDocument();
   });
 
-  // 网格标题按图片 / 视频语义区分：纯图片相册说「所有图片」，
-  // 混有视频时说「全部媒体」。别再用漫画域的「页」。
-  it.each([
-    [0, "所有图片"],
-    [3, "全部媒体"],
-  ])("相册含 %i 个视频时网格标题为 %s", (videoCount, title) => {
+  it("照片相册直接进入照片墙，没有「开始浏览」这一步", () => {
     vi.mocked(useLibraryNodes).mockReturnValue({
       data: {
         revision: 4,
         missing: [],
         items: [
           {
-            id: "a_mix",
+            id: "a_trip",
             kind: "album",
-            name: "混合相册",
+            name: "春游",
             imageCount: 8,
-            videoCount,
+            contentKind: "photo",
           },
         ],
       },
       isLoading: false,
     } as never);
-    vi.mocked(useAlbumMedia).mockReturnValue({
-      data: {
-        pages: [{ items: [{ id: "f_first", kind: "image", index: 0 }] }],
-      },
-      hasNextPage: false,
-      isFetchingNextPage: false,
-      fetchNextPage: vi.fn(),
-    } as never);
 
-    renderAlbum("/albums/a_mix");
+    renderAlbum("/albums/a_trip");
 
-    expect(screen.getByRole("heading", { name: title })).toBeInTheDocument();
+    expect(screen.getByTestId("photo-album")).toHaveTextContent("照片墙:a_trip");
+    expect(screen.queryByRole("button", { name: /开始浏览/ })).toBeNull();
   });
 
-  // 「继续上次」和「开始浏览」是同一个动作（进图片阅读器），
-  // 之前一个用阅读图标、一个用视频播放三角，用户会以为相册里是视频。
-  it("「继续上次」与「开始浏览」用同一个阅读图标", () => {
-    const mockAlbum = () => {
-      vi.mocked(useLibraryNodes).mockReturnValue({
-        data: {
-          revision: 4,
-          missing: [],
-          items: [
-            {
-              id: "a_mix",
-              kind: "album",
-              name: "混合相册",
-              imageCount: 10,
-              videoCount: 0,
-            },
-          ],
-        },
-        isLoading: false,
-      } as never);
-      vi.mocked(useAlbumMedia).mockReturnValue({
-        data: {
-          pages: [{ items: [{ id: "f_first", kind: "image", index: 0 }] }],
-        },
-        hasNextPage: false,
-        isFetchingNextPage: false,
-        fetchNextPage: vi.fn(),
-      } as never);
-    };
-    const iconOf = (el: HTMLElement) =>
-      el.querySelector("svg")?.innerHTML ?? "";
-
-    mockAlbum();
-    const fresh = renderAlbum("/albums/a_mix");
-    const startIcon = iconOf(
-      within(fresh.container).getByRole("button", { name: /开始浏览/ }),
-    );
-    cleanup();
-
-    vi.mocked(useImageActivity).mockReturnValue({
-      data: {
-        albumId: "a_mix",
-        mediaKind: "image",
-        pageIndex: 3,
-        pageCount: 10,
-      },
-    } as never);
-    mockAlbum();
-    const resumed = renderAlbum("/albums/a_mix");
-    const resumeIcon = iconOf(
-      within(resumed.container).getByRole("button", { name: /继续上次/ }),
-    );
-
-    expect(resumeIcon).toBe(startIcon);
-  });
-
-  it("分页失败保留相册并提供不取消活动请求的重试", () => {
-    const fetchNextPage = vi.fn();
+  it("漫画相册直接进入阅读器", async () => {
     vi.mocked(useLibraryNodes).mockReturnValue({
       data: {
         revision: 4,
         missing: [],
         items: [
-          { id: "a_pages", kind: "album", name: "分页相册", imageCount: 405 },
+          {
+            id: "a_comic",
+            kind: "album",
+            name: "第一卷",
+            imageCount: 120,
+            contentKind: "comic",
+          },
         ],
       },
       isLoading: false,
     } as never);
-    vi.mocked(useAlbumMedia).mockReturnValue({
-      data: {
-        pages: [
-          { items: [{ id: "f_first", kind: "image", index: 0, kindIndex: 0 }] },
-        ],
-      },
-      hasNextPage: true,
-      isFetchNextPageError: true,
-      isFetchingNextPage: false,
-      fetchNextPage,
-    } as never);
 
-    renderAlbum("/albums/a_pages");
+    renderAlbum("/albums/a_comic");
 
-    expect(
-      screen.getByRole("heading", { name: "分页相册" }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("alert")).toHaveTextContent("后续媒体加载失败");
-    fireEvent.click(screen.getByRole("button", { name: "重试加载" }));
-    expect(fetchNextPage).toHaveBeenCalledTimes(1);
-    expect(fetchNextPage).toHaveBeenCalledWith({ cancelRefetch: false });
-  });
-
-  function mockAlbumPage() {
-    vi.mocked(useLibraryNodes).mockReturnValue({
-      data: {
-        revision: 4,
-        missing: [],
-        items: [
-          { id: "a_pages", kind: "album", name: "分页相册", imageCount: 405 },
-        ],
-      },
-      isLoading: false,
-    } as never);
-    vi.mocked(useAlbumMedia).mockReturnValue({
-      data: {
-        pages: [
-          { items: [{ id: "f_first", kind: "image", index: 0, kindIndex: 0 }] },
-        ],
-      },
-      hasNextPage: true,
-      isFetchingNextPage: false,
-      fetchNextPage: vi.fn(),
-    } as never);
-  }
-
-  it("更多菜单复制相册的完整链接并恢复来源焦点", async () => {
-    const originalClipboard = Object.getOwnPropertyDescriptor(
-      navigator,
-      "clipboard",
+    await waitFor(() =>
+      expect(screen.getByTestId("location")).toHaveTextContent("/read/a_comic"),
     );
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { writeText },
-    });
-    useUIStore.setState({ toasts: [] });
-    try {
-      mockAlbumPage();
-      renderAlbum("/albums/a_pages");
-      const source = screen.getByRole("button", { name: "更多操作" });
-      source.focus();
-      fireEvent.click(source);
-      fireEvent.click(
-        screen.getByRole("menuitem", {
-          name: "复制链接",
-        }),
-      );
-      await waitFor(() =>
-        expect(writeText).toHaveBeenCalledWith(
-          window.location.origin + "/albums/a_pages",
-        ),
-      );
-      await waitFor(() =>
-        expect(useUIStore.getState().toasts).toEqual([
-          expect.objectContaining({ kind: "success", message: "已复制链接" }),
-        ]),
-      );
-      expect(screen.queryByRole("menu")).toBeNull();
-      expect(source).toHaveFocus();
-    } finally {
-      if (originalClipboard)
-        Object.defineProperty(navigator, "clipboard", originalClipboard);
-      else Reflect.deleteProperty(navigator, "clipboard");
-    }
-  });
-
-  it("详情菜单复制被拒绝且回退不可用时反馈错误", async () => {
-    const originalClipboard = Object.getOwnPropertyDescriptor(
-      navigator,
-      "clipboard",
-    );
-    Object.defineProperty(navigator, "clipboard", {
-      configurable: true,
-      value: { writeText: vi.fn().mockRejectedValue(new Error("test denied")) },
-    });
-    useUIStore.setState({ toasts: [] });
-    try {
-      mockAlbumPage();
-      renderAlbum("/albums/a_pages");
-      fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
-      fireEvent.click(screen.getByRole("menuitem", { name: "复制链接" }));
-      await waitFor(() =>
-        expect(useUIStore.getState().toasts).toEqual([
-          expect.objectContaining({
-            kind: "error",
-            message: "复制失败，请检查浏览器权限",
-          }),
-        ]),
-      );
-      expect(document.querySelector("textarea")).toBeNull();
-    } finally {
-      if (originalClipboard)
-        Object.defineProperty(navigator, "clipboard", originalClipboard);
-      else Reflect.deleteProperty(navigator, "clipboard");
-    }
+    expect(screen.queryByTestId("photo-album")).toBeNull();
   });
 
   it("打开相册成功写入访问后使已有历史缓存立即失效", async () => {
-    mockAlbumPage();
+    vi.mocked(useLibraryNodes).mockReturnValue({
+      data: {
+        revision: 4,
+        missing: [],
+        items: [
+          { id: "a_pages", kind: "album", name: "分页相册", imageCount: 405 },
+        ],
+      },
+      isLoading: false,
+    } as never);
     const { client } = renderAlbum("/albums/a_pages");
     client.setQueryData(["history"], { history: [] });
     await waitFor(() => expect(historyApi.add).toHaveBeenCalledTimes(1));
@@ -447,7 +282,16 @@ describe("Album", () => {
   });
 
   it("写入访问成功立即采用返回列表，不依赖后续读取", async () => {
-    mockAlbumPage();
+    vi.mocked(useLibraryNodes).mockReturnValue({
+      data: {
+        revision: 4,
+        missing: [],
+        items: [
+          { id: "a_pages", kind: "album", name: "分页相册", imageCount: 405 },
+        ],
+      },
+      isLoading: false,
+    } as never);
     const history = [
       {
         albumId: "a_pages",
@@ -465,8 +309,17 @@ describe("Album", () => {
   });
 
   it("追加媒体页时不重复写入本次访问", async () => {
-    mockAlbumPage();
-    const { refresh } = renderAlbum("/albums/a_pages");
+    vi.mocked(useLibraryNodes).mockReturnValue({
+      data: {
+        revision: 4,
+        missing: [],
+        items: [
+          { id: "a_pages", kind: "album", name: "分页相册", imageCount: 405 },
+        ],
+      },
+      isLoading: false,
+    } as never);
+    renderAlbum("/albums/a_pages");
     await waitFor(() => expect(historyApi.add).toHaveBeenCalledTimes(1));
     vi.mocked(useAlbumMedia).mockReturnValue({
       data: {
@@ -479,9 +332,7 @@ describe("Album", () => {
       isFetchingNextPage: false,
       fetchNextPage: vi.fn(),
     } as never);
-    await act(async () => {
-      refresh();
-    });
-    expect(historyApi.add).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(historyApi.add).toHaveBeenCalledTimes(1));
+    cleanup();
   });
 });

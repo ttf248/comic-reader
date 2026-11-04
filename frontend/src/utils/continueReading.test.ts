@@ -16,18 +16,30 @@ function card(over: Partial<CardData> = {}): CardData {
     coverPath: "f_1/cover.jpg",
     to: "/albums/" + encodeURIComponent("E:/存照/某本漫画"),
     progress: { index: 5, total: 20 },
+    contentKind: "comic",
     ...over,
   };
 }
 
 describe("continueReadingTarget", () => {
-  it("跳到上次读到的页，并带上相册名", () => {
+  it("漫画相册跳到上次读到的页，并带上相册名", () => {
     const target = continueReadingTarget(card());
     const url = new URL(target, "http://localhost");
-    expect(url.pathname).toBe("/gallery");
-    expect(url.searchParams.get("path")).toBe("E:/存照/某本漫画");
+    expect(url.pathname).toBe("/read/" + encodeURIComponent("E:/存照/某本漫画"));
     expect(url.searchParams.get("index")).toBe("5");
     expect(url.searchParams.get("name")).toBe("某本漫画");
+  });
+
+  it("照片相册回到照片墙，不进阅读器", () => {
+    const target = continueReadingTarget(
+      card({ contentKind: "photo", title: "某本相册" }),
+    );
+    expect(target).toBe("/albums/" + encodeURIComponent("E:/存照/某本漫画"));
+  });
+
+  it("没有标类型的相册按照片处理", () => {
+    const target = continueReadingTarget(card({ contentKind: undefined }));
+    expect(target).toBe("/albums/" + encodeURIComponent("E:/存照/某本漫画"));
   });
 
   it("图片相册走 image 类型", () => {

@@ -68,6 +68,11 @@ export interface CardData {
   sourceRoot?: string;
   // 来源媒体根的 basename（直接给 UI 用）
   sourceName?: string;
+  /**
+   * 内容用途："photo"（照片墙）/ "comic"（漫画阅读器）。
+   * 列表里的「继续」入口按它决定跳照片墙还是阅读器。
+   */
+  contentKind?: "photo" | "comic";
 }
 
 interface Props {

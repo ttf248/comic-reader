@@ -50,9 +50,9 @@ export function entryReaderUrl(entry: GalleryContextEntry): string | null {
   if (!entry.to.startsWith("/albums/")) return null;
   const id = decodeFavPath(entry.to);
   if (!id) return null;
-  const params = new URLSearchParams({ path: id, index: "0" });
+  const params = new URLSearchParams({ index: "0" });
   if (entry.name) params.set("name", entry.name);
-  return `/gallery?${params.toString()}`;
+  return `/read/${encodeURIComponent(id)}?${params.toString()}`;
 }
 
 export interface GalleryContext {

@@ -39,6 +39,7 @@ export function nodeSummaryToCard(
     to: albumRoute(node.id),
     sourceRoot: node.sourceRoot,
     sourceName: node.sourceName,
+    contentKind: node.contentKind,
   };
 }
 

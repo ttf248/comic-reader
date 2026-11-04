@@ -769,9 +769,8 @@ async function resolveAlbumRoute(page) {
 // 进入阅读器：阅读器的浮层（顶栏、底栏、药丸工具条）全部是"压在图片上的
 // 白字"，静态算不出背景，只能靠像素判定那一遍。
 //
-// 直接构造 /gallery?path=<相册 id> 进阅读器：走"相册页 → 点开始浏览"
-// 会带上一条「开始浏览」的 toast，它会盖住阅读器底部的浮动工具条，
-// 拍出来的 / 采样到的不是真实版式。
+// 直接构造 /read/<相册 id> 进阅读器：走相册页会带上 toast，
+// 它会盖住阅读器底部的浮动工具条，拍出来的 / 采样到的不是真实版式。
 async function openReader(page) {
   const albumId = await page.evaluate(async () => {
     const r = await fetch("/api/library/dashboard");
@@ -787,13 +786,12 @@ async function openReader(page) {
     return hit?.id ?? null;
   });
   if (!albumId) return false;
-  const qs = new URLSearchParams({ path: albumId, index: "0" });
-  await page.goto(`${BASE}/gallery?${qs.toString()}`, {
+  await page.goto(`${BASE}/read/${encodeURIComponent(albumId)}?index=0`, {
     waitUntil: "domcontentloaded",
   });
   await page.waitForTimeout(2200);
   await waitForStable(page);
-  return page.url().includes("/gallery");
+  return page.url().includes("/read/");
 }
 
 // 标签页：真实库里可能一个标签都没有（/api/tags 返回空数组），

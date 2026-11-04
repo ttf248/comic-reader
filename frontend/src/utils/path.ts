@@ -13,6 +13,14 @@ export function albumRoute(albumId: string): string {
   return `/albums/${encodeURIComponent(albumId)}`
 }
 
+// 漫画阅读器路由：/read/<encoded album id>
+// 可选 index 指定从第几张开始（0 基）。
+export function readerRoute(albumId: string, index?: number): string {
+  const base = `/read/${encodeURIComponent(albumId)}`
+  if (index === undefined) return base
+  return `${base}?index=${index}`
+}
+
 // 标签页（新名）：/tags/<encoded tag>
 export function tagRoute(tag: string): string {
   return `/tags/${encodeURIComponent(tag)}`

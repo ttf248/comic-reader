@@ -7,13 +7,13 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../api/client";
 import { activityApi } from "../api/activity";
 import { libraryApi } from "../api/library";
 import { useGalleryStore } from "../store/galleryStore";
-import Gallery from "./Gallery";
+import Reader from "./Reader";
 
 interface MockVideoProps {
   initialPositionSec?: number;
@@ -120,23 +120,27 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function renderGallery(query = `path=${albumId}`) {
+function renderReader(query = "") {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  function Providers({ children }: { children: ReactNode }) {
+  function Providers(_props: { children: ReactNode }) {
     return (
       <QueryClientProvider client={client}>
-        <MemoryRouter initialEntries={[`/gallery?${query}`]}>
-          {children}
+        <MemoryRouter
+          initialEntries={[`/read/${albumId}${query ? `?${query}` : ""}`]}
+        >
+          <Routes>
+            <Route path="/read/:albumId" element={<Reader />} />
+          </Routes>
         </MemoryRouter>
       </QueryClientProvider>
     );
   }
-  return { ...render(<Gallery />, { wrapper: Providers }), client };
+  return { ...render(<Reader />, { wrapper: Providers }), client };
 }
 
-describe("Gallery 媒体活动恢复门禁", () => {
+describe("Reader 媒体活动恢复门禁", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.videoProps = null;
@@ -192,7 +196,7 @@ describe("Gallery 媒体活动恢复门禁", () => {
       },
     ];
     mocks.historyAdd.mockResolvedValue({ history });
-    const { client } = renderGallery();
+    const { client } = renderReader();
     await waitFor(() =>
       expect(client.getQueryData(["history"])).toEqual({ history }),
     );
@@ -237,7 +241,7 @@ describe("Gallery 媒体活动恢复门禁", () => {
           })),
         ],
       });
-      renderGallery(
+      renderReader(
         `path=${albumId}&type=video&name=${encodeURIComponent("URL旧标题")}`,
       );
       await waitFor(() =>
@@ -260,7 +264,7 @@ describe("Gallery 媒体活动恢复门禁", () => {
     mocks.nodes.mockReturnValue(summary.promise);
     mockImages();
     mocks.getImage.mockResolvedValue({ pageIndex: 0 });
-    renderGallery(`path=${albumId}&name=${encodeURIComponent("URL旧标题")}`);
+    renderReader(`name=${encodeURIComponent("URL旧标题")}`);
     await screen.findByTestId("image-gallery");
     expect(mocks.historyAdd).not.toHaveBeenCalled();
     await act(async () => {
@@ -292,7 +296,7 @@ describe("Gallery 媒体活动恢复门禁", () => {
   it("图片保存失败持续提示，重试保存当前页后清除提示", async () => {
     mockImages();
     mocks.setImage.mockRejectedValueOnce(new Error("disk unavailable"));
-    renderGallery(`path=${albumId}&index=1`);
+    renderReader(`index=1`);
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "阅读进度未保存",
     );
@@ -309,7 +313,7 @@ describe("Gallery 媒体活动恢复门禁", () => {
     mockImages();
     mocks.getImage.mockRejectedValueOnce(new Error("offline"));
     mocks.getImage.mockResolvedValue({ pageIndex: 1 });
-    renderGallery();
+    renderReader();
     expect(await screen.findByRole("alert")).toHaveTextContent("已暂停保存");
     await new Promise((resolve) => window.setTimeout(resolve, 650));
     expect(mocks.setImage).not.toHaveBeenCalled();
@@ -341,7 +345,7 @@ describe("Gallery 媒体活动恢复门禁", () => {
       durationMs: 100_000,
     });
     mocks.setVideo.mockRejectedValueOnce(new Error("offline"));
-    renderGallery(`path=${albumId}&type=video&index=0`);
+    renderReader(`type=video&index=0`);
     await waitFor(() =>
       expect((mocks.videoProps as MockVideoProps).initialPositionSec).toBe(20),
     );
@@ -385,7 +389,7 @@ describe("Gallery 媒体活动恢复门禁", () => {
     });
     mocks.getImage.mockReturnValue(lookup.promise);
 
-    renderGallery();
+    renderReader();
     await waitFor(() => expect(activityApi.getImage).toHaveBeenCalled());
     await new Promise((resolve) => window.setTimeout(resolve, 650));
     expect(activityApi.setImage).not.toHaveBeenCalled();
@@ -424,7 +428,7 @@ describe("Gallery 媒体活动恢复门禁", () => {
     });
     mocks.getImage.mockReturnValue(lookup.promise);
 
-    const view = renderGallery();
+    const view = renderReader();
     await waitFor(() =>
       expect(libraryApi.allMedia).toHaveBeenCalledWith(albumId),
     );
@@ -455,7 +459,7 @@ describe("Gallery 媒体活动恢复门禁", () => {
     });
     mocks.getVideo.mockReturnValue(lookup.promise);
 
-    const view = renderGallery(`path=${albumId}&type=video&index=0`);
+    const view = renderReader(`path=${albumId}&type=video&index=0`);
     await waitFor(() => expect(activityApi.getVideo).toHaveBeenCalled());
     const props = mocks.videoProps as MockVideoProps;
     act(() => {
@@ -498,7 +502,7 @@ describe("Gallery 媒体活动恢复门禁", () => {
     });
     mocks.getVideo.mockReturnValue(lookup.promise);
 
-    renderGallery(`path=${albumId}&type=video&index=0`);
+    renderReader(`path=${albumId}&type=video&index=0`);
     await waitFor(() => expect(activityApi.getVideo).toHaveBeenCalled());
     act(() => {
       (mocks.videoProps as MockVideoProps).onMetaLoaded?.(100);
@@ -556,7 +560,7 @@ describe("Gallery 媒体活动恢复门禁", () => {
       updated: "2026-09-05T00:00:00Z",
     });
 
-    renderGallery(`path=${albumId}&type=video&index=0`);
+    renderReader(`path=${albumId}&type=video&index=0`);
     await waitFor(() => expect(activityApi.getVideo).toHaveBeenCalledTimes(1));
     await waitFor(() =>
       expect((mocks.videoProps as MockVideoProps).initialPositionSec).toBe(42),
