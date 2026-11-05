@@ -408,3 +408,127 @@ func TestChangingRootKindRepublishesWithoutRescan(t *testing.T) {
 		t.Fatalf("comic scope still sees re-rooted children: %+v", comic.Items)
 	}
 }
+
+// 按名解析标签要同时给出两侧的册数：客户端据此区分
+// 「这个标签失效了」和「它只属于另一侧」。
+func TestResolveLibraryTagsReportsBothSides(t *testing.T) {
+	fixture := newKindFixture(t)
+	snapshot := fixture.catalog.Acquire()
+
+	result, err := ResolveLibraryTags(snapshot, []string{"共同", "漫画", "风景", "不存在的标签"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	counts := map[string]LibraryTagSummary{}
+	for _, item := range result.Items {
+		counts[item.Tag] = item
+	}
+	if len(counts) != 3 {
+		t.Fatalf("items=%d want 3", len(counts))
+	}
+	shared := counts["共同"]
+	if shared.PhotoAlbumCount != 1 || shared.ComicAlbumCount != 1 {
+		t.Fatalf("共同 photo=%d comic=%d want 1/1", shared.PhotoAlbumCount, shared.ComicAlbumCount)
+	}
+	if shared.AlbumCount != 2 {
+		t.Fatalf("共同 albumCount=%d want 2", shared.AlbumCount)
+	}
+	comicOnly := counts["漫画"]
+	if comicOnly.PhotoAlbumCount != 0 || comicOnly.ComicAlbumCount != 1 {
+		t.Fatalf("漫画 photo=%d comic=%d want 0/1", comicOnly.PhotoAlbumCount, comicOnly.ComicAlbumCount)
+	}
+	photoOnly := counts["风景"]
+	if photoOnly.PhotoAlbumCount != 1 || photoOnly.ComicAlbumCount != 0 {
+		t.Fatalf("风景 photo=%d comic=%d want 1/0", photoOnly.PhotoAlbumCount, photoOnly.ComicAlbumCount)
+	}
+	if len(result.Missing) != 1 || result.Missing[0] != "不存在的标签" {
+		t.Fatalf("missing=%v want [不存在的标签]", result.Missing)
+	}
+}
+
+// 「最近加入」按属性分侧，并按业务日期倒序。
+func TestPageLibraryRecentIsKindScopedAndSorted(t *testing.T) {
+	fixture := newKindFixture(t)
+	snapshot := fixture.catalog.Acquire()
+
+	photo, err := PageLibraryRecent(snapshot, LibraryKindPhoto, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if photo.Total != 2 {
+		t.Fatalf("photo recent total=%d want 2", photo.Total)
+	}
+	for _, item := range photo.Items {
+		if item.ContentKind != string(LibraryKindPhoto) {
+			t.Fatalf("photo scope leaked a comic album %+v", item)
+		}
+	}
+	comic, err := PageLibraryRecent(snapshot, LibraryKindComic, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if comic.Total != 3 {
+		t.Fatalf("comic recent total=%d want 3", comic.Total)
+	}
+	for _, item := range comic.Items {
+		if item.ContentKind != string(LibraryKindComic) {
+			t.Fatalf("comic scope leaked a photo album %+v", item)
+		}
+	}
+
+	// 限制条数时只截断，不改顺序。
+	limited, err := PageLibraryRecent(snapshot, LibraryKindComic, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(limited.Items) != 1 {
+		t.Fatalf("limited items=%d want 1", len(limited.Items))
+	}
+	if limited.Items[0].ID != comic.Items[0].ID {
+		t.Fatalf("limited first=%s want %s", limited.Items[0].ID, comic.Items[0].ID)
+	}
+}
+
+// 相册的「所属系列」是它直接上级集合的名字；根目录下的相册没有上级集合。
+func TestAlbumSummaryCarriesParentSeries(t *testing.T) {
+	fixture := newKindFixture(t)
+	snapshot := fixture.catalog.Acquire()
+
+	volumeID := fixture.catalog.ExternalID(filepath.Join(fixture.comicRoot, "shelf", "volume1"), ResourceAlbum)
+	node, ok := snapshot.state.library.nodes[volumeID]
+	if !ok {
+		t.Fatalf("volume album %s not indexed", volumeID)
+	}
+	if node.ParentName != "shelf" {
+		t.Fatalf("parentName=%q want shelf", node.ParentName)
+	}
+
+	// 根目录下的相册没有上级集合。
+	rootAlbum, ok := snapshot.state.library.nodes[fixture.comicAlbumID]
+	if !ok {
+		t.Fatalf("comic album %s not indexed", fixture.comicAlbumID)
+	}
+	if rootAlbum.ParentName != "" {
+		t.Fatalf("parentName=%q want empty", rootAlbum.ParentName)
+	}
+}
+
+// 库规模按属性拆开：两个工作台各自的相册数与集合数都要能报出来。
+func TestManifestReportsPerKindCollectionCounts(t *testing.T) {
+	fixture := newKindFixture(t)
+	manifest, err := BuildLibraryManifest(fixture.catalog.Acquire())
+	if err != nil {
+		t.Fatal(err)
+	}
+	stats := manifest.Statistics
+	if stats.PhotoAlbumCount != 2 || stats.ComicAlbumCount != 3 {
+		t.Fatalf("album counts photo=%d comic=%d want 2/3", stats.PhotoAlbumCount, stats.ComicAlbumCount)
+	}
+	if stats.PhotoCollectionCount != 0 || stats.ComicCollectionCount != 1 {
+		t.Fatalf("collection counts photo=%d comic=%d want 0/1", stats.PhotoCollectionCount, stats.ComicCollectionCount)
+	}
+	if stats.PhotoCollectionCount+stats.ComicCollectionCount != stats.CollectionCount {
+		t.Fatalf("per-kind collections %d+%d != total %d",
+			stats.PhotoCollectionCount, stats.ComicCollectionCount, stats.CollectionCount)
+	}
+}

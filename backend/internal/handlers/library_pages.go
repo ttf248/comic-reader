@@ -239,6 +239,66 @@ func LibraryNodesQueryHandler(catalog *services.ResourceCatalog) fiber.Handler {
 	}
 }
 
+// LibraryTagsQueryHandler 按名批量解析标签摘要。
+//
+// 它与 nodes/query 一样按需解析，不分页、不按工作台属性过滤：
+// 收藏里的智能标签可能在任意一侧有作品，客户端需要同时知道两侧的册数，
+// 才能区分「这个标签失效了」和「它只属于另一侧」。
+func LibraryTagsQueryHandler(catalog *services.ResourceCatalog) fiber.Handler {
+	type request struct {
+		Names []string `json:"names"`
+	}
+	return func(c *fiber.Ctx) error {
+		var body request
+		if err := c.BodyParser(&body); err != nil || len(body.Names) == 0 {
+			return httputil.BadRequest(c, "invalid_tag_names", "names must be a non-empty array")
+		}
+		if len(body.Names) > services.MaxLibraryNodeQuery {
+			return httputil.BadRequest(c, "too_many_tag_names", "names exceeds the batch limit")
+		}
+		names := make([]string, 0, len(body.Names))
+		for _, name := range body.Names {
+			if name = strings.TrimSpace(name); name != "" {
+				names = append(names, name)
+			}
+		}
+		if len(names) == 0 {
+			return httputil.BadRequest(c, "invalid_tag_names", "names must contain a tag name")
+		}
+		snapshot := catalog.Acquire()
+		result, err := services.ResolveLibraryTags(snapshot, names)
+		if err != nil {
+			return writeLibraryPageError(c, err, snapshot.Revision())
+		}
+		setLibraryRevisionETag(c, snapshot.Revision())
+		return c.JSON(fiber.Map{"ok": true, "result": result})
+	}
+}
+
+// LibraryRecentHandler 返回该属性下最近加入的相册摘要。
+//
+// 照片工作台不记录浏览进度，没有「继续阅读」可言；
+// 「最近添加」是照片侧与漫画侧对称的入口，也是收藏空态的推荐来源。
+func LibraryRecentHandler(catalog *services.ResourceCatalog) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		limit, ok := parseLibraryPageLimit(c)
+		if !ok {
+			return nil
+		}
+		kind, ok := parseLibraryKind(c)
+		if !ok {
+			return nil
+		}
+		snapshot := catalog.Acquire()
+		page, err := services.PageLibraryRecent(snapshot, kind, limit)
+		if err != nil {
+			return writeLibraryPageError(c, err, snapshot.Revision())
+		}
+		setLibraryRevisionETag(c, snapshot.Revision())
+		return c.JSON(fiber.Map{"ok": true, "page": page})
+	}
+}
+
 // LibraryTagsPageHandler 分页返回标签摘要，不携带标签下的完整相册数组。
 func LibraryTagsPageHandler(catalog *services.ResourceCatalog) fiber.Handler {
 	return func(c *fiber.Ctx) error {

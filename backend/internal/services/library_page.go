@@ -89,6 +89,11 @@ type LibraryStatistics struct {
 	// 若随工作台模式跳变，用户会以为库变小了。
 	PhotoAlbumCount int `json:"photoAlbumCount"`
 	ComicAlbumCount int `json:"comicAlbumCount"`
+	// PhotoCollectionCount / ComicCollectionCount 是按用途拆分的集合数，
+	// 与上面的相册数一一对应：工作台按属性一分为二，界面上的库规模
+	// 也要跟着那一侧走。
+	PhotoCollectionCount int `json:"photoCollectionCount"`
+	ComicCollectionCount int `json:"comicCollectionCount"`
 }
 
 type LibraryRootSummary struct {
@@ -130,6 +135,10 @@ type LibraryNodeSummary struct {
 	// 例如 "2020年" / "2011年/10.1一号公馆"。前端用它替代
 	// “本目录媒体”作为卡片标题。普通相册为空。
 	Location string `json:"location,omitempty"`
+	// ParentName 是相册直接上级集合的名字，也就是「所属系列」。
+	// 漫画目录里一连载多卷时，前端按它把卷分节展示。
+	// 根目录下的相册没有上级集合，为空。
+	ParentName string `json:"parentName,omitempty"`
 	// ContentKind 是节点的内容属性："photo" / "comic"。
 	// 前端据此决定点击相册后进入照片墙还是漫画阅读器。
 	ContentKind string `json:"contentKind,omitempty"`
@@ -152,6 +161,11 @@ type LibraryTagSummary struct {
 	AlbumCount  int      `json:"albumCount"`
 	CoverImage  string   `json:"coverImage,omitempty"`
 	CoverImages []string `json:"coverImages"`
+	// PhotoAlbumCount / ComicAlbumCount 是该标签在两种属性下的册数。
+	// 列表接口按当前属性收敛，只要一个数就够；按名解析时两个都要，
+	// 客户端据此判断「这个标签在当前这一侧还有没有作品」。
+	PhotoAlbumCount int `json:"photoAlbumCount,omitempty"`
+	ComicAlbumCount int `json:"comicAlbumCount,omitempty"`
 }
 
 // LibrarySearchHit 是预计算搜索索引的对外条目，不包含目录树或绝对路径。
@@ -227,24 +241,33 @@ type libraryPageIndex struct {
 	albums    []LibraryNodeSummary
 	nodes     map[string]LibraryNodeSummary
 	tags      []LibraryTagSummary
+	tagsByName map[string]LibraryTagSummary
 	tagAlbums map[string][]LibraryNodeSummary
 	search    []LibrarySearchHit
 	// albumIndexesByKind 是全库相册按用途分桶的下标表（存下标不存摘要副本）。
 	// 用途过滤只需要在已物化的切片上做一次稳定筛选，不必另存一份摘要。
 	albumIndexesByKind map[models.ContentKind][]int
 	kindAlbumCounts    map[models.ContentKind]int
+	// recentAlbumIndexesByKind 是按用途分桶的「最近加入」下标表。
+	// 它在索引构建期按业务日期排好一次，请求期只切片，
+	// 不再每请求重排全库。
+	recentAlbumIndexesByKind map[models.ContentKind][]int
+	kindCollectionCounts      map[models.ContentKind]int
 }
 
 func buildLibraryPageIndex(state *resourceCatalogState) *libraryPageIndex {
 	index := &libraryPageIndex{
-		children:           make(map[string][]LibraryNodeSummary),
-		media:              make(map[string][]LibraryMediaItem),
-		albums:             []LibraryNodeSummary{},
-		nodes:              make(map[string]LibraryNodeSummary),
-		tags:               []LibraryTagSummary{},
-		tagAlbums:          make(map[string][]LibraryNodeSummary),
-		albumIndexesByKind: make(map[models.ContentKind][]int),
-		kindAlbumCounts:    make(map[models.ContentKind]int),
+		children:                make(map[string][]LibraryNodeSummary),
+		media:                   make(map[string][]LibraryMediaItem),
+		albums:                  []LibraryNodeSummary{},
+		nodes:                   make(map[string]LibraryNodeSummary),
+		tags:                    []LibraryTagSummary{},
+		tagsByName:              make(map[string]LibraryTagSummary),
+		tagAlbums:               make(map[string][]LibraryNodeSummary),
+		albumIndexesByKind:      make(map[models.ContentKind][]int),
+		kindAlbumCounts:         make(map[models.ContentKind]int),
+		recentAlbumIndexesByKind: make(map[models.ContentKind][]int),
+		kindCollectionCounts:      make(map[models.ContentKind]int),
 	}
 	if state == nil || state.result == nil {
 		return index
@@ -315,13 +338,35 @@ func buildLibraryPageIndex(state *resourceCatalogState) *libraryPageIndex {
 		index.albumIndexesByKind[kind] = append(index.albumIndexesByKind[kind], i)
 		index.kindAlbumCounts[kind]++
 	}
+	// 「最近加入」的下标表同样在构建期排好：按业务日期倒序，
+	// 日期缺失时退回修改时间。请求期只切片，不再重排全库。
+	for _, kind := range []models.ContentKind{models.ContentKindPhoto, models.ContentKindComic} {
+		recent := make([]int, 0, len(index.albums))
+		for i, album := range index.albums {
+			if models.NormalizeContentKind(album.ContentKind) == kind {
+				recent = append(recent, i)
+			}
+		}
+		sort.SliceStable(recent, func(i, j int) bool {
+			return albumMoreRecent(index.albums[recent[i]], index.albums[recent[j]])
+		})
+		index.recentAlbumIndexesByKind[kind] = recent
+	}
+	// 集合也按属性计数：工作台分两侧，库规模也要跟着那一侧走。
+	// state.collections 含各层嵌套的集合，与扫描结果的集合总数一致。
+	for _, collection := range state.collections {
+		kind := models.NormalizeContentKind(collection.ContentKind)
+		index.kindCollectionCounts[kind]++
+	}
 
 	smartCollections := append([]models.SmartCollection(nil), state.result.SmartCollections...)
 	sort.SliceStable(smartCollections, func(i, j int) bool {
 		return naturalLess(smartCollections[i].Tag, smartCollections[j].Tag)
 	})
 	for _, smart := range smartCollections {
-		index.tags = append(index.tags, tagSummary(state, smart))
+		summary := tagSummary(state, smart)
+		index.tags = append(index.tags, summary)
+		index.tagsByName[summary.Tag] = summary
 		albums := append([]models.Album(nil), smart.Albums...)
 		sort.SliceStable(albums, func(i, j int) bool {
 			return albumNaturalLess(albums[i], albums[j])
@@ -433,13 +478,15 @@ func buildIndexedLibraryManifest(state *resourceCatalogState, index *libraryPage
 		Roots:     roots,
 		Warnings:  append([]models.ScanWarning(nil), warnings...),
 		Statistics: LibraryStatistics{
-			RootCount:       len(roots),
-			AlbumCount:      result.AlbumCount,
-			CollectionCount: result.CollectionCount,
-			TagCount:        len(index.tags),
-			WarningCount:    len(result.Warnings),
-			PhotoAlbumCount: index.kindAlbumCounts[models.ContentKindPhoto],
-			ComicAlbumCount: index.kindAlbumCounts[models.ContentKindComic],
+			RootCount:            len(roots),
+			AlbumCount:           result.AlbumCount,
+			CollectionCount:      result.CollectionCount,
+			TagCount:             len(index.tags),
+			WarningCount:         len(result.Warnings),
+			PhotoAlbumCount:      index.kindAlbumCounts[models.ContentKindPhoto],
+			ComicAlbumCount:      index.kindAlbumCounts[models.ContentKindComic],
+			PhotoCollectionCount: index.kindCollectionCounts[models.ContentKindPhoto],
+			ComicCollectionCount: index.kindCollectionCounts[models.ContentKindComic],
 		},
 	}
 }
@@ -544,6 +591,85 @@ type LibraryNodeQueryResult struct {
 	Revision uint64               `json:"revision"`
 	Items    []LibraryNodeSummary `json:"items"`
 	Missing  []string             `json:"missing"`
+}
+
+// LibraryTagQueryResult 是按名解析标签摘要的结果。
+//
+// Missing 只装「库里根本没有这个标签」的条目：一个只含漫画的标签在照片
+// 工作台里同样存在，只是这一侧没有作品 —— 客户端据此区分「失效」与
+// 「属于另一侧」，不会把用户的收藏误当成垃圾清掉。
+type LibraryTagQueryResult struct {
+	Revision uint64              `json:"revision"`
+	Items    []LibraryTagSummary `json:"items"`
+	Missing  []string            `json:"missing"`
+}
+
+// ResolveLibraryTags 按调用方给定顺序批量解析标签摘要。
+//
+// 它与 ResolveLibraryNodes 同构：不按工作台属性过滤，而是同时给出
+// 两种属性下的册数，让客户端自己决定当前这一侧看不看得到它。
+func ResolveLibraryTags(snapshot CatalogSnapshot, names []string) (LibraryTagQueryResult, error) {
+	if !snapshot.Ready() || snapshot.state == nil || snapshot.state.library == nil {
+		return LibraryTagQueryResult{}, ErrLibraryNotReady
+	}
+	result := LibraryTagQueryResult{
+		Revision: snapshot.Revision(),
+		Items:    make([]LibraryTagSummary, 0, len(names)),
+		Missing:  make([]string, 0),
+	}
+	for _, name := range names {
+		tag := strings.TrimSpace(name)
+		albums, exists := snapshot.state.library.tagAlbums[tag]
+		if !exists {
+			result.Missing = append(result.Missing, tag)
+			continue
+		}
+		summary, ok := snapshot.state.library.tagsByName[tag]
+		if !ok {
+			summary = LibraryTagSummary{Tag: tag}
+		}
+		summary.Tag = tag
+		summary.AlbumCount = len(albums)
+		summary.PhotoAlbumCount = 0
+		summary.ComicAlbumCount = 0
+		for _, album := range albums {
+			if models.NormalizeContentKind(album.ContentKind) == models.ContentKindComic {
+				summary.ComicAlbumCount++
+			} else {
+				summary.PhotoAlbumCount++
+			}
+		}
+		result.Items = append(result.Items, summary)
+	}
+	return result, nil
+}
+
+// PageLibraryRecent 返回该属性下最近加入的相册摘要，按业务日期倒序。
+//
+// 它是照片工作台的「最近添加」与收藏空态推荐的唯一数据源：
+// 漫画侧有阅读进度可以当「继续阅读」，照片侧不记录浏览进度，
+// 只能按加入时间给用户看点什么。
+func PageLibraryRecent(snapshot CatalogSnapshot, kind LibraryKindScope, limit int) (LibraryPage[LibraryNodeSummary], error) {
+	if !snapshot.Ready() || snapshot.state == nil || snapshot.state.library == nil {
+		return LibraryPage[LibraryNodeSummary]{}, ErrLibraryNotReady
+	}
+	if limit <= 0 || limit > MaxLibraryPageLimit {
+		limit = DefaultLibraryPageLimit
+	}
+	indexes := snapshot.state.library.recentAlbumIndexesByKind[models.ContentKind(kind)]
+	total := len(indexes)
+	if total > limit {
+		total = limit
+	}
+	items := make([]LibraryNodeSummary, 0, total)
+	for _, i := range indexes[:total] {
+		items = append(items, cloneNodeSummary(snapshot.state.library.albums[i]))
+	}
+	return LibraryPage[LibraryNodeSummary]{
+		Revision: snapshot.Revision(),
+		Items:    items,
+		Total:    len(indexes),
+	}, nil
 }
 
 func PageLibraryTags(snapshot CatalogSnapshot, kind LibraryKindScope, cursor string, limit int) (LibraryPage[LibraryTagSummary], error) {
@@ -869,8 +995,39 @@ func albumSummary(state *resourceCatalogState, album models.Album) LibraryNodeSu
 		Virtual:        album.Virtual,
 		HasCustomCover: state.customCovers[filepath.Clean(album.Path)],
 		Location:       album.Location,
+		ParentName:     parentNameFor(state, album),
 		ContentKind:    album.ContentKind,
 	}
+}
+
+// parentNameFor 返回相册直接上级集合的名字，也就是「所属系列」。
+//
+// 相册的父目录就是它所在集合的路径；根目录下的相册没有上级集合。
+// 虚拟相册（“本目录媒体”）与所属集合同目录，不算有上级系列。
+func parentNameFor(state *resourceCatalogState, album models.Album) string {
+	if state == nil || album.Virtual || album.Path == "" {
+		return ""
+	}
+	return state.collectionNames[filepath.Dir(filepath.Clean(album.Path))]
+}
+
+// albumMoreRecent 判断左边的相册是否比右边的「更近」。
+//
+// 排序用业务日期（拍摄时间 > 文件夹名日期 > 修改时间）：
+// 新加进来的相册不一定是最新的目录，但它是用户刚整理的那一批。
+// 日期相同时退回 ID，保证顺序稳定。
+func albumMoreRecent(left, right LibraryNodeSummary) bool {
+	leftDate, rightDate := left.Date, right.Date
+	if leftDate.IsZero() {
+		leftDate = left.ModTime
+	}
+	if rightDate.IsZero() {
+		rightDate = right.ModTime
+	}
+	if !leftDate.Equal(rightDate) {
+		return leftDate.After(rightDate)
+	}
+	return left.ID < right.ID
 }
 
 func collectionSummary(state *resourceCatalogState, collection models.Collection) LibraryNodeSummary {

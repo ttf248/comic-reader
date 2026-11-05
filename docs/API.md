@@ -121,18 +121,20 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 相册同时返回 `date` 与 `dateSource`。`dateSource` 取值为 `captured` / `folder` / `modified`，服务端按该顺序降级；目录日期只接受 `YYYY`、`YYYY-MM`、`YYYY-MM-DD`、`YYYYMMDD` 或严格的 `YYYY/MM/DD` 路径分段，不会从任意名称子串中猜测。
 
 媒体库浏览只使用下列 revision 分页接口。除 `/api/library/manifest`、
-`/api/library/nodes/query` 与 `/api/albums/:albumId/media` 外，它们都接受必填的
-`kind` 查询参数，取值 `photo` / `comic`：
+`/api/library/nodes/query`、`/api/tags/query` 与 `/api/albums/:albumId/media` 外，
+它们都接受必填的 `kind` 查询参数，取值 `photo` / `comic`：
 
-- `GET /api/library/manifest`：返回根列表、扫描时间和相册/集合/标签/告警统计，不包含目录树或媒体数组；`warnings` 最多返回前 100 条脱敏告警详情，完整数量见 `statistics.warningCount`。`statistics.albumCount` 恒为全库相册总数，另带 `photoAlbumCount` 与 `comicAlbumCount` 两个按属性拆分的计数——库规模不随工作台模式跳变。
+- `GET /api/library/manifest`：返回根列表、扫描时间和相册/集合/标签/告警统计，不包含目录树或媒体数组；`warnings` 最多返回前 100 条脱敏告警详情，完整数量见 `statistics.warningCount`。`statistics.albumCount` 恒为全库相册总数，另带 `photoAlbumCount` 与 `comicAlbumCount` 两个按属性拆分的计数——库规模不随工作台模式跳变。集合同理：`collectionCount` 恒为全库集合总数，另带 `photoCollectionCount` 与 `comicCollectionCount`。
 - `GET /api/library/activity-summary`：返回当前 revision 的 `albumCount` 与 `unreadCount`，供常驻导航显示未读 badge；不返回相册清单或活动详情。两个计数都收敛到 `kind` 指定的属性。
 - `GET /api/library/dashboard`：返回首页所需的 `albumCount`、`unreadCount`、最多 6 本 `unread` 相册摘要与全部 `inProgress` 阅读摘要；不返回全量相册列表。每条在读摘要的 `pageCount` 始终以当前扫描结果为准。阅读进度只属于漫画工作台：`kind=photo` 时 `inProgress` 恒为空。
 - `GET /api/library/unread?limit=60&cursor=...`：分页返回尚未翻开过的相册摘要；已读和在读相册不会传输。有图片的相册以漫画阅读活动判定，纯视频相册以视频播放活动判定（没有阅读活动可依）。未读只统计漫画目录的相册：`kind=photo` 时恒为空。
+- `GET /api/library/recent?limit=60`：返回该属性下最近加入的相册摘要，按业务日期倒序（`date` 缺失时退回 `modTime`）。照片工作台不记录浏览进度，没有「继续阅读」可言，这个接口是它与漫画侧对称的入口，也是收藏空态的推荐来源。不分页：`total` 是该属性下的相册总数，`items` 至多 `limit` 条。
 - `GET /api/library/:rootOrCollectionId/children?limit=60&cursor=...`：分页返回直属相册与子集合摘要。相册与集合都继承所属目录的属性，因此都参与 `kind` 过滤；属性不匹配的目录返回空页。集合摘要的 `albumCount` 恒为全部后代。
 - `GET /api/albums/random?scope=unread`：随机返回一个相册摘要；只在该属性的相册里抽取，`scope=unread` 时进一步只从未保存阅读活动的相册中抽取。没有匹配相册返回 `404 no_matching_album`。
 - `GET /api/albums/:albumId/media?limit=60&cursor=...`：按统一自然顺序返回媒体；`index` 是相册内总序号，`kindIndex` 是图片或视频各自序号。图片项另带 `width` / `height`（原始像素宽高，未知时为 0），照片墙据此按真实宽高比排布，不必在浏览器里逐张探测。媒体流与工作台模式无关。
 - `POST /api/library/nodes/query`：body 为 `{ "ids": ["a_...", "c_..."] }`，按输入顺序批量解析相册/集合摘要；单批最多 500 项，失效 ID 返回在 `missing` 中。直达链接、收藏与最近浏览都靠它解析摘要，**不受工作台模式影响**。
 - `GET /api/tags?limit=60&cursor=...`：分页返回标签摘要。每个标签的 `albumCount` 按 `kind` 指定的属性重算，该属性下没有相册的标签整个不出现。
+- `POST /api/tags/query`：body 为 `{ "names": ["共同", "连载"] }`，按输入顺序批量解析标签摘要；单批最多 500 项。它**不按工作台属性过滤**，而是同时给出 `photoAlbumCount` 与 `comicAlbumCount`，客户端据此区分「这个标签失效了」和「它只属于另一侧」。库里根本没有的标签名进 `missing`。
 - `GET /api/tags/:tag/albums?limit=60&cursor=...`：分页返回标签下的相册摘要。`tag` 按单个 URL 路径段编码，服务端只解码一次，支持中文、空格、`+`、`%` 及字面 `%xx`；非法百分号编码返回 `400 invalid_tag`，解码后为空返回 `400 missing_tag`，不存在的标签返回 `404 tag_not_found`。
 
 `kind` 过滤全部命中：相册与集合按其目录属性归属，标签则按「该属性下是否还有相册」判断——只含漫画的标签不出现在照片工作台的结果里。缺失或非法取值返回 `400 invalid_kind`。
@@ -145,7 +147,9 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 客户端应从第一页重新拉取。
 
 节点摘要不携带媒体数组。相册摘要通过 `tags: string[]` 返回目录名解析出的全部标签，
-不再提供单标签别名字段。集合摘要的 `albumCount`、`imageCount`、`videoCount`、
+不再提供单标签别名字段。相册摘要的 `parentName` 是它直接上级集合的名字，也就是
+「所属系列」——漫画目录里一连载多卷时，前端按它把卷分节展示；根目录下的相册没有
+上级集合，该字段为空。集合摘要的 `albumCount`、`imageCount`、`videoCount`、
 `mediaCount` 和 `folderSize` 均包含所有后代，`childCount` 仍只表示直属子项数量。
 相册摘要的 `hasCustomCover` 为 `true` 时表示当前 revision 已应用用户设置的人工封面；
 失效的覆盖记录不会出现在此字段中。

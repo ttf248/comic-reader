@@ -45,6 +45,10 @@ type resourceCatalogState struct {
 	customCovers  map[string]bool
 	contentPolicy ContentKindPolicy
 	library       *libraryPageIndex
+	// collectionNames 是「集合绝对路径 → 展示名」的对照表。
+	// 相册的直接上级集合就是它所在目录的路径，查这张表即可得到
+	// 「所属系列」——漫画工作台按它把同一连载的卷分节展示。
+	collectionNames map[string]string
 }
 
 // CatalogSnapshot 是一次请求期间固定的资源视图。它把扫描结果、
@@ -73,12 +77,13 @@ func NewResourceCatalog() *ResourceCatalog {
 
 func emptyCatalogState(revision uint64) *resourceCatalogState {
 	return &resourceCatalogState{
-		revision:     revision,
-		byID:         map[string]ResourceRef{},
-		byPathKind:   map[string]string{},
-		albums:       map[string]models.Album{},
-		collections:  map[string]models.Collection{},
-		customCovers: map[string]bool{},
+		revision:        revision,
+		byID:            map[string]ResourceRef{},
+		byPathKind:      map[string]string{},
+		albums:          map[string]models.Album{},
+		collections:     map[string]models.Collection{},
+		customCovers:    map[string]bool{},
+		collectionNames: map[string]string{},
 	}
 }
 
@@ -187,13 +192,14 @@ func (c *ResourceCatalog) ClearWithCache(cache *ScanResultCache) error {
 func (c *ResourceCatalog) publish(result *models.ScanResult, roots []string, customCovers map[string]bool) uint64 {
 	revision := c.revision.Add(1)
 	state := &resourceCatalogState{
-		revision:      revision,
-		byID:          make(map[string]ResourceRef),
-		byPathKind:    make(map[string]string),
-		albums:        make(map[string]models.Album),
-		collections:   make(map[string]models.Collection),
-		customCovers:  cloneCustomCoverPaths(customCovers),
-		contentPolicy: c.contentPolicy,
+		revision:       revision,
+		byID:           make(map[string]ResourceRef),
+		byPathKind:     make(map[string]string),
+		albums:         make(map[string]models.Album),
+		collections:    make(map[string]models.Collection),
+		customCovers:   cloneCustomCoverPaths(customCovers),
+		contentPolicy:  c.contentPolicy,
+		collectionNames: make(map[string]string),
 	}
 	for _, root := range pathutil.NormalizeRoots(roots) {
 		abs, err := filepath.Abs(root)
@@ -416,6 +422,11 @@ func (s CatalogSnapshot) Result() *models.ScanResult {
 func indexCollection(state *resourceCatalogState, collection *models.Collection) {
 	if id := indexPath(state, collection.Path, ResourceCollection); id != "" {
 		state.collections[id] = *collection
+	}
+	// 集合路径 → 展示名：相册据此查出自己的「所属系列」。
+	name := nodeDisplayName(collection.DisplayName, collection.Name)
+	if name != "" {
+		state.collectionNames[filepath.Clean(collection.Path)] = name
 	}
 	for i := range collection.Albums {
 		indexAlbum(state, &collection.Albums[i])
