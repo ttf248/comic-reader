@@ -94,8 +94,12 @@ it("按真实宽高比排布，并把已加载与未加载的条目都算进滚�
   // 30 个条目按 1200px 宽、200px 目标行高分成多行。
   const rows = screen.getAllByTestId("wall-row");
   expect(rows.length).toBeGreaterThan(1);
-  expect(screen.getByText("1.jpg")).toBeInTheDocument();
   expect(screen.getByText("视频封面")).toBeInTheDocument();
+  // 悬停信息层给出文件名与像素尺寸：照片墙是浏览页，光靠缩略图
+  // 看不出「这是什么」。
+  expect(screen.getAllByTestId("wall-tile-info")[0]).toHaveTextContent("1.jpg");
+  // 视频角标带文字：光靠一枚三角形说不清这是什么。
+  expect(screen.getByText("视频")).toBeInTheDocument();
 });
 
 it("回报的分页范围换算回原始媒体序号", () => {
