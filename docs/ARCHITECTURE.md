@@ -122,20 +122,26 @@ SIGINT/SIGTERM 触发停止接收连接、取消扫描/转码并强制刷新扫�
 
 ### 工作台模式
 
-工作台模式（`appMode`）就是目录的内容属性（`contentKind`）：`photo` / `comic` 两档互斥，没有不过滤的第三档。属性写在配置里（`mediaRoots[].kind`），目录下的相册与集合在发布时一并继承，没有单本相册的归类动作。模式本身是用户偏好，存服务端 `Prefs`（`state/web_settings.json`），前端经 `hooks/useAppMode.ts` 读写。
+工作台模式（`appMode`）就是目录的内容属性（`contentKind`）：`photo` / `comic` 两档互斥，没有不过滤的第三档。属性写在配置里（`mediaRoots[].kind`），目录下的相册与集合在发布时一并继承，没有单本相册的归类动作。服务端记住上次用的是哪一侧（`Prefs.appMode`，`state/web_settings.json`），它只是**落地页偏好**；当前在看哪一侧由 URL 路径前缀决定。
 
 - 模式决定列表呈现哪一半，也决定相册点开进照片墙还是阅读器：照片工作台只列照片目录的相册，漫画工作台只列漫画目录的相册，两套菜单与措辞各自成套。
-- 服务端列表接口的 `kind` 查询参数（`photo` / `comic`）必填，缺失或非法返回 `400 invalid_kind`：子节点、未读、随机、标签、标签相册与搜索按目录属性过滤。集合继承所属目录的属性，因此同样参与过滤——漫画目录下的集合不会出现在照片工作台里。它的 `albumCount` 恒为全部后代，但集合的所有成员都在同一媒体根（同属性），所以这个计数天然按侧，无需再拆一份。manifest 的 `albumCount` 是全库总数，另给 `photoAlbumCount` / `comicAlbumCount`。
+- 服务端列表接口的 `kind` 查询参数（`photo` / `comic`）必填，缺失或非法返回 `400 invalid_kind`：子节点、未读、随机、标签、标签相册与搜索按目录属性过滤。集合继承所属目录的属性，因此同样参与过滤——漫画目录下的集合不会出现在照片工作台里。它的 `albumCount` 恒为全部后代，但集合的所有成员都在同一媒体根（同属性），所以这个计数天然按侧，无需再拆一份。manifest 的 `albumCount` 是全库总数，另给 `photoAlbumCount` / `comicAlbumCount`，集合同理有 `photoCollectionCount` / `comicCollectionCount`。
 - 过滤发生在分页之前：发布时预切好的有序切片按属性筛成子序列，游标里的偏移是过滤后列表的偏移。属性进游标作用域，跨属性复用被拒绝为 `invalid_cursor`。
 - 未读/在读派生按 `(catalogRevision, activityRevision)` 缓存，缓存与属性无关，属性过滤是请求期后置筛选。未读下标只收漫画相册：照片目录下的相册不记录阅读进度，没有「未读」这个概念。
-- 前端查询键带模式段（`["library", ..., "mode", mode]`），切模式即换键自动重取，旧模式缓存保留。媒体清单与 `nodes/query` 与模式无关，键不带模式。收藏与历史的资源 ID 集合不分类型，由前端按摘要里的 `contentKind` 客户端过滤。
+- 前端查询键带模式段（`["library", ..., "mode", mode]`），切模式即换键自动重取，旧模式缓存保留。媒体清单与 `nodes/query` 与模式无关，键不带模式。收藏与历史的资源 ID 集合不分类型，由前端按摘要里的 `contentKind` 客户端过滤；`hooks/useFavoritesByMode.ts` 把「当前侧可见的卡片 / 本侧计数 / 真失效的条目」收在一处，收藏页与首页共用它，口径不再分叉。
+- 收藏里的智能标签按名解析（`POST /api/tags/query`），接口同时给出两侧的册数：客户端据此区分「这个标签在库里不存在」（失效，可清理）与「它只属于另一侧」（不可见，但不是失效）。把两者混为一谈会导致用户在另一侧点一次「清理失效收藏」就删掉自己的收藏。
 - 阅读器整屏脱离 AppShell，侧栏不可见，顶部提供工作台 chip 切模式（切模式即离开阅读器回到外壳）。
+- 模式也决定视觉基调：`<html data-mode>` 由 `WorkbenchModeProvider` 写入，CSS token 按 `:root[data-theme][data-mode]` 组合覆盖（`--brand*` / `--feature-bg` / `--mode-tint`），画布与文字保持中性灰阶。封面画幅同样按侧取默认值（照片 1:1、漫画 2:3），见 `utils/workbench.ts` 的 `coverRatioForMode`。
+- 首页首屏专区按侧各成一套：漫画是「继续阅读 / 未读」，照片是「最近加入 / 随手看看」。照片侧的数据源是 `GET /api/library/recent?kind=photo`（按业务日期倒序的最近相册）与 `GET /api/albums/random?kind=photo`（随手一本），组件在 `components/home/PhotoHeroes.tsx`，随机结果由 `hooks/useSerendipityAlbum.ts` 用「种子」做查询键换取。
+- 索引维度按侧分：照片按年份（`components/home/YearTimeline.tsx`），漫画按作品（`components/home/SeriesTimeline.tsx`，集合即作品）。两者共用 `components/home/Timeline.tsx` 的视觉骨架。
 
 ### 查询、导航与网格
 
 - TanStack Query 管理库、媒体、偏好、收藏与历史；Zustand 管理本机 UI、阅读器和扫描连接会话。主题与 Toast 在应用层统一挂载，阅读器独立于 AppShell 但仍有错误边界与访问门禁。
-- 路由在 `App.tsx` 懒加载：`/`、`/recents`、`/favorites`、`/unread`、`/albums/*`、`/tags/*`、`/settings`，漫画阅读器 `/read/:albumId` 使用相册 ID 和 0-based index，视频加 `type=video`。旧的 `/gallery?path=…` 链接由兼容路由转到 `/read/<相册 id>`，参数原样带过去。标签按单个路径段编码，直接打开链接的返回有应用内兜底。
-- 相册入口按内容属性分派：照片目录的相册 `/albums/<相册 id>` 直接渲染照片墙，漫画目录的相册重定向到阅读器。属性由服务端给出（所属目录的 `kind`），前端不按图片数量推断。
+- 路由在 `App.tsx` 懒加载，**模式进 URL 路径**：`/photo`（照片库）、`/photo/recents`、`/photo/favorites`、`/photo/albums/*`、`/photo/tags/*`；`/comic`（漫画库）、`/comic/unread`、`/comic/recents`、`/comic/favorites`、`/comic/albums/*`、`/comic/tags/*`；漫画阅读器 `/comic/read/:albumId` 使用相册 ID 和 0-based index，视频加 `type=video`；设置页 `/settings` 与模式无关。根路径 `/` 按服务端记住的偏好落到某一侧。标签按单个路径段编码，路径段只解码一次（从原始 pathname 切段，不用 `useParams`），直接打开链接的返回有应用内兜底。
+- **模式有且只有一个真相源：URL 路径前缀。** 服务端 `Prefs.appMode` 只决定根路径落到哪一侧；前端 `appModeStore` 只镜像这个偏好，不持有「当前模式」。`WorkbenchModeProvider`（`components/layout/`）挂在应用最外层，从 `useLocation` 推导模式并经上下文下发，因此整屏脱离外壳的阅读器也在同一套上下文里。切换模式 = 导航到对侧对应页 + 写回偏好，两件事缺一不可。
+- 模式切换的语义只有一张表（`utils/path.ts` 的 `counterpartRoute`）：两侧都有的同名页（最近 / 收藏 / 标签）一一对应；相册与阅读器只属于一侧，未读只属于漫画侧，它们都回落到对侧首页。
+- 相册入口按内容属性分派：照片目录的相册 `/photo/albums/<相册 id>` 直接渲染照片墙，漫画目录的相册重定向到阅读器。属性由服务端给出（所属目录的 `kind`），前端不按图片数量推断。
 - 常驻导航仅取 activity-summary、随机相册或已加载 dashboard；首页一次取得未读计数、有限预览与在读摘要，不下载全库。完整未读索引按“库 revision + 活动版本”复用，列表按需分页。
 - `AlbumGrid` 绑定最近的纵向滚动祖先，网格/列表只挂视口附近条目。
 - 照片墙（`components/wall`）按每张图的真实宽高比做自适应排布：宽高比来自服务端媒体分页返回的像素宽高（由 `MediaDimensionService` 读图片头得到并缓存），排布算法是纯函数，容器宽度或密度变化时重算。行高度由算法确定，`Virtuoso` 只负责按行虚拟化；虚拟窗口参数保持在安全范围内，避免尺寸树展开过深触发爆栈。总数占位保留整本相册的滚动长度，行范围换算回媒体序号后由 `useMediaGridPagination` 连续补页，失败保留内容并暂停自动请求，显式重试恢复。容器与窗口的验证要求见设计文档。

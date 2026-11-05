@@ -148,8 +148,9 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 节点摘要不携带媒体数组。相册摘要通过 `tags: string[]` 返回目录名解析出的全部标签，
 不再提供单标签别名字段。相册摘要的 `parentName` 是它直接上级集合的名字，也就是
-「所属系列」——漫画目录里一连载多卷时，前端按它把卷分节展示；根目录下的相册没有
-上级集合，该字段为空。集合摘要的 `albumCount`、`imageCount`、`videoCount`、
+「所属系列」——漫画目录里一连载多卷时，它标出这一卷属于哪部作品；根目录下的相册
+没有上级集合，该字段为空。漫画工作台的首页按作品索引，索引项取自根目录下的集合
+（集合的成员由服务端聚合成 `albumCount`）。集合摘要的 `albumCount`、`imageCount`、`videoCount`、
 `mediaCount` 和 `folderSize` 均包含所有后代，`childCount` 仍只表示直属子项数量。
 相册摘要的 `hasCustomCover` 为 `true` 时表示当前 revision 已应用用户设置的人工封面；
 失效的覆盖记录不会出现在此字段中。
