@@ -21,7 +21,8 @@ import {
 } from "../utils/albumGrouping";
 import EmptyState from "../components/common/EmptyState";
 import { albumRoute, decodeFavPath, decodePathTail, homeRoute, readerRoute } from "../utils/path";
-import { collectionUnit } from "../utils/workbench";
+import { collectionUnit, workbenchCopy } from "../utils/workbench";
+import CardCover from "../components/album/CardCover";
 import { useAppMode } from "../hooks/useAppMode";
 import { useSafeBack } from "../utils/navigation";
 import { compareDatesDesc } from "../utils/date";
@@ -48,7 +49,6 @@ interface CollectionDetail {
   videoCount: number;
   albums: AlbumLike[];
   collections: CollectionLike[];
-  albumCount: number;
   /**
    * 集合的内容属性：照片「本」，漫画「卷」。
    * 集合继承所属目录的属性，计数单位跟着那一侧走。
@@ -159,7 +159,6 @@ export default function Album() {
       videoCount: node.videoCount ?? 0,
       albums,
       collections,
-      albumCount: node.albumCount ?? 0,
       contentKind: node.contentKind,
     };
   }, [childrenQuery.data, node]);
@@ -251,6 +250,114 @@ export default function Album() {
         }
       }}
     />
+  );
+}
+
+/**
+ * 集合页的页头。
+ *
+ * 集合是「一堆相册」而不是一本相册，所以它的身份由封面拼贴 + 数量
+ * 来说明：拼贴给出直观印象，数量给出规模，两者相邻才能一眼判断
+ * 「这里有多少东西、值不值得点进去」。
+ *
+ * 数量说的是「这一页列出来的东西」：直属相册与直属子集合各算各的。
+ * 服务端的 albumCount 是全部后代的相册数，拿它当页头数量会和下面的
+ * 网格对不上（网格只列直属子项）——两处数字必须说同一件事。
+ */
+function CollectionHead({
+  detail,
+  isFavorite,
+  onToggleFav,
+  onBack,
+}: {
+  detail: CollectionDetail;
+  isFavorite: boolean;
+  onToggleFav: () => void;
+  onBack: () => void;
+}) {
+  const copy = workbenchCopy(detail.contentKind);
+  const albumCount = detail.albums.length;
+  const collectionCount = detail.collections.length;
+  return (
+    <div className="page-shell page-heading">
+      <button onClick={onBack} className="btn btn-sm btn-ghost mb-5 -ml-2">
+        <ChevronLeftIcon size={13} />
+        <span>返回</span>
+      </button>
+      <div className="detail-head">
+        <div className="detail-head__cover">
+          <CardCover
+            data={{
+              variant: "collection",
+              title: detail.name,
+              coverPath: detail.coverImage,
+              covers: detail.coverImages,
+            }}
+          />
+        </div>
+        <div className="min-w-0">
+          <p className="page-eyebrow">集合</p>
+          <h1 className="detail-head__title mt-2">{detail.name}</h1>
+          <div className="detail-head__meta">
+            <span>
+              <span className="detail-head__value">{albumCount}</span>{" "}
+              {collectionUnit(detail.contentKind)}
+            </span>
+            {collectionCount > 0 && (
+              <>
+                <span className="text-fg-subtle">·</span>
+                <span>
+                  <span className="detail-head__value">{collectionCount}</span>{" "}
+                  个子集合
+                </span>
+              </>
+            )}
+            {detail.imageCount > 0 && (
+              <>
+                <span className="text-fg-subtle">·</span>
+                <span>
+                  <span className="detail-head__value">
+                    {detail.imageCount}
+                  </span>{" "}
+                  {copy.mediaUnit}
+                </span>
+              </>
+            )}
+            {detail.videoCount > 0 && (
+              <>
+                <span className="text-fg-subtle">·</span>
+                <span>
+                  <span className="detail-head__value">
+                    {detail.videoCount}
+                  </span>{" "}
+                  个视频
+                </span>
+              </>
+            )}
+            {detail.sourceName && (
+              <>
+                <span className="text-fg-subtle">·</span>
+                <span>来自 {detail.sourceName}</span>
+              </>
+            )}
+          </div>
+        </div>
+        <div className="detail-head__actions">
+          <button
+            type="button"
+            onClick={onToggleFav}
+            className={`inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-body transition-colors ${
+              isFavorite
+                ? "bg-favorite/10 text-favorite hover:bg-favorite/15"
+                : "border border-border-faint hover:bg-bg-subtle text-fg-muted"
+            }`}
+          >
+            <StarIcon size={13} filled={isFavorite} />
+            <span>{isFavorite ? "已收藏" : "收藏"}</span>
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -369,35 +476,14 @@ function CollectionView({
   );
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="page-shell page-heading">
-        <button onClick={onBack} className="btn btn-sm btn-ghost mb-4 -ml-2">
-          <ChevronLeftIcon size={13} />
-          <span>返回</span>
-        </button>
-        <div className="flex items-end justify-between gap-4 flex-wrap">
-          <div className="min-w-0">
-            <h1 className="page-title page-title--sm truncate">{detail.name}</h1>
-            <div className="text-body text-fg-muted mt-1.5">
-              <span className="tabular-nums">
-                {detail.albumCount} {collectionUnit(detail.contentKind)}
-              </span>
-            </div>
-          </div>
-          <button
-            onClick={onToggleFav}
-            className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-meta transition-colors ${
-              isFavorite
-                ? "bg-favorite/10 text-favorite hover:bg-favorite/15"
-                : "border border-border-faint hover:bg-bg-subtle text-fg-muted"
-            }`}
-          >
-            <StarIcon size={12} filled={isFavorite} />
-            <span>{isFavorite ? "已收藏" : "收藏"}</span>
-          </button>
-        </div>
-      </div>
-      <div className="flex-1 overflow-auto">
+    <div className="flex flex-col h-full min-h-0">
+      <CollectionHead
+        detail={detail}
+        isFavorite={isFavorite}
+        onToggleFav={onToggleFav}
+        onBack={onBack}
+      />
+      <div className="flex-1 min-h-0 overflow-auto">
         {needsHistory && <ViewedSortNotice query={historyQuery} />}
         <ListFilterBar totalCount={cards.length} showMinImageFilter={false} />
         {/* 时间线只在 ≥2 个年份桶时才有意义:
@@ -423,7 +509,13 @@ function CollectionView({
             description="试试修改搜索条件或排序。"
           />
         ) : (
-          <AlbumGrid items={cards} variant={viewMode} />
+          /* 网格与页头共用同一条留白线：之前这里少了一层容器，
+             卡片贴到了侧栏边上，与其它页面的左缘对不齐。 */
+          <section className="page-shell">
+            <div className="pb-10">
+              <AlbumGrid items={cards} variant={viewMode} />
+            </div>
+          </section>
         )}
       </div>
     </div>

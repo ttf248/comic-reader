@@ -172,95 +172,118 @@ export default function PhotoAlbum({ album }: Props) {
       <header className="shrink-0 border-b border-border-faint bg-bg">
         {/* 照片墙与其它页面的内容左缘保持一致：留白用同一套 gutter，
             宽屏时照片铺满但边缘不跑掉。 */}
-        <div className="flex items-center gap-3 px-[clamp(20px,3vw,48px)] py-2.5">
-          <button
-            type="button"
-            onClick={goBack}
-            className="btn btn-sm btn-ghost -ml-2 shrink-0"
-            aria-label="返回"
-          >
-            <ChevronLeftIcon size={13} />
-            <span className="hidden sm:inline">返回</span>
-          </button>
-
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-label font-medium text-fg">
-              {title}
-            </h1>
-            <div className="text-meta tabular-nums text-fg-muted">
-              {album.imageCount ?? 0} 张
-              {(album.videoCount ?? 0) > 0 && ` · ${album.videoCount} 个视频`}
-            </div>
-          </div>
-
-          <div className="hidden items-center gap-1 md:flex">
-            <span className="text-meta text-fg-subtle">密度</span>
-            <div className="flex items-center overflow-hidden rounded-md border border-border-faint text-meta">
-              {(["compact", "cozy", "large"] as const).map((key) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setDensity(key)}
-                  className={`h-7 px-2.5 transition-colors ${
-                    density === key
-                      ? "bg-bg-subtle text-fg"
-                      : "text-fg-muted hover:text-fg"
-                  }`}
-                  title={WALL_DENSITY_LABEL[key]}
-                  aria-label={WALL_DENSITY_LABEL[key]}
-                  aria-pressed={density === key}
-                >
-                  {key === "compact" ? "S" : key === "cozy" ? "M" : "L"}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={toggleFavorite}
-            className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors ${
-              isFavorite
-                ? "text-favorite hover:bg-favorite/10"
-                : "text-fg-muted hover:bg-bg-subtle hover:text-fg"
-            }`}
-            title={isFavorite ? "取消收藏" : "收藏"}
-            aria-label={isFavorite ? "取消收藏" : "收藏"}
-          >
-            <StarIcon size={15} filled={isFavorite} />
-          </button>
-
-          <Popover
-            align="end"
-            aria-label="相册更多操作"
-            trigger={
-              <button
-                type="button"
-                className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-bg-subtle hover:text-fg"
-                title="更多"
-                aria-label="更多操作"
-              >
-                <MoreHorizontalIcon size={15} />
-              </button>
-            }
-          >
-            <PopoverLabel>相册</PopoverLabel>
-            <PopoverItem
-              onClick={() => void openInExplorer()}
-              disabled={!actions.canOpenInExplorer}
+        <div className="px-[clamp(20px,3vw,48px)]">
+          <div className="album-bar">
+            <button
+              type="button"
+              onClick={goBack}
+              className="btn btn-sm btn-ghost -ml-2 shrink-0"
+              aria-label="返回"
             >
-              <FolderIcon size={13} />
-              <span>在资源管理器中打开</span>
-            </PopoverItem>
-            <PopoverItem onClick={() => void copyLink()}>
-              <CopyIcon size={13} />
-              <span>复制相册链接</span>
-            </PopoverItem>
-            <PopoverItem onClick={() => void setCover()}>
-              <GridIcon size={13} />
-              <span>用当前查看的图片设为封面</span>
-            </PopoverItem>
-          </Popover>
+              <ChevronLeftIcon size={13} />
+              <span className="hidden sm:inline">返回</span>
+            </button>
+
+            <div className="min-w-0 flex-1">
+              <h1 className="album-bar__title truncate">{title}</h1>
+              <div className="album-bar__meta tabular-nums">
+                <span>
+                  <span className="text-fg font-medium">
+                    {album.imageCount ?? 0}
+                  </span>{" "}
+                  张
+                </span>
+                {(album.videoCount ?? 0) > 0 && (
+                  <>
+                    <span className="text-fg-subtle">·</span>
+                    <span>
+                      <span className="text-fg font-medium">
+                        {album.videoCount}
+                      </span>{" "}
+                      个视频
+                    </span>
+                  </>
+                )}
+                {album.sourceName && (
+                  <>
+                    <span className="text-fg-subtle">·</span>
+                    <span className="truncate">来自 {album.sourceName}</span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* 右侧操作收成一组：密度切换、收藏、更多。
+                组内用 hairline 分隔，读起来是一个工具条而不是三个孤立按钮。 */}
+            <div className="hidden items-center gap-2 md:flex">
+              <span className="text-meta text-fg-subtle">密度</span>
+              <div className="flex items-center overflow-hidden rounded-md border border-border-faint text-meta">
+                {(["compact", "cozy", "large"] as const).map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setDensity(key)}
+                    className={`h-7 px-2.5 transition-colors ${
+                      density === key
+                        ? "bg-bg-subtle text-fg"
+                        : "text-fg-muted hover:text-fg"
+                    }`}
+                    title={WALL_DENSITY_LABEL[key]}
+                    aria-label={WALL_DENSITY_LABEL[key]}
+                    aria-pressed={density === key}
+                  >
+                    {key === "compact" ? "S" : key === "cozy" ? "M" : "L"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={toggleFavorite}
+              className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors ${
+                isFavorite
+                  ? "text-favorite hover:bg-favorite/10"
+                  : "text-fg-muted hover:bg-bg-subtle hover:text-fg"
+              }`}
+              title={isFavorite ? "取消收藏" : "收藏"}
+              aria-label={isFavorite ? "取消收藏" : "收藏"}
+            >
+              <StarIcon size={15} filled={isFavorite} />
+            </button>
+
+            <Popover
+              align="end"
+              aria-label="相册更多操作"
+              trigger={
+                <button
+                  type="button"
+                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-bg-subtle hover:text-fg"
+                  title="更多"
+                  aria-label="更多操作"
+                >
+                  <MoreHorizontalIcon size={15} />
+                </button>
+              }
+            >
+              <PopoverLabel>相册</PopoverLabel>
+              <PopoverItem
+                onClick={() => void openInExplorer()}
+                disabled={!actions.canOpenInExplorer}
+              >
+                <FolderIcon size={13} />
+                <span>在资源管理器中打开</span>
+              </PopoverItem>
+              <PopoverItem onClick={() => void copyLink()}>
+                <CopyIcon size={13} />
+                <span>复制相册链接</span>
+              </PopoverItem>
+              <PopoverItem onClick={() => void setCover()}>
+                <GridIcon size={13} />
+                <span>用当前查看的图片设为封面</span>
+              </PopoverItem>
+            </Popover>
+          </div>
         </div>
       </header>
 

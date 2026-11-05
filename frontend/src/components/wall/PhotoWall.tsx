@@ -167,25 +167,32 @@ export default function PhotoWall({
                       aria-label={isVideo ? `播放 ${item.name}` : `查看 ${item.name}`}
                     />
                     {/* 视频角标：光靠一枚 10px 的三角不够 —— 形状与颜色都
-                        说不清这是什么，带上「视频」两个字才不依赖颜色辨认。 */}
+                        说不清这是什么，带上「视频」两个字才不依赖颜色辨认。
+                        角标带汉字，因此用 --text-meta 而不是 --text-badge：
+                        徽章字号是拉丁字母与数字的下限，中文压不住。 */}
                     {isVideo && (
-                      <span className="pointer-events-none absolute right-1.5 top-1.5 z-0 inline-flex items-center gap-1 rounded-md bg-black/65 px-1.5 py-0.5 text-badge font-medium text-white/90 backdrop-blur">
+                      <span className="pointer-events-none absolute right-1.5 top-1.5 z-0 inline-flex items-center gap-1 rounded-md bg-black/65 px-1.5 py-0.5 text-meta font-medium text-white/90 backdrop-blur">
                         <PlayFilledIcon size={10} />
                         <span>视频</span>
                       </span>
                     )}
                     {/* 悬停信息层：文件名与像素尺寸。
                         照片墙是浏览页，光靠缩略图看不出「这是什么」；
-                        尺寸来自服务端已带的 width / height，不用另发请求。 */}
+                        尺寸来自服务端已带的 width / height，不用另发请求。
+
+                        背板用共享的 .scrim-bottom：文字所在的整段保持
+                        88% 黑，往上才淡出。原先那层 from-black/85 的渐变
+                        在明亮封面上只压到约 52%，白字对比度掉到 4.3:1
+                        （AA 要 4.5:1）—— 亮度不可控的封面必须按最坏情况算。 */}
                     <div
                       data-testid="wall-tile-info"
-                      className="pointer-events-none absolute inset-x-0 bottom-0 z-0 flex items-end justify-between gap-2 px-2.5 pb-2 pt-9 bg-gradient-to-t from-black/85 via-black/40 to-transparent opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+                      className="pointer-events-none absolute inset-x-0 bottom-0 z-0 flex items-end justify-between gap-2 px-2.5 pb-2 pt-9 scrim-bottom opacity-0 transition-opacity duration-200 group-hover:opacity-100"
                     >
-                      <span className="truncate text-meta text-white/90">
+                      <span className="truncate text-meta text-white">
                         {item.name}
                       </span>
                       {hasSize && (
-                        <span className="shrink-0 text-badge tabular-nums text-white/70">
+                        <span className="shrink-0 text-badge tabular-nums text-white/80">
                           {item.width}×{item.height}
                         </span>
                       )}

@@ -299,7 +299,7 @@ export default function Sidebar({
           {resumeEntries.length > 1 && (
             <Link
               to={recentsRoute(mode)}
-              className="mt-2 flex items-center gap-1 px-1 text-meta text-rail-muted hover:text-rail-fg transition-colors"
+              className="mt-2 flex min-h-7 items-center gap-1 px-1 text-meta text-rail-muted hover:text-rail-fg transition-colors"
             >
               <span>
                 还有 {resumeEntries.length - 1} 本

@@ -310,6 +310,84 @@
     top: 8px;
     right: 8px;
   }
+  /* --- 详情页头 ---
+     一套骨架：封面 · 标题区 · 操作区。集合页与相册详情页共用，
+     标题区留空（无封面）时左右两列自然贴边，页头不会变形。 */
+  .detail-head {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: clamp(16px, 2vw, 24px);
+  }
+  .detail-head__cover {
+    width: 104px;
+    height: 104px;
+    overflow: hidden;
+    border-radius: var(--radius-media);
+    background: var(--bg-subtle);
+    box-shadow: var(--shadow-xs);
+  }
+  .detail-head__title {
+    font-family: var(--font-display);
+    font-size: clamp(22px, 2.1vw, 30px);
+    line-height: 1.25;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--fg);
+    overflow-wrap: anywhere;
+  }
+  .detail-head__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 10px;
+    margin-top: 9px;
+    font-size: var(--text-body);
+    color: var(--fg-muted);
+  }
+  /* 数字比单位重一档：扫读时先看到量级，再看到单位。 */
+  .detail-head__value {
+    color: var(--fg);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .detail-head__actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    /* 与眉标同一行：操作属于这一层的身份，不是垂直居中悬在半空。 */
+    align-self: start;
+    margin-top: 2px;
+  }
+
+  /* --- 相册条：照片墙顶部的相册身份条 ---
+     不带封面（封面就是墙本身），但保留标题的字面量级，
+     让相册页和集合页看起来是同一套语言。 */
+  .album-bar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding-block: 12px;
+  }
+  .album-bar__title {
+    font-family: var(--font-display);
+    font-size: clamp(20px, 1.8vw, 25px);
+    line-height: 1.25;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--fg);
+    overflow-wrap: anywhere;
+  }
+  .album-bar__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 2px 10px;
+    margin-top: 4px;
+    font-size: var(--text-meta);
+    color: var(--fg-muted);
+  }
+
   .library-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
@@ -576,6 +654,23 @@
     .library-grid,
     .library-grid--spacious {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    /* 窄屏页头：封面缩到 72px，标题与操作仍然并排；
+       操作区换行到下一行，不把标题挤成一条窄柱。 */
+    .detail-head {
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 14px;
+    }
+    .detail-head__cover {
+      width: 72px;
+      height: 72px;
+    }
+    .detail-head__actions {
+      grid-column: 1 / -1;
+      justify-content: flex-start;
+    }
+    .album-bar {
+      flex-wrap: wrap;
     }
     .album-tile {
       padding: 5px;
