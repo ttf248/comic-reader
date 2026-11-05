@@ -2,8 +2,14 @@ import { api } from "./client";
 
 // 后端 /api/config 的响应结构。所有字段都来自 config.yaml；
 // 当前生效值在 GetConfig 时返回。
+/** 媒体根目录：路径 + 内容属性（照片 / 漫画，两者互斥）。 */
+export interface MediaRootConfig {
+  path: string;
+  kind: ContentKind;
+}
+
 export interface ServerConfig {
-  mediaRoots: string[];
+  mediaRoots: MediaRootConfig[];
   host: string;
   port: number;
   accessMode: "local" | "lan";
@@ -29,10 +35,6 @@ export interface ServerConfig {
   skipHidden: boolean;
   systemFiles: string[];
   excludePatterns: string[];
-  // 相册的浏览用途：默认按哪种方式打开相册，以及每个媒体根的按根默认值。
-  // 键是规范化后的媒体根路径（与 mediaRoots 同一套写法）。
-  defaultContentKind: ContentKind;
-  rootContentKinds: Record<string, ContentKind>;
 }
 
 /** 相册的浏览用途：照片墙 / 漫画阅读器。 */
@@ -63,8 +65,6 @@ type ServerConfigFields = Partial<
     | "skipHidden"
     | "systemFiles"
     | "excludePatterns"
-    | "defaultContentKind"
-    | "rootContentKinds"
   >
 >;
 

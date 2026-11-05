@@ -13,7 +13,7 @@ import { decodeFavPath, readerRoute } from "./path";
  *
  * 落点按相册的内容用途决定：
  *  - 漫画相册 → 阅读器，并带上页码，从上次的位置接着读；
- *  - 照片相册 → 照片墙（相册入口按用途分派），照片墙自己管浏览位置。
+ *  - 照片相册 → 相册详情页。照片没有阅读进度，也就不存在「接着读」。
  *
  * type 的推断（只在漫画相册里有意义）：
  *  - imageCount > 0（混合 / 纯图）→ type=image
@@ -21,6 +21,7 @@ import { decodeFavPath, readerRoute } from "./path";
  */
 export function continueReadingTarget(card: CardData): string {
   if (card.variant !== "album") return card.to;
+  // 阅读进度只属于漫画：照片相册没有进度，直接回相册详情页。
   if (card.contentKind !== "comic") return card.to;
 
   const idx = card.progress?.index ?? 0;

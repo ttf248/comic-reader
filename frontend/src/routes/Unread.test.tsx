@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router-dom";
 import Unread from "./Unread";
 import { useFavorites } from "../hooks/useFavorites";
 import { useSearchStore } from "../store/searchStore";
+import { useAppModeStore } from "../store/appModeStore";
 
 // 全部依赖外部 hook,组件本身不直接 fetch — mock 掉避免网络。
 vi.mock("../hooks/useFavorites", () => ({
@@ -50,8 +51,8 @@ const baseAlbum = (
   videoCount: 0,
   mediaCount: imageCount,
   coverImage: id + "-cover",
-  // 工作台默认是照片：相册要带上用途，否则会被模式过滤掉。
-  contentKind: "photo" as const,
+  // 未读只属于漫画工作台：相册必须是漫画属性。
+  contentKind: "comic" as const,
   coverImages: [id + "-cover"],
   folderSize: 0,
   tags: [] as string[],
@@ -70,7 +71,11 @@ function seedUnread(
   vi.mocked(useLibraryManifest).mockReturnValue({
     data: {
       manifest: {
-        statistics: { albumCount, photoAlbumCount: albumCount },
+        statistics: {
+          albumCount,
+          comicAlbumCount: albumCount,
+          photoAlbumCount: 0,
+        },
       },
     },
     isLoading: false,
@@ -98,11 +103,17 @@ describe("Unread", () => {
     vi.mocked(useLibraryManifest).mockReturnValue({
       data: {
         manifest: {
-          statistics: { albumCount: 0, photoAlbumCount: 0 },
+          statistics: {
+            albumCount: 0,
+            comicAlbumCount: 0,
+            photoAlbumCount: 0,
+          },
         },
       },
       isLoading: false,
     } as never);
+    // 未读页只属于漫画工作台：照片模式会被重定向回主页。
+    useAppModeStore.setState({ mode: "comic", ready: true });
     useSearchStore.getState().reset();
     vi.mocked(useFavorites).mockReturnValue({
       favorites: [],
@@ -126,14 +137,14 @@ describe("Unread", () => {
       const headerHasCount = screen.queryAllByText(/还有/).length > 0;
       expect(headerHasCount).toBe(true);
     });
-    expect(screen.getByText("随机一本未浏览")).toBeInTheDocument();
+    expect(screen.getByText("随机一本未读")).toBeInTheDocument();
   });
 
   it("全部看完时显示「看完了」空态", async () => {
     seedUnread([], 1);
     renderUnread();
     await waitFor(() => {
-      expect(screen.getByText(/照片都看完啦/)).toBeInTheDocument();
+      expect(screen.getByText(/全部看完啦/)).toBeInTheDocument();
     });
   });
 

@@ -6,8 +6,8 @@ import { useAppModeStore } from '../store/appModeStore'
 /**
  * 全局工作台模式。
  *
- * mode 是「我现在看哪一类相册」，它决定列表呈现什么、页面用什么措辞；
- * 它不改变任何一本相册自己的打开方式（那是相册的 contentKind）。
+ * mode 就是目录的内容属性：照片工作台只列照片目录的相册，漫画工作台只列漫画目录的。
+ * 它决定列表呈现什么、页面用什么措辞，也决定相册点开进照片墙还是阅读器。
  */
 export function useAppMode() {
   const mode = useAppModeStore((s) => s.mode)

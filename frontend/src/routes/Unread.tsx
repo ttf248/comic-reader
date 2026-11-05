@@ -1,6 +1,6 @@
 import PageHeading from "../components/common/PageHeading";
 import { useMemo } from "react";
-import { useNavigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useSearchStore } from "../store/searchStore";
 import { useUIStore } from "../store/uiStore";
 import { useUnreadAlbums } from "../hooks/useUnreadAlbums";
@@ -14,8 +14,8 @@ import type { GalleryContextEntry } from "../utils/galleryContext";
 import { albumRoute, decodeFavPath } from "../utils/path";
 import { compareDatesDesc } from "../utils/date";
 import { useViewedSort } from "../hooks/useHistory";
+import { comicCopy } from "../utils/workbench";
 import { useAppMode } from "../hooks/useAppMode";
-import { workbenchCopy } from "../utils/workbench";
 import { cardMatchesQuery } from "../utils/libraryCard";
 import ViewedSortNotice from "../components/common/ViewedSortNotice";
 
@@ -35,7 +35,7 @@ export default function Unread() {
   const pushToast = useUIStore((s) => s.pushToast);
   const { cards, count, total, isLoading } = useUnreadAlbums();
   const { mode } = useAppMode();
-  const copy = workbenchCopy(mode);
+  const copy = comicCopy();
   const needsHistory = sortBy === "viewed" && cards.length > 0;
   const { query: historyQuery, compareViewed } = useViewedSort(needsHistory);
 
@@ -92,6 +92,10 @@ export default function Unread() {
     const pick = filtered[Math.floor(Math.random() * filtered.length)];
     navigate(albumRoute(pick.to.replace(/^\/albums\//, "")));
   }
+
+  // 未读页只属于漫画工作台：照片模式下没有「未读」这回事，
+  // 从地址栏直接进来时回到主页，而不是给一个空页面。
+  if (mode !== "comic") return <Navigate to="/" replace />;
 
   return (
     <div className="min-h-full">

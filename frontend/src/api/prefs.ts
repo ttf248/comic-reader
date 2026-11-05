@@ -15,8 +15,8 @@ export interface Prefs {
   theme: 'light' | 'dark' | 'system'
   sidebarCollapsed: boolean
   /**
-   * 全局工作台模式。photo / comic 让列表只呈现该用途的相册，
-   * all 不过滤（逃生舱）。它与相册自身的 contentKind 正交。
+   * 全局工作台模式。photo / comic 让列表只呈现对应目录属性的相册，
+   * 两档互斥：没有不过滤的「全部」。
    */
   appMode: AppMode
 }

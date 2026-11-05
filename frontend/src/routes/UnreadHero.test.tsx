@@ -44,7 +44,6 @@ function renderHero(
           <UnreadHero
             cards={cards}
             count={count}
-            mode="comic"
             onShuffle={onShuffle}
             onMarkRead={onMarkRead}
           />

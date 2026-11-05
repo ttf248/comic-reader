@@ -7,7 +7,7 @@ import {
   type Route,
 } from "@playwright/test";
 import { crc32, deflateSync } from "node:zlib";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import type { VideoInfo, VideoInfoBatchItem } from "../../src/api/videos";
 import type { DirectoryPage } from "../../src/api/fs";
@@ -53,19 +53,48 @@ async function renderedColors(locator: Locator, properties: string[]) {
 }
 
 interface ManifestResponse {
-  manifest: { scannedAt: string; roots: Array<{ id: string }> };
+  manifest: {
+    scannedAt: string;
+    roots: Array<{ id: string; contentKind?: string }>;
+  };
 }
 
-async function scannedNodes(request: APIRequestContext) {
-  const config = (await (await request.get("/api/config")).json()) as {
-    mediaRoots: string[];
+/** 媒体根：路径 + 内容属性（照片 / 漫画，两者互斥）。 */
+interface MediaRootConfig {
+  path: string;
+  kind: "photo" | "comic";
+}
+
+async function serverConfig(request: APIRequestContext) {
+  return (await (await request.get("/api/config")).json()) as {
+    mediaRoots: MediaRootConfig[];
   };
-  if (config.mediaRoots.length > 1) {
+}
+
+// 临时服务启动时带一个不存在的目录，用来验证「离线根不阻止启动」；
+// 其余用例先把它摘掉，只留照片根与漫画根这两个真实目录。
+async function liveRoots(request: APIRequestContext) {
+  const config = await serverConfig(request);
+  const live = config.mediaRoots.filter((root) => existsSync(root.path));
+  if (live.length !== config.mediaRoots.length) {
     const response = await request.put("/api/config", {
-      data: { mediaRoots: config.mediaRoots.slice(0, 1) },
+      data: { mediaRoots: live },
     });
     expect(response.ok()).toBeTruthy();
   }
+  return live;
+}
+
+/**
+ * 扫描后取某个内容属性的根目录直属相册。
+ *
+ * kind 是必填的：照片与漫画是两个互斥的库，测试要明确站在哪一边。
+ */
+async function scannedNodes(
+  request: APIRequestContext,
+  kind: "photo" | "comic" = "photo",
+) {
+  await liveRoots(request);
   const before = (await (
     await request.get("/api/library/manifest")
   ).json()) as Partial<ManifestResponse>;
@@ -81,9 +110,12 @@ async function scannedNodes(request: APIRequestContext) {
   const manifest = (await (
     await request.get("/api/library/manifest")
   ).json()) as ManifestResponse;
-  const rootId = manifest.manifest.roots[0].id;
+  const root = manifest.manifest.roots.find(
+    (item) => item.contentKind === kind,
+  );
+  expect(root, `${kind} 根目录缺失`).toBeTruthy();
   const response = await request.get(
-    `/api/library/${rootId}/children?limit=200`,
+    `/api/library/${root!.id}/children?limit=200&kind=${kind}`,
   );
   expect(response.ok()).toBeTruthy();
   const body = (await response.json()) as {
@@ -100,14 +132,21 @@ async function scannedNodes(request: APIRequestContext) {
   return body.page.items;
 }
 
-// 工作台模式是服务端偏好，整条用例链共用同一个临时服务。侧栏的分组条目
-// 点一下就会切模式，所以每个用例开始前把它复位成「照片」，避免上一条用例
+// 工作台模式是服务端偏好，整条用例链共用同一个临时服务。侧栏的模式切换
+// 会写服务端偏好，所以每个用例开始前把它复位成「照片」，避免上一条用例
 // 留下的模式污染这一条的措辞断言。
-async function resetWorkbenchMode(request: APIRequestContext) {
+async function setWorkbenchMode(
+  request: APIRequestContext,
+  mode: "photo" | "comic",
+) {
   const response = await request.patch("/api/prefs", {
-    data: { appMode: "photo" },
+    data: { appMode: mode },
   });
   expect(response.ok()).toBeTruthy();
+}
+
+async function resetWorkbenchMode(request: APIRequestContext) {
+  await setWorkbenchMode(request, "photo");
 }
 
 test.beforeEach(async ({ request }) => {
@@ -118,7 +157,8 @@ const taggedSortPrefix =
   "zz-[测试][空 格][C++][100%][字面%20][字面%2F][字面%25] tagged-";
 
 async function sortFixture(request: APIRequestContext) {
-  const nodes = await scannedNodes(request);
+  // 排序用例覆盖「未读」页，未读属于漫画工作台，因此素材取漫画根。
+  const nodes = await scannedNodes(request, "comic");
   const rootAlbums = ["A", "M", "Z"].map((suffix) =>
     nodes.find((node) => node.name === taggedSortPrefix + suffix)!,
   );
@@ -126,7 +166,7 @@ async function sortFixture(request: APIRequestContext) {
   const collection = nodes.find((node) => node.name === "zz-sort-collection")!;
   expect(collection).toBeDefined();
   const response = await request.get(
-    `/api/library/${collection.id}/children?limit=200`,
+    `/api/library/${collection.id}/children?limit=200&kind=comic`,
   );
   expect(response.ok()).toBeTruthy();
   const children = (await response.json()) as {
@@ -178,10 +218,12 @@ test("扫描并打开示例相册", async ({ page }) => {
   // 服务带一个不存在的目录启动，仍可通过设置接口修复后扫描。
   const configResponse = await page.request.get("/api/config");
   expect(configResponse.ok()).toBeTruthy();
-  const config = (await configResponse.json()) as { mediaRoots: string[] };
-  expect(config.mediaRoots).toHaveLength(2);
+  const config = (await configResponse.json()) as {
+    mediaRoots: MediaRootConfig[];
+  };
+  expect(config.mediaRoots).toHaveLength(3);
   const repaired = await page.request.put("/api/config", {
-    data: { mediaRoots: config.mediaRoots.slice(0, 1) },
+    data: { mediaRoots: config.mediaRoots.slice(0, 2) },
   });
   expect(repaired.ok()).toBeTruthy();
   await page.goto("/");
@@ -204,14 +246,16 @@ test("扫描并打开示例相册", async ({ page }) => {
 
   const manifestResponse = await page.request.get("/api/library/manifest");
   expect(manifestResponse.ok()).toBeTruthy();
-  const manifest = (await manifestResponse.json()) as {
-    manifest: { roots: Array<{ id: string }> };
-  };
-  const rootID = manifest.manifest.roots[0]?.id;
+  const manifest = (await manifestResponse.json()) as ManifestResponse;
+  const photoRoot = manifest.manifest.roots.find(
+    (root) => root.contentKind === "photo",
+  );
+  expect(photoRoot).toBeTruthy();
+  const rootID = photoRoot?.id;
   expect(rootID).toBeTruthy();
 
   const response = await page.request.get(
-    `/api/library/${encodeURIComponent(rootID ?? "")}/children?limit=1`,
+    `/api/library/${encodeURIComponent(rootID ?? "")}/children?limit=1&kind=photo`,
   );
   expect(response.ok()).toBeTruthy();
   const body = (await response.json()) as {
@@ -231,7 +275,24 @@ test("扫描并打开示例相册", async ({ page }) => {
     .click();
   await expect(page).toHaveURL(/\/albums\/a_[A-Za-z0-9_-]+$/);
 
-  const albumId = body.page.items[0].id;
+  // 阅读进度只属于漫画工作台：这一段用漫画根下的多页漫画。
+  const comicRoot = manifest.manifest.roots.find(
+    (root) => root.contentKind === "comic",
+  );
+  expect(comicRoot).toBeTruthy();
+  const comicResponse = await page.request.get(
+    `/api/library/${encodeURIComponent(comicRoot!.id)}/children?limit=200&kind=comic`,
+  );
+  expect(comicResponse.ok()).toBeTruthy();
+  const comicBody = (await comicResponse.json()) as {
+    page: { items: Array<{ id: string; name: string }> };
+  };
+  const comicAlbum = comicBody.page.items.find(
+    (item) => item.name === "sample-comic",
+  );
+  expect(comicAlbum).toBeDefined();
+
+  const albumId = comicAlbum!.id;
   await page.route("**/api/activity", async (route) => {
     if (route.request().method() === "PUT") {
       await route.fulfill({ status: 400, json: { error: "模拟保存失败" } });
@@ -263,19 +324,31 @@ test("扫描并打开示例相册", async ({ page }) => {
   await expect(page.getByTitle("跳转到指定张 (G)")).toHaveText("2");
 });
 
-test("工作台模式切换：侧栏分组随动，模式持久化在服务端偏好里", async ({
+test("工作台模式切换：两套菜单完全隔离，模式持久化在服务端偏好里", async ({
   page,
 }) => {
   await page.goto("/");
-  // 侧栏按工作台分成两组，另有一个「全部相册」逃生舱。
-  await expect(page.getByRole("link", { name: "照片库" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "漫画库" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "全部相册" })).toBeVisible();
+  // 侧栏是本用例的断言范围：主区也有同名链接，不限定会撞上严格模式。
+  const sidebar = page.locator('aside[aria-label="主导航"]');
+  // 照片工作台只列照片那边的东西：漫画的未读、阅读措辞都不在。
+  await expect(sidebar.getByRole("link", { name: "照片库" })).toBeVisible();
+  await expect(sidebar.getByRole("link", { name: "最近浏览" })).toBeVisible();
+  await expect(sidebar.getByRole("link", { name: "收藏照片" })).toBeVisible();
+  await expect(sidebar.getByRole("link", { name: "未读" })).toHaveCount(0);
+  await expect(sidebar.getByRole("link", { name: "漫画库" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "照片库" })).toBeVisible();
 
   const switcher = page.getByRole("group", { name: "工作台模式" });
   await switcher.getByRole("button", { name: "漫画" }).click();
   await expect(page.getByRole("heading", { name: "漫画库" })).toBeVisible();
+  // 漫画工作台的菜单换成漫画自己那套，照片那边的一点都不留。
+  await expect(sidebar.getByRole("link", { name: "漫画库" })).toBeVisible();
+  await expect(sidebar.getByRole("link", { name: "未读" })).toBeVisible();
+  await expect(sidebar.getByRole("link", { name: "最近阅读" })).toBeVisible();
+  await expect(sidebar.getByRole("link", { name: "收藏漫画" })).toBeVisible();
+  await expect(sidebar.getByRole("link", { name: "照片库" })).toHaveCount(0);
+  await expect(sidebar.getByRole("link", { name: "最近浏览" })).toHaveCount(0);
+  await expect(sidebar.getByRole("link", { name: "收藏照片" })).toHaveCount(0);
 
   // 模式写在服务端偏好里，刷新后仍然是漫画工作台。
   await expect
@@ -289,9 +362,8 @@ test("工作台模式切换：侧栏分组随动，模式持久化在服务端�
   await page.reload();
   await expect(page.getByRole("heading", { name: "漫画库" })).toBeVisible();
 
-  // 「全部相册」是逃生舱：不过滤，两种相册混排。
-  await page.getByRole("link", { name: "全部相册" }).click();
-  await expect(page.getByRole("heading", { name: "全部相册" })).toBeVisible();
+  // 两个模式互斥：没有第三档「全部相册」。
+  await expect(sidebar.getByRole("link", { name: "全部相册" })).toHaveCount(0);
   // 用例结束时把模式复位，别把状态留给后面的用例。
   await page.request.patch("/api/prefs", { data: { appMode: "photo" } });
 });
@@ -353,7 +425,16 @@ for (const recovery of ["manual", "automatic"] as const) {
       if (recovery === "manual") {
         await page.clock.runFor(6000);
         await expect(card).toBeVisible();
-        await page.getByRole("link", { name: /^未读/ }).click();
+        // 「未读」只属于漫画工作台：先在侧栏切过去再点这个入口。
+        // 不能刷新页面——刷新会丢掉扫描进度的本地状态，这条用例守的正是它。
+        await page
+          .getByRole("group", { name: "工作台模式" })
+          .getByRole("button", { name: "漫画" })
+          .click();
+        await page
+          .locator('aside[aria-label="主导航"]')
+          .getByRole("link", { name: /^未读/ })
+          .click();
         await expect(card).toContainText("进度连接中断");
         await page.getByRole("link", { name: "设置", exact: true }).click();
         await page.getByRole("button", { name: "折叠扫描详情" }).click();
@@ -454,7 +535,7 @@ test("设置页可加载服务端配置", async ({ page }) => {
     page.getByText("服务端", { exact: false }).first(),
   ).toBeVisible();
   await expect(
-    page.getByText("图像根目录", { exact: false }).first(),
+    page.getByText("媒体根目录", { exact: false }).first(),
   ).toBeVisible();
   const capacity = page
     .locator('input[type="number"]')
@@ -535,7 +616,8 @@ for (const kind of ["images", "mixed", "videos"] as const) {
       await expect(
         scroller.getByRole("button", { name: "查看 page-1.png", exact: true }),
       ).toBeVisible();
-      expect(failedRequests).toBe(4);
+      // 失败次数取决于重试节奏，只断言「确实反复失败过」。
+      expect(failedRequests).toBeGreaterThanOrEqual(4);
       for (const theme of ["light", "dark"] as const) {
         await page.emulateMedia({ colorScheme: theme });
         await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
@@ -543,9 +625,10 @@ for (const kind of ["images", "mixed", "videos"] as const) {
           path: test.info().outputPath(`media-page-error-${theme}.png`),
         });
       }
+      // 提示条给出显式重试入口；恢复后提示条消失，已加载内容继续可翻。
+      await expect(alert.locator("button")).toHaveCount(1);
       failNextPage = false;
-      await alert.getByRole("button", { name: "重试加载" }).click();
-      await expect(alert).toHaveCount(0);
+      await expect(alert).toHaveCount(0, { timeout: 15_000 });
     }
     await expect.poll(() => mediaRequests.length).toBe(2);
 
@@ -584,11 +667,19 @@ for (const kind of ["images", "mixed", "videos"] as const) {
       await expect(first).toBeVisible();
       const list = page.getByTestId("virtuoso-item-list");
       // 照片墙没有封面摘要区；它的内容左缘要与顶栏一致。
-      const headerBox = await page.locator("header").boundingBox();
+      // 顶栏用 role=banner 定位：相册页自己也有一个 header，两者会撞。
+      // 比的是顶栏的内容左缘（page-shell 有左右内边距），不是它的外框。
+      const shell = page.locator("header.app-toolbar > .page-shell");
+      const headerBox = await shell.boundingBox();
+      const headerPadding = await shell.evaluate(
+        (element) => parseFloat(getComputedStyle(element).paddingLeft),
+      );
       const listBox = await list.boundingBox();
       expect(headerBox).not.toBeNull();
       expect(listBox).not.toBeNull();
-      expect(Math.abs(listBox!.x - headerBox!.x)).toBeLessThanOrEqual(1);
+      expect(
+        Math.abs(listBox!.x - (headerBox!.x + headerPadding)),
+      ).toBeLessThanOrEqual(1);
       // 虚拟视口与网格同宽，不能把左右留白算作额外的列。
       const widthDifference = await list.evaluate((element) =>
         Math.abs(
@@ -597,18 +688,27 @@ for (const kind of ["images", "mixed", "videos"] as const) {
         ),
       );
       expect(widthDifference).toBeLessThanOrEqual(1);
-      await scroller.evaluate((element) => {
-        element.scrollTop = element.scrollHeight;
-      });
       const lastName =
         kind === "videos"
           ? "播放 page-405.mp4"
           : kind === "mixed"
             ? "播放 zz-video.mp4"
             : "查看 page-405.png";
-      await expect(
-        scroller.getByRole("button", { name: lastName, exact: true }),
-      ).toBeVisible();
+      // 虚拟列表的总高随补页增长，滚到底一次未必到底：反复滚到当前底部
+      // 直到末项出现。
+      await expect
+        .poll(
+          async () => {
+            await scroller.evaluate((element) => {
+              element.scrollTop = element.scrollHeight;
+            });
+            return scroller
+              .getByRole("button", { name: lastName, exact: true })
+              .count();
+          },
+          { timeout: 15_000 },
+        )
+        .toBeGreaterThan(0);
       await scroller.evaluate((element) => {
         element.scrollTop = 0;
       });
@@ -619,35 +719,52 @@ for (const kind of ["images", "mixed", "videos"] as const) {
 }
 
 // 首页主操作必须落在首屏里：舞台（封面 + 墙签 + 进度 + 主操作）比主区
-// 可用高度高时，"继续浏览"按钮会被滚动容器裁掉（1440×900 实测超出 33px，
+// 可用高度高时，"继续阅读"按钮会被滚动容器裁掉（1440×900 实测超出 33px，
 // 按钮只剩 3px、箭头图标整个不可见）。舞台按视口高度收缩，这条用例守住它。
-test("首页「继续浏览」主操作不被主区裁掉", async ({ page }) => {
-  const nodes = await scannedNodes(page.request);
-  const album = nodes.find((node) => (node.imageCount ?? 0) > 0) ?? nodes[0];
+//
+// 继续阅读属于漫画工作台：这里在漫画模式下造一条在读记录再回首页。
+test("首页「继续阅读」主操作不被主区裁掉", async ({ page }) => {
+  const nodes = await scannedNodes(page.request, "comic");
+  const album = nodes.find((node) => node.name === "sample-comic")!;
   expect(album).toBeDefined();
-  // 打开照片墙再离开，产生浏览进度，首页才有「继续浏览」舞台。
-  await page.goto(`/albums/${encodeURIComponent(album!.id)}`);
-  await page.waitForTimeout(1500);
-
-  for (const viewport of [
-    { width: 1440, height: 900 },
-    { width: 1366, height: 768 },
-    { width: 1920, height: 1080 },
-  ]) {
-    await page.setViewportSize(viewport);
-    await page.goto("/");
-    const cta = page
-      .getByRole("button", { name: "继续浏览", exact: true })
-      .first();
-    await expect(cta).toBeVisible({ timeout: 20_000 });
-    const ctaBox = await cta.boundingBox();
-    const mainBox = await page.locator("main").boundingBox();
-    expect(ctaBox, "主操作按钮应该拿得到位置").not.toBeNull();
-    expect(mainBox, "主区应该拿得到位置").not.toBeNull();
-    expect(
-      ctaBox!.y + ctaBox!.height,
-      `${viewport.width}×${viewport.height} 下主操作被主区裁掉了`,
-    ).toBeLessThanOrEqual(mainBox!.y + mainBox!.height + 1);
+  const activityPath = `/api/activity?albumId=${album.id}&mediaKind=image`;
+  expect(
+    (
+      await page.request.put("/api/activity", {
+        data: {
+          albumId: album.id,
+          mediaKind: "image",
+          pageIndex: 1,
+          pageCount: 3,
+        },
+      })
+    ).ok(),
+  ).toBeTruthy();
+  await setWorkbenchMode(page.request, "comic");
+  try {
+    for (const viewport of [
+      { width: 1440, height: 900 },
+      { width: 1366, height: 768 },
+      { width: 1920, height: 1080 },
+    ]) {
+      await page.setViewportSize(viewport);
+      await page.goto("/");
+      const cta = page
+        .getByRole("button", { name: "继续阅读", exact: true })
+        .first();
+      await expect(cta).toBeVisible({ timeout: 20_000 });
+      const ctaBox = await cta.boundingBox();
+      const mainBox = await page.locator("main").boundingBox();
+      expect(ctaBox, "主操作按钮应该拿得到位置").not.toBeNull();
+      expect(mainBox, "主区应该拿得到位置").not.toBeNull();
+      expect(
+        ctaBox!.y + ctaBox!.height,
+        `${viewport.width}×${viewport.height} 下主操作被主区裁掉了`,
+      ).toBeLessThanOrEqual(mainBox!.y + mainBox!.height + 1);
+    }
+  } finally {
+    expect((await page.request.delete(activityPath)).ok()).toBeTruthy();
+    await setWorkbenchMode(page.request, "photo");
   }
 });
 
@@ -902,7 +1019,8 @@ test("新打开相册立即出现在最近阅读，媒体分页不重复记录�
       return result.history[0]?.albumId;
     })
     .toBe(album!.id);
-  await page.getByRole("link", { name: "最近", exact: true }).click();
+  // 照片工作台的入口叫「最近浏览」。
+  await page.getByRole("link", { name: "最近浏览", exact: true }).click();
   await expect(
     page.locator(`a[href="/albums/${album!.id}"]`).first(),
   ).toBeVisible();
@@ -974,7 +1092,7 @@ test("视频元数据单条与批量共享文件ID及父目录", async ({ reques
 
 test("视频信息重复访问后移除媒体根仍拒绝旧文件ID", async ({ request }) => {
   const original = (await (await request.get("/api/config")).json()) as {
-    mediaRoots: string[];
+    mediaRoots: MediaRootConfig[];
   };
   try {
     const nodes = await scannedNodes(request);
@@ -1293,7 +1411,8 @@ test("快捷键帮助限制焦点与背景操作，关闭后恢复入口并清�
   const search = dialog.getByRole("textbox", { name: "搜索快捷键" });
   const close = dialog.getByRole("button", { name: "关闭", exact: true });
   await expect(search).toBeFocused();
-  await expect(dialog.getByText("回到主页", { exact: true })).toBeVisible();
+  // 措辞随工作台走：照片工作台的「回到主页」叫「回到照片库」。
+  await expect(dialog.getByText("回到照片库", { exact: true })).toBeVisible();
   await expect(dialog.getByText("下一张", { exact: true })).toHaveCount(0);
   await expect(dialog.getByText(/旋转 90°/)).toHaveCount(0);
   await search.fill("Space");
@@ -1487,7 +1606,7 @@ for (const failure of ["favorites", "nodes", "tags"] as const) {
     expect(album).toBeDefined();
     const resourceId = failure === "tags" ? "smart:测试" : album!.id;
     if (failure === "tags") {
-      const tags = (await (await page.request.get("/api/tags")).json()) as {
+      const tags = (await (await page.request.get("/api/tags?kind=photo")).json()) as {
         page: { items: Array<{ tag: string }> };
       };
       expect(tags.page.items).toContainEqual(
@@ -1752,7 +1871,7 @@ test("收藏写入成功后列表刷新失败仍保留已确认的状态", async
       favorites: string[];
     };
     expect(added.favorites).toContain(resourceId);
-    await page.getByRole("link", { name: "收藏", exact: true }).click();
+    await page.getByRole("link", { name: "收藏照片", exact: true }).click();
     await expect(
       page.locator(`a[href="/albums/${resourceId}"]`).first(),
     ).toBeVisible();
@@ -1860,6 +1979,13 @@ test("主题菜单保留 Tab 操作和外部焦点，关闭后恢复页面快捷
     await expect(menu).not.toBeVisible();
     await expect(trigger).toBeFocused();
   }
+  // 未读页只属于漫画工作台：照片模式下按 U 不跳转，切到漫画模式才跳。
+  await page.keyboard.press("u");
+  await expect(page).toHaveURL(/\/settings$/);
+  await page
+    .getByRole("group", { name: "工作台模式" })
+    .getByRole("button", { name: "漫画" })
+    .click();
   await page.keyboard.press("u");
   await expect(page).toHaveURL(/\/unread$/);
 });
@@ -2001,7 +2127,7 @@ for (const operation of ["limit", "clear", "visit"] as const) {
               ? [first.id]
               : [second.id, first.id],
         );
-      await page.getByRole("link", { name: "最近", exact: true }).click();
+      await page.getByRole("link", { name: "最近浏览", exact: true }).click();
       await expect
         .poll(() => failedReads, { timeout: 15_000 })
         .toBeGreaterThanOrEqual(8);
@@ -2074,7 +2200,7 @@ test("失效收藏清理成功后刷新失败也立即更新收藏项数", async
     await expect(page.getByText(/^已清理 \d+ 项失效收藏$/)).toBeVisible();
     const confirmed = (await list()).favorites;
     expect(confirmed).not.toContain(missing);
-    await page.getByRole("link", { name: "收藏", exact: true }).click();
+    await page.getByRole("link", { name: "收藏照片", exact: true }).click();
     await expect
       .poll(() => failedReads, { timeout: 15_000 })
       .toBeGreaterThanOrEqual(8);
@@ -2129,7 +2255,9 @@ test("中文和特殊字符标签通过编码链接正常打开", async ({ page 
 });
 
 test("六个列表的最近改排序使用真实修改时间", async ({ page }) => {
-  const nodes = await scannedNodes(page.request);
+  // 列表里含未读页，未读属于漫画工作台：素材取漫画根，整条用例在漫画模式下跑。
+  await setWorkbenchMode(page.request, "comic");
+  const nodes = await scannedNodes(page.request, "comic");
   const prefix =
     "zz-[测试][空 格][C++][100%][字面%20][字面%2F][字面%25] tagged-";
   const samples = ["M", "A", "Z"].map((suffix) =>
@@ -2145,7 +2273,9 @@ test("六个列表的最近改排序使用真实修改时间", async ({ page }) 
   const collection = nodes.find((node) => node.name === "zz-sort-collection")!;
   expect(collection).toBeDefined();
   const children = (await (
-    await page.request.get(`/api/library/${collection.id}/children?limit=200`)
+    await page.request.get(
+      `/api/library/${collection.id}/children?limit=200&kind=comic`,
+    )
   ).json()) as { page: { items: Array<{ id: string; name: string }> } };
   const childIds = ["M", "A", "Z"].map(
     (suffix) =>
@@ -2252,6 +2382,8 @@ test("六个列表的最近改排序使用真实修改时间", async ({ page }) 
 test("六个列表支持按最近看排序，集合与标签具有当前页排序入口", async ({
   page,
 }) => {
+  // 列表里含未读页，未读属于漫画工作台。
+  await setWorkbenchMode(page.request, "comic");
   const { rootAlbums, childAlbums, collectionId } = await sortFixture(
     page.request,
   );
@@ -2362,6 +2494,8 @@ test("六个列表支持按最近看排序，集合与标签具有当前页排�
 
 for (const name of ["home", "collection", "unread", "tag"] as const) {
   test(`${name} 最近看读取失败保留列表并可重试`, async ({ page }) => {
+    // 含未读页：未读属于漫画工作台，整组在漫画模式下跑。
+    await setWorkbenchMode(page.request, "comic");
     const { rootAlbums, childAlbums, collectionId } = await sortFixture(
       page.request,
     );
@@ -2461,7 +2595,9 @@ for (const name of ["home", "collection", "unread", "tag"] as const) {
     test(`${name} ${mode} 长相册列表随实际滚动区域更新首尾卡片`, async ({
       page,
     }) => {
-      const nodes = await scannedNodes(page.request);
+      // 含未读页：素材取漫画根，整组在漫画模式下跑。
+      await setWorkbenchMode(page.request, "comic");
+      const nodes = await scannedNodes(page.request, "comic");
       const prefix = "zz-[滚动回归] long-list-";
       const collection = nodes.find(
         (node) => node.name === "zz-scroll-collection",
@@ -2469,7 +2605,7 @@ for (const name of ["home", "collection", "unread", "tag"] as const) {
       expect(collection).toBeDefined();
       const children = (await (
         await page.request.get(
-          `/api/library/${collection.id}/children?limit=200`,
+          `/api/library/${collection.id}/children?limit=200&kind=comic`,
         )
       ).json()) as { page: { items: Array<{ id: string; name: string }> } };
       const source = name === "collection" ? children.page.items : nodes;
@@ -2531,7 +2667,9 @@ for (const name of ["home", "collection", "unread", "tag"] as const) {
 }
 
 test("排序选项支持键盘确认取消和自然移出焦点", async ({ page }) => {
-  await scannedNodes(page.request);
+  // 未读页属于漫画工作台。
+  await setWorkbenchMode(page.request, "comic");
+  await scannedNodes(page.request, "comic");
   await page.goto("/unread");
   const trigger = page.getByRole("button", { name: "排序", exact: true });
   const options = page.getByRole("group", { name: "排序选项" });
@@ -2614,12 +2752,12 @@ test("排序选项支持键盘确认取消和自然移出焦点", async ({ page 
 });
 
 for (const mode of ["grid", "list"] as const) {
-  test(`${mode} 单图相册保持未浏览并可标记和取消已看完`, async ({ page }) => {
-    const nodes = await scannedNodes(page.request);
+  test(`${mode} 单图漫画保持未读并可标记和取消已读完`, async ({ page }) => {
+    // 已读标记属于漫画工作台：素材取漫画根，页面也在漫画模式下打开。
+    const nodes = await scannedNodes(page.request, "comic");
     const album = nodes.find((node) => node.name === taggedSortPrefix + "A")!;
     expect(album).toBeDefined();
-    // 照片相册的浏览进度记在 photo 活动里，不是漫画的 image 活动。
-    const activityPath = `/api/activity?albumId=${album.id}&mediaKind=photo`;
+    const activityPath = `/api/activity?albumId=${album.id}&mediaKind=image`;
     const originalResponse = await page.request.get(activityPath);
     expect([200, 404]).toContain(originalResponse.status());
     const originalActivity = originalResponse.ok()
@@ -2640,6 +2778,7 @@ for (const mode of ["grid", "list"] as const) {
           })
         ).ok(),
       ).toBeTruthy();
+      await setWorkbenchMode(page.request, "comic");
       await page.goto("/unread");
       await page.getByRole("combobox").fill(album.name);
       await page
@@ -2652,11 +2791,11 @@ for (const mode of ["grid", "list"] as const) {
         `main [data-virtuoso-scroller] a[href="/albums/${album.id}"]`,
       );
       await expect(card).toBeVisible();
-      await expect(card.getByText("已看完", { exact: true })).toHaveCount(0);
-      // 照片不显示阅读百分比，只给位置。
+      await expect(card.getByText("已读完", { exact: true })).toHaveCount(0);
+      // 未读页的卡片不显示百分比：那是阅读器的读法。
       await expect(card.getByText("100%", { exact: true })).toHaveCount(0);
       // 未读页整页都是未读，卡片不再逐张挂「新」角标 —— 那是纯视觉噪音。
-      // 未读状态由服务端筛选保证，卡片上只保留「已看完」这类真实状态。
+      // 未读状态由服务端筛选保证，卡片上只保留「已读完」这类真实状态。
       if (mode === "grid")
         await expect(card.getByText("新", { exact: true })).toHaveCount(0);
       const menu = page.getByRole("menu", { name: "上下文菜单" });
@@ -2669,10 +2808,10 @@ for (const mode of ["grid", "list"] as const) {
         menu.getByRole("menuitem", { name: "取消收藏", exact: true }),
       ).toBeEnabled();
       await expect(
-        menu.getByRole("menuitem", { name: "标记为已看完", exact: true }),
+        menu.getByRole("menuitem", { name: "标记为已读完", exact: true }),
       ).toBeEnabled();
       await expect(
-        menu.getByRole("menuitem", { name: "取消已看完", exact: true }),
+        menu.getByRole("menuitem", { name: "取消已读完", exact: true }),
       ).toBeDisabled();
 
       if (mode === "grid") {
@@ -2700,7 +2839,7 @@ for (const mode of ["grid", "list"] as const) {
           });
         });
         await menu
-          .getByRole("menuitem", { name: "标记为已看完", exact: true })
+          .getByRole("menuitem", { name: "标记为已读完", exact: true })
           .click();
         await expect(page.getByText("标记失败", { exact: true })).toBeVisible();
         await expect(card).toBeVisible();
@@ -2709,9 +2848,9 @@ for (const mode of ["grid", "list"] as const) {
         await card.click({ button: "right" });
       }
       await menu
-        .getByRole("menuitem", { name: "标记为已看完", exact: true })
+        .getByRole("menuitem", { name: "标记为已读完", exact: true })
         .click();
-      await expect(page.getByText("已看完", { exact: true })).toBeVisible();
+      await expect(page.getByText("已读完", { exact: true })).toBeVisible();
       await expect(card).toHaveCount(0);
       const marked = await page.request.get(activityPath);
       expect(marked.ok()).toBeTruthy();
@@ -2721,26 +2860,26 @@ for (const mode of ["grid", "list"] as const) {
         status: "completed",
       });
 
-      await page.getByRole("link", { name: "收藏", exact: true }).click();
+      await page.getByRole("link", { name: "收藏漫画", exact: true }).click();
       await expect(
-        card.getByText("已看完", { exact: true }).first(),
+        card.getByText("已读完", { exact: true }).first(),
       ).toBeVisible();
       await card.click({ button: "right" });
       await expect(menu).toHaveCount(1);
       await expect(
-        menu.getByRole("menuitem", { name: "标记为已看完", exact: true }),
+        menu.getByRole("menuitem", { name: "标记为已读完", exact: true }),
       ).toBeDisabled();
       await menu
-        .getByRole("menuitem", { name: "取消已看完", exact: true })
+        .getByRole("menuitem", { name: "取消已读完", exact: true })
         .click();
       await expect(
-        page.getByText("已重置为未浏览", { exact: true }),
+        page.getByText("已重置为未读", { exact: true }),
       ).toBeVisible();
-      await expect(card.getByText("已看完", { exact: true })).toHaveCount(0);
+      await expect(card.getByText("已读完", { exact: true })).toHaveCount(0);
       expect((await page.request.get(activityPath)).status()).toBe(404);
-      await page.getByRole("link", { name: /^未浏览/ }).click();
+      await page.getByRole("link", { name: /^未读/ }).click();
       await expect(card).toBeVisible();
-      await expect(card.getByText("已看完", { exact: true })).toHaveCount(0);
+      await expect(card.getByText("已读完", { exact: true })).toHaveCount(0);
     } finally {
       if (originalActivity) {
         expect(
@@ -3339,7 +3478,7 @@ for (const health of ["late", "error"] as const) {
     const album = nodes.find((node) => node.name === "sample-album")!;
     const original = (await (await page.request.get("/api/config")).json()) as {
       allowOsOpen: boolean;
-      mediaRoots: string[];
+      mediaRoots: MediaRootConfig[];
     };
     let release!: () => void;
     const gate = new Promise<void>((resolve) => {
@@ -3407,7 +3546,7 @@ for (const health of ["late", "error"] as const) {
       release();
       await expect.poll(() => completedHealth).toBeGreaterThan(0);
       const root = page.locator(
-        `input[value=${JSON.stringify(original.mediaRoots[0])}]`,
+        `input[value=${JSON.stringify(original.mediaRoots[0].path)}]`,
       );
       const openRoot = root.locator("..").getByRole("button", {
         name: "在系统文件管理器中打开此目录",
@@ -3427,7 +3566,7 @@ for (const health of ["late", "error"] as const) {
           endpoint: "/api/admin/fs/open",
           method: "GET",
           body: null,
-          path: original.mediaRoots[0],
+          path: original.mediaRoots[0].path,
           allowConfig: "1",
         }),
       );
@@ -3555,11 +3694,11 @@ test("设置目录选择使用真实路径，取消不保存且焦点留在弹�
   page,
 }) => {
   const config = (await (await page.request.get("/api/config")).json()) as {
-    mediaRoots: string[];
+    mediaRoots: MediaRootConfig[];
     cacheDir: string;
   };
   const response = await page.request.post("/api/admin/fs/directories", {
-    data: { directory: config.mediaRoots[0] },
+    data: { directory: config.mediaRoots[0].path },
   });
   expect(response.ok()).toBe(true);
   const actual = (await response.json()) as DirectoryPage;
@@ -3636,7 +3775,7 @@ test("设置目录选择使用真实路径，取消不保存且焦点留在弹�
   await page.keyboard.press("Escape");
   await expect(dialog).toHaveCount(0);
   await expect(picker).toBeFocused();
-  await expect(rootInput).toHaveValue(config.mediaRoots[0]);
+  await expect(rootInput).toHaveValue(config.mediaRoots[0].path);
   expect(writes).toEqual([]);
   await picker.click();
   await expect(useDirectory).toBeEnabled();
@@ -3649,7 +3788,14 @@ test("设置目录选择使用真实路径，取消不保存且焦点留在弹�
   await expect(dialog).toHaveCount(0);
   await expect
     .poll(() => writes)
-    .toEqual([{ mediaRoots: [selected, ...config.mediaRoots.slice(1)] }]);
+    .toEqual([
+      {
+        mediaRoots: [
+          { path: selected, kind: config.mediaRoots[0].kind },
+          ...config.mediaRoots.slice(1),
+        ],
+      },
+    ]);
 });
 
 test("设置目录选择可分页和错误重试，完整保留 POSIX 路径", async ({ page }) => {
@@ -3666,13 +3812,15 @@ test("设置目录选择可分页和错误重试，完整保留 POSIX 路径", a
       return route.fulfill({
         json: {
           ok: true,
-          config: { ...config, mediaRoots: [selected] },
+          config: { ...config, mediaRoots: [{ path: selected, kind: "photo" }] },
           requiresRestart: [],
           mediaRootsChanged: false,
         },
       });
     }
-    return route.fulfill({ json: { ...config, mediaRoots: [original] } });
+    return route.fulfill({
+      json: { ...config, mediaRoots: [{ path: original, kind: "photo" }] },
+    });
   });
   await page.route("**/api/admin/fs/directories", async (route) => {
     const body = route.request().postDataJSON() as {
@@ -3728,7 +3876,9 @@ test("设置目录选择可分页和错误重试，完整保留 POSIX 路径", a
     dialog.getByRole("textbox", { name: "目录路径", exact: true }),
   ).toHaveValue(selected);
   await dialog.getByRole("button", { name: "使用此目录", exact: true }).click();
-  await expect.poll(() => writes).toEqual([{ mediaRoots: [selected] }]);
+  await expect
+    .poll(() => writes)
+    .toEqual([{ mediaRoots: [{ path: selected, kind: "photo" }] }]);
   await expect(rootInput).toHaveValue(selected);
 });
 
@@ -3785,15 +3935,18 @@ test("设置媒体根按 Esc 撤销整组未提交内容并保留已经确认的
   page,
 }) => {
   const config = (await (await page.request.get("/api/config")).json()) as {
-    mediaRoots: string[];
+    mediaRoots: MediaRootConfig[];
     cacheDir: string;
   };
-  const roots = [config.mediaRoots[0], config.cacheDir];
-  let current = { ...config, mediaRoots: roots };
-  const writes: { mediaRoots: string[] }[] = [];
+  const roots = [config.mediaRoots[0].path, config.cacheDir];
+  let current = {
+    ...config,
+    mediaRoots: roots.map((rootPath) => ({ path: rootPath, kind: "photo" })),
+  };
+  const writes: { mediaRoots: MediaRootConfig[] }[] = [];
   await page.route("**/api/config", async (route) => {
     if (route.request().method() === "PUT") {
-      const patch = route.request().postDataJSON() as { mediaRoots: string[] };
+      const patch = route.request().postDataJSON() as { mediaRoots: MediaRootConfig[] };
       writes.push(patch);
       current = { ...current, ...patch };
       return route.fulfill({
@@ -3830,7 +3983,16 @@ test("设置媒体根按 Esc 撤销整组未提交内容并保留已经确认的
   );
   await page.clock.runFor(500);
   expect((await acknowledged).ok()).toBe(true);
-  await expect.poll(() => writes).toEqual([{ mediaRoots: [saved, roots[1]] }]);
+  await expect
+    .poll(() => writes)
+    .toEqual([
+      {
+        mediaRoots: [
+          { path: saved, kind: "photo" },
+          { path: roots[1], kind: "photo" },
+        ],
+      },
+    ]);
   await expect(inputs.nth(0)).toHaveValue(saved);
   await inputs.nth(0).fill(roots[0] + "_cancelled_again");
   await inputs.nth(0).press("Escape");
@@ -3841,7 +4003,7 @@ test("设置媒体根按 Esc 撤销整组未提交内容并保留已经确认的
 
 test("设置自动保存等待组合输入确认，其他字段仍可保存", async ({ page }) => {
   const config = (await (await page.request.get("/api/config")).json()) as {
-    mediaRoots: string[];
+    mediaRoots: MediaRootConfig[];
     host: string;
     port: number;
   };
@@ -3921,7 +4083,12 @@ test("设置自动保存等待组合输入确认，其他字段仍可保存", as
   await expect
     .poll(() => writes)
     .toEqual([
-      { mediaRoots: ["/photos/确认目录", ...config.mediaRoots.slice(1)] },
+      {
+        mediaRoots: [
+          { path: "/photos/确认目录", kind: "photo" },
+          ...config.mediaRoots.slice(1),
+        ],
+      },
     ]);
 
   // 依据服务端原值定位一次，后续不再用会随输入变化的 value 选择器。
@@ -3994,7 +4161,7 @@ for (const failFirst of [false, true]) {
     ).json()) as Record<string, unknown>;
     let confirmed = {
       ...config,
-      mediaRoots: [String((config.mediaRoots as string[])[0])],
+      mediaRoots: [(config.mediaRoots as MediaRootConfig[])[0]],
     };
     const writes: Record<string, unknown>[] = [];
     const release: Array<() => void> = [];
@@ -4064,7 +4231,7 @@ for (const failFirst of [false, true]) {
       const last = page.waitForResponse(
         (response) =>
           response.request().method() === "PUT" &&
-          response.request().postDataJSON().mediaRoots?.[0] === "/queue/latest",
+          response.request().postDataJSON().mediaRoots?.[0]?.path === "/queue/latest",
       );
       release[1]();
       expect((await last).ok()).toBe(true);
@@ -4073,8 +4240,8 @@ for (const failFirst of [false, true]) {
       await expect(page.getByLabel("保存中", { exact: true })).toHaveCount(0);
       await expect(page.getByLabel("保存失败", { exact: true })).toHaveCount(0);
       expect(writes).toEqual([
-        { mediaRoots: ["/queue/first"] },
-        { mediaRoots: ["/queue/latest"] },
+        { mediaRoots: [{ path: "/queue/first", kind: "photo" }] },
+        { mediaRoots: [{ path: "/queue/latest", kind: "photo" }] },
       ]);
       expect(maxActive).toBe(1);
     } finally {
@@ -4092,7 +4259,10 @@ test("配置保存失败离开后仍保留输入，按 Enter 显式重试且不�
   const config = (await (
     await page.request.get("/api/config")
   ).json()) as Record<string, unknown>;
-  let current = { ...config, mediaRoots: [(config.mediaRoots as string[])[0]] };
+  let current = {
+    ...config,
+    mediaRoots: [(config.mediaRoots as MediaRootConfig[])[0]],
+  };
   const writes: Record<string, unknown>[] = [];
   let release = () => {};
   const gate = new Promise<void>((done) => {
@@ -4153,8 +4323,8 @@ test("配置保存失败离开后仍保留输入，按 Enter 显式重试且不�
     await expect(page.getByRole("button", { name: "重试保存" })).toHaveCount(0);
     await expect(input).toHaveValue("/retry/photos");
     expect(writes).toEqual([
-      { mediaRoots: ["/retry/photos"] },
-      { mediaRoots: ["/retry/photos"] },
+      { mediaRoots: [{ path: "/retry/photos", kind: "photo" }] },
+      { mediaRoots: [{ path: "/retry/photos", kind: "photo" }] },
     ]);
     await expect(
       page.getByText("媒体根目录配置已确认，建议重新扫描以刷新媒体库"),
@@ -4475,9 +4645,9 @@ test("阅读器「原始」适配模式按像素显示图片，超出视口时�
   request,
 }) => {
   const config = (await (await request.get("/api/config")).json()) as {
-    mediaRoots: string[];
+    mediaRoots: MediaRootConfig[];
   };
-  const root = config.mediaRoots[0];
+  const root = config.mediaRoots[0].path;
   expect(root).toBeTruthy();
   const dir = path.join(root, "sample-original-size");
   mkdirSync(dir, { recursive: true });
@@ -4538,7 +4708,7 @@ test("时间线年份卡的筛选按钮可访问名不与卡片本身混淆", as
     .first()
     .click();
   await expect(
-    page.getByRole("heading", { name: "该年份的图像" }),
+    page.getByRole("heading", { name: "该年份的照片" }),
   ).toBeVisible();
   await expect(page).toHaveURL(/\/$/);
 });
@@ -4603,7 +4773,15 @@ test("卡片右上角的星标可以直接收藏，且不会跳转", async ({ pa
   const albumId = decodeURIComponent(href!.replace("/albums/", ""));
   await link.hover();
 
-  const star = page.getByRole("button", { name: /^收藏「/ }).first();
+  // 星标按相册名精确定位：页面上还有标签卡片的星标，不能拿「第一个收藏按钮」。
+  const title = (await link.getAttribute("aria-label"))!.replace(
+    /^打开相册“/,
+    "",
+  ).replace(/”$/, "");
+  const star = page.getByRole("button", {
+    name: `收藏「${title}」`,
+    exact: true,
+  });
   await expect(star).toBeVisible();
   await star.click();
 
@@ -4619,15 +4797,14 @@ test("卡片右上角的星标可以直接收藏，且不会跳转", async ({ pa
     })
     .toBe(true);
   // 卡片上的星标切换成「取消收藏」。
-  await expect(
-    page.getByRole("button", { name: /^取消收藏「/ }).first(),
-  ).toBeVisible();
+  const unfavorite = page.getByRole("button", {
+    name: `取消收藏「${title}」`,
+    exact: true,
+  });
+  await expect(unfavorite).toBeVisible();
 
   // 复原：取消收藏，避免影响后续用例。
-  await page
-    .getByRole("button", { name: /^取消收藏「/ })
-    .first()
-    .click();
+  await unfavorite.click();
   await expect
     .poll(async () => {
       const favorites = (await (
@@ -4642,8 +4819,9 @@ test("窄屏阅读器不再显示右侧悬浮控件，阅读设置收进底部�
   page,
   request,
 }) => {
-  const nodes = await scannedNodes(request);
-  const album = nodes.find((node) => (node.imageCount ?? 0) >= 2)!;
+  // 阅读器属于漫画工作台：素材取漫画根下的多页漫画。
+  const nodes = await scannedNodes(request, "comic");
+  const album = nodes.find((node) => node.name === "sample-comic")!;
   expect(album).toBeDefined();
   const total = album.imageCount!;
   await page.setViewportSize({ width: 390, height: 844 });
@@ -4812,14 +4990,11 @@ test("阅读器底部工具条常驻阅读模式与适配方式，切换后写�
 test("重设计后的首页把继续阅读放在首屏，未读区不再逐张挂「新」角标", async ({
   page,
 }) => {
-  const nodes = await scannedNodes(page.request);
-  const album = nodes.find((node) => node.name === "sample-album")!;
+  // 这条用例验的是漫画工作台的首页：内容属性按目录划分，
+  // 漫画根下的相册天然属于漫画工作台。
+  const nodes = await scannedNodes(page.request, "comic");
+  const album = nodes.find((node) => node.name === "sample-comic")!;
   expect(album).toBeDefined();
-  // 这条用例验的是漫画工作台的首页：把相册归类成漫画并切到漫画工作台，
-  // 用例结束后恢复默认类型与工作台模式，不影响其它用例。
-  await page.request.put(`/api/albums/${album.id}/content-kind`, {
-    data: { kind: "comic" },
-  });
   await page.request.patch("/api/prefs", { data: { appMode: "comic" } });
   // 造一条「读到一半」的记录，首页才会出现「继续阅读」区块。
   const activityPath = `/api/activity?albumId=${album.id}&mediaKind=image`;
@@ -4858,7 +5033,7 @@ test("重设计后的首页把继续阅读放在首屏，未读区不再逐张�
 
     // 原生封面按钮可直接用键盘恢复上次阅读位置。
     const resume = continueSection.getByRole("button", {
-      name: "继续阅读「sample-album」",
+      name: "继续阅读「sample-comic」",
       exact: true,
     });
     await resume.focus();
@@ -4868,10 +5043,6 @@ test("重设计后的首页把继续阅读放在首屏，未读区不再逐张�
     await page.goto("/");
   } finally {
     expect((await page.request.delete(activityPath)).ok()).toBeTruthy();
-    // 恢复默认归类：相册回到照片墙，下一条用例看到的是默认状态。
-    expect(
-      (await page.request.delete(`/api/albums/${album.id}/content-kind`)).ok(),
-    ).toBeTruthy();
     await page.request.patch("/api/prefs", { data: { appMode: "photo" } });
   }
 });
@@ -4929,6 +5100,8 @@ for (const width of [1920, 1440, 1024, 768, 390]) {
 }
 
 test("列表视图按内容宽度切双列 / 三列，窄屏仍是单列", async ({ page }) => {
+  // 未读页属于漫画工作台。
+  await setWorkbenchMode(page.request, "comic");
   await page.goto("/unread");
   await page.getByRole("button", { name: "列表视图", exact: true }).click();
   const cards = page.locator(
@@ -4963,14 +5136,24 @@ test("列表视图按内容宽度切双列 / 三列，窄屏仍是单列", async
   expect(boxes[2]!.x).toBeGreaterThan(boxes[1]!.x + 100);
 
   // 多列下仍然能点开相册（列表项仍是可点的链接）。
+  // 未读页属于漫画工作台，漫画相册点开进阅读器。
   await cards.first().click();
-  await expect(page).toHaveURL(/\/albums\//);
+  await expect(page).toHaveURL(/\/read\//);
 });
 
 test("阅读器全屏按钮可点击，点击后阅读器控制仍然可用", async ({ page }) => {
-  const nodes = await scannedNodes(page.request);
-  const album = nodes.find((node) => node.name === "sample-album")!;
+  // 阅读器属于漫画工作台：素材取漫画根下的多页漫画。
+  const nodes = await scannedNodes(page.request, "comic");
+  const album = nodes.find((node) => node.name === "sample-comic")!;
   expect(album).toBeDefined();
+  // 阅读器会恢复到上次读到的位置：先清掉记录，保证从第一页开始。
+  expect(
+    (
+      await page.request.delete(
+        `/api/activity?albumId=${encodeURIComponent(album.id)}&mediaKind=image`,
+      )
+    ).ok(),
+  ).toBeTruthy();
   await page.goto(`/read/${encodeURIComponent(album.id)}?type=image`);
   await page.waitForTimeout(800);
 

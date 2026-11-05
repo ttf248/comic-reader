@@ -122,13 +122,14 @@ it("父组件重绘并更换回调时，保留当前焦点和搜索状态", () =
 it.each(["library", "image", "video"] as const)(
   "%s 场景只展示对应页面的快捷键",
   (context) => {
+    useAppModeStore.setState({ mode: "photo" });
     render(<HelpOverlay context={context} open onClose={vi.fn()} />);
     if (context === "library") {
-      expect(screen.getByText("回到主页")).toBeInTheDocument();
+      expect(screen.getByText("回到照片库")).toBeInTheDocument();
       expect(screen.queryByText(/旋转 90°/)).not.toBeInTheDocument();
       expect(screen.queryByText("下一张")).not.toBeInTheDocument();
     } else {
-      expect(screen.queryByText("回到主页")).not.toBeInTheDocument();
+      expect(screen.queryByText("回到照片库")).not.toBeInTheDocument();
       expect(screen.getByText("当前内容设为封面")).toBeInTheDocument();
       expect(screen.getByText("清除自定义封面")).toBeInTheDocument();
       if (context === "image") {
@@ -149,8 +150,9 @@ it.each(["library", "image", "video"] as const)(
 
 // 照片墙是主页面的一种形态：全局操作照旧，再多一组大图预览的操作。
 it("photo 场景展示全局操作与大图预览操作", () => {
+  useAppModeStore.setState({ mode: "photo" });
   render(<HelpOverlay context="photo" open onClose={vi.fn()} />);
-  expect(screen.getByText("回到主页")).toBeInTheDocument();
+  expect(screen.getByText("回到照片库")).toBeInTheDocument();
   expect(screen.getByText("照片墙")).toBeInTheDocument();
   expect(screen.getByText("恢复适应屏幕")).toBeInTheDocument();
   expect(screen.getByText("关闭预览，回到照片墙")).toBeInTheDocument();
@@ -159,19 +161,38 @@ it("photo 场景展示全局操作与大图预览操作", () => {
   expect(screen.queryByText(/旋转 90°/)).not.toBeInTheDocument();
 });
 
-// 少数全局操作的措辞随工作台模式变化：照片工作台讲「未浏览」。
+// 少数全局操作的措辞随工作台模式变化。
 it("全局操作的措辞随工作台模式变化", () => {
   useAppModeStore.setState({ mode: "photo" });
-  const view = render(<HelpOverlay context="library" open onClose={vi.fn()} />);
-  expect(screen.getByText("未浏览相册页")).toBeInTheDocument();
+  render(<HelpOverlay context="library" open onClose={vi.fn()} />);
   expect(screen.getByText("随机翻翻")).toBeInTheDocument();
+  expect(screen.getByText("回到照片库")).toBeInTheDocument();
+  expect(screen.getByText("最近浏览")).toBeInTheDocument();
+  expect(screen.getByText("收藏照片")).toBeInTheDocument();
+
+  act(() => {
+    useAppModeStore.setState({ mode: "comic" });
+  });
+  expect(screen.getByText("随机一本")).toBeInTheDocument();
+  expect(screen.getByText("回到漫画库")).toBeInTheDocument();
+  expect(screen.getByText("最近阅读")).toBeInTheDocument();
+  expect(screen.getByText("收藏漫画")).toBeInTheDocument();
+  act(() => {
+    useAppModeStore.setState({ mode: "photo" });
+  });
+});
+
+// 未读页只属于漫画工作台：照片模式下按 U 什么也不会发生，
+// 帮助浮层也不该列出这个快捷键。
+it("未读快捷键只在漫画工作台出现", () => {
+  useAppModeStore.setState({ mode: "photo" });
+  render(<HelpOverlay context="library" open onClose={vi.fn()} />);
+  expect(screen.queryByText("未读相册页")).not.toBeInTheDocument();
 
   act(() => {
     useAppModeStore.setState({ mode: "comic" });
   });
   expect(screen.getByText("未读相册页")).toBeInTheDocument();
-  expect(screen.getByText("随机一本")).toBeInTheDocument();
-  view.rerender(<HelpOverlay context="library" open onClose={vi.fn()} />);
   act(() => {
     useAppModeStore.setState({ mode: "photo" });
   });

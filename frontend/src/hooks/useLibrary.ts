@@ -73,29 +73,7 @@ export function useLibraryActivitySync() {
   }, [queryClient, mode]);
 }
 
-// 两种用途各自的未读计数。侧栏两组各挂一个徽标，
-// 它们互不替代：照片的未浏览数不该被漫画的未读数顶掉。
-export function useUnreadCountsByKind() {
-  const { ready } = useAppMode();
-  const photo = useQuery({
-    queryKey: libraryQueryKeys.activitySummary("photo"),
-    queryFn: () => libraryApi.activitySummary("photo"),
-    staleTime: 30_000,
-    enabled: ready,
-  });
-  const comic = useQuery({
-    queryKey: libraryQueryKeys.activitySummary("comic"),
-    queryFn: () => libraryApi.activitySummary("comic"),
-    staleTime: 30_000,
-    enabled: ready,
-  });
-  return {
-    photo: photo.data?.summary.unreadCount ?? 0,
-    comic: comic.data?.summary.unreadCount ?? 0,
-  };
-}
-
-// 当前模式下的未读计数。
+// 当前模式的未读计数。未读只属于漫画工作台，照片侧恒为 0。
 export function useLibraryActivitySummary() {
   const { mode, ready } = useAppMode();
   return useQuery({

@@ -5,7 +5,7 @@ import { useSearchStore } from "../store/searchStore";
 import { useUIStore } from "../store/uiStore";
 import type { Prefs } from "../api/prefs";
 import { useHistory } from "../hooks/useHistory";
-import { useImageActivities, usePhotoActivities } from "../hooks/useImageActivity";
+import { useImageActivities } from "../hooks/useImageActivity";
 import { useAppMode } from "../hooks/useAppMode";
 import { workbenchCopy } from "../utils/workbench";
 import { useGalleryContextSync } from "../hooks/useGalleryContextSync";
@@ -54,7 +54,7 @@ export default function Recents() {
       if (!node || node.kind !== "album") continue;
       // 最近访问是用户的真实足迹，但工作台只呈现当前这一类：
       // 照片工作台里不该冒出一本漫画。
-      if (mode !== "all" && node.contentKind !== mode) continue;
+      if (node.contentKind !== mode) continue;
       out.push({ ...nodeSummaryToCard(node), lastSeenAt: h.openedAt });
     }
     return out;
@@ -62,7 +62,6 @@ export default function Recents() {
 
   // 被当前工作台过滤掉的条数要说清楚，否则用户以为记录丢了。
   const hiddenCount = useMemo(() => {
-    if (mode === "all") return 0;
     return history.filter((h) => {
       const node = nodesById.get(h.albumId);
       return node?.kind === "album" && node.contentKind !== mode;
@@ -73,10 +72,8 @@ export default function Recents() {
     () => cards.map((c) => decodeFavPath(c.to)).filter(Boolean),
     [cards],
   );
-  // 进度要按相册用途取：照片相册的位置在 photo 活动里，
-  // 漫画相册的页码在 image 活动里，取错就是张冠李戴。
+  // 阅读进度只属于漫画相册。
   const { data: imageProgressMap } = useImageActivities(progressPaths);
-  const { data: photoProgressMap } = usePhotoActivities(progressPaths);
 
   const filtered = useMemo(() => {
     const list = cards
@@ -93,11 +90,9 @@ export default function Recents() {
       })
       .map((c) => {
         const k = decodeFavPath(c.to);
-        // 按相册自身的用途取对应的那份活动：漫画看页码，照片看浏览位置。
-        const p =
-          c.contentKind === "photo"
-            ? photoProgressMap?.[k]
-            : imageProgressMap?.[k];
+        // 阅读进度只属于漫画相册。
+        if (c.contentKind !== "comic") return c;
+        const p = imageProgressMap?.[k];
         if (!p) return c;
         return {
           ...c,
@@ -120,7 +115,7 @@ export default function Recents() {
         // 最近看沿用服务端按 openedAt 倒序的访问记录。
         return list;
     }
-  }, [cards, query, sortBy, imageProgressMap, photoProgressMap, minImageCount]);
+  }, [cards, query, sortBy, imageProgressMap, minImageCount]);
 
   const recentsEntries = useMemo<GalleryContextEntry[]>(
     () =>

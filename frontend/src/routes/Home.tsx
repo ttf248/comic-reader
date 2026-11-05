@@ -18,7 +18,7 @@ import YearTimeline from "../components/home/YearTimeline";
 import { ContinueHero, UnreadHero } from "../components/home/HomeHeroes";
 import { useUIStore } from "../store/uiStore";
 import { useAppMode } from "../hooks/useAppMode";
-import { workbenchCopy } from "../utils/workbench";
+import { comicCopy, workbenchCopy } from "../utils/workbench";
 import { albumRoute, decodeFavPath } from "../utils/path";
 import { continueReadingTarget } from "../utils/continueReading";
 import { compareDatesDesc } from "../utils/date";
@@ -67,16 +67,20 @@ export default function Home() {
   const viewMode = useUIStore((s) => s.viewMode);
 
   const { favorites } = useFavorites();
+  // 未读与继续阅读只属于漫画工作台：照片这边不出现这两个区。
+  const isComic = mode === "comic";
   // 首页只展示服务端预先限制为六本的未读预览；完整未读库交给 /unread 分页加载。
   const unreadCards = useMemo<CardData[]>(
     () =>
-      (dashboard?.unread ?? []).map((album) => ({
-        ...nodeSummaryToCard(album, "u:"),
-        progress: { index: 0, total: album.imageCount ?? 0 },
-      })),
-    [dashboard],
+      isComic
+        ? (dashboard?.unread ?? []).map((album) => ({
+            ...nodeSummaryToCard(album, "u:"),
+            progress: { index: 0, total: album.imageCount ?? 0 },
+          }))
+        : [],
+    [dashboard, isComic],
   );
-  const unreadCount = dashboard?.unreadCount ?? 0;
+  const unreadCount = isComic ? (dashboard?.unreadCount ?? 0) : 0;
   const dashboardProgressByID = useMemo(
     () =>
       new Map(
@@ -101,7 +105,7 @@ export default function Home() {
   });
 
   const randomAlbum = useMutation({
-    mutationFn: (scope: "all" | "unread") =>
+    mutationFn: (scope: "any" | "unread") =>
       libraryApi.randomAlbum(mode, scope),
     onSuccess: ({ album }) => navigate(albumRoute(album.id)),
     onError: (_error, scope) =>
@@ -110,7 +114,7 @@ export default function Home() {
         message: scope === "unread" ? "没有未读相册可跳" : "尚未加载图像库",
       }),
   });
-  const onShuffle = () => randomAlbum.mutate("all");
+  const onShuffle = () => randomAlbum.mutate("any");
   const onShuffleUnread = () => randomAlbum.mutate("unread");
 
   // 「继续阅读」管理：单本标记已读 / 一键全部标记已读。
@@ -132,7 +136,7 @@ export default function Home() {
       return;
     }
     markReadContinue.mutate(
-      { albumId, total, contentKind: card.contentKind },
+      { albumId, total },
       {
         onSuccess: () =>
           pushToast({
@@ -152,7 +156,6 @@ export default function Home() {
     const items = inProgressAll.map((c) => ({
       albumId: decodeFavPath(c.to),
       total: c.progress?.total ?? 0,
-      contentKind: c.contentKind,
     }));
     markReadAllContinue.mutate(items, {
       onSuccess: (r) => {
@@ -182,7 +185,7 @@ export default function Home() {
       return;
     }
     markReadOne.mutate(
-      { albumId, total, contentKind: card.contentKind },
+      { albumId, total },
       {
         onSuccess: () =>
           pushToast({
@@ -389,13 +392,15 @@ export default function Home() {
               {copy.randomLabel}
               <span className="text-[12.5px] opacity-70">R</span>
             </button>
-            <QuickLink
-              to="/unread"
-              icon={<SparkleIcon size={14} />}
-              count={unreadCount > 0 ? unreadCount : undefined}
-            >
-              {copy.unreadTitle}
-            </QuickLink>
+            {isComic && (
+              <QuickLink
+                to="/unread"
+                icon={<SparkleIcon size={14} />}
+                count={unreadCount > 0 ? unreadCount : undefined}
+              >
+                {comicCopy().unreadTitle}
+              </QuickLink>
+            )}
             <QuickLink to="/recents" icon={<ClockIcon size={14} />}>
               {copy.recentsTitle}
             </QuickLink>
@@ -405,20 +410,19 @@ export default function Home() {
                 icon={<StarIcon size={13} filled />}
                 count={favCount}
               >
-                收藏
+                {copy.favoritesTitle}
               </QuickLink>
             )}
           </div>
         )}
       </section>
 
-      {hasContent && (inProgressAll.length > 0 || unreadCards.length > 0) && (
+      {hasContent && isComic && (inProgressAll.length > 0 || unreadCards.length > 0) && (
         <div className="page-shell">
           <div className="home-overview">
             {inProgressAll.length > 0 && (
               <ContinueHero
                 cards={inProgressAll}
-                mode={mode}
                 onContinue={onContinue}
                 onRemove={onRemoveContinue}
                 onClearAll={onClearContinue}
@@ -428,7 +432,6 @@ export default function Home() {
               <UnreadHero
                 cards={unreadCards}
                 count={unreadCount}
-                mode={mode}
                 onShuffle={onShuffleUnread}
                 onMarkRead={onMarkReadUnread}
               />

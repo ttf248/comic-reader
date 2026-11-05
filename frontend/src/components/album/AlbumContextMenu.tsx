@@ -9,8 +9,7 @@ import {
 import { fileManagerErrorMessage } from "../../utils/fileManager";
 import { favoriteResourceId } from "../../utils/path";
 import { isCompleted } from "../../utils/progress";
-import { copyForAlbum } from "../../utils/workbench";
-import { useAlbumClassification } from "../../hooks/useAlbumClassification";
+import { comicCopy } from "../../utils/workbench";
 import { useUIStore } from "../../store/uiStore";
 import {
   ArrowRightLineIcon,
@@ -20,8 +19,6 @@ import {
   InfoIcon,
   CheckIcon,
   RewindIcon,
-  ImageIcon,
-  RefreshIcon,
 } from "../common/Icon";
 
 interface Props {
@@ -49,11 +46,10 @@ export default function AlbumContextMenu({
   const resourceId = favoriteResourceId(item);
   const imageCount = item.imageCount ?? item.progress?.total ?? item.count;
   const completed = isCompleted(item.progress);
-  // 措辞跟相册自身的用途走：照片是「已看完」，漫画是「已读完」。
-  const kind = item.contentKind ?? "photo";
-  const copy = copyForAlbum(kind);
-  // 归类动作：把相册移到另一种打开方式，或恢复默认归类。
-  const classification = useAlbumClassification(resourceId);
+  // 阅读进度只属于漫画工作台：照片相册没有「读完」这回事，
+  // 菜单里也就不会出现标记与取消标记。
+  const isComic = item.contentKind === "comic";
+  const copy = comicCopy();
   const items: AnyMenuItem[] = [
     { id: "open", label: "打开", icon: <ArrowRightLineIcon size={12} /> },
     {
@@ -62,7 +58,7 @@ export default function AlbumContextMenu({
       icon: <StarIcon size={12} />,
     },
   ];
-  if (isAlbum && imageCount > 0) {
+  if (isAlbum && isComic && imageCount > 0) {
     items.push(
       { id: "separator", separator: true },
       {
@@ -78,31 +74,6 @@ export default function AlbumContextMenu({
         disabled: !completed,
       },
     );
-  }
-  // 归类：把相册移到另一种打开方式。它会清掉另一种用途留下的进度，
-  // 所以放在菜单里当一次明确的动作，而不是页头常驻的开关。
-  if (isAlbum) {
-    items.push({ id: "separator", separator: true });
-    if (item.contentKind === "comic") {
-      items.push({
-        id: "classify-photo",
-        label: "移到照片库",
-        icon: <ImageIcon size={12} />,
-      });
-    } else {
-      items.push({
-        id: "classify-comic",
-        label: "移到漫画库",
-        icon: <ImageIcon size={12} />,
-      });
-    }
-    if (item.contentKindOverridden) {
-      items.push({
-        id: "classify-reset",
-        label: "恢复默认类型",
-        icon: <RefreshIcon size={12} />,
-      });
-    }
   }
   items.push(
     { id: "separator", separator: true },
@@ -193,7 +164,6 @@ export default function AlbumContextMenu({
               .mutateAsync({
                 albumId: resourceId,
                 total: imageCount,
-                contentKind: kind,
               })
               .then(() =>
                 pushToast({
@@ -205,11 +175,7 @@ export default function AlbumContextMenu({
               .catch(() => pushToast({ kind: "error", message: "标记失败" }));
             break;
           case "unmark-read":
-            void resetRead
-              .mutateAsync({
-                albumId: resourceId,
-                contentKind: item.contentKind,
-              })
+            void resetRead.mutateAsync({ albumId: resourceId })
               .then(() =>
                 pushToast({
                   kind: "success",
@@ -218,15 +184,6 @@ export default function AlbumContextMenu({
                 }),
               )
               .catch(() => pushToast({ kind: "error", message: "重置失败" }));
-            break;
-          case "classify-photo":
-            void classification.moveTo.mutateAsync("photo");
-            break;
-          case "classify-comic":
-            void classification.moveTo.mutateAsync("comic");
-            break;
-          case "classify-reset":
-            void classification.resetToDefault.mutateAsync();
             break;
         }
         onClose();

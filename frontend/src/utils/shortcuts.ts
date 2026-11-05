@@ -17,10 +17,16 @@ export interface Shortcut {
   /**
    * 随工作台模式变化的措辞。
    *
-   * 少数全局操作在照片与漫画工作台下该用不同的说法（「未读相册页」
-   * 在照片工作台里是「未浏览相册页」）。缺省时用 description。
+   * 少数全局操作在照片与漫画工作台下该用不同的说法（「随机翻翻」在
+   * 漫画工作台里是「随机一本」）。缺省时用 description。
    */
-  modeDescriptions?: Partial<Record<"photo" | "comic" | "all", string>>;
+  modeDescriptions?: Partial<Record<"photo" | "comic", string>>;
+  /**
+   * 只在某些工作台模式下生效的快捷键。
+   *
+   * 未读页只属于漫画工作台，照片模式下按 U 不做跳转。
+   */
+  modes?: Array<"photo" | "comic">;
 }
 
 // 按页面和媒体类型声明快捷键；reader 分组由图片与视频阅读器共用。
@@ -38,6 +44,7 @@ export const SHORTCUTS: Shortcut[] = [
     id: "home",
     label: "Ctrl+H",
     description: "回到主页",
+    modeDescriptions: { photo: "回到照片库", comic: "回到漫画库" },
     combo: "ctrl+h",
     group: "global",
   },
@@ -45,6 +52,7 @@ export const SHORTCUTS: Shortcut[] = [
     id: "recents",
     label: "Ctrl+R",
     description: "最近访问",
+    modeDescriptions: { photo: "最近浏览", comic: "最近阅读" },
     combo: "ctrl+r",
     group: "global",
   },
@@ -52,6 +60,7 @@ export const SHORTCUTS: Shortcut[] = [
     id: "favorites",
     label: "Ctrl+D",
     description: "我的收藏",
+    modeDescriptions: { photo: "收藏照片", comic: "收藏漫画" },
     combo: "ctrl+d",
     group: "global",
   },
@@ -88,9 +97,9 @@ export const SHORTCUTS: Shortcut[] = [
     id: "unread",
     label: "U",
     description: "未读相册页",
-    modeDescriptions: { photo: "未浏览相册页" },
     combo: "u",
     group: "global",
+    modes: ["comic"],
   },
   {
     id: "help",

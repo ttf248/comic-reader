@@ -9,7 +9,11 @@ import {
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import ServerConfigPanel from "./ServerConfigPanel";
-import { configApi, type ServerConfig } from "../../api/config";
+import {
+  configApi,
+  type MediaRootConfig,
+  type ServerConfig,
+} from "../../api/config";
 import { useUIStore } from "../../store/uiStore";
 import { ListFilterBar } from "../common/ListFilterBar";
 import { useSearchStore } from "../../store/searchStore";
@@ -43,7 +47,7 @@ vi.mock("../../api/fs", () => ({
 }));
 
 const baseConfig = {
-  mediaRoots: ["E:\\漫画"],
+  mediaRoots: [{ path: "E:\\漫画", kind: "comic" as const }],
   host: "0.0.0.0",
   port: 8080,
   accessMode: "local" as const,
@@ -61,9 +65,6 @@ const baseConfig = {
   skipHidden: true,
   systemFiles: [],
   excludePatterns: [],
-  // 内容用途:全局默认与按媒体根的默认值
-  defaultContentKind: "photo" as const,
-  rootContentKinds: {} as Record<string, "photo" | "comic">,
 };
 
 beforeAll(() => {
@@ -184,14 +185,14 @@ describe("ServerConfigPanel", () => {
     await screen.findByDisplayValue("/other/photos [100%] #");
     expect(configApi.update).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "取消" }));
-    expect(input).toHaveValue(baseConfig.mediaRoots[0]);
+    expect(input).toHaveValue(baseConfig.mediaRoots[0].path);
     expect(configApi.update).not.toHaveBeenCalled();
     fireEvent.click(pickerButton);
     await screen.findByDisplayValue("/other/photos [100%] #");
     fireEvent.click(screen.getByRole("button", { name: "使用此目录" }));
     await waitFor(() =>
       expect(configApi.update).toHaveBeenCalledWith({
-        mediaRoots: ["/other/photos [100%] #"],
+        mediaRoots: [{ path: "/other/photos [100%] #", kind: "comic" }],
       }),
     );
     expect(configApi.update).toHaveBeenCalledOnce();
@@ -278,7 +279,7 @@ describe("ServerConfigPanel", () => {
   });
 
   it.each([
-    baseConfig.mediaRoots[0],
+    baseConfig.mediaRoots[0].path,
     baseConfig.cacheDir,
     baseConfig.staticDir,
   ])("配置目录 %s 使用白名单入口打开并反馈结果", async (path) => {
@@ -318,7 +319,7 @@ describe("ServerConfigPanel", () => {
       ),
     );
     renderPanel();
-    const input = await screen.findByDisplayValue(baseConfig.mediaRoots[0]);
+    const input = await screen.findByDisplayValue(baseConfig.mediaRoots[0].path);
     fireEvent.click(
       within(input.parentElement!).getByRole("button", {
         name: "在系统文件管理器中打开此目录",
@@ -427,7 +428,10 @@ describe("ServerConfigPanel", () => {
   );
 
   it("媒体根按 Esc 撤销整组未提交修改及空槽位，保留其他设置草稿", async () => {
-    const roots = [baseConfig.mediaRoots[0], "/photos/second"];
+    const roots = [
+      { path: baseConfig.mediaRoots[0].path, kind: "comic" as const },
+      { path: "/photos/second", kind: "photo" as const },
+    ];
     vi.mocked(configApi.get).mockResolvedValue({
       ...baseConfig,
       mediaRoots: roots,
@@ -456,8 +460,8 @@ describe("ServerConfigPanel", () => {
     expect(
       screen.getAllByPlaceholderText("E:\\照片 或 /home/user/pics"),
     ).toHaveLength(2);
-    expect(inputs[0]).toHaveValue(roots[0]);
-    expect(inputs[1]).toHaveValue(roots[1]);
+    expect(inputs[0]).toHaveValue(roots[0].path);
+    expect(inputs[1]).toHaveValue(roots[1].path);
     await waitFor(
       () => expect(configApi.update).toHaveBeenCalledWith({ port: 9090 }),
       { timeout: 1500 },
@@ -471,7 +475,10 @@ describe("ServerConfigPanel", () => {
   it("Esc 恢复最新确认的媒体根，不会回滚已经完成的自动保存", async () => {
     vi.mocked(configApi.update).mockResolvedValue({
       ok: true,
-      config: { ...baseConfig, mediaRoots: ["/photos/saved"] },
+      config: {
+        ...baseConfig,
+        mediaRoots: [{ path: "/photos/saved", kind: "comic" }],
+      },
       requiresRestart: [],
       mediaRootsChanged: false,
     });
@@ -483,7 +490,9 @@ describe("ServerConfigPanel", () => {
     await waitFor(
       () =>
         expect(queryClient.getQueryData(["server-config"])).toEqual(
-          expect.objectContaining({ mediaRoots: ["/photos/saved"] }),
+          expect.objectContaining({
+            mediaRoots: [{ path: "/photos/saved", kind: "comic" }],
+          }),
         ),
       { timeout: 1500 },
     );
@@ -521,7 +530,10 @@ describe("ServerConfigPanel", () => {
     await act(async () => {
       release?.({
         ok: true,
-        config: { ...baseConfig, mediaRoots: ["/photos/submitted"] },
+        config: {
+          ...baseConfig,
+          mediaRoots: [{ path: "/photos/submitted", kind: "comic" }],
+        },
         requiresRestart: [],
         mediaRootsChanged: false,
       });
@@ -553,7 +565,7 @@ describe("ServerConfigPanel", () => {
       renderPanel();
       const original =
         field === "mediaRoots"
-          ? baseConfig.mediaRoots[0]
+          ? baseConfig.mediaRoots[0].path
           : String(baseConfig[field]);
       const input = await screen.findByDisplayValue(original);
       const candidate = field === "port" ? "909" : "/photos/候选文字";
@@ -581,7 +593,7 @@ describe("ServerConfigPanel", () => {
           expect(configApi.update).toHaveBeenCalledWith({
             [field]:
               field === "mediaRoots"
-                ? [final]
+                ? [{ path: final, kind: "comic" }]
                 : field === "port"
                   ? Number(final)
                   : final,
@@ -634,23 +646,29 @@ describe("ServerConfigPanel", () => {
   it("移除正在组合输入的媒体根后可以保存剩余目录，离开页面清理未提交输入", async () => {
     vi.mocked(configApi.get).mockResolvedValue({
       ...baseConfig,
-      mediaRoots: [baseConfig.mediaRoots[0], "/photos/remaining"],
+      mediaRoots: [
+        { path: baseConfig.mediaRoots[0].path, kind: "comic" as const },
+        { path: "/photos/remaining", kind: "photo" as const },
+      ],
     });
     vi.mocked(configApi.update).mockResolvedValue({
       ok: true,
-      config: { ...baseConfig, mediaRoots: ["/photos/remaining"] },
+      config: {
+        ...baseConfig,
+        mediaRoots: [{ path: "/photos/remaining", kind: "photo" }],
+      },
       requiresRestart: [],
       mediaRootsChanged: false,
     });
     const view = renderPanel();
-    const input = await screen.findByDisplayValue(baseConfig.mediaRoots[0]);
+    const input = await screen.findByDisplayValue(baseConfig.mediaRoots[0].path);
     fireEvent.compositionStart(input);
     fireEvent.change(input, { target: { value: "/photos/候选" } });
     fireEvent.click(screen.getAllByRole("button", { name: "删除此根目录" })[0]);
     await waitFor(
       () =>
         expect(configApi.update).toHaveBeenCalledWith({
-          mediaRoots: ["/photos/remaining"],
+          mediaRoots: [{ path: "/photos/remaining", kind: "photo" }],
         }),
       { timeout: 1500 },
     );
@@ -683,7 +701,10 @@ describe("ServerConfigPanel", () => {
   it("媒体根目录停止输入后自动保存并提示重新扫描", async () => {
     vi.mocked(configApi.update).mockResolvedValue({
       ok: true,
-      config: { ...baseConfig, mediaRoots: ["D:\\new"] },
+      config: {
+        ...baseConfig,
+        mediaRoots: [{ path: "D:\\new", kind: "comic" }],
+      },
       requiresRestart: [],
       mediaRootsChanged: true,
     });
@@ -696,7 +717,7 @@ describe("ServerConfigPanel", () => {
     await waitFor(
       () =>
         expect(configApi.update).toHaveBeenCalledWith({
-          mediaRoots: ["D:\\new"],
+          mediaRoots: [{ path: "D:\\new", kind: "comic" }],
         }),
       { timeout: 1500 },
     );
@@ -706,7 +727,13 @@ describe("ServerConfigPanel", () => {
   it("多根：补全新增根目录后自动保存", async () => {
     vi.mocked(configApi.update).mockResolvedValue({
       ok: true,
-      config: { ...baseConfig, mediaRoots: ["E:\\漫画", "F:\\照片"] },
+      config: {
+        ...baseConfig,
+        mediaRoots: [
+          { path: "E:\\漫画", kind: "comic" },
+          { path: "F:\\照片", kind: "photo" },
+        ],
+      },
       requiresRestart: [],
       mediaRootsChanged: true,
     });
@@ -734,7 +761,10 @@ describe("ServerConfigPanel", () => {
     await waitFor(
       () =>
         expect(configApi.update).toHaveBeenCalledWith({
-          mediaRoots: ["E:\\漫画", "F:\\照片"],
+          mediaRoots: [
+            { path: "E:\\漫画", kind: "comic" },
+            { path: "F:\\照片", kind: "photo" },
+          ],
         }),
       { timeout: 1500 },
     );
@@ -768,7 +798,7 @@ describe("ServerConfigPanel", () => {
       );
       renderPanel();
       const input = await screen.findByDisplayValue(
-        key === "cacheDir" ? baseConfig.cacheDir : baseConfig.mediaRoots[0],
+        key === "cacheDir" ? baseConfig.cacheDir : baseConfig.mediaRoots[0].path,
       );
       fireEvent.change(input, { target: { value: "/recovery/photos" } });
       if (key === "cacheDir") fireEvent.blur(input);
@@ -783,7 +813,9 @@ describe("ServerConfigPanel", () => {
       fireEvent.click(button);
       await waitFor(() => expect(configApi.update).toHaveBeenCalledTimes(2));
       const value =
-        key === "mediaRoots" ? ["/recovery/photos"] : "/recovery/photos";
+        key === "mediaRoots"
+          ? [{ path: "/recovery/photos", kind: "comic" }]
+          : "/recovery/photos";
       expect(configApi.update).toHaveBeenLastCalledWith({ [key]: value });
       await act(async () => {
         retry.resolve(savedConfig({ [key]: value }));
@@ -989,12 +1021,16 @@ describe("ServerConfigPanel", () => {
     vi.mocked(configApi.update).mockImplementation(() =>
       ++attempts === 1
         ? Promise.reject(new Error("确认丢失"))
-        : Promise.resolve(savedConfig({ mediaRoots: ["/confirmed/root"] })),
+        : Promise.resolve(
+            savedConfig({
+              mediaRoots: [{ path: "/confirmed/root", kind: "comic" }],
+            }),
+          ),
     );
     const { queryClient } = renderPanel();
     const cachedKey = [...libraryQueryKeys.root, "recovery-check"];
     queryClient.setQueryData(cachedKey, { old: true });
-    const input = await screen.findByDisplayValue(baseConfig.mediaRoots[0]);
+    const input = await screen.findByDisplayValue(baseConfig.mediaRoots[0].path);
     fireEvent.change(input, { target: { value: "/confirmed/root" } });
     await screen.findByLabelText("保存失败");
     fireEvent.click(screen.getByRole("button", { name: "重试保存" }));
@@ -1070,7 +1106,9 @@ describe("ServerConfigPanel", () => {
     const first = deferred<ReturnType<typeof savedConfig>>();
     const second = deferred<ReturnType<typeof savedConfig>>();
     vi.mocked(configApi.update).mockImplementation((patch) =>
-      patch.mediaRoots?.[0] === "/save/one" ? first.promise : second.promise,
+      patch.mediaRoots?.[0]?.path === "/save/one"
+        ? first.promise
+        : second.promise,
     );
     const { queryClient } = renderPanel();
     const input = await screen.findByPlaceholderText(
@@ -1091,16 +1129,20 @@ describe("ServerConfigPanel", () => {
     expect(configApi.update).toHaveBeenCalledOnce();
     expect(input).toHaveValue("/save/two");
     await act(async () => {
-      first.resolve(savedConfig({ mediaRoots: ["/save/one"] }));
+      first.resolve(
+        savedConfig({ mediaRoots: [{ path: "/save/one", kind: "comic" }] }),
+      );
     });
     await waitFor(() => expect(configApi.update).toHaveBeenCalledTimes(2));
     expect(input).toHaveValue("/save/two");
     await act(async () => {
-      second.resolve(savedConfig({ mediaRoots: ["/save/two"] }));
+      second.resolve(
+        savedConfig({ mediaRoots: [{ path: "/save/two", kind: "comic" }] }),
+      );
     });
     await waitFor(() =>
       expect(queryClient.getQueryData(["server-config"])).toMatchObject({
-        mediaRoots: ["/save/two"],
+        mediaRoots: [{ path: "/save/two", kind: "comic" }],
       }),
     );
     expect(input).toHaveValue("/save/two");
@@ -1359,7 +1401,7 @@ describe("ServerConfigPanel", () => {
       ...baseConfig,
       systemFiles: null as unknown as string[],
       excludePatterns: null as unknown as string[],
-      mediaRoots: null as unknown as string[],
+      mediaRoots: null as unknown as MediaRootConfig[],
     });
     expect(() => renderPanel()).not.toThrow();
     await waitFor(() => {

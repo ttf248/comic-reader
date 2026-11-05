@@ -220,19 +220,22 @@ describe("AlbumCard 状态表达", () => {
     expect(screen.getByText("27%")).toBeInTheDocument();
   });
 
-  it("照片相册不显示百分比：那是漫画的读法，位置改在元信息行", () => {
+  // 照片相册没有阅读进度：百分比、位置与「已读完」都属于漫画。
+  it("照片相册不显示百分比，也不显示阅读位置", () => {
     renderCard(
       card({ contentKind: "photo", progress: { index: 3, total: 12 } }),
     );
 
     expect(screen.queryByText("27%")).not.toBeInTheDocument();
-    expect(screen.getByText("看到 4 / 12")).toBeInTheDocument();
+    expect(screen.queryByText("读到 4 / 12")).not.toBeInTheDocument();
+    expect(screen.queryByText("已读完", { exact: true })).not.toBeInTheDocument();
   });
 
-  it("照片相册完成时说的是「已看完」", () => {
+  it("照片相册不显示「已读完」chip，也不显示未读点", () => {
     renderCard(card({ contentKind: "photo", progress: { index: 11, total: 12 } }));
 
-    expect(screen.getByText("已看完", { exact: true })).toBeInTheDocument();
+    expect(screen.queryByText("已读完", { exact: true })).not.toBeInTheDocument();
+    expect(screen.queryByText("未读")).not.toBeInTheDocument();
   });
 
   it("整页都是未读的列表关掉逐卡未读标记", () => {

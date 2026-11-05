@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   configApi,
+  type ContentKind,
+  type MediaRootConfig,
   type ServerConfig,
   type ServerConfigPatch,
 } from "../../api/config";
@@ -317,7 +319,7 @@ export default function ServerConfigPanel() {
 
     // "添加根目录"会先插入空输入槽位。目录尚未补全时不发无效 PATCH，
     // 待所有输入槽位都有值后再自动提交。
-    if (debouncedMediaRoots.some((root) => root.trim() === "")) return;
+    if (debouncedMediaRoots.some((root) => root.path.trim() === "")) return;
 
     delete pathDirtyRef.current.mediaRoots;
     setDraft((current) => {
@@ -813,25 +815,32 @@ function MediaRootsField({
   onConfirm,
   onCompositionChange,
 }: {
-  roots: string[];
+  roots: MediaRootConfig[];
   status: FieldStatus;
   allowOsOpen: boolean;
-  onChange: (next: string[]) => void;
+  onChange: (next: MediaRootConfig[]) => void;
   onOpenInExplorer: (path: string) => void;
   onCancel: () => void;
   onConfirm: () => void;
   onCompositionChange: (active: boolean) => void;
 }) {
   // 始终渲染一个空槽位(即使当前为空),方便用户添加第一个根
-  const list = roots.length === 0 ? [""] : roots;
-  const updateAt = (i: number, v: string) => {
+  const list: MediaRootConfig[] =
+    roots.length === 0 ? [{ path: "", kind: "photo" }] : roots;
+  const updatePathAt = (i: number, path: string) => {
     const next = [...roots];
     if (i < next.length) {
-      next[i] = v;
+      next[i] = { ...next[i], path };
     } else {
       // 空槽位:替换为新值
-      next[0] = v;
+      next[0] = { path, kind: "photo" };
     }
+    onChange(next);
+  };
+  const updateKindAt = (i: number, kind: ContentKind) => {
+    if (i >= roots.length) return;
+    const next = [...roots];
+    next[i] = { ...next[i], kind };
     onChange(next);
   };
   const removeAt = (i: number) => {
@@ -845,42 +854,52 @@ function MediaRootsField({
     onChange(next);
   };
   const addEmpty = () => {
-    onChange([...roots, ""]);
+    onChange([...roots, { path: "", kind: "photo" }]);
   };
   return (
     <div className="px-4 py-3 text-sm space-y-2">
       <div className="flex items-start justify-between gap-4">
         <div className="flex flex-col">
-          <span className="text-fg">图像根目录</span>
+          <span className="text-fg">媒体根目录</span>
           <span className="text-[12.5px] text-fg-subtle mt-0.5">
-            多个目录都会扫描，相册按来源分组，徽标显示所属目录。按 Esc
-            撤销整组编辑草稿。
+            多个目录都会扫描，相册按来源分组，徽标显示所属目录。每个目录
+            选定一种内容属性：照片目录用照片墙浏览，漫画目录用阅读器。
+            按 Esc 撤销整组编辑草稿。
           </span>
         </div>
         <StatusBadge status={status} />
       </div>
       <div className="space-y-2">
-        {list.map((v, i) => (
+        {list.map((root, i) => (
           <div key={i} className="space-y-1.5">
             <PathField
-              value={v}
+              value={root.path}
               placeholder="E:\照片 或 /home/user/pics"
               label={`媒体根目录 ${i + 1}`}
               // 只在已存在的根上提供"打开资源管理器"(空槽位不算)
               onOpenInExplorer={
-                i < roots.length && v && allowOsOpen
-                  ? () => onOpenInExplorer(v)
+                i < roots.length && root.path && allowOsOpen
+                  ? () => onOpenInExplorer(root.path)
                   : undefined
               }
-              onPick={(picked) => updateAt(i, picked)}
-              onChange={(nv) => updateAt(i, nv)}
+              onPick={(picked) => updatePathAt(i, picked)}
+              onChange={(nv) => updatePathAt(i, nv)}
               onCancel={onCancel}
               onConfirm={onConfirm}
               onCompositionChange={onCompositionChange}
               removable={roots.length > 1}
               onRemove={() => removeAt(i)}
             />
-            {i < roots.length && v && null}
+            <div className="flex items-center gap-2">
+              <span className="text-[12.5px] text-fg-subtle shrink-0">
+                内容属性
+              </span>
+              <KindRadio
+                value={root.kind}
+                onChange={(kind) => updateKindAt(i, kind)}
+                label={`媒体根目录 ${i + 1} 的内容属性`}
+              />
+            </div>
           </div>
         ))}
       </div>
@@ -892,6 +911,46 @@ function MediaRootsField({
         <PlusIcon size={12} />
         添加根目录
       </button>
+    </div>
+  );
+}
+
+// 内容属性单选：照片与漫画互斥，只能选一个。
+function KindRadio({
+  value,
+  onChange,
+  label,
+}: {
+  value: ContentKind;
+  onChange: (kind: ContentKind) => void;
+  label: string;
+}) {
+  const options: { key: ContentKind; text: string }[] = [
+    { key: "photo", text: "照片" },
+    { key: "comic", text: "漫画" },
+  ];
+  return (
+    <div
+      role="radiogroup"
+      aria-label={label}
+      className="inline-flex shrink-0 items-center gap-0.5 rounded-md border border-border-faint p-0.5"
+    >
+      {options.map((option) => (
+        <button
+          key={option.key}
+          type="button"
+          role="radio"
+          aria-checked={value === option.key}
+          onClick={() => onChange(option.key)}
+          className={`h-7 rounded px-2.5 text-[12.5px] transition-colors ${
+            value === option.key
+              ? "bg-bg-subtle text-fg"
+              : "text-fg-muted hover:text-fg"
+          }`}
+        >
+          {option.text}
+        </button>
+      ))}
     </div>
   );
 }

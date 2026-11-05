@@ -55,6 +55,11 @@ export default function HelpOverlay({
   const describe = (s: Shortcut) =>
     s.modeDescriptions?.[mode] ?? s.description;
 
+  // 只在某个工作台模式下存在的快捷键，在另一个模式下不列出：
+  // 未读页属于漫画，照片模式下按 U 什么也不会发生。
+  const inCurrentMode = (s: Shortcut) =>
+    !s.modes || s.modes.includes(mode);
+
   useEffect(() => {
     const dialog = dialogRef.current;
     if (!open || !dialog) return;
@@ -101,7 +106,9 @@ export default function HelpOverlay({
   const filteredGroups = GROUP_ORDER.filter((g) => activeGroups.includes(g.key))
     .map((g) => ({
       title: g.title,
-      items: SHORTCUTS.filter((s) => s.group === g.key && matches(s)),
+      items: SHORTCUTS.filter(
+        (s) => s.group === g.key && matches(s) && inCurrentMode(s),
+      ),
     }))
     .filter((g) => g.items.length > 0);
 

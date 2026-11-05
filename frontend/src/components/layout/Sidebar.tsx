@@ -10,26 +10,24 @@ import {
   ChevronRightIcon,
   ShuffleIcon,
   SparkleIcon,
-  LibraryIcon,
 } from "../common/Icon";
 import { useNavigate } from "react-router-dom";
 import { useUIStore } from "../../store/uiStore";
 import {
+  useLibraryActivitySummary,
   useLibraryDashboard,
-  useUnreadCountsByKind,
 } from "../../hooks/useLibrary";
 import { useAppMode } from "../../hooks/useAppMode";
 import { libraryApi } from "../../api/library";
 import { albumRoute } from "../../utils/path";
 import { thumbUrl } from "../../api/thumbs";
 import { nodeSummaryToCard } from "../../utils/libraryCard";
-import { copyForAlbum, workbenchCopy } from "../../utils/workbench";
+import { comicCopy, workbenchCopy } from "../../utils/workbench";
 import {
   continueReadingTarget,
   readingPercent,
 } from "../../utils/continueReading";
 import ModeSwitch from "./ModeSwitch";
-import type { AppMode, ContentKind } from "../../api/library";
 
 interface Props {
   collapsed: boolean;
@@ -38,33 +36,28 @@ interface Props {
 }
 
 interface NavEntry {
-  /** 这一项属于哪个工作台；跨模式的组用它决定点击时先切模式。 */
-  mode: Exclude<AppMode, "all">;
   to: string;
   label: string;
   Icon: typeof HomeIcon;
-  /** 徽标数字（未浏览 / 未读计数）。 */
+  /** 徽标数字（未读计数）。 */
   badge?: number;
 }
 
-// 侧栏按工作台分成两组：照片组与漫画组。
+// 侧栏只呈现当前工作台的那一组。
 //
-// 两组指向同一批路由，差别在模式与措辞——「照片库 / 未浏览」与
-// 「漫画库 / 未读」是同一批页面在两种工作台下的两种读法。
-// 点击非当前模式的条目会先切模式再跳转。
-const photoGroup: Omit<NavEntry, "badge">[] = [
-  { mode: "photo", to: "/", label: "照片库", Icon: HomeIcon },
-  { mode: "photo", to: "/unread", label: "未浏览", Icon: SparkleIcon },
-];
-const comicGroup: Omit<NavEntry, "badge">[] = [
-  { mode: "comic", to: "/", label: "漫画库", Icon: HomeIcon },
-  { mode: "comic", to: "/unread", label: "未读", Icon: SparkleIcon },
+// 两个模式是完全独立的界面：照片这边只有浏览、收藏与最近；
+// 漫画这边才有未读与继续阅读。菜单不混排，操作也不互相沾边。
+const PHOTO_GROUP: NavEntry[] = [
+  { to: "/", label: "照片库", Icon: HomeIcon },
+  { to: "/recents", label: "最近浏览", Icon: ClockIcon },
+  { to: "/favorites", label: "收藏照片", Icon: StarIcon },
 ];
 
-// 与模式无关的公共入口：收藏与最近都是用户的显式选择，跨类型成立。
-const sharedItems = [
-  { to: "/recents", label: "最近", Icon: ClockIcon, end: false },
-  { to: "/favorites", label: "收藏", Icon: StarIcon, end: false },
+const COMIC_GROUP: NavEntry[] = [
+  { to: "/", label: "漫画库", Icon: HomeIcon },
+  { to: "/unread", label: "未读", Icon: SparkleIcon },
+  { to: "/recents", label: "最近阅读", Icon: ClockIcon },
+  { to: "/favorites", label: "收藏漫画", Icon: StarIcon },
 ];
 
 // 设置沉到底部组：它是低频入口，不该和「主页 / 最近 / 收藏」平级。
@@ -86,8 +79,8 @@ export default function Sidebar({
   const pushToast = useUIStore((s) => s.pushToast);
   const { mode, setMode } = useAppMode();
   const copy = workbenchCopy(mode);
-  // 常驻导航只消费服务端派生的计数，不能为 badge 常驻下载全库相册摘要。
-  const unreadCounts = useUnreadCountsByKind();
+  // 未读只属于漫画工作台：照片侧栏没有未读入口，也就没有它的徽标。
+  const unreadCount = useLibraryActivitySummary().data?.summary.unreadCount ?? 0;
   const navRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -106,12 +99,14 @@ export default function Sidebar({
     if (!randomAlbum.isPending) randomAlbum.mutate();
   };
 
-  // 当前侧栏复用首页 dashboard 的在读摘要，React Query 共享查询缓存。
-  // 导航可重新设计；数据仍按需查询，避免为常驻区域下载全库摘要。
+  // 继续阅读只属于漫画工作台：照片侧栏不显示在读摘要。
   const dashboard = useLibraryDashboard();
   const inProgress = useMemo(
-    () => dashboard.data?.dashboard.inProgress ?? [],
-    [dashboard.data],
+    () =>
+      mode === "comic"
+        ? (dashboard.data?.dashboard.inProgress ?? [])
+        : [],
+    [dashboard.data, mode],
   );
   const continueCard = useMemo(() => {
     const first = inProgress[0];
@@ -119,7 +114,6 @@ export default function Sidebar({
     return {
       ...nodeSummaryToCard(first.album),
       progress: { index: first.pageIndex, total: first.pageCount },
-      mediaKind: first.mediaKind,
     };
   }, [inProgress]);
   // 其余在读：最多 5 条紧凑行，再多就只给一个总数提示。
@@ -128,7 +122,6 @@ export default function Sidebar({
       inProgress.slice(1, 6).map((item) => ({
         ...nodeSummaryToCard(item.album),
         progress: { index: item.pageIndex, total: item.pageCount },
-        mediaKind: item.mediaKind,
       })),
     [inProgress],
   );
@@ -140,45 +133,30 @@ export default function Sidebar({
   const navItemClass = (isActive: boolean) =>
     `nav-entry group ${collapsed ? "nav-entry--compact" : ""} ${isActive ? "is-active" : ""}`;
 
-  // 工作台组的选中态要带模式：照片库与漫画库指向同一个路径，
-  // 只看路径会同时点亮两个条目。
-  const isGroupActive = (entry: NavEntry) =>
-    mode === entry.mode &&
-    (entry.to === "/"
+  const isEntryActive = (entry: NavEntry) =>
+    entry.to === "/"
       ? location.pathname === "/"
-      : location.pathname.startsWith(entry.to));
+      : location.pathname.startsWith(entry.to);
 
   const renderGroup = (
     title: string,
-    group: Omit<NavEntry, "badge">[],
-    badgeFor: (mode: Exclude<AppMode, "all">) => number,
+    group: NavEntry[],
+    badgeFor: (entry: NavEntry) => number,
   ) => {
-    const groupMode = group[0].mode;
-    const active = mode === groupMode;
     return (
       <div className="mt-5 first:mt-0">
         <div className="px-4 pb-1 flex items-center gap-2">
-          <span
-            className={`text-[11.5px] tracking-wide transition-colors ${
-              active ? "text-rail-fg" : "text-rail-muted/70"
-            }`}
-          >
+          <span className="text-[11.5px] tracking-wide transition-colors text-rail-fg">
             {title}
           </span>
         </div>
         {group.map((entry) => {
-          const isActive = isGroupActive({ ...entry, badge: 0 });
-          const badge = badgeFor(entry.mode);
-          // 用 Link 而不是 NavLink：两组指向同一批路径，NavLink 会把
-          // 「照片库」和「漫画库」同时标成当前页。选中态由 isGroupActive
-          // 判定（路径 + 模式），aria-current 也由我们自己给。
+          const isActive = isEntryActive(entry);
+          const badge = badgeFor(entry);
           return (
             <Link
-              key={`${entry.mode}-${entry.to}-${entry.label}`}
+              key={`${entry.to}-${entry.label}`}
               to={entry.to}
-              onClick={() => {
-                if (mode !== entry.mode) setMode(entry.mode);
-              }}
               className={navItemClass(isActive)}
               aria-current={isActive ? "page" : undefined}
               title={`${entry.label}${badge > 0 ? ` · 还有 ${badge} 本` : ""}`}
@@ -274,49 +252,21 @@ export default function Sidebar({
       )}
 
       <nav ref={navRef} className="pt-5 pb-3 px-4 space-y-1.5">
-        {renderGroup("照片", photoGroup, () => unreadCounts.photo)}
-        {renderGroup("漫画", comicGroup, () => unreadCounts.comic)}
-
-        {/* 全部相册：逃生舱，不是第三个工作台。它让跨类型的相册仍然找得到。 */}
-        <Link
-          to="/"
-          onClick={() => setMode("all")}
-          className={navItemClass(mode === "all")}
-          aria-current={mode === "all" ? "page" : undefined}
-          title="全部相册：照片与漫画混排"
-        >
-          <LibraryIcon size={16} className="shrink-0" />
-          {!collapsed && <span className="truncate">全部相册</span>}
-        </Link>
-
-        {sharedItems.map((it) => (
-          <NavLink
-            key={it.to}
-            to={it.to}
-            end={it.end}
-            className={({ isActive }) => navItemClass(isActive)}
-          >
-            {({ isActive }) => (
-              <>
-                <it.Icon
-                  size={16}
-                  className={`shrink-0 ${isActive ? "opacity-100" : ""}`}
-                />
-                {!collapsed && <span className="truncate">{it.label}</span>}
-              </>
-            )}
-          </NavLink>
-        ))}
+        {mode === "comic"
+          ? renderGroup("漫画", COMIC_GROUP, (entry) =>
+              entry.to === "/unread" ? unreadCount : 0,
+            )
+          : renderGroup("照片", PHOTO_GROUP, () => 0)}
       </nav>
 
-      {/* 「继续」区：紧跟导航，填掉侧栏中段的空白。
+      {/* 「继续阅读」区：紧跟导航，填掉侧栏中段的空白。
           上面是"正在翻的那本"，下面是"接下来几本"。
-          它只列当前工作台的在读 / 在浏览。 */}
-      {!collapsed && continueCard && (
+          它只出现在漫画工作台 —— 照片这边没有阅读进度。 */}
+      {!collapsed && mode === "comic" && continueCard && (
         <div className="px-4 pt-5 pb-2 min-h-0 overflow-y-auto">
           <div className="px-1 pb-2 flex items-baseline gap-2">
             <span className="text-[12.5px] text-rail-muted">
-              {copy.continueTitle}
+              {comicCopy().continueTitle}
             </span>
             <span className="text-[12.5px] text-rail-muted tabular-nums">
               {inProgress.length} 本
@@ -327,7 +277,6 @@ export default function Sidebar({
             coverPath={continueCard.coverPath}
             index={continueCard.progress?.index ?? 0}
             total={continueCard.progress?.total ?? 0}
-            contentKind={continueCard.contentKind}
             onOpen={() => navigate(continueReadingTarget(continueCard))}
           />
           {continueRest.map((card) => (
@@ -337,13 +286,12 @@ export default function Sidebar({
               coverPath={card.coverPath}
               index={card.progress?.index ?? 0}
               total={card.progress?.total ?? 0}
-              contentKind={card.contentKind}
               onOpen={() => navigate(continueReadingTarget(card))}
             />
           ))}
           {continueRestCount > 0 && (
             <div className="px-2 pt-1.5 text-[12.5px] text-rail-muted tabular-nums">
-              还有 {continueRestCount} 本没{copy.finishVerb}
+              还有 {continueRestCount} 本没{comicCopy().finishVerb}
             </div>
           )}
         </div>
@@ -415,14 +363,12 @@ function ContinueRow({
   coverPath,
   index,
   total,
-  contentKind,
   onOpen,
 }: {
   title: string;
   coverPath?: string;
   index: number;
   total: number;
-  contentKind?: ContentKind;
   onOpen: () => void;
 }) {
   const percent = readingPercent({ index, total });
@@ -430,7 +376,7 @@ function ContinueRow({
     <button
       type="button"
       onClick={onOpen}
-      title={`${copyForAlbum(contentKind).continueTitle}「${title}」`}
+      title={`${comicCopy().continueTitle}「${title}」`}
       className="w-full mt-1 rounded-md px-1 py-1 flex items-center gap-2.5 text-left transition-colors hover:bg-rail-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rail-accent"
     >
       <span className="relative w-[26px] h-[34px] shrink-0 rounded overflow-hidden bg-rail-hover block">
@@ -455,7 +401,7 @@ function ContinueRow({
           {title}
         </span>
         <span className="block text-[12.5px] text-rail-muted tabular-nums mt-0.5">
-          {copyForAlbum(contentKind).positionVerb} {index + 1} / {total}
+          {comicCopy().positionVerb} {index + 1} / {total}
         </span>
       </span>
     </button>
@@ -471,14 +417,12 @@ function ContinueMiniCard({
   coverPath,
   index,
   total,
-  contentKind,
   onOpen,
 }: {
   title: string;
   coverPath?: string;
   index: number;
   total: number;
-  contentKind?: ContentKind;
   onOpen: () => void;
 }) {
   const percent = readingPercent({ index, total });
@@ -486,7 +430,7 @@ function ContinueMiniCard({
     <button
       type="button"
       onClick={onOpen}
-      title={`${copyForAlbum(contentKind).continueTitle}「${title}」`}
+      title={`${comicCopy().continueTitle}「${title}」`}
       className="mt-2 w-full rounded-lg bg-rail-hover hover:bg-rail-hover p-2 flex gap-2.5 items-center text-left transition-colors group/mini focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rail-accent"
     >
       <span className="relative w-9 h-12 shrink-0 rounded overflow-hidden bg-rail-hover block">
@@ -515,7 +459,7 @@ function ContinueMiniCard({
           />
         </span>
         <span className="mt-1 block text-[12.5px] text-rail-muted tabular-nums">
-          {copyForAlbum(contentKind).positionVerb} {index + 1} / {total}
+          {comicCopy().positionVerb} {index + 1} / {total}
         </span>
       </span>
     </button>

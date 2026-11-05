@@ -6,13 +6,13 @@ import { useTagAlbums } from "../hooks/useLibrary";
 import { useFavorites } from "../hooks/useFavorites";
 import { useImageActivities } from "../hooks/useImageActivity";
 import { useSearchStore } from "../store/searchStore";
+import { useAppModeStore } from "../store/appModeStore";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 vi.mock("../hooks/useLibrary", () => ({ useTagAlbums: vi.fn() }));
 vi.mock("../hooks/useFavorites", () => ({ useFavorites: vi.fn() }));
 vi.mock("../hooks/useImageActivity", () => ({
   useImageActivities: vi.fn(),
-  usePhotoActivities: () => ({ data: {} }),
 }));
 vi.mock("../hooks/useGalleryContextSync", () => ({
   useGalleryContextSync: vi.fn(),
@@ -47,6 +47,8 @@ describe("Tag", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useSearchStore.getState().reset();
+    // 「已读完」统计只属于漫画工作台。
+    useAppModeStore.setState({ mode: "comic", ready: true });
     vi.mocked(useFavorites).mockReturnValue({
       favorites: [],
       isLoading: false,
@@ -79,6 +81,7 @@ describe("Tag", () => {
             coverImages: ["f_cover"],
             imageCount: 12,
             videoCount: 1,
+            contentKind: "comic",
           },
         ],
       },

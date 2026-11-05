@@ -61,10 +61,10 @@ export default function AppShell() {
 
   useEffect(() => {
     const titles: Record<string, string> = {
-      "/": mode === "comic" ? "漫画库" : mode === "photo" ? "照片库" : "全部相册",
-      "/recents": "最近",
-      "/favorites": "收藏",
-      "/unread": mode === "comic" ? "未读" : mode === "photo" ? "未浏览" : "未读",
+      "/": mode === "comic" ? "漫画库" : "照片库",
+      "/recents": mode === "comic" ? "最近阅读" : "最近浏览",
+      "/favorites": mode === "comic" ? "收藏漫画" : "收藏照片",
+      "/unread": "未读",
       "/settings": "设置",
     };
     const path = location.pathname;
@@ -129,9 +129,9 @@ export default function AppShell() {
       if (immersive) return;
       goShuffle();
     },
-    // U → 未读页
+    // U → 未读页（未读只属于漫画工作台）
     u: () => {
-      if (immersive) return;
+      if (immersive || mode !== "comic") return;
       navigate("/unread");
     },
   });

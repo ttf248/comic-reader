@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useSearchStore } from "../store/searchStore";
 import { useUIStore } from "../store/uiStore";
 import { useFavorites } from "../hooks/useFavorites";
-import { useImageActivities, usePhotoActivities } from "../hooks/useImageActivity";
+import { useImageActivities } from "../hooks/useImageActivity";
 import { useAppMode } from "../hooks/useAppMode";
 import { workbenchCopy } from "../utils/workbench";
 import { useGalleryContextSync } from "../hooks/useGalleryContextSync";
@@ -96,7 +96,7 @@ export default function Favorites() {
       if (!node) continue;
       // 收藏是用户的显式选择，但工作台只呈现当前这一类：
       // 照片工作台里不该冒出一本漫画。
-      if (mode !== "all" && node.contentKind !== mode) continue;
+      if (node.contentKind !== mode) continue;
       out.push({ ...nodeSummaryToCard(node), isFavorite: true });
     }
     return out;
@@ -104,7 +104,6 @@ export default function Favorites() {
 
   // 被当前工作台过滤掉的收藏数要说清楚，否则用户以为收藏丢了。
   const hiddenCount = useMemo(() => {
-    if (mode === "all") return 0;
     return favorites.filter((f) => {
       if (f.startsWith("smart:")) return false;
       const node = nodesById.get(f);
@@ -131,7 +130,6 @@ export default function Favorites() {
     [cards],
   );
   const { data: progressMap } = useImageActivities(progressPaths);
-  const { data: photoProgressMap } = usePhotoActivities(progressPaths);
 
   const filtered = useMemo(() => {
     const list = cards
@@ -149,11 +147,9 @@ export default function Favorites() {
       .map((c) => {
         if (c.variant !== "album") return c;
         const k = decodeFavPath(c.to);
-        // 进度按相册自己的用途取：照片看浏览位置，漫画看页码。
-        const p =
-          c.contentKind === "photo"
-            ? photoProgressMap?.[k]
-            : progressMap?.[k];
+        // 阅读进度只属于漫画相册。
+        if (c.contentKind !== "comic") return c;
+        const p = progressMap?.[k];
         if (!p) return c;
         return {
           ...c,
@@ -183,7 +179,6 @@ export default function Favorites() {
     query,
     sortBy,
     progressMap,
-    photoProgressMap,
     compareViewed,
     minImageCount,
   ]);

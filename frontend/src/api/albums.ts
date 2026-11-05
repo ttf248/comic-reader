@@ -1,5 +1,5 @@
 import { api } from "./client";
-import type { ContentKind } from "./library";
+import type { AppMode, ContentKind } from "./library";
 
 export interface SearchHit {
   kind: "album" | "collection" | "smartCollection";
@@ -14,18 +14,8 @@ export interface SearchHit {
   contentKind?: ContentKind;
 }
 
-export interface ContentKindState {
-  ok: boolean;
-  /** 当前生效的用途。 */
-  contentKind: ContentKind;
-  /** 取消覆盖后会回落到的用途。 */
-  contentKindDefault: ContentKind;
-  /** 是否是用户手动设置的覆盖。 */
-  contentKindOverridden: boolean;
-}
-
 export const albumsApi = {
-  search(q: string, limit = 50, kind: ContentKind | "all" = "all") {
+  search(q: string, limit = 50, kind: AppMode = "photo") {
     return api<{ ok: boolean; results: SearchHit[]; count: number }>(
       `/api/search`,
       {
@@ -53,25 +43,6 @@ export const albumsApi = {
       {
         method: "DELETE",
       },
-    );
-  },
-  // 内容用途：切换相册的打开方式（照片墙 / 漫画阅读器）。
-  // 覆盖会持久化，删除覆盖后回落到媒体根默认值。
-  getContentKind(albumId: string) {
-    return api<ContentKindState>(
-      `/api/albums/${encodeURIComponent(albumId)}/content-kind`,
-    );
-  },
-  setContentKind(albumId: string, kind: ContentKind) {
-    return api<ContentKindState>(
-      `/api/albums/${encodeURIComponent(albumId)}/content-kind`,
-      { method: "PUT", body: { kind } },
-    );
-  },
-  clearContentKind(albumId: string) {
-    return api<ContentKindState>(
-      `/api/albums/${encodeURIComponent(albumId)}/content-kind`,
-      { method: "DELETE" },
     );
   },
 };

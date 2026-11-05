@@ -1,53 +1,20 @@
-import type { AppMode, ContentKind } from "../api/library";
+import type { AppMode } from "../api/library";
 
 /**
  * 工作台文案。
  *
- * 同一个页面在照片与漫画两种工作台下要用不同的说法：照片是「浏览 / 看完 /
- * 看到」，漫画是「阅读 / 读完 / 读到」。把措辞集中在这里，
- * 避免每个组件各写一份 if 而慢慢走样。
+ * 照片与漫画是两个完全独立的世界：各自的列表、措辞与操作互不掺入。
+ * 照片这边没有「继续浏览」「未浏览」「看到第 N 张」——进度与未读属于漫画；
+ * 漫画这边没有照片墙式的浏览说法。集中在这里，避免每个组件各写一份
+ * if 而慢慢走样。
  */
 export interface WorkbenchCopy {
-  /** 首页主标题：照片库 / 漫画库 / 全部相册。 */
+  /** 首页主标题：照片库 / 漫画库。 */
   libraryTitle: string;
   /** 首页眉标。 */
   libraryEyebrow: string;
   /** 首页副标题。 */
   libraryDescription: string;
-  /** 「继续」区的标题。 */
-  continueTitle: string;
-  /** 继续区里的主动作按钮。 */
-  continueButton: string;
-  /** 进度位置的动词：看到 / 读到。 */
-  positionVerb: string;
-  /** 完成的说法：已看完 / 已读完（状态徽标）。 */
-  finishedLabel: string;
-  /** 完成的动词：看完 / 读完（用于「已看完」这样的过去式提示）。 */
-  finishVerb: string;
-  /** 标记完成的说法。 */
-  markFinishedLabel: string;
-  /** 「还没看完 / 还没读完」的计数说明。 */
-  unfinishedCountLabel: string;
-  /** 批量标记完成按钮的说明。 */
-  markAllTitle: string;
-  /** 是否显示阅读百分比：照片不显示，只给位置。 */
-  showReadingPercent: boolean;
-  /** 未读区的标题。 */
-  unreadTitle: string;
-  /** 未读列表页的标题。 */
-  unreadPageTitle: string;
-  /** 未读计数句里的动词：没看 / 没读。 */
-  unreadCountVerb: string;
-  /** 未读列表清空后的引导文案。 */
-  unreadEmptyHint: string;
-  /** 未读区的眉标。 */
-  unreadEyebrow: string;
-  /** 未读区的计数说明。 */
-  unreadCountLabel: string;
-  /** 未读区的随机按钮。 */
-  unreadButton: string;
-  /** 未读清空后的空态。 */
-  unreadEmpty: string;
   /** 主列表区的标题。 */
   sectionTitle: string;
   /** 年份筛选生效时的主列表区标题。 */
@@ -70,28 +37,48 @@ export interface WorkbenchCopy {
   randomLabel: string;
 }
 
+/** 漫画工作台专有的文案：进度与未读都属于漫画。 */
+export interface ComicCopy extends WorkbenchCopy {
+  /** 「继续阅读」区的标题。 */
+  continueTitle: string;
+  /** 继续区里的主动作按钮。 */
+  continueButton: string;
+  /** 进度位置的动词：读到。 */
+  positionVerb: string;
+  /** 完成的说法：已读完（状态徽标）。 */
+  finishedLabel: string;
+  /** 完成的动词：读完。 */
+  finishVerb: string;
+  /** 标记完成的说法。 */
+  markFinishedLabel: string;
+  /** 「还没读完」的计数说明。 */
+  unfinishedCountLabel: string;
+  /** 批量标记完成按钮的说明。 */
+  markAllTitle: string;
+  /** 是否显示阅读百分比。 */
+  showReadingPercent: boolean;
+  /** 未读区的标题。 */
+  unreadTitle: string;
+  /** 未读列表页的标题。 */
+  unreadPageTitle: string;
+  /** 未读计数句里的动词：没读。 */
+  unreadCountVerb: string;
+  /** 未读列表清空后的引导文案。 */
+  unreadEmptyHint: string;
+  /** 未读区的眉标。 */
+  unreadEyebrow: string;
+  /** 未读区的计数说明。 */
+  unreadCountLabel: string;
+  /** 未读区的随机按钮。 */
+  unreadButton: string;
+  /** 未读清空后的空态。 */
+  unreadEmpty: string;
+}
+
 const PHOTO: WorkbenchCopy = {
   libraryTitle: "照片库",
   libraryEyebrow: "你的照片",
   libraryDescription: "照片、故事与每一次重逢",
-  continueTitle: "继续浏览",
-  continueButton: "继续浏览",
-  positionVerb: "看到",
-  finishedLabel: "已看完",
-  finishVerb: "看完",
-  markFinishedLabel: "标记为已看完",
-  unfinishedCountLabel: "本还没看完",
-  markAllTitle: "把当前所有未浏览相册标记为已看完(不影响收藏 / 最近)",
-  showReadingPercent: false,
-  unreadTitle: "未浏览",
-  unreadPageTitle: "未浏览的相册",
-  unreadCountVerb: "没看",
-  unreadEmptyHint:
-    "照片都看过了，可以在「主页」随机翻翻，或去「收藏」里找回老朋友。",
-  unreadEyebrow: "下一张的灵感",
-  unreadCountLabel: "本等你翻看",
-  unreadButton: "随机一本未浏览",
-  unreadEmpty: "照片都看完啦 🎉",
   sectionTitle: "全部照片",
   yearSectionTitle: "该年份的照片",
   recentsTitle: "最近浏览",
@@ -104,7 +91,7 @@ const PHOTO: WorkbenchCopy = {
   randomLabel: "随机翻翻",
 };
 
-const COMIC: WorkbenchCopy = {
+const COMIC: ComicCopy = {
   libraryTitle: "漫画库",
   libraryEyebrow: "你的漫画",
   libraryDescription: "漫画、章节与还没翻完的那一话",
@@ -138,69 +125,17 @@ const COMIC: WorkbenchCopy = {
   randomLabel: "随机一本",
 };
 
-// 「全部相册」是逃生舱而不是第三个工作台：它的措辞取中性值，
-// 不假装自己是照片或漫画。
-const ALL: WorkbenchCopy = {
-  libraryTitle: "全部相册",
-  libraryEyebrow: "属于你的影像年鉴",
-  libraryDescription: "照片、故事与每一次重逢",
-  continueTitle: "继续",
-  continueButton: "继续",
-  positionVerb: "看到",
-  finishedLabel: "已读完",
-  finishVerb: "读完",
-  markFinishedLabel: "标记为已读",
-  unfinishedCountLabel: "本还没看完",
-  markAllTitle: "把当前所有未读相册标记为已读(不影响收藏 / 最近)",
-  showReadingPercent: true,
-  unreadTitle: "未读",
-  unreadPageTitle: "未读相册",
-  unreadCountVerb: "没读",
-  unreadEmptyHint:
-    "列表空了，可以在「主页」随机翻翻，或去「收藏」里找回老朋友。",
-  unreadEyebrow: "下一本的灵感",
-  unreadCountLabel: "本等你翻开",
-  unreadButton: "随机一本未读",
-  unreadEmpty: "全部看完啦 🎉",
-  sectionTitle: "全部图像",
-  yearSectionTitle: "该年份的图像",
-  recentsTitle: "最近",
-  recentsEyebrow: "浏览足迹",
-  recentsEmpty: "还没有最近记录",
-  recentsLoadError: "最近记录加载失败。",
-  recentsAlbumsLoadError: "最近记录的相册信息加载失败。",
-  favoritesTitle: "收藏",
-  favoritesEmpty: "还没有收藏",
-  randomLabel: "随机一本",
-};
-
 /** 返回某个工作台模式对应的文案。 */
 export function workbenchCopy(mode: AppMode): WorkbenchCopy {
-  if (mode === "comic") return COMIC;
-  if (mode === "photo") return PHOTO;
-  return ALL;
+  return mode === "comic" ? COMIC : PHOTO;
 }
 
 /**
- * 按相册自身的用途挑措辞。
+ * 漫画工作台的专有文案。
  *
- * 「全部相册」视图里两种相册混排，措辞必须跟着每一本相册走，
- * 不能整个页面统一成一种说法。
+ * 进度与未读只存在于漫画工作台，因此这些措辞不随模式切换：
+ * 需要它们的地方（继续阅读区、未读区、漫画卡片）本来就只在漫画模式出现。
  */
-export function copyForContentKind(
-  mode: AppMode,
-  contentKind?: ContentKind,
-): WorkbenchCopy {
-  if (mode === "all") return copyForAlbum(contentKind);
-  return workbenchCopy(mode);
-}
-
-/**
- * 按相册自身的用途取措辞，与当前工作台模式无关。
- *
- * 卡片与右键菜单讲的是「这一本相册」的状态：照片相册说「看到 / 已看完」，
- * 漫画相册说「读到 / 已读完」，不跟着工作台模式走。
- */
-export function copyForAlbum(contentKind?: ContentKind): WorkbenchCopy {
-  return contentKind === "comic" ? COMIC : PHOTO;
+export function comicCopy(): ComicCopy {
+  return COMIC;
 }

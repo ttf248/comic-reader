@@ -43,7 +43,7 @@ describe("libraryApi", () => {
       );
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await libraryApi.allTags("all");
+    const result = await libraryApi.allTags("photo");
 
     expect(result.items.map((item) => item.tag)).toEqual(["A", "B"]);
     expect(result.revision).toBe(7);
@@ -114,7 +114,7 @@ describe("libraryApi", () => {
       );
     vi.stubGlobal("fetch", fetchMock);
 
-    const result = await libraryApi.allUnreadAlbums("all");
+    const result = await libraryApi.allUnreadAlbums("comic");
 
     expect(result.items.map((item) => item.id)).toEqual(["a_1", "a_2"]);
     expect(result.total).toBe(2);
@@ -145,7 +145,7 @@ describe("libraryApi", () => {
       );
     vi.stubGlobal("fetch", fetchMock);
 
-    await expect(libraryApi.allUnreadAlbums("all")).rejects.toBeInstanceOf(
+    await expect(libraryApi.allUnreadAlbums("comic")).rejects.toBeInstanceOf(
       LibraryRevisionChangedError,
     );
   });
@@ -187,9 +187,9 @@ describe("libraryApi", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const [summary, dashboard, random] = await Promise.all([
-      libraryApi.activitySummary("all"),
-      libraryApi.dashboard("all"),
-      libraryApi.randomAlbum("all", "unread"),
+      libraryApi.activitySummary("comic"),
+      libraryApi.dashboard("comic"),
+      libraryApi.randomAlbum("comic", "unread"),
     ]);
 
     expect(summary.summary).toMatchObject({ albumCount: 320, unreadCount: 18 });

@@ -24,7 +24,7 @@ import { formatDuration } from "../../utils/format";
 import { isCompleted, isUnread, progressPercent } from "../../utils/progress";
 import { favoriteResourceId } from "../../utils/path";
 import { useToggleFavorite } from "../../hooks/useFavorites";
-import { copyForAlbum } from "../../utils/workbench";
+import { comicCopy } from "../../utils/workbench";
 import type { ContentKind } from "../../api/library";
 import CardCover from "./CardCover";
 
@@ -71,15 +71,11 @@ export interface CardData {
   // 来源媒体根的 basename（直接给 UI 用）
   sourceName?: string;
   /**
-   * 内容用途："photo"（照片墙）/ "comic"（漫画阅读器）。
-   * 列表里的「继续」入口按它决定跳照片墙还是阅读器，
-   * 卡片的进度措辞也按它走：照片是「看到」，漫画是「读到」。
+   * 内容属性："photo"（照片）/ "comic"（漫画）。
+   * 它继承自所属媒体目录，并决定相册用哪种交互打开。
+   * 进度与「已读完」只在漫画属性下出现。
    */
   contentKind?: ContentKind;
-  /** 取消相册级用途覆盖后会回落到的用途。 */
-  contentKindDefault?: ContentKind;
-  /** 用户是否手动切换过这一本的用途。 */
-  contentKindOverridden?: boolean;
 }
 
 interface Props {
@@ -260,11 +256,11 @@ function GridCard({
   const progressPct = progressPercent(data.progress);
   // 0-based 页码到达 total - 1 即已读完。
   const isFinished = isCompleted(data.progress);
-  // 照片相册的进度是「翻到了第几张」，不显示百分比。
-  const isPhotoAlbum =
-    data.variant === "album" && data.contentKind === "photo";
-  const cardCopy = copyForAlbum(data.contentKind);
-  // 未读标记（见文件底部 showUnreadMark）：只对相册、且页面不是「整页未读」时出现。
+  // 阅读进度只属于漫画相册：照片相册没有进度条、没有「已读完」。
+  const isComicAlbum =
+    data.variant === "album" && data.contentKind === "comic";
+  const cardCopy = comicCopy();
+  // 未读标记（见文件底部 showUnreadMark）：只对漫画相册、且页面不是「整页未读」时出现。
   const unread = showUnreadMark(data, showUnreadBadge);
   // 只有配置了多个媒体根才需要标来源。
   const multiRoot = useUIStore((s) => s.multiRoot);
@@ -352,9 +348,9 @@ function GridCard({
               照片相册不显示百分比：它是「翻到了第几张」，不是「读完了一本」，
               百分比读数会让人误以为在读漫画。照片卡片只保留底边那条进度条，
               位置数字挪到元信息行。 */}
-          {progressPct !== null && progressPct > 0 && (
+          {isComicAlbum && progressPct !== null && progressPct > 0 && (
             <>
-              {!isFinished && !isPhotoAlbum && (
+              {!isFinished && (
                 <div className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-md bg-black/65 backdrop-blur-sm ring-1 ring-white/20 px-1.5 h-5 text-[11.5px] font-medium text-white shadow-sm">
                   <ReaderIcon size={11} className="shrink-0" />
                   <span className="tabular-nums">{progressPct}%</span>
@@ -370,10 +366,11 @@ function GridCard({
           )}
 
           {/* 已读：右下角 chip。深色蒙版材质压在任何封面上都读得清
-              （原来的实心绿块在深色主题 / 浅色封面上都会糊掉）。 */}
-          {isFinished && data.variant === "album" && (
+              （原来的实心绿块在深色主题 / 浅色封面上都会糊掉）。
+              「已读完」只属于漫画相册：照片这边没有读完这回事。 */}
+          {isFinished && isComicAlbum && (
             <div className="absolute bottom-2 right-2">
-              <ReadChip contentKind={data.contentKind} />
+              <ReadChip />
             </div>
           )}
         </div>
@@ -423,20 +420,7 @@ function GridCard({
                 <span className="truncate">{data.subtitle}</span>
               </>
             )}
-            {/* 照片相册的封面角位不挂百分比（那是漫画的读法），
-                位置数字挪到这里，才不至于把「翻到第几张」这件事丢掉。 */}
-            {isPhotoAlbum &&
-              data.progress &&
-              data.progress.total > 0 &&
-              data.progress.index >= 0 && (
-                <>
-                  <span className="text-fg-subtle">·</span>
-                  <span className="shrink-0 whitespace-nowrap">
-                    {cardCopy.positionVerb} {data.progress.index + 1} /{" "}
-                    {data.progress.total}
-                  </span>
-                </>
-              )}
+
           </div>
           {/* 多根来源 badge：与标签副标题独立，作为视觉小标签放在元数据行。
               单一媒体根下每张卡片都挂同一句来源是噪音，multiRoot 为 false 时隐藏。 */}
@@ -452,7 +436,8 @@ function GridCard({
               title={`上次 ${timeAgo(data.lastSeenAt)}`}
             >
               <ClockIcon size={10} className="shrink-0 text-fg-subtle" />
-              {data.progress &&
+              {isComicAlbum &&
+                data.progress &&
                 data.progress.total > 0 &&
                 data.progress.index >= 0 && (
                   <>
@@ -523,8 +508,10 @@ function ListCard({
   // 与 GridCard 一致：直接依赖 <img loading="lazy">，不重复自写 IO。
   const progressPct = progressPercent(data.progress);
   const isFinished = isCompleted(data.progress);
-  // 照片相册的进度是「翻到了第几张」，措辞与漫画分开。
-  const cardCopy = copyForAlbum(data.contentKind);
+  // 阅读进度只属于漫画相册。
+  const isComicAlbum =
+    data.variant === "album" && data.contentKind === "comic";
+  const cardCopy = comicCopy();
   // 未读标记与网格视图同源。
   const unread = showUnreadMark(data, showUnreadBadge);
   // 只有配置了多个媒体根才需要标来源。
@@ -584,7 +571,7 @@ function ListCard({
                 <span>{cardCopy.unreadTitle}</span>
               </span>
             )}
-            {isFinished && data.variant === "album" && (
+            {isFinished && isComicAlbum && (
               <span className="inline-flex items-center gap-0.5 text-[13px] font-medium text-fg-muted shrink-0">
                 <CheckIcon size={11} className="text-success" />
                 <span>{cardCopy.finishedLabel}</span>
@@ -601,7 +588,7 @@ function ListCard({
               </span>
             )}
           </div>
-          {progressPct !== null && progressPct > 0 && (
+          {isComicAlbum && progressPct !== null && progressPct > 0 && (
             <div className="mt-2 flex items-center gap-2 max-w-md">
               <div className="flex-1 h-1 bg-bg-strong rounded-full overflow-hidden">
                 <div
@@ -681,11 +668,17 @@ function ListCard({
 // ============================================================================
 
 /** 是否给这张卡挂未读标记。
- *  未读只对相册有意义（集合 / 智能视图是聚合视图，谈不上"翻开过"）。
+ *  未读只对漫画相册有意义：照片工作台没有阅读进度，也没有未读这回事。
+ *  集合 / 智能视图是聚合视图，同样谈不上"翻开过"。
  *  showUnreadBadge=false 用于"整页都是未读"的列表：那里每张卡挂同一个
  *  标记纯属重复，未读状态由服务端筛选保证。 */
 function showUnreadMark(data: CardData, showUnreadBadge: boolean): boolean {
-  return showUnreadBadge && data.variant === "album" && isUnread(data.progress);
+  return (
+    showUnreadBadge &&
+    data.variant === "album" &&
+    data.contentKind === "comic" &&
+    isUnread(data.progress)
+  );
 }
 
 /** 未读：一颗白点 + 深色描边。
@@ -708,8 +701,8 @@ function UnreadDot({ label }: { label: string }) {
  * 说法跟相册用途走：漫画是「已读完」，照片是「已看完」——
  * 照片相册没有「读完」这回事，用户也不该被漫画的说法套住。
  */
-function ReadChip({ contentKind }: { contentKind?: ContentKind }) {
-  const title = copyForAlbum(contentKind).finishedLabel;
+function ReadChip() {
+  const title = comicCopy().finishedLabel;
   return (
     <span
       className="inline-flex items-center gap-1 rounded-md bg-black/65 backdrop-blur-sm ring-1 ring-white/20 px-1.5 h-5 text-[12.5px] font-medium text-white shadow-sm"

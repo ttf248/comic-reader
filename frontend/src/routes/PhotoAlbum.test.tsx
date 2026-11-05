@@ -11,8 +11,6 @@ import PhotoAlbum from "./PhotoAlbum";
 import { useAlbumMedia } from "../hooks/useLibrary";
 import { useFavorites } from "../hooks/useFavorites";
 import { useUIStore } from "../store/uiStore";
-import { activityApi } from "../api/activity";
-import { albumsApi } from "../api/albums";
 
 vi.mock("../hooks/useLibrary", () => ({
   libraryQueryKeys: { root: ["library"] },
@@ -25,19 +23,9 @@ vi.mock("../hooks/useFavorites", () => ({ useFavorites: vi.fn() }));
 vi.mock("../api/fs", () => ({
   fsApi: { capabilities: vi.fn().mockResolvedValue({ allowOsOpen: false }) },
 }));
-vi.mock("../api/activity", () => ({
-  activityApi: { setPhoto: vi.fn(async () => ({})) },
-}));
 vi.mock("../api/albums", () => ({
   albumsApi: {
     setCover: vi.fn(async () => ({})),
-    setContentKind: vi.fn(async () => ({
-      ok: true,
-      contentKind: "comic",
-      contentKindDefault: "photo",
-      contentKindOverridden: true,
-    })),
-    clearContentKind: vi.fn(),
   },
 }));
 vi.mock("../components/wall/PhotoWall", () => ({
@@ -73,8 +61,6 @@ const album = {
   imageCount: 3,
   videoCount: 1,
   contentKind: "photo" as const,
-  contentKindDefault: "photo" as const,
-  contentKindOverridden: false,
 };
 
 function Location() {
@@ -181,27 +167,13 @@ describe("PhotoAlbum", () => {
     }
   });
 
-  it("从「更多」菜单归类成漫画相册后进入阅读器", async () => {
+  // 内容属性只按目录设置，页面上没有「把这本归类到漫画」的入口。
+  it("「更多」菜单没有相册归类入口", () => {
     renderPhotoAlbum();
 
-    // 用途切换不再是页头常驻控件，而是「更多」菜单里的一次明确动作。
     fireEvent.click(screen.getByRole("button", { name: "更多操作" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "移到漫画库" }));
-
-    await waitFor(() =>
-      expect(albumsApi.setContentKind).toHaveBeenCalledWith("a_trip", "comic"),
-    );
-    await waitFor(() =>
-      expect(screen.getByTestId("location")).toHaveTextContent("/read/a_trip"),
-    );
-  });
-
-  it("打开照片墙就记下浏览进度", async () => {
-    renderPhotoAlbum();
-
-    await waitFor(() =>
-      expect(activityApi.setPhoto).toHaveBeenCalledWith("a_trip", 0, 4),
-    );
+    expect(screen.queryByRole("menuitem", { name: "移到漫画库" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "移到照片库" })).toBeNull();
   });
 
   it("照片墙期间帮助浮层切到照片场景，离开后复位", () => {

@@ -46,9 +46,8 @@ import {
 } from "../utils/galleryContext";
 import { usePrefs } from "../hooks/usePrefs";
 import { useVideoActivity } from "../hooks/useVideoActivity";
-import { useAlbumClassification } from "../hooks/useAlbumClassification";
 import { useAppMode } from "../hooks/useAppMode";
-import type { AppMode, ContentKind } from "../api/library";
+import type { AppMode } from "../api/library";
 
 // 画廊页面：从 URL 读取 path/index/name。
 // 关闭时持久化阅读进度到后端。
@@ -902,25 +901,6 @@ export default function Reader() {
       });
   }, [pathParam, queryClient, pushToast]);
 
-  // 归类：把本相册移到另一种打开方式。
-  // 移到照片库要离开阅读器（照片墙是另一套外壳）；
-  // 移到漫画库则留在原地——这本相册此刻正在当漫画读。
-  const classification = useAlbumClassification(pathParam);
-  const moveToKind = useCallback(
-    (kind: ContentKind) => {
-      if (!pathParam) return;
-      void classification.moveTo
-        .mutateAsync(kind)
-        .then(() => {
-          if (kind === "photo") navigate(albumRoute(pathParam));
-        })
-        .catch(() => {
-          // toast 由 hook 统一给出。
-        });
-    },
-    [classification.moveTo, navigate, pathParam],
-  );
-
   // 切换工作台：阅读器整屏脱离 AppShell，侧栏不可见，
   // 这里离开阅读器回到外壳，顺带把工作台换掉。
   const openWorkbench = useCallback(
@@ -1182,9 +1162,6 @@ export default function Reader() {
           onClearCover={onClearCover}
           hasCustomCover={hasCustomCover}
           onToggleOverview={() => setShowOverview((v) => !v)}
-          onMoveToKind={moveToKind}
-          onResetKind={() => void classification.resetToDefault.mutateAsync()}
-          kindOverridden={albumSummary?.contentKindOverridden === true}
           workbenchMode={workbenchMode}
           onOpenWorkbench={openWorkbench}
           onJumpToFirst={isVideo ? () => goToVideo(0) : () => setIndex(0)}

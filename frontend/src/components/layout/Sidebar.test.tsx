@@ -17,7 +17,9 @@ const dashboard = {
 };
 
 vi.mock("../../hooks/useLibrary", () => ({
-  useUnreadCountsByKind: () => ({ photo: 12, comic: 69 }),
+  useLibraryActivitySummary: () => ({
+    data: { summary: { unreadCount: 69 } },
+  }),
   useLibraryDashboard: () => ({ data: dashboard }),
 }));
 
@@ -114,33 +116,46 @@ describe("Sidebar", () => {
     expect(screen.getByText("3 本")).toBeInTheDocument();
   });
 
-  it("侧栏按照片 / 漫画分成两组，两组各自给出入口", () => {
+  // 两个模式的侧栏完全隔离：漫画这边有未读与阅读措辞，照片这边一样都没有。
+  it("漫画工作台只列出漫画自己的入口", () => {
     renderSidebar();
-    // 「照片」既是分段控件的一档，也是分组标题。
-    expect(screen.getAllByText("照片").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("漫画").length).toBeGreaterThan(0);
-    expect(screen.getByText("照片库")).toBeInTheDocument();
     expect(screen.getByText("漫画库")).toBeInTheDocument();
-    expect(screen.getByText("未浏览")).toBeInTheDocument();
     expect(screen.getByText("未读")).toBeInTheDocument();
-    // 逃生舱：全部相册是独立入口，不是第三个工作台。
-    expect(screen.getByText("全部相册")).toBeInTheDocument();
+    expect(screen.getByText("最近阅读")).toBeInTheDocument();
+    expect(screen.getByText("收藏漫画")).toBeInTheDocument();
+    // 照片那边的入口不出现在漫画工作台。
+    expect(screen.queryByText("照片库")).not.toBeInTheDocument();
+    expect(screen.queryByText("最近浏览")).not.toBeInTheDocument();
+    expect(screen.queryByText("收藏照片")).not.toBeInTheDocument();
   });
 
-  it("点击另一组的条目会先切模式再跳转", () => {
+  it("照片工作台只列出照片自己的入口", () => {
+    appMode.mode = "photo";
     renderSidebar();
-    fireEvent.click(screen.getByText("照片库"));
-    expect(appMode.setMode).toHaveBeenCalledWith("photo");
+    expect(screen.getByText("照片库")).toBeInTheDocument();
+    expect(screen.getByText("最近浏览")).toBeInTheDocument();
+    expect(screen.getByText("收藏照片")).toBeInTheDocument();
+    // 漫画那边的一切都不出现，包括未读入口与阅读措辞。
+    expect(screen.queryByText("漫画库")).not.toBeInTheDocument();
+    expect(screen.queryByText("未读")).not.toBeInTheDocument();
+    expect(screen.queryByText("最近阅读")).not.toBeInTheDocument();
+    expect(screen.queryByText("收藏漫画")).not.toBeInTheDocument();
+    expect(screen.queryByText("继续阅读")).not.toBeInTheDocument();
   });
 
-  it("切换到照片工作台后，「继续」区改用浏览的措辞", () => {
+  it("不再有「全部相册」入口：两个模式互斥，没有第三档", () => {
+    renderSidebar();
+    expect(screen.queryByText("全部相册")).not.toBeInTheDocument();
+  });
+
+  it("照片工作台下不出现「继续阅读」区", () => {
     appMode.mode = "photo";
     dashboard.dashboard.inProgress = [
       { album: albumNode, pageIndex: 5, pageCount: 20 },
     ];
     renderSidebar();
-    expect(screen.getByText("继续浏览")).toBeInTheDocument();
     expect(screen.queryByText("继续阅读")).not.toBeInTheDocument();
+    expect(screen.queryByText("某本漫画")).not.toBeInTheDocument();
   });
 
   it("不再提供「随机未读」：该动作在未读页与首页已有入口", () => {

@@ -3,23 +3,22 @@ import { api, ApiError } from "./client";
 export const LIBRARY_PAGE_LIMIT = 200;
 export const LIBRARY_NODE_BATCH_LIMIT = 500;
 
-/** 相册的浏览用途：照片墙还是漫画阅读器。 */
+/** 媒体目录的内容属性：照片目录还是漫画目录。 */
 export type ContentKind = "photo" | "comic";
 
 /**
- * 全局工作台模式。
+ * 工作台模式。
  *
- * photo / comic 让列表只呈现该用途的相册，all 不过滤（逃生舱）。
- * 它与相册自身的 contentKind 正交：模式只决定「我现在看哪一类」，
- * 不改变任何一本相册自己的打开方式。
+ * 目录属性把媒体库分成照片与漫画两半，两半互斥；模式一次只面对其中一半。
+ * 没有「全部」这一档：它会让两个模式的菜单互相掺入。
  */
-export type AppMode = ContentKind | "all";
+export type AppMode = ContentKind;
 
 export interface LibraryStatistics {
   rootCount: number;
   /** 全库相册总数。它不随工作台模式变化。 */
   albumCount: number;
-  /** 按用途拆分的相册数。 */
+  /** 按内容属性拆分的相册数。 */
   photoAlbumCount?: number;
   comicAlbumCount?: number;
   collectionCount: number;
@@ -37,6 +36,8 @@ export interface LibraryRootSummary {
   id: string;
   name: string;
   childCount: number;
+  /** 该目录的内容属性："photo" / "comic"。 */
+  contentKind?: ContentKind;
 }
 
 export interface LibraryManifest {
@@ -77,14 +78,10 @@ export interface LibraryNodeSummary {
    */
   location?: string;
   /**
-   * 内容用途："photo"（照片墙）或 "comic"（漫画阅读器）。
-   * 它决定点击相册后进入哪套交互，与文件是图片还是视频无关。
+   * 内容属性："photo"（照片）或 "comic"（漫画）。
+   * 它继承自所属媒体目录，并决定点击相册后进入哪套交互。
    */
   contentKind?: ContentKind;
-  /** 取消相册级覆盖后会回落到的用途（媒体根默认值）。 */
-  contentKindDefault?: ContentKind;
-  /** 用户是否手动切换过这本相册的用途。 */
-  contentKindOverridden?: boolean;
 }
 
 export interface LibraryMediaItem {
@@ -115,8 +112,6 @@ export interface LibraryDashboardProgress {
   album: LibraryNodeSummary;
   pageIndex: number;
   pageCount: number;
-  /** 位置的语义：photo 是照片墙里翻到第几张，image 是漫画读到第几页。 */
-  mediaKind?: "photo" | "image";
   updated: string;
 }
 
@@ -270,7 +265,9 @@ export const libraryApi = {
       `/api/tags/${encodeURIComponent(tag)}/albums`,
       { params: { cursor, limit, kind } },
     ),
-  randomAlbum: (kind: AppMode, scope: "all" | "unread" = "all") =>
+  // scope 只区分「该模式下的任意一本」与「该模式下还没翻开的」；
+  // 叫 "any" 而不是 "all"，避免和工作台模式混成一个概念。
+  randomAlbum: (kind: AppMode, scope: "any" | "unread" = "any") =>
     api<{
       ok: boolean;
       album: LibraryNodeSummary;

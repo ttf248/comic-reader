@@ -40,8 +40,6 @@ export function nodeSummaryToCard(
     sourceRoot: node.sourceRoot,
     sourceName: node.sourceName,
     contentKind: node.contentKind,
-    contentKindDefault: node.contentKindDefault,
-    contentKindOverridden: node.contentKindOverridden,
   };
 }
 

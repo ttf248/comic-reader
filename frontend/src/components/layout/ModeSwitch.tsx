@@ -8,14 +8,11 @@ interface Props {
 /**
  * 工作台模式切换器：照片 / 漫画。
  *
- * 它是「我现在看哪一类相册」的选择，与相册自身的用途正交：
- * 切换只改变列表与措辞，不改变任何一本相册打开后的交互。
- *
- * 「全部相册」不在这里——它是逃生舱而不是第三个工作台，
- * 作为侧栏里的独立导航项存在。
+ * 模式就是目录的内容属性：照片目录的相册归照片工作台，漫画目录的归漫画工作台，
+ * 两半互斥。这里只有两档，没有「全部」——不过滤的第三档会让两套菜单互相掺入。
  */
 export default function ModeSwitch({ mode, onChange }: Props) {
-  const options: { key: Exclude<AppMode, "all">; label: string }[] = [
+  const options: { key: AppMode; label: string }[] = [
     { key: "photo", label: "照片" },
     { key: "comic", label: "漫画" },
   ];

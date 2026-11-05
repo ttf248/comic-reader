@@ -9,8 +9,8 @@ import type { AppMode } from '../api/library'
  * 它的真相源是服务端偏好（state/web_settings.json），本地这份只是镜像：
  * 切换要立刻反映到界面，但真正持久化的是服务端。
  *
- * 模式是「我现在看哪一类」，相册自身的 contentKind 是「这本怎么打开」，
- * 两者正交——模式只过滤列表，不改变任何一本相册的打开方式。
+ * 模式就是目录的内容属性：照片目录的相册归照片工作台，漫画目录的归漫画工作台。
+ * 两半互斥，模式决定「我现在面对哪一半」。
  */
 interface AppModeState {
   mode: AppMode

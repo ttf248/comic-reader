@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useSearchStore } from "../store/searchStore";
 import { useUIStore } from "../store/uiStore";
 import { useFavorites } from "../hooks/useFavorites";
-import { useImageActivities, usePhotoActivities } from "../hooks/useImageActivity";
+import { useImageActivities } from "../hooks/useImageActivity";
 import type { LibraryNodeSummary } from "../api/library";
 import { useGalleryContextSync } from "../hooks/useGalleryContextSync";
 import AlbumGrid, { type CardData } from "../components/album/AlbumGrid";
@@ -65,14 +65,11 @@ export default function Tag() {
     [albums],
   );
   const { data: progressMap } = useImageActivities(progressPaths);
-  const { data: photoProgressMap } = usePhotoActivities(progressPaths);
-  // 进度按相册自己的用途取：照片看浏览位置，漫画看页码。
+  // 阅读进度只属于漫画相册：照片目录下的相册没有进度可言。
   const activityFor = useCallback(
     (album: LibraryNodeSummary) =>
-      album.contentKind === "photo"
-        ? photoProgressMap?.[album.id]
-        : progressMap?.[album.id],
-    [photoProgressMap, progressMap],
+      album.contentKind === "comic" ? progressMap?.[album.id] : undefined,
+    [progressMap],
   );
   const readCount = useMemo(() => {
     let count = 0;
@@ -225,11 +222,15 @@ export default function Tag() {
                 value={totalMedia}
                 detail={`图片 ${totalImages} · 视频 ${totalVideos}`}
               />
-              <Stat
-                icon={<ClockIcon size={13} />}
-                label={mode === "photo" ? "已看完" : "已读完"}
-                value={`${readCount}/${albums.length}`}
-              />
+              {/* 阅读进度只属于漫画工作台：照片目录下的相册没有
+                  「读完」这个状态，这一格在照片模式下不出现。 */}
+              {mode === "comic" && (
+                <Stat
+                  icon={<ClockIcon size={13} />}
+                  label="已读完"
+                  value={`${readCount}/${albums.length}`}
+                />
+              )}
               <Stat
                 icon={<StarIcon size={13} />}
                 label="最近更新"

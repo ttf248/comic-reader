@@ -30,7 +30,6 @@ function renderHero(cards: ReturnType<typeof makeCard>[]) {
       <MemoryRouter>
         <ContinueHero
           cards={cards}
-          mode="comic"
           onContinue={onContinue}
           onRemove={onRemove}
           onClearAll={onClearAll}

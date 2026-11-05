@@ -6,6 +6,7 @@ import type { LibraryNodeSummary } from "../api/library";
 import { historyApi } from "../api/prefs";
 import { useSearchStore } from "../store/searchStore";
 import { useUIStore } from "../store/uiStore";
+import { useAppModeStore } from "../store/appModeStore";
 import Home from "./Home";
 
 const mocks = vi.hoisted(() => ({
@@ -34,7 +35,6 @@ vi.mock("../hooks/useGalleryContextSync", () => ({
 }));
 vi.mock("../hooks/useImageActivity", () => ({
   useImageActivities: () => ({ data: {} }),
-  usePhotoActivities: () => ({ data: {} }),
   useMarkAlbumRead: () => ({ mutateAsync: vi.fn() }),
   useMarkAlbumsRead: () => ({ mutateAsync: vi.fn() }),
 }));
@@ -118,6 +118,8 @@ beforeEach(() => {
   useUIStore.setState({ viewMode: "grid" });
   useSearchStore.getState().reset();
   mocks.inProgress = true;
+  // 「继续阅读」与「未读」属于漫画工作台，首页的这些用例都在漫画模式跑。
+  useAppModeStore.setState({ mode: "comic", ready: true });
   vi.mocked(historyApi.list).mockResolvedValue({ history: [] });
   mocks.items = [
     {
@@ -154,7 +156,7 @@ it("筛选条紧贴在「全部图像」网格上方，不被英雄区 / 时间�
 
   await waitFor(() => expect(screen.getByTestId("album-grid")).toBeTruthy());
 
-  const heading = screen.getByText("全部照片");
+  const heading = screen.getByText("全部漫画");
   const chip = screen.getByRole("button", { name: /文件夹/ });
   const grid = screen.getByTestId("album-grid");
 
@@ -226,4 +228,14 @@ it("没有在读相册时未读区独立成块（没有舞台可挂）", async (
   // 否则首页第一屏只剩一个推荐货架，没有"接着读"的主入口。
   expect(screen.queryByTestId("continue-hero")).toBeNull();
   expect(screen.getByTestId("unread-hero")).toBeTruthy();
+});
+
+// 照片工作台没有阅读进度，也没有未读：两个区块都不出现。
+it("照片工作台不显示继续阅读与未读区", async () => {
+  useAppModeStore.setState({ mode: "photo", ready: true });
+  renderHome();
+  await waitFor(() => expect(screen.getByTestId("album-grid")).toBeTruthy());
+  expect(screen.queryByTestId("continue-hero")).toBeNull();
+  expect(screen.queryByTestId("unread-hero")).toBeNull();
+  expect(screen.getByText("全部照片")).toBeTruthy();
 });

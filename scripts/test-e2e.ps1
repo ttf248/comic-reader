@@ -58,21 +58,34 @@ try {
     @{ Name = "M"; Modified = "2024-01-01T00:00:00Z"; MediaModified = "2000-01-01T00:00:00Z" },
     @{ Name = "Z"; Modified = "2022-01-01T00:00:00Z"; MediaModified = "2030-01-01T00:00:00Z" }
   )
-  $collectionDir = Join-Path (Join-Path $testRoot "media") "zz-sort-collection"
-  foreach ($parent in @((Join-Path $testRoot "media"), $collectionDir)) {
-    foreach ($sample in $taggedSamples) {
-      $taggedDir = Join-Path $parent ("zz-[测试][空 格][C++][100%][字面%20][字面%2F][字面%25] tagged-" + $sample.Name)
-      New-Item -ItemType Directory -Path $taggedDir -Force | Out-Null
-      $taggedImage = Join-Path $taggedDir "page.png"
-      [System.IO.File]::WriteAllBytes($taggedImage, $pngBytes)
-      [System.IO.File]::SetLastWriteTimeUtc($taggedImage, [DateTimeOffset]::Parse($sample.MediaModified).UtcDateTime)
-      [System.IO.Directory]::SetLastWriteTimeUtc($taggedDir, [DateTimeOffset]::Parse($sample.Modified).UtcDateTime)
+  # 标签素材在照片根与漫画根各放一份：内容属性按目录划分，两个工作台
+  # 各自都要能看到同名标签下的相册。
+  foreach ($rootName in @("media", "media-comic")) {
+    $rootDir = Join-Path $testRoot $rootName
+    $collectionDir = Join-Path $rootDir "zz-sort-collection"
+    foreach ($parent in @($rootDir, $collectionDir)) {
+      foreach ($sample in $taggedSamples) {
+        $taggedDir = Join-Path $parent ("zz-[测试][空 格][C++][100%][字面%20][字面%2F][字面%25] tagged-" + $sample.Name)
+        New-Item -ItemType Directory -Path $taggedDir -Force | Out-Null
+        $taggedImage = Join-Path $taggedDir "page.png"
+        [System.IO.File]::WriteAllBytes($taggedImage, $pngBytes)
+        [System.IO.File]::SetLastWriteTimeUtc($taggedImage, [DateTimeOffset]::Parse($sample.MediaModified).UtcDateTime)
+        [System.IO.Directory]::SetLastWriteTimeUtc($taggedDir, [DateTimeOffset]::Parse($sample.Modified).UtcDateTime)
+      }
     }
   }
 
+  # 漫画根下再放一本多页漫画：继续阅读、未读与「标记为已读完」都靠它。
+  $comicAlbumDir = Join-Path (Join-Path $testRoot "media-comic") "sample-comic"
+  New-Item -ItemType Directory -Path $comicAlbumDir -Force | Out-Null
+  1..3 | ForEach-Object {
+    [System.IO.File]::WriteAllBytes((Join-Path $comicAlbumDir "page-$_.png"), $pngBytes)
+  }
+
   # 长相册列表：主区域与集合内层各放 108 本，验证滚动到首屏之外仍能访问。
-  $scrollCollectionDir = Join-Path (Join-Path $testRoot "media") "zz-scroll-collection"
-  foreach ($parent in @((Join-Path $testRoot "media"), $scrollCollectionDir)) {
+  # 放在漫画根下：这条用例在漫画工作台跑，未读页是其中一站。
+  $scrollCollectionDir = Join-Path (Join-Path $testRoot "media-comic") "zz-scroll-collection"
+  foreach ($parent in @((Join-Path $testRoot "media-comic"), $scrollCollectionDir)) {
     1..108 | ForEach-Object {
       $scrollAlbumDir = Join-Path $parent ("zz-[滚动回归] long-list-{0:D3}" -f $_)
       New-Item -ItemType Directory -Path $scrollAlbumDir -Force | Out-Null
@@ -113,12 +126,17 @@ try {
   }
 
   $mediaPathYaml = (Join-Path $testRoot "media").Replace("\", "/")
+  $comicPathYaml = (Join-Path $testRoot "media-comic").Replace("\", "/")
   $cachePathYaml = (Join-Path $testRoot "cache").Replace("\", "/")
   $staticPathYaml = $staticRoot.Replace("\", "/")
   $config = @"
 mediaRoots:
-  - "$mediaPathYaml"
-  - "$mediaPathYaml-offline"
+  - path: "$mediaPathYaml"
+    kind: photo
+  - path: "$comicPathYaml"
+    kind: comic
+  - path: "$mediaPathYaml-offline"
+    kind: photo
 host: "127.0.0.1"
 port: $testPort
 cacheDir: "$cachePathYaml"

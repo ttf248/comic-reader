@@ -1,13 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import type { LibraryMediaItem, LibraryNodeSummary } from "../api/library";
 import { albumsApi } from "../api/albums";
 import { useAlbumMedia } from "../hooks/useLibrary";
 import { useFavorites } from "../hooks/useFavorites";
-import { usePhotoActivity } from "../hooks/usePhotoActivity";
 import { useAlbumActions } from "../hooks/useAlbumActions";
-import { useAlbumClassification } from "../hooks/useAlbumClassification";
 import { useUIStore } from "../store/uiStore";
 import {
   usePhotoStore,
@@ -32,12 +29,9 @@ import {
   InfoIcon,
   MoreHorizontalIcon,
   StarIcon,
-  ReaderIcon,
-  RefreshIcon,
 } from "../components/common/Icon";
 import { fileManagerErrorMessage } from "../utils/fileManager";
 import { useSafeBack } from "../utils/navigation";
-import { readerRoute } from "../utils/path";
 
 interface Props {
   /** 相册摘要（含内容用途与封面）。 */
@@ -52,7 +46,6 @@ interface Props {
  * 收在顶部工具条，不再占用一整屏的封面区。
  */
 export default function PhotoAlbum({ album }: Props) {
-  const navigate = useNavigate();
   const goBack = useSafeBack("/");
   const queryClient = useQueryClient();
   const pushToast = useUIStore((s) => s.pushToast);
@@ -76,8 +69,6 @@ export default function PhotoAlbum({ album }: Props) {
     item: LibraryMediaItem;
   } | null>(null);
   const [propertiesFileId, setPropertiesFileId] = useState<string | null>(null);
-  const { record } = usePhotoActivity(album.id);
-  const classification = useAlbumClassification(album.id);
 
   const title = album.virtual
     ? album.location || album.displayName || album.name
@@ -94,11 +85,6 @@ export default function PhotoAlbum({ album }: Props) {
     to: `/albums/${encodeURIComponent(album.id)}`,
     isFavorite,
   });
-
-  // 打开照片墙就算「翻过」这本相册：未读统计需要一个明确的起点。
-  useEffect(() => {
-    if (total > 0) record(0, total);
-  }, [record, total]);
 
   // 照片墙的帮助浮层多一组大图预览的操作；离开本页时复位。
   const setHelpContext = useUIStore((s) => s.setHelpContext);
@@ -119,9 +105,8 @@ export default function PhotoAlbum({ album }: Props) {
         return;
       }
       setViewerIndex(index);
-      record(index, total);
     },
-    [record, total],
+    [],
   );
 
   const setCover = useCallback(async () => {
@@ -274,36 +259,14 @@ export default function PhotoAlbum({ album }: Props) {
               <GridIcon size={13} />
               <span>用当前查看的图片设为封面</span>
             </PopoverItem>
-            {/* 归类：把相册移到漫画库。它是一次写操作（会清掉另一种
-                打开方式的进度），所以留在菜单里而不是页头常驻控件。 */}
-            <PopoverItem
-              onClick={() => {
-                // 归类成漫画相册后，这本相册该用阅读器打开：
-                // 继续停在照片墙上会显示一个「漫画」相册的照片墙。
-                void classification.moveTo
-                  .mutateAsync("comic")
-                  .then(() => navigate(readerRoute(album.id)));
-              }}
-              title="移到漫画库 · 会清空照片浏览进度"
-            >
-              <ReaderIcon size={13} />
-              <span>移到漫画库</span>
-            </PopoverItem>
-            {album.contentKindOverridden && (
-              <PopoverItem
-                onClick={() => void classification.resetToDefault.mutateAsync()}
-                title="恢复成媒体根的默认打开方式"
-              >
-                <RefreshIcon size={13} />
-                <span>恢复默认类型</span>
-              </PopoverItem>
-            )}
           </Popover>
         </div>
       </header>
 
       <div className="min-h-0 flex-1 px-[clamp(20px,3vw,48px)] pb-2">
-        {mediaQuery.isError ? (
+        {/* 只有第一页就没加载出来才整页报错：后续分页失败时已加载的内容
+            仍然能翻，页头的提示条已经说明了失败与重试。 */}
+        {mediaQuery.isError && mediaItems.length === 0 ? (
           <div className="flex h-full items-center justify-center text-[13px] text-fg-muted">
             媒体加载失败，请重试。
           </div>
@@ -394,10 +357,7 @@ export default function PhotoAlbum({ album }: Props) {
           items={mediaItems}
           index={viewerIndex}
           albumName={title}
-          onIndexChange={(index) => {
-            setViewerIndex(index);
-            record(index, total);
-          }}
+          onIndexChange={(index) => setViewerIndex(index)}
           onClose={() => setViewerIndex(null)}
           isFavorite={isFavorite}
           onToggleFavorite={toggleFavorite}

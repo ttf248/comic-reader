@@ -8,7 +8,6 @@ import ThemeSwitcher from "../components/common/ThemeSwitcher";
 import { useUIStore } from "../store/uiStore";
 import { libraryQueryKeys, useLibraryManifest } from "../hooks/useLibrary";
 import ServerConfigPanel from "../components/settings/ServerConfigPanel";
-import ContentKindPolicyPanel from "../components/settings/ContentKindPolicyPanel";
 import ScanWarnings from "../components/common/ScanWarnings";
 import { syncHistoryCache } from "../utils/historyCache";
 import { useAppMode } from "../hooks/useAppMode";
@@ -24,7 +23,6 @@ import {
   ServerIcon,
   ImageIcon,
   ReaderIcon,
-  GridIcon,
 } from "../components/common/Icon";
 
 export default function Settings() {
@@ -288,8 +286,8 @@ export default function Settings() {
           </Row>
         </Section>
 
-        {/* 工作台：应用当前面向哪一类相册。它决定列表呈现什么、
-            页面用什么措辞，与每本相册自己的打开方式无关。 */}
+        {/* 工作台：应用当前面向哪一类目录。它决定列表呈现什么、
+            页面用什么措辞；两类目录的属性在「服务端 › 媒体根目录」里设定。 */}
         <Section title="工作台" icon={<LibraryIcon size={13} />}>
           <Row label="默认工作台">
             <div className="flex items-center border border-border-faint rounded-md overflow-hidden">
@@ -297,7 +295,6 @@ export default function Settings() {
                 [
                   ["photo", "照片"],
                   ["comic", "漫画"],
-                  ["all", "全部"],
                 ] as const
               ).map(([key, label]) => (
                 <button
@@ -437,11 +434,6 @@ export default function Settings() {
           <p className="px-5 pb-4 text-[12.5px] text-fg-subtle -mt-2">
             显示模式、适配与方向只保存在本机浏览器；自动切换与通知保存在服务端，所有设备共享。
           </p>
-        </Section>
-
-        {/* 相册用途：决定「新相册默认按哪种方式打开」，与工作台模式是两件事。 */}
-        <Section title="相册用途" icon={<GridIcon size={13} />}>
-          <ContentKindPolicyPanel />
         </Section>
 
         <Section title="数据" icon={<LibraryIcon size={13} />}>

@@ -23,7 +23,7 @@ import Popover, {
 } from "../common/Popover";
 import { useGalleryStore } from "../../store/galleryStore";
 import { toggleFullscreen as toggleFullscreenImpl } from "../../utils/fullscreen";
-import type { AppMode, ContentKind } from "../../api/library";
+import type { AppMode } from "../../api/library";
 
 interface Props {
   name: string;
@@ -61,14 +61,6 @@ interface Props {
   /** 打开目录（整本缩略图）。可选：不提供时不显示入口。 */
   onToggleOverview?: () => void;
   /**
-   * 归类：把本相册移到另一种打开方式，或恢复默认归类。
-   * 它们是写操作（会清掉另一种用途留下的进度），所以只在菜单里出现。
-   */
-  onMoveToKind?: (kind: ContentKind) => void;
-  onResetKind?: () => void;
-  /** 本相册的用途是否被用户手动覆盖过。 */
-  kindOverridden?: boolean;
-  /**
    * 工作台切换。阅读器整屏脱离 AppShell，侧栏不可见，
    * 想换工作台只能从这里走——切模式意味着离开阅读器回到外壳。
    */
@@ -103,9 +95,6 @@ export default function GalleryHeader({
   onJumpToFirst,
   onJumpToLast,
   onToggleOverview,
-  onMoveToKind,
-  onResetKind,
-  kindOverridden,
   workbenchMode,
   onOpenWorkbench,
 }: Props) {
@@ -173,11 +162,7 @@ export default function GalleryHeader({
             >
               <LibraryIcon size={13} />
               <span className="hidden sm:inline">
-                {workbenchMode === "comic"
-                  ? "漫画库"
-                  : workbenchMode === "photo"
-                    ? "照片库"
-                    : "全部相册"}
+                {workbenchMode === "comic" ? "漫画库" : "照片库"}
               </span>
             </button>
           }
@@ -190,10 +175,6 @@ export default function GalleryHeader({
           <PopoverItem onClick={() => onOpenWorkbench("comic")}>
             <ReaderIcon size={13} />
             <span>打开漫画库</span>
-          </PopoverItem>
-          <PopoverItem onClick={() => onOpenWorkbench("all")}>
-            <LibraryIcon size={13} />
-            <span>打开全部相册</span>
           </PopoverItem>
         </Popover>
       )}
@@ -294,35 +275,6 @@ export default function GalleryHeader({
             <span>阅读方向：{direction === "ltr" ? "左→右" : "右→左"}</span>
             <span className="ml-auto text-[12.5px] text-white/55">L</span>
           </PopoverItem>
-        )}
-        {onMoveToKind && (
-          <>
-            <PopoverSeparator />
-            <PopoverLabel>相册归类</PopoverLabel>
-            <PopoverItem
-              onClick={() => onMoveToKind("photo")}
-              title="移到照片库 · 会清空漫画阅读进度"
-            >
-              <ImageIcon size={13} />
-              <span>移到照片库</span>
-            </PopoverItem>
-            <PopoverItem
-              onClick={() => onMoveToKind("comic")}
-              title="移到漫画库 · 会清空照片浏览进度"
-            >
-              <ReaderIcon size={13} />
-              <span>移到漫画库</span>
-            </PopoverItem>
-            {kindOverridden && onResetKind && (
-              <PopoverItem
-                onClick={onResetKind}
-                title="恢复成媒体根的默认打开方式"
-              >
-                <RefreshIcon size={13} />
-                <span>恢复默认类型</span>
-              </PopoverItem>
-            )}
-          </>
         )}
         {hasAlbumNav && <PopoverSeparator />}
         {hasAlbumNav && <PopoverLabel>列表</PopoverLabel>}

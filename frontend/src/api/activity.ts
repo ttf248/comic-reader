@@ -29,10 +29,11 @@ export function isActivityNotFound(error: unknown): boolean {
  * 活动类型。
  *
  * - image：漫画阅读进度（读到第几页）
- * - photo：照片浏览进度（最后看到第几张），与漫画进度分开存放
  * - video：视频播放位置
+ *
+ * 照片浏览不留进度：照片工作台没有「看到第几张」这回事。
  */
-export type MediaKind = "image" | "photo" | "video";
+export type MediaKind = "image" | "video";
 export type ActivityStatus = "in_progress" | "completed";
 
 export interface ActivityIdentity {
@@ -56,12 +57,6 @@ export interface ImageActivity extends Activity {
   pageCount: number;
 }
 
-export interface PhotoActivity extends Activity {
-  mediaKind: "photo";
-  pageIndex: number;
-  pageCount: number;
-}
-
 export interface VideoActivity extends Activity {
   mediaKind: "video";
   itemId: string;
@@ -73,12 +68,6 @@ export type ActivityInput =
   | {
       albumId: string;
       mediaKind: "image";
-      pageIndex: number;
-      pageCount: number;
-    }
-  | {
-      albumId: string;
-      mediaKind: "photo";
       pageIndex: number;
       pageCount: number;
     }
@@ -105,11 +94,6 @@ export const activityApi = {
       params: { albumId, mediaKind: "image" },
     }),
 
-  getPhoto: (albumId: string) =>
-    api<PhotoActivity>("/api/activity", {
-      params: { albumId, mediaKind: "photo" },
-    }),
-
   getVideo: (albumId: string, itemId: string) =>
     api<VideoActivity>("/api/activity", {
       params: { albumId, mediaKind: "video", itemId },
@@ -118,7 +102,7 @@ export const activityApi = {
   set: (activity: ActivityInput) =>
     withActivityChanged(
       api<Activity>("/api/activity", { method: "PUT", body: activity }),
-      activity.mediaKind === "image" || activity.mediaKind === "photo",
+      activity.mediaKind === "image",
     ),
 
   setImage: (albumId: string, pageIndex: number, pageCount: number) =>
@@ -126,22 +110,6 @@ export const activityApi = {
       api<ImageActivity>("/api/activity", {
         method: "PUT",
         body: { albumId, mediaKind: "image", pageIndex, pageCount },
-      }),
-    ),
-
-  removePhoto: (albumId: string) =>
-    withActivityChanged(
-      api<{ ok: boolean; removed: boolean }>("/api/activity", {
-        method: "DELETE",
-        params: { albumId, mediaKind: "photo" },
-      }),
-    ),
-
-  setPhoto: (albumId: string, pageIndex: number, pageCount: number) =>
-    withActivityChanged(
-      api<PhotoActivity>("/api/activity", {
-        method: "PUT",
-        body: { albumId, mediaKind: "photo", pageIndex, pageCount },
       }),
     ),
 
@@ -188,32 +156,13 @@ export const activityApi = {
     return response;
   },
 
-  queryPhotos: async (albumIds: string[]) => {
-    const response = await api<{ activities: PhotoActivity[]; count: number }>(
-      "/api/activity/query",
-      {
-        method: "POST",
-        body: {
-          items: albumIds.map((albumId) => ({
-            albumId,
-            mediaKind: "photo" as const,
-          })),
-        },
-      },
-    );
-    return response;
-  },
-
   setBatch: (activities: ActivityInput[]) =>
     withActivityChanged(
       api<{ ok: boolean; updated: number }>("/api/activity/batch", {
         method: "PUT",
         body: { activities },
       }),
-      activities.some(
-        (activity) =>
-          activity.mediaKind === "image" || activity.mediaKind === "photo",
-      ),
+      activities.some((activity) => activity.mediaKind === "image"),
     ),
 
   remove: (identity: ActivityIdentity) =>
@@ -226,7 +175,7 @@ export const activityApi = {
           itemId: identity.itemId,
         },
       }),
-      identity.mediaKind === "image" || identity.mediaKind === "photo",
+      identity.mediaKind === "image",
     ),
 
   removeImage: (albumId: string) =>
