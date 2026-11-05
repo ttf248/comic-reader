@@ -29,25 +29,35 @@ const [vw, vh] = (process.env.LG_CRASH_VIEWPORT ?? "1280x720")
   .map(Number);
 const MOCK_THUMBS = process.env.LG_CRASH_MOCK_THUMBS === "1";
 
-/** 取一本媒体最多的相册：条目越多，虚拟网格的测量压力越大。 */
+/**
+ * 取一本媒体最多的相册：条目越多，虚拟网格的测量压力越大。
+ *
+ * 媒体根的子节点里既有相册也有集合，集合打开是集合页而不是照片墙，
+ * 因此这里只取相册（kind === "album"）。子节点接口现在必须带 kind，
+ * 照片侧是 photo。
+ */
 async function pickAlbum() {
   const manifest = await (
     await fetch(`${BASE}/api/library/manifest`, { cache: "no-store" })
   ).json();
-  const root = manifest?.manifest?.roots?.[0];
+  const root = (manifest?.manifest?.roots ?? []).find(
+    (r) => (r.contentKind ?? "photo") === "photo",
+  );
   if (!root) throw new Error("媒体库还没扫描，先跑一次扫描");
   const children = await (
-    await fetch(`${BASE}/api/library/${root.id}/children?limit=200`, {
-      cache: "no-store",
-    })
+    await fetch(
+      `${BASE}/api/library/${root.id}/children?kind=photo&limit=200`,
+      { cache: "no-store" },
+    )
   ).json();
   const items = children?.page?.items ?? [];
-  if (items.length === 0) throw new Error("媒体库里没有相册");
+  const albums = items.filter((item) => item.kind === "album");
+  if (albums.length === 0) throw new Error("媒体库里没有相册");
   if (ALBUM_NAME) {
-    const hit = items.find((item) => item.name === ALBUM_NAME);
+    const hit = albums.find((item) => item.name === ALBUM_NAME);
     if (!hit) {
       throw new Error(
-        `找不到相册 ${ALBUM_NAME}（可选：${items
+        `找不到相册 ${ALBUM_NAME}（可选：${albums
           .slice(0, 8)
           .map((i) => i.name)
           .join(" / ")}）`,
@@ -55,7 +65,7 @@ async function pickAlbum() {
     }
     return hit;
   }
-  return items.reduce((best, item) =>
+  return albums.reduce((best, item) =>
     (item.imageCount ?? 0) > (best.imageCount ?? 0) ? item : best,
   );
 }
@@ -87,7 +97,8 @@ for (let i = 0; i < VISITS; i++) {
       route.fulfill({ contentType: "image/png", body: PNG }),
     );
   }
-  await page.goto(`${BASE}/albums/${album.id}`, {
+  // 相册页在工作台前缀下：照片侧是 /photo/albums/<id>。
+  await page.goto(`${BASE}/photo/albums/${album.id}`, {
     waitUntil: "domcontentloaded",
   });
   await page
