@@ -40,7 +40,7 @@ func PrefsPatchHandler(s *store.PrefsStore) fiber.Handler {
 			return writeError(c, fiber.StatusBadRequest, "invalid_prefs_body", "invalid preferences body")
 		}
 		if p.AppMode != nil && !models.IsValidAppMode(*p.AppMode) {
-			return writeError(c, fiber.StatusBadRequest, "invalid_app_mode", "appMode must be photo, comic or all")
+			return writeError(c, fiber.StatusBadRequest, "invalid_app_mode", "appMode must be photo or comic")
 		}
 
 		cur, err := s.Patch(func(cur *models.Prefs) {

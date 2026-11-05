@@ -43,6 +43,8 @@ func NormalizeContentKind(value string) ContentKind {
 // 目录属性（ContentKind）把媒体库分成照片与漫画两半，两半互斥：
 // 照片模式的列表只出现照片目录的相册，漫画模式只出现漫画目录的相册。
 // 两种模式的菜单与文案各自成套，互不掺入对方的操作。
+//
+// 它同时是用户偏好：服务端记住上次用的是哪一侧，应用根路径据此落到对应侧。
 type AppMode string
 
 const (

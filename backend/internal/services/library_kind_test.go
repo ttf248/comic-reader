@@ -364,3 +364,47 @@ func TestDashboardHasNoInProgressInPhotoScope(t *testing.T) {
 		t.Fatalf("photo scope kept in-progress entries: %+v", dashboard.InProgress)
 	}
 }
+
+// 改目录属性不必重扫磁盘：属性只影响相册元数据，
+// 重新发布快照后列表立即按新属性收敛。
+// 这条覆盖「设置页改属性 → 进程内列表立刻按新属性过滤」的完整语义。
+func TestChangingRootKindRepublishesWithoutRescan(t *testing.T) {
+	fixture := newKindFixture(t)
+
+	// 改之前：漫画根是漫画，照片作用域下看不到它的内容。
+	before, err := PageLibraryChildren(fixture.catalog.Acquire(), fixture.comicRootID, LibraryKindPhoto, "", 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.Total != 0 {
+		t.Fatalf("photo scope saw comic-root children before the change: %+v", before.Items)
+	}
+
+	// 把漫画根改成照片目录。
+	fixture.catalog.SetContentKindPolicy(NewContentKindPolicy([]RootKind{
+		{Path: fixture.photoRoot, Kind: models.ContentKindPhoto},
+		{Path: fixture.comicRoot, Kind: models.ContentKindPhoto},
+	}))
+
+	after, err := PageLibraryChildren(fixture.catalog.Acquire(), fixture.comicRootID, LibraryKindPhoto, "", 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Total != 3 {
+		t.Fatalf("photo scope total=%d, want 3 after the change", after.Total)
+	}
+	for _, item := range after.Items {
+		if item.ContentKind != string(LibraryKindPhoto) {
+			t.Fatalf("node kept the old kind: %+v", item)
+		}
+	}
+
+	// 反过来，漫画作用域现在应该看不到这些内容。
+	comic, err := PageLibraryChildren(fixture.catalog.Acquire(), fixture.comicRootID, LibraryKindComic, "", 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if comic.Total != 0 {
+		t.Fatalf("comic scope still sees re-rooted children: %+v", comic.Items)
+	}
+}

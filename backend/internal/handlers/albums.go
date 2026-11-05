@@ -130,10 +130,11 @@ func coverKindFromExt(p string) string {
 	return models.FileMediaKind(p)
 }
 
-//	GET /api/search?q=<keyword>&limit=<n>&kind=<photo|comic|all>
+//	GET /api/search?q=<keyword>&limit=<n>&kind=<photo|comic>
 //
 // 关键字匹配 name/tag 子串（不区分大小写）。limit 默认 50。
-// kind 只过滤相册命中；集合与智能标签是导航容器，不参与用途过滤。
+// kind 必填：媒体库按目录属性一分为二，搜索结果只呈现其中一半。
+// 集合与智能标签按其目录属性参与过滤；只含另一种属性的命中不出现在结果里。
 // 搜索索引与分页摘要随同一个 catalog revision 一次性发布。
 func SearchHandler(catalog *services.ResourceCatalog) fiber.Handler {
 	return func(c *fiber.Ctx) error {

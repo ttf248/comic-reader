@@ -125,7 +125,7 @@ SIGINT/SIGTERM 触发停止接收连接、取消扫描/转码并强制刷新扫�
 工作台模式（`appMode`）就是目录的内容属性（`contentKind`）：`photo` / `comic` 两档互斥，没有不过滤的第三档。属性写在配置里（`mediaRoots[].kind`），目录下的相册与集合在发布时一并继承，没有单本相册的归类动作。模式本身是用户偏好，存服务端 `Prefs`（`state/web_settings.json`），前端经 `hooks/useAppMode.ts` 读写。
 
 - 模式决定列表呈现哪一半，也决定相册点开进照片墙还是阅读器：照片工作台只列照片目录的相册，漫画工作台只列漫画目录的相册，两套菜单与措辞各自成套。
-- 服务端列表接口的 `kind` 查询参数（`photo` / `comic`）必填，缺失或非法返回 `400 invalid_kind`：子节点、未读、随机、标签、标签相册与搜索按目录属性过滤，集合节点恒返回（导航容器，其 `albumCount` 恒为全部后代）。manifest 的 `albumCount` 是全库总数，另给 `photoAlbumCount` / `comicAlbumCount`。
+- 服务端列表接口的 `kind` 查询参数（`photo` / `comic`）必填，缺失或非法返回 `400 invalid_kind`：子节点、未读、随机、标签、标签相册与搜索按目录属性过滤。集合继承所属目录的属性，因此同样参与过滤——漫画目录下的集合不会出现在照片工作台里。它的 `albumCount` 恒为全部后代，但集合的所有成员都在同一媒体根（同属性），所以这个计数天然按侧，无需再拆一份。manifest 的 `albumCount` 是全库总数，另给 `photoAlbumCount` / `comicAlbumCount`。
 - 过滤发生在分页之前：发布时预切好的有序切片按属性筛成子序列，游标里的偏移是过滤后列表的偏移。属性进游标作用域，跨属性复用被拒绝为 `invalid_cursor`。
 - 未读/在读派生按 `(catalogRevision, activityRevision)` 缓存，缓存与属性无关，属性过滤是请求期后置筛选。未读下标只收漫画相册：照片目录下的相册不记录阅读进度，没有「未读」这个概念。
 - 前端查询键带模式段（`["library", ..., "mode", mode]`），切模式即换键自动重取，旧模式缓存保留。媒体清单与 `nodes/query` 与模式无关，键不带模式。收藏与历史的资源 ID 集合不分类型，由前端按摘要里的 `contentKind` 客户端过滤。

@@ -65,6 +65,13 @@ func TestPrefsAppModeRoundTrip(t *testing.T) {
 	if !strings.Contains(string(body), "invalid_app_mode") {
 		t.Fatalf("body=%s", body)
 	}
+	// 错误文案只列真实存在的取值：「全部」这一档已经不存在了。
+	if !strings.Contains(string(body), "appMode must be photo or comic") {
+		t.Fatalf("错误文案应只列 photo / comic, body=%s", body)
+	}
+	if strings.Contains(string(body), "all") {
+		t.Fatalf("错误文案不应再提「全部」, body=%s", body)
+	}
 	if mode := get()["appMode"]; mode != "comic" {
 		t.Fatalf("appMode=%v after rejected patch, want comic", mode)
 	}

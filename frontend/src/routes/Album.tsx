@@ -88,7 +88,7 @@ function toCollectionLike(summary: LibraryNodeSummary): CollectionLike {
  *  - 照片相册：直接进入照片墙，不再有「开始浏览」这一步；
  *  - 漫画相册：直接进入阅读器。
  *
- * 相册是哪种内容类型由服务端决定（媒体根默认值 + 单个相册覆盖），
+ * 相册是哪种内容类型由服务端决定（它继承所属媒体根的属性），
  * 这里只负责按类型分派。
  */
 export default function Album() {

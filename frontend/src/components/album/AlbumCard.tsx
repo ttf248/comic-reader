@@ -698,8 +698,8 @@ function UnreadDot({ label }: { label: string }) {
 /**
  * 已读：蒙版 chip + 绿色对勾。
  *
- * 说法跟相册用途走：漫画是「已读完」，照片是「已看完」——
- * 照片相册没有「读完」这回事，用户也不该被漫画的说法套住。
+ * 只有漫画相册会渲染它：阅读进度与「读完」都属于漫画，
+ * 照片侧不显示完成态。
  */
 function ReadChip() {
   const title = comicCopy().finishedLabel;

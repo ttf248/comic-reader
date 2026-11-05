@@ -78,7 +78,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 可更新字段：`mediaRoots`、`host`、`port`、`accessMode`、`accessToken`、`cacheDir`、`thumbSizeW`、`thumbSizeH`、`thumbCacheSize`、`cacheMaxAgeDays`、`cacheMaxSizeMB`、`ffmpegPath`、`allowOsOpen`、`staticDir`、`skipHidden`、`excludePatterns`、`systemFiles`。`accessToken` 永不在 GET/PUT 响应中回显，只返回 `accessTokenConfigured`。
 
-`mediaRoots` 的每个条目同时携带目录路径与它的内容属性：`{ "path": "E:\照片", "kind": "photo" }`。`kind` 只有 `photo` 与 `comic` 两种且互斥，决定该目录里的相册与集合按哪种方式浏览、归入哪个工作台。缺省 `kind` 按 `photo` 处理；非法 `kind` 返回 `400 invalid_config`。属性可热更新：它只决定「相册用什么方式打开」与列表归属，不影响扫描结果，改完立即生效，不需要重新扫描。
+`mediaRoots` 的每个条目同时携带目录路径与它的内容属性：`{ "path": "E:\照片", "kind": "photo" }`。`kind` 只有 `photo` 与 `comic` 两种且互斥，决定该目录里的相册与集合按哪种方式浏览、归入哪个工作台。条目写成映射但省略 `kind` 时按 `photo` 处理；非法 `kind` 返回 `400 invalid_config`。只写一个路径字符串的旧写法不再支持，启动时直接报错指出新写法。属性可热更新：它只决定「相册用什么方式打开」与列表归属，不影响扫描结果，改完立即生效，不需要重新扫描。
 
 `mediaRoots` 相对进程 CWD 绝对化、清理路径分隔与 `.`、去空并保序去重，响应和写回 YAML 均使用规范化后的路径，保留首次出现的大小写。Windows 比较时忽略大小写，其他平台区分大小写；不通过解析符号链接或 junction 合并不同路径。仅增加等价写法、重复项或调整顺序时，`mediaRootsChanged=false`，保留现有媒体库、revision 和有效扫描缓存。
 

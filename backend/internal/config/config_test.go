@@ -209,6 +209,9 @@ func TestValidate(t *testing.T) {
 		}, false},
 		{"bad_thumb_w", func(c *Config) { c.ThumbSizeW = 0 }, true},
 		{"bad_thumb_h", func(c *Config) { c.ThumbSizeH = -1 }, true},
+		{"bad_root_kind", func(c *Config) {
+			c.MediaRoots = []MediaRoot{{Path: dir, Kind: "manga"}}
+		}, true},
 		{"ok", func(c *Config) { c.MediaRoots = []MediaRoot{{Path: dir, Kind: DefaultMediaRootKind}} }, false},
 	}
 
@@ -231,6 +234,37 @@ func TestAddr(t *testing.T) {
 	c := &Config{Host: "127.0.0.1", Port: 9090}
 	if got := c.Addr(); got != "127.0.0.1:9090" {
 		t.Errorf("Addr: got %q", got)
+	}
+}
+
+// 旧写法（媒体根只写一个路径字符串）必须报错，而不是被悄悄当成照片目录：
+// 属性要显式写出来，否则用户以为自己在看照片，实际目录被归到了别处。
+func TestLoadFile_LegacyRootStringIsRejected(t *testing.T) {
+	path := writeTempYAML(t, `
+mediaRoots:
+  - 'D:\photos'
+`)
+	_, err := LoadFile(path)
+	if err == nil {
+		t.Fatal("legacy mediaRoots string should be rejected")
+	}
+	if !strings.Contains(err.Error(), "kind") {
+		t.Fatalf("错误信息应指向新写法, got: %v", err)
+	}
+}
+
+// 属性只有照片与漫画两种；非法值在归一化时回落到默认属性。
+func TestNormalizeMediaRootKind(t *testing.T) {
+	cases := map[string]string{
+		"photo": "photo",
+		"comic": "comic",
+		" manga": "photo",
+		"":      "photo",
+	}
+	for input, want := range cases {
+		if got := NormalizeMediaRootKind(input); got != want {
+			t.Errorf("NormalizeMediaRootKind(%q)=%q want %q", input, got, want)
+		}
 	}
 }
 
