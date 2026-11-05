@@ -59,6 +59,21 @@ describe("GalleryToolbar 阅读控制", () => {
     expect(onNext).toHaveBeenCalled();
   });
 
+  // 工具条压在画面上，空闲后淡出。淡出时不能还挡着点击。
+  it("隐藏时淡出并且不再接收点击", () => {
+    renderToolbar({ visible: false });
+    const bar = screen.getByRole("toolbar", { name: "阅读控制" });
+    expect(bar.className).toContain("opacity-0");
+    expect(bar.className).toContain("pointer-events-none");
+  });
+
+  it("显示时保持可点", () => {
+    renderToolbar({ visible: true });
+    const bar = screen.getByRole("toolbar", { name: "阅读控制" });
+    expect(bar.className).toContain("opacity-100");
+    expect(bar.className).not.toContain("pointer-events-none");
+  });
+
   it("翻页按钮把事件交给父组件", () => {
     const { onPrev, onNext } = renderToolbar();
     fireEvent.click(screen.getByRole("button", { name: "上一页" }));

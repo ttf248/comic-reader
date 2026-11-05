@@ -280,7 +280,6 @@ function GridCard({
   // 悬停预览：350ms 后弹出，移出卡片或预览延迟 150ms 关闭。
   // （延迟是为了让用户能从卡片顺利移到预览上，预览是 portal 元素，
   //   鼠标在 card→preview 的过渡中会先触发 card mouseleave。）
-  // 触摸设备不启用（pointer: coarse 才挂监听）。
   const closeTimer = useRef<number | null>(null);
   const onEnter = (e: React.MouseEvent<HTMLDivElement>) => {
     if (window.matchMedia("(pointer: coarse)").matches) return;
@@ -305,12 +304,39 @@ function GridCard({
       closeTimer.current = null;
     }, 150);
   };
+
+  // 触摸设备没有悬停：长按 400ms 唤起同一张预览。
+  //
+  // 长按之后的那次抬手不能算作点击 —— 否则用户长按看了预览，松手却又
+  // 被带进相册。因此长按成功时记下一个标记，链接的 onClick 见到它就
+  // 取消这次跳转。
+  const pressTimer = useRef<number | null>(null);
+  const longPressedRef = useRef(false);
+  const onPressStart = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!window.matchMedia("(pointer: coarse)").matches) return;
+    if (e.pointerType === "mouse") return;
+    const target = e.currentTarget;
+    pressTimer.current = window.setTimeout(() => {
+      pressTimer.current = null;
+      longPressedRef.current = true;
+      setPreviewRect(target.getBoundingClientRect());
+      setPreviewOn(true);
+    }, 400);
+  };
+  const onPressEnd = () => {
+    if (pressTimer.current !== null) {
+      window.clearTimeout(pressTimer.current);
+      pressTimer.current = null;
+    }
+  };
   // 卸载时清理 timer
   useEffect(() => {
     return () => {
       if (previewTimer.current !== null)
         window.clearTimeout(previewTimer.current);
       if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
+      if (pressTimer.current !== null)
+        window.clearTimeout(pressTimer.current);
     };
   }, []);
 
@@ -318,10 +344,23 @@ function GridCard({
     <div
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
-      className="album-tile relative group"
+      onPointerDown={onPressStart}
+      onPointerUp={onPressEnd}
+      onPointerCancel={onPressEnd}
+      onPointerLeave={onPressEnd}
+      className="album-tile relative group select-none"
     >
       <Link
         to={data.to}
+        onClick={(e) => {
+          // 长按刚唤起过预览：这一下抬手不是「打开相册」。
+          if (longPressedRef.current) {
+            e.preventDefault();
+            longPressedRef.current = false;
+            return;
+          }
+          longPressedRef.current = false;
+        }}
         aria-label={`打开${data.variant === "album" ? "相册" : data.variant === "collection" ? "集合" : "智能视图"}“${data.displayTitle ?? data.title}”`}
         className="group block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
       >
@@ -331,7 +370,14 @@ function GridCard({
         >
           <CardCover data={data} />
 
-          {/* 封面左上角：状态槽 + 视频转码角标（同一列堆叠，互不遮挡）。 */}
+          {/* 封面左上角：状态槽。阅读状态（未读 / 已读完）与视频转码角标
+              都在这一列，堆叠显示，互不遮挡。
+
+              「已读完」原先放在右下角，和未读点分处两个角 —— 扫读一张
+              卡片时，状态散在两个方向，要分别去找。两者互斥（未读与
+              已读完不会同时成立），所以放进同一列不冲突。
+              深色蒙版材质压在任何封面上都读得清（原来的实心绿块在
+              深色主题 / 浅色封面上都会糊掉）。 */}
           <div className="absolute top-2 left-2 flex flex-col items-start gap-1">
             {data.coverKind === "video" && (
               <TranscodeStatusBadge
@@ -340,6 +386,7 @@ function GridCard({
               />
             )}
             {unread && <UnreadDot label={cardCopy.unreadTitle} />}
+            {isFinished && isComicAlbum && <ReadChip />}
           </div>
 
           {/* 底部暗化蒙版（hover 时让进度条与徽章更清晰） */}
@@ -370,15 +417,6 @@ function GridCard({
                 />
               </div>
             </>
-          )}
-
-          {/* 已读：右下角 chip。深色蒙版材质压在任何封面上都读得清
-              （原来的实心绿块在深色主题 / 浅色封面上都会糊掉）。
-              「已读完」只属于漫画相册：照片这边没有读完这回事。 */}
-          {isFinished && isComicAlbum && (
-            <div className="absolute bottom-2 right-2">
-              <ReadChip />
-            </div>
           )}
         </div>
 

@@ -149,12 +149,40 @@ export default function Reader() {
     }, 2500);
   }, []);
 
+  // 底部工具条的显隐：它压在画面上，常驻会一直挡着画。空闲后淡出，
+  // 鼠标靠近底部（或按下任意键）就回来。
+  //
+  // 顶部条与底部页码进度条仍然常驻，所以「现在读到第几页」永远不需要
+  // 先找到工具条 —— 淡出的是操作入口，不是位置信息。
+  const [toolbarVisible, setToolbarVisible] = useState(true);
+  const toolbarTimerRef = useRef<number | null>(null);
+  const markToolbarActive = useCallback(() => {
+    setToolbarVisible(true);
+    if (toolbarTimerRef.current !== null) {
+      window.clearTimeout(toolbarTimerRef.current);
+    }
+    toolbarTimerRef.current = window.setTimeout(() => {
+      setToolbarVisible(false);
+    }, 2500);
+  }, []);
+
   useEffect(() => {
     markActive();
-    const onMove = () => markActive();
-    const onKey = () => markActive();
+    markToolbarActive();
+    const onMove = (event: MouseEvent) => {
+      markActive();
+      // 鼠标靠近画面底部时唤回工具条（工具条在进度条上方约 52px）。
+      if (event.clientY > window.innerHeight - 160) markToolbarActive();
+    };
+    const onKey = () => {
+      markActive();
+      markToolbarActive();
+    };
     // 触屏：mousemove 不会触发，需要单独监听 touchstart / pointerdown
-    const onTouch = () => markActive();
+    const onTouch = () => {
+      markActive();
+      markToolbarActive();
+    };
     window.addEventListener("mousemove", onMove);
     window.addEventListener("keydown", onKey);
     window.addEventListener("pointerdown", onTouch);
@@ -164,8 +192,10 @@ export default function Reader() {
       window.removeEventListener("pointerdown", onTouch);
       if (idleTimerRef.current !== null)
         window.clearTimeout(idleTimerRef.current);
+      if (toolbarTimerRef.current !== null)
+        window.clearTimeout(toolbarTimerRef.current);
     };
-  }, [markActive]);
+  }, [markActive, markToolbarActive]);
 
   const { favorites, toggle: toggleFavorite } = useFavorites();
   const isFav = pathParam ? favorites.includes(pathParam) : false;
@@ -1067,7 +1097,9 @@ export default function Reader() {
     <div
       data-testid="gallery-reader"
       className="reader-shell relative flex overflow-hidden select-none"
-      style={{ height: "100vh" }}
+      // 用 dvh 而不是 vh：移动端浏览器地址栏收起 / 展开时，100vh 不等于
+      // 实际可视高度，底部的页码进度条会被推到屏幕外。
+      style={{ height: "100dvh" }}
       onMouseMove={markActive}
       onContextMenu={(e) => {
         // 屏蔽浏览器默认右键菜单(图片另存为等),改用我们自己的。
@@ -1179,8 +1211,9 @@ export default function Reader() {
           }
         />
 
-        {/* 阅读控制：底部浮动工具条（翻页 / 模式 / 适配 / 缩放 / 旋转）
-            常驻显示 —— 淡出等于把功能藏起来。
+        {/* 阅读控制：底部浮动工具条（翻页 / 模式 / 适配 / 缩放 / 旋转）。
+            它压在画面上，常驻会一直挡着画，所以空闲后淡出，鼠标靠近
+            底部就回来；位置信息交给常驻的顶部条与底部页码条。
             视频模式不显示（视频有原生 controls）。 */}
         {!isVideo && (
           <GalleryToolbar
@@ -1188,6 +1221,7 @@ export default function Reader() {
             onNext={next}
             atStart={index <= 0}
             atEnd={index >= images.length - 1}
+            visible={toolbarVisible}
           />
         )}
 

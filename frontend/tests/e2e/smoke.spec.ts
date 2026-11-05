@@ -475,7 +475,9 @@ for (const recovery of ["manual", "automatic"] as const) {
       await scan.click();
       const card = page.getByTestId("scan-progress");
       await expect(card).toContainText("进度连接中断");
-      await expect(page.locator("footer")).toContainText("扫描进度连接中断");
+      // 底部状态栏已移除：扫描中断这件事现在只有左下角那张浮动卡一个
+      // 出口，卡片本身必须把「中断」和「结果待确认」说清楚。
+      await expect(card).toContainText("尚未确认");
       await expect(scan).toBeDisabled();
       await page.keyboard.press("Control+s");
       await page.clock.runFor(100);

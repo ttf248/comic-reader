@@ -1,5 +1,6 @@
 import { useLocation } from 'react-router-dom'
 import { useUIStore } from '../../store/uiStore'
+import { isReaderPath } from '../../utils/path'
 import { CloseIcon, InfoIcon, CheckIcon, AlertIcon } from './Icon'
 
 // 全局轻量 Toast：右下角堆叠，单条可关闭，自动过期。
@@ -7,10 +8,15 @@ import { CloseIcon, InfoIcon, CheckIcon, AlertIcon } from './Icon'
 export default function ToastViewport() {
   const toasts = useUIStore((s) => s.toasts)
   const dismiss = useUIStore((s) => s.dismissToast)
-  // 阅读器（/read）是恒定深色的沉浸场景：沿用应用主题的浅色 toast
-  // 会变成"黑底里浮一块白板"，与阅读器里的其它浮层自相矛盾。
+  // 恒定深色的沉浸场景：沿用应用主题的浅色 toast 会变成"黑底里浮一块
+  // 白板"，与场景里的其它浮层自相矛盾。
+  //
+  // 判断依据是「当前是不是在深色浮层里」，而不是路径前缀：照片墙的
+  // 大图预览也是深色浮层，但它的路径不是 /read —— 早先按路径判断时，
+  // 在预览里弹出的 toast 是一块浅色板。
   const { pathname } = useLocation()
-  const dark = pathname.startsWith('/read')
+  const immersiveOverlay = useUIStore((s) => s.immersiveOverlay)
+  const dark = isReaderPath(pathname) || immersiveOverlay
   if (!toasts.length) return null
   return (
     <div

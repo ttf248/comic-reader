@@ -27,6 +27,14 @@ interface Props {
   /** 当前是否第一页 / 最后一页（用于禁用翻页按钮）。 */
   atStart?: boolean;
   atEnd?: boolean;
+  /**
+   * 是否显示。
+   *
+   * 阅读时它压在画面上，常驻会一直挡着画。空闲后淡出，鼠标靠近底部
+   * 或按下任意键就回来 —— 顶部条与底部页码进度条始终常驻，所以
+   * 「现在在哪一页」这件事永远不需要先找到工具条。
+   */
+  visible?: boolean;
 }
 
 const MODE_OPTIONS: {
@@ -59,6 +67,7 @@ export default function GalleryToolbar({
   onNext,
   atStart,
   atEnd,
+  visible = true,
 }: Props) {
   const mode = useGalleryStore((s) => s.mode);
   const setMode = useGalleryStore((s) => s.setMode);
@@ -73,7 +82,9 @@ export default function GalleryToolbar({
 
   return (
     <div
-      className="absolute bottom-[52px] left-1/2 z-20 -translate-x-1/2"
+      className={`absolute bottom-[52px] left-1/2 z-20 -translate-x-1/2 transition-opacity duration-300 ${
+        visible ? "opacity-100" : "opacity-0 pointer-events-none"
+      }`}
       role="toolbar"
       aria-label="阅读控制"
     >

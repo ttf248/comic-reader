@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import AlbumCard, { type CardData } from "./AlbumCard";
 import { useUIStore } from "../../store/uiStore";
 import { favoritesApi } from "../../api/prefs";
@@ -25,6 +25,10 @@ vi.mock("../../hooks/useVideoCover", () => ({
 
 vi.mock("../common/TranscodeStatusBadge", () => ({
   default: () => null,
+}));
+
+vi.mock("../common/HoverPreview", () => ({
+  default: () => <div data-testid="hover-preview" />,
 }));
 
 function card(overrides: Partial<CardData> = {}): CardData {
@@ -231,11 +235,17 @@ describe("AlbumCard 状态表达", () => {
     expect(screen.queryByText("已读完", { exact: true })).not.toBeInTheDocument();
   });
 
-  it("已读完的相册在封面右下角显示已读 chip，且不再显示未读点", () => {
-    renderCard(card({ progress: { index: 11, total: 12 } }));
+  // 阅读状态集中在封面左上角一列：未读点与已读完 chip 互斥，不会同时
+  // 出现，但也不再散在两个方向 —— 扫读一张卡片时不用分别去找。
+  it("已读完的相册在封面左上角显示已读 chip，且不再显示未读点", () => {
+    const { container } = renderCard(card({ progress: { index: 11, total: 12 } }));
 
     expect(screen.getByText("已读完", { exact: true })).toBeInTheDocument();
     expect(screen.queryByText("未读")).not.toBeInTheDocument();
+    const chip = screen.getByText("已读完", { exact: true }).closest("div");
+    const slot = container.querySelector(".album-tile__cover > div");
+    expect(slot).not.toBeNull();
+    expect(slot?.contains(chip)).toBe(true);
   });
 
   it("在读的相册不再显示未读点，状态由封面底部的进度条承担", () => {
@@ -359,5 +369,103 @@ describe("AlbumCard 收藏星标", () => {
         "收藏失败，请稍后重试",
       ),
     );
+  });
+});
+
+
+describe("AlbumCard 触摸长按", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useRealTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  // React Router 的 Link 自己就会 preventDefault 再跳转，所以不能用
+  // 「事件有没有被取消」来判断有没有跳转 —— 直接看有没有换页。
+  function renderCardWithRoute(data: CardData) {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    return render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={["/"]}>
+          <Routes>
+            <Route path="/albums/album-1" element={<div>album-page</div>} />
+            <Route path="*" element={<AlbumCard data={data} />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+  }
+
+  function mockCoarsePointer() {
+    vi.spyOn(window, "matchMedia").mockImplementation(
+      (query: string) =>
+        ({
+          matches: query.includes("pointer: coarse"),
+          media: query,
+          onchange: null,
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        }) as unknown as MediaQueryList,
+    );
+  }
+
+  // 触摸设备没有悬停，长按是唯一能唤起预览的方式。
+  it("长按 400ms 唤起预览", () => {
+    vi.useFakeTimers();
+    mockCoarsePointer();
+    renderCard(card());
+
+    const tile = screen.getByTestId("card-cover").parentElement as HTMLElement;
+    expect(screen.queryByTestId("hover-preview")).not.toBeInTheDocument();
+
+    fireEvent.pointerDown(tile, { pointerType: "touch" });
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+    expect(screen.getByTestId("hover-preview")).toBeInTheDocument();
+  });
+
+  // 长按之后的那次抬手不能算点击 —— 否则用户看完预览松手却又被带进
+  // 相册。
+  it("长按唤起预览后，这一次抬手不再跳进相册", () => {
+    vi.useFakeTimers();
+    mockCoarsePointer();
+    renderCardWithRoute(card());
+
+    const tile = screen.getByTestId("card-cover").parentElement as HTMLElement;
+    fireEvent.pointerDown(tile, { pointerType: "touch" });
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+    fireEvent.pointerUp(tile, { pointerType: "touch" });
+
+    fireEvent.click(screen.getByRole("link"));
+    expect(screen.queryByText("album-page")).not.toBeInTheDocument();
+  });
+
+  // 普通点击仍然照常跳转。
+  it("没有长按时，点击照常跳进相册", () => {
+    vi.useFakeTimers();
+    mockCoarsePointer();
+    renderCardWithRoute(card());
+
+    const tile = screen.getByTestId("card-cover").parentElement as HTMLElement;
+    fireEvent.pointerDown(tile, { pointerType: "touch" });
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    fireEvent.pointerUp(tile, { pointerType: "touch" });
+
+    fireEvent.click(screen.getByRole("link"));
+    expect(screen.getByText("album-page")).toBeInTheDocument();
   });
 });
