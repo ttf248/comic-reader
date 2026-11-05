@@ -192,7 +192,7 @@ describe("Album", () => {
 
     // 父集合标题是 "2011年"；散图卡片不能也叫 "2011年"，否则同名卡片
     // 会让人以为集合里还有一个叫 "2011年" 的子相册。
-    expect(screen.getByText("本目录媒体")).toBeInTheDocument();
+    expect(screen.getByText("散图")).toBeInTheDocument();
     expect(screen.queryByText("2011年")).toBeInTheDocument();
     expect(screen.getAllByText("2011年")).toHaveLength(1);
   });

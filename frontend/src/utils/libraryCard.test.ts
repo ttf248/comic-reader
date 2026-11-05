@@ -73,7 +73,7 @@ describe("libraryCard", () => {
     );
 
     expect(card.displayTitle).toBe("2020年");
-    expect(card.subtitle).toBe("本目录媒体");
+    expect(card.subtitle).toBe("散图");
     // 标题与搜索、排序共用：都用归属目录，否则列表里只能搜到类型词。
     expect(card.title).toBe("2020年");
   });
@@ -102,7 +102,7 @@ describe("libraryCard", () => {
 
     expect(cardMatchesQuery(card, "2020年")).toBe(true);
     expect(cardMatchesQuery(card, "2020")).toBe(true);
-    expect(cardMatchesQuery(card, "本目录媒体")).toBe(true);
+    expect(cardMatchesQuery(card, "散图")).toBe(true);
     expect(cardMatchesQuery(card, "1999")).toBe(false);
     expect(cardMatchesQuery(card, "  ")).toBe(true);
   });

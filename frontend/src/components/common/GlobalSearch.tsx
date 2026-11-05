@@ -146,7 +146,7 @@ export default function GlobalSearch() {
                 <div className="text-meta text-fg-subtle truncate">
                   {h.kind === "album"
                     ? h.virtual
-                      ? "本目录媒体"
+                      ? "散图"
                       : "文件夹"
                     : h.kind === "smartCollection"
                       ? "标签"

@@ -388,7 +388,9 @@ function CollectionView({
       variant: "album",
       // 散图在集合内已有父目录做上下文，标题回到语义名：否则 "2011年"
       // 集合里会出现一张同样叫 "2011年" 的卡片（location 就是父目录名）。
-      title: a.virtual ? "本目录媒体" : a.name,
+      // 标题用「散图」而不是服务端的「本目录媒体」：后者是技术叫法，
+      // 在界面上读不出这是什么。
+      title: a.virtual ? "散图" : a.name,
       subtitle: a.virtual ? "" : (a.tags ?? []).join(" · "),
       count: a.imageCount,
       imageCount: a.imageCount,
@@ -499,7 +501,11 @@ function CollectionView({
                 按年份浏览 — 当前集合下的子相册/子集合
               </span>
             </div>
-            <YearTimeline groups={yearGroups} />
+            {/* 年份卡与下面的网格共用同一条左缘：这里少一层容器，
+                整条索引会比网格左移一截。 */}
+            <div className="page-shell">
+              <YearTimeline groups={yearGroups} />
+            </div>
           </div>
         )}
 

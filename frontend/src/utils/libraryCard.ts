@@ -9,8 +9,10 @@ export function nodeSummaryToCard(
   const isAlbum = node.kind === "album";
   // 虚拟相册（散图）的 name 恒为“本目录媒体”：几十张同名卡片在未读 /
   // 最近等扁平列表里无法区分，搜索和按名排序也都只命中这个类型词。
-  // 改用归属目录（location）做标题，把“本目录媒体”降级成副标题里的
-  // 类型说明。
+  // 改用归属目录（location）做标题，把类型说明降级成副标题。
+  //
+  // 副标题写「散图」而不是「本目录媒体」：后者是服务端的技术叫法，
+  // 而且一屏里重复十遍就是一片噪音；「散图」既短又说清了这是什么。
   //
   // title 也用归属目录：各列表页的搜索、排序、跨卷上下文与提示文案都读
   // title，只改 displayTitle 的话这些地方仍会显示“本目录媒体”。
@@ -25,7 +27,7 @@ export function nodeSummaryToCard(
     displayTitle:
       isVirtualAlbum && virtualLocation ? virtualLocation : node.displayName,
     subtitle: isVirtualAlbum
-      ? "本目录媒体"
+      ? "散图"
       : isAlbum
         ? node.tags?.join(" · ") || undefined
         : "集合",
