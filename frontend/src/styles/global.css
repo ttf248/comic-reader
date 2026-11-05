@@ -99,19 +99,14 @@
     grid-column: 1 / -1;
   }
   /* 照片侧首屏的两栏骨架（只在分两栏的断点生效）。
-     默认：宽栏是照片墙，窄栏是「随手看看」。
-     有「接着看」时：宽栏让给「接着看」，照片墙移到第二行通栏 ——
-     照片墙横贯一行更像一面展陈墙，也不用把窄栏挤成两行。
-     窄屏只有一栏，这些定位一律不生效，区块按文档顺序单列排下。 */
+     宽屏：第一行「接着看」+「随手看看」，第二行「最近加入」通栏 ——
+     四张方照横贯一行更像一面展陈墙，也不用把窄栏挤成两行。
+     窄屏只有一栏，按文档顺序单列排下，与宽屏的阅读顺序一致。
+
+     因此文档顺序固定为「接着看 → 随手看看 → 最近加入」；没有浏览
+     记录时换成「最近加入 → 随手看看」，同样先宽后窄。宽屏与窄屏
+     的阅读顺序必须一致，否则同一份内容在不同宽度下读法不同。 */
   @media (min-width: 1280px) {
-    .home-overview > .home-recent {
-      grid-column: 1;
-      grid-row: 1;
-    }
-    .home-overview > .home-serendipity {
-      grid-column: 2;
-      grid-row: 1;
-    }
     .home-overview--with-resume > .home-resume {
       grid-column: 1;
       grid-row: 1;
@@ -124,46 +119,78 @@
       grid-column: 1 / -1;
       grid-row: 2;
     }
-    /* 只剩一个区块时通栏。 */
-    .home-overview > .home-recent:only-child,
-    .home-overview > .home-serendipity:only-child,
-    .home-overview > .home-resume:only-child {
-      grid-column: 1 / -1;
+    .home-overview:not(.home-overview--with-resume) > .home-recent {
+      grid-column: 1;
+      grid-row: 1;
+    }
+    .home-overview:not(.home-overview--with-resume) > .home-serendipity {
+      grid-column: 2;
+      grid-row: 1;
     }
   }
-  .reading-desk {
+  /* 首屏专区面板：每个工作台内部只有一种面板 —— 照片侧是白展板，
+     漫画侧是暖纸。此前「接着看 / 随手看看」与「最近加入」各用一种
+     底色，两个工作台自己就不成套；这里统一从 --panel-* 读。 */
+  .hero-panel {
     display: flex;
     flex-direction: column;
     min-width: 0;
-    padding: 26px;
+    padding: 24px;
     border: 1px solid var(--border);
     border-radius: var(--radius-panel);
-    background: var(--feature-bg);
-    color: var(--feature-fg);
+    background: var(--panel-bg);
+    color: var(--panel-fg);
   }
-  .reading-desk__feature {
+  .hero-panel__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+  .hero-panel__feature {
     display: grid;
-    grid-template-columns: minmax(140px, 0.78fr) minmax(0, 1fr);
+    grid-template-columns: var(--hero-cover-col) minmax(0, 1fr);
     align-items: center;
-    gap: clamp(20px, 3vw, 38px);
+    /* 面板被拉到与相邻面板等高时，内容居中在剩余空间里，而不是
+       全部堆在顶部、底下留一大块空白。 */
+    align-content: center;
+    gap: clamp(16px, 2vw, 24px);
     flex: 1;
-    padding-block: 24px;
+    padding-block: 20px;
+    /* 内容不跟着面板一起拉满：宽屏上标题会横跨整个屏幕，
+       视线要跨很远才能找到右边的按钮。 */
+    max-width: 900px;
   }
-  .reading-cover {
+  .hero-panel__title {
+    margin-top: 12px;
+    /* 展示字号：随视口缩放，两端是唯一的硬编码。 */
+    font: 600 clamp(22px, 2.3vw, 34px)/1.4 var(--font-display);
+    overflow-wrap: anywhere;
+  }
+  .hero-panel__muted {
+    color: var(--panel-muted);
+    font-size: var(--text-meta);
+  }
+  /* 首屏封面：漫画是书脊（装订边 + 轻微倾斜），照片是方照（不倾斜）——
+     照片是展陈，不是书。 */
+  .hero-cover {
     position: relative;
     width: 100%;
-    max-width: 180px;
+    overflow: hidden;
+    border-radius: var(--radius-media);
+    background: var(--bg-media);
+  }
+  .hero-cover--book {
     aspect-ratio: 4 / 5;
     justify-self: center;
-    overflow: hidden;
     /* 书脊造型：左侧是装订边，比右侧厚。 */
     border-radius: 12px 16px 16px 12px;
-    background: var(--bg-media);
     box-shadow: 8px 12px 22px rgb(0 0 0 / 18%);
     transform: rotate(-3deg);
     transition: transform 240ms var(--ease-out);
   }
-  .reading-cover::after {
+  .hero-cover--book::after {
     content: "";
     position: absolute;
     inset: 0;
@@ -172,65 +199,27 @@
     border: 1px solid var(--media-highlight);
     border-radius: inherit;
   }
-  .reading-cover:hover {
+  .hero-cover--book:hover {
     transform: rotate(-1deg) translateY(-3px);
   }
-  .reading-desk__title {
-    margin-top: 12px;
-    /* 展示字号：随视口缩放，两端是唯一的硬编码。 */
-    font: 600 clamp(22px, 2.3vw, 34px)/1.4 var(--font-display);
-    overflow-wrap: anywhere;
-  }
-  .reading-desk__muted {
-    color: var(--feature-muted);
-    font-size: var(--text-meta);
-  }
-  /* 照片侧的展陈面板（「接着看」「随手看看」）：与漫画的阅读台共用面板
-     外壳（边框、圆角、feature 底色），但封面是方的、不倾斜 ——
-     照片是展陈，不是书。 */
-  .photo-desk {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    padding: 24px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-panel);
-    background: var(--feature-bg);
-    color: var(--feature-fg);
-  }
-  .photo-desk__feature {
-    display: grid;
-    grid-template-columns: minmax(0, 132px) minmax(0, 1fr);
-    align-items: center;
-    gap: clamp(16px, 2vw, 24px);
-    padding-block: 20px;
-    /* 内容不跟着面板一起拉满：宽屏上标题会横跨整个屏幕，
-       视线要跨很远才能找到右边的按钮。 */
-    max-width: 900px;
-  }
-  .photo-cover {
-    position: relative;
-    width: 100%;
+  .hero-cover--print {
     aspect-ratio: 1 / 1;
-    overflow: hidden;
-    border-radius: var(--radius-media);
-    background: var(--bg-media);
     box-shadow: var(--shadow-sm);
   }
-  .reading-queue {
+  .hero-queue {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 12px;
     border-top: 1px solid var(--border);
     padding-top: 18px;
   }
-  .reading-queue__item {
+  .hero-queue__item {
     display: flex;
     align-items: center;
     position: relative;
     min-width: 0;
   }
-  .reading-queue__open {
+  .hero-queue__open {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -239,7 +228,7 @@
     border-radius: var(--radius-media);
     text-align: left;
   }
-  .reading-queue__remove {
+  .hero-queue__remove {
     position: absolute;
     right: -5px;
     top: -5px;
@@ -248,32 +237,26 @@
     width: 28px;
     height: 28px;
     border-radius: 50%;
-    background: var(--feature-bg);
-    color: var(--feature-muted);
+    background: var(--panel-bg);
+    color: var(--panel-muted);
     opacity: 0;
   }
-  .reading-queue__item:hover .reading-queue__remove,
-  .reading-queue__remove:focus-visible {
+  .hero-queue__item:hover .hero-queue__remove,
+  .hero-queue__remove:focus-visible {
     opacity: 1;
   }
-  .discovery-panel {
-    min-width: 0;
-    padding: 24px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-panel);
-    background: var(--bg-elevated);
-  }
-  .discovery-grid {
+  /* 面板里的卡片墙：两列是默认，四列才像一面照片墙。 */
+  .hero-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 18px 14px;
   }
-  .home-overview > .discovery-panel:only-child .discovery-grid {
+  .home-overview > .hero-panel:only-child .hero-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
   /* 宽栏里的展陈墙：照片侧的「最近加入」占主栏，四张一排才像一面照片墙，
      两张一排会变成两张巨幅海报，反而不是展陈。 */
-  .discovery-grid--wall {
+  .hero-grid--wall {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
   .section-heading {
@@ -285,44 +268,45 @@
   }
   .section-index {
     color: var(--brand-ink);
-    font: 500 var(--text-meta)/1 var(--font-mono);
+    font: 500 var(--text-meta)/1 var(--section-index-font);
   }
+  /* 卡片材质跟着工作台走：照片侧无框展陈，漫画侧有框有厚度。 */
   .album-tile {
-    border: 1px solid var(--border-faint);
-    border-radius: var(--radius-tile);
-    background: var(--bg-elevated);
+    border: 1px solid var(--card-border);
+    border-radius: var(--card-radius);
+    background: var(--card-bg);
     padding: 8px;
     transition:
       box-shadow var(--dur),
       transform var(--dur);
   }
   .album-tile:hover {
-    box-shadow: var(--shadow-md);
-    transform: translateY(-3px);
+    box-shadow: var(--card-shadow);
+    transform: translateY(var(--card-lift));
   }
   .album-tile__cover {
     border-radius: var(--radius-media);
   }
   .album-tile__meta {
-    padding: 12px 5px 7px;
+    padding: 12px 0 7px;
   }
   .album-tile > .absolute {
     top: 16px;
     right: 16px;
   }
-  .discovery-panel .album-tile {
+  /* 面板里的卡片：封面与面板齐平（去掉卡片自己的内边距），
+     但材质仍由 --card-* 决定 —— 照片侧无框，漫画侧有框。 */
+  .hero-panel .album-tile {
     padding: 0;
-    border: 0;
-    background: transparent;
   }
-  .discovery-panel .album-tile__meta {
+  .hero-panel .album-tile__meta {
     padding-inline: 0;
     padding-bottom: 0;
   }
-  .discovery-panel .album-tile__meta > :not(:first-child) {
+  .hero-panel .album-tile__meta > :not(:first-child) {
     display: none;
   }
-  .discovery-panel .album-tile > .absolute {
+  .hero-panel .album-tile > .absolute {
     top: 8px;
     right: 8px;
   }
@@ -509,8 +493,16 @@
     .home-overview {
       grid-template-columns: 1fr;
     }
-    .discovery-grid {
+    /* 首屏变成单列后，「未读」面板横贯整行：四张一排才排得开。 */
+    .hero-grid {
       grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+  /* 640–767px：展陈墙横贯整行也只有不到 200px 一张，四张并排会把
+     封面压成看不清的小方块。两张更合适。 */
+  @media (max-width: 767px) {
+    .hero-grid--wall {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
   @media (max-width: 639px) {
@@ -561,26 +553,24 @@
     .home-overview {
       gap: 18px;
     }
-    .reading-desk,
-    .discovery-panel,
-    .photo-desk {
+    .hero-panel {
       padding: 18px;
       border-radius: var(--radius-tile);
     }
-    .reading-desk__feature {
+    .hero-panel__feature {
       grid-template-columns: 108px minmax(0, 1fr);
       gap: 18px;
       padding-block: 22px;
     }
-  .reading-queue {
+    .hero-queue {
       grid-template-columns: 1fr;
       gap: 14px;
     }
-    .reading-queue__remove {
+    .hero-queue__remove {
       opacity: 1;
     }
-    .discovery-grid,
-    .home-overview > .discovery-panel:only-child .discovery-grid {
+    .hero-grid,
+    .home-overview > .hero-panel:only-child .hero-grid {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     .library-grid,
@@ -592,7 +582,7 @@
       border-radius: var(--radius-control);
     }
     .album-tile__meta {
-      padding-inline: 3px;
+      padding-inline: 0;
     }
     .album-tile > .absolute {
       top: 10px;

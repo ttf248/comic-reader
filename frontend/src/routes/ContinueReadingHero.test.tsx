@@ -106,7 +106,7 @@ describe("ContinueReadingHero", () => {
 
   it("卡片的可访问名不包含 X 按钮的文案", () => {
     const { container } = renderHero([makeCard("/a", "A", 5, 20)]);
-    const card = container.querySelector(".reading-cover") as HTMLElement;
+    const card = container.querySelector(".hero-cover") as HTMLElement;
     expect(card).not.toHaveAccessibleName(/标记为已读/);
   });
 
@@ -121,11 +121,11 @@ describe("ContinueReadingHero", () => {
 it("主封面使用清晰预览，加载失败后仍可继续阅读", () => {
   const { container, onContinue } = renderHero([makeCard("/a", "A", 5, 20)]);
   const cover = container.querySelector(
-    ".reading-cover img",
+    ".hero-cover img",
   ) as HTMLImageElement;
   expect(cover.src).toContain("/api/previews/");
   fireEvent.error(cover);
-  expect(container.querySelector(".reading-cover img")).toBeNull();
+  expect(container.querySelector(".hero-cover img")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "继续阅读「A」" }));
   expect(onContinue).toHaveBeenCalledTimes(1);
 });

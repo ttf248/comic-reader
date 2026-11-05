@@ -34,7 +34,7 @@ export function RecentlyAddedHero({ items, total }: RecentlyAddedProps) {
   if (cards.length === 0) return null;
   return (
     <section
-      className="discovery-panel home-recent"
+      className="hero-panel home-recent"
       data-testid="recently-added-hero"
       aria-labelledby="recently-added-heading"
     >
@@ -58,7 +58,7 @@ export function RecentlyAddedHero({ items, total }: RecentlyAddedProps) {
           </Link>
         </div>
       </div>
-      <div className="discovery-grid discovery-grid--wall">
+      <div className="hero-grid hero-grid--wall">
         {cards.slice(0, 4).map((card) => (
           <AlbumCard
             key={card.id}
@@ -94,7 +94,7 @@ export function SerendipityHero({
   const card = nodeSummaryToCard(album);
   return (
     <section
-      className="photo-desk home-serendipity"
+      className="hero-panel home-serendipity"
       data-testid="serendipity-hero"
       aria-labelledby="serendipity-heading"
     >
@@ -106,7 +106,7 @@ export function SerendipityHero({
           type="button"
           onClick={onReshuffle}
           disabled={isLoading}
-          className="reading-desk__muted inline-flex items-center gap-1 ml-auto min-h-7 px-1 rounded"
+          className="hero-panel__muted inline-flex items-center gap-1 ml-auto min-h-7 px-1 rounded"
           title={copy.serendipityButton}
           aria-label={copy.serendipityButton}
         >
@@ -114,20 +114,20 @@ export function SerendipityHero({
           {isLoading ? copy.serendipityLoading : copy.serendipityButton}
         </button>
       </div>
-      <div className="photo-desk__feature">
+      <div className="hero-panel__feature">
         <Link
           to={card.to}
           aria-label={`打开相册「${card.title}」`}
-          className="photo-cover"
+          className="hero-cover hero-cover--print"
         >
           <Cover card={card} large />
         </Link>
         <div className="min-w-0">
-          <p className="reading-desk__muted">{copy.serendipityHint}</p>
-          <h3 className="reading-desk__title line-clamp-2">
+          <p className="hero-panel__muted">{copy.serendipityHint}</p>
+          <h3 className="hero-panel__title line-clamp-2">
             {card.displayTitle ?? card.title}
           </h3>
-          <p className="reading-desk__muted mt-3 tabular-nums">
+          <p className="hero-panel__muted mt-3 tabular-nums">
             {card.imageCount ?? 0} {copy.mediaUnit}
             {(card.videoCount ?? 0) > 0 && ` · ${card.videoCount} 个视频`}
           </p>

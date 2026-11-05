@@ -150,14 +150,59 @@
 
 /* === 工作台模式色调 ===
    两个工作台是两个产品，界面基调也该不同：照片侧冷（静、展陈），
-   漫画侧暖（纸页、翻阅）。差异只落在「品牌点缀」与「hero 面板底色」
-   两处 —— 画布、文字、描边保持中性灰阶，避免污染可读性。
+   漫画侧暖（纸页、翻阅）。
 
    覆盖键是 :root[data-theme][data-mode]：模式由 URL 路径推导，写在
    <html data-mode> 上，因此切模式就是一次导航，色调随之切换。
-   模式未确定（首帧）时用中性值：宁可无色，也不要闪一下错色调。 */
+   模式未确定（首帧）时用中性值：宁可无色，也不要闪一下错材质。 */
+
+/* === 工作台材质 ===
+   光靠品牌色区分两侧还不够：两个工作台此前共用同一套「灰阶方框」语法，
+   换过去看着还是同一个产品。材质让两侧真正分开 ——
+   照片侧是展陈墙（照片才是主角，卡片不画框、不浮起，封面方形）；
+   漫画侧是书架（每一本都是一件独立的东西，有边框、有厚度、有阴影，
+   封面竖版像书脊）。
+
+   面板也只留一套：照片侧是白展板，漫画侧是暖纸。此前首屏上
+   「接着看 / 随手看看」与「最近加入」用的是两种底色，两个工作台
+   内部自己就不成套。 */
 :root {
-  --mode-tint: #8a919b;
+  --card-bg: transparent;
+  --card-border: transparent;
+  --card-radius: 6px;
+  --card-shadow: none;
+  --card-lift: 0px;
+  --panel-bg: var(--bg-elevated);
+  --panel-fg: var(--fg);
+  --panel-muted: var(--fg-muted);
+  --hero-cover-col: 132px;
+  --section-index-font: var(--font-mono);
+}
+
+:root[data-mode="photo"] {
+  --card-bg: transparent;
+  --card-border: transparent;
+  --card-radius: 6px;
+  --card-shadow: none;
+  --card-lift: 0px;
+  --panel-bg: var(--bg-elevated);
+  --panel-fg: var(--fg);
+  --panel-muted: var(--fg-muted);
+  --hero-cover-col: 132px;
+  --section-index-font: var(--font-mono);
+}
+
+:root[data-mode="comic"] {
+  --card-bg: var(--bg-elevated);
+  --card-border: var(--border-faint);
+  --card-radius: 16px;
+  --card-shadow: var(--shadow-md);
+  --card-lift: -3px;
+  --panel-bg: var(--feature-bg);
+  --panel-fg: var(--feature-fg);
+  --panel-muted: var(--feature-muted);
+  --hero-cover-col: 168px;
+  --section-index-font: var(--font-display);
 }
 
 :root[data-theme="light"][data-mode="photo"] {
@@ -165,7 +210,6 @@
   --brand-soft: #e3ecf5;
   --brand-ink: #1e4468;
   --feature-bg: #e9eef4;
-  --mode-tint: #2f5d8a;
 }
 
 :root[data-theme="light"][data-mode="comic"] {
@@ -173,7 +217,6 @@
   --brand-soft: #f2e6d8;
   --brand-ink: #7a3f10;
   --feature-bg: #f1ebe4;
-  --mode-tint: #a35a1e;
 }
 
 :root[data-theme="dark"][data-mode="photo"] {
@@ -181,7 +224,6 @@
   --brand-soft: #1b2831;
   --brand-ink: #a8cbe6;
   --feature-bg: #191d22;
-  --mode-tint: #7fb0d9;
 }
 
 :root[data-theme="dark"][data-mode="comic"] {
@@ -189,5 +231,4 @@
   --brand-soft: #2b2119;
   --brand-ink: #e9bb88;
   --feature-bg: #1d1a17;
-  --mode-tint: #d9a066;
 }

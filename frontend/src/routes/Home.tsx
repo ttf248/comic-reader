@@ -491,7 +491,13 @@ export default function Home() {
       )}
 
       {/* 照片侧的首屏专区：与漫画侧的「继续阅读 / 未读」位置对齐，
-          内容却是照片自己的 —— 接着看、最近加入与随手看看。 */}
+          内容却是照片自己的 —— 接着看、最近加入与随手看看。
+
+          文档顺序就是阅读顺序，宽屏与窄屏一致：
+          有浏览记录时是「接着看 → 随手看看 → 最近加入」（宽屏第一行
+          两块、第二行最近加入通栏）；没有记录时换成「最近加入 →
+          随手看看」，同样是先宽后窄。此前两者的顺序在宽窄屏之间
+          会翻转，同一份内容换个宽度就读法不同。 */}
       {hasContent &&
         !isComic &&
         (resumeCards.length > 0 ||
@@ -503,15 +509,36 @@ export default function Home() {
                 resumeCards.length > 0 ? " home-overview--with-resume" : ""
               }`}
             >
-              {resumeCards.length > 0 && <ResumeHero cards={resumeCards} />}
-              {recentItems.length > 0 && (
-                <RecentlyAddedHero items={recentItems} total={recentTotal} />
+              {resumeCards.length > 0 ? (
+                <>
+                  <ResumeHero cards={resumeCards} />
+                  <SerendipityHero
+                    album={serendipity.album}
+                    isLoading={serendipity.isLoading}
+                    onReshuffle={serendipity.reshuffle}
+                  />
+                  {recentItems.length > 0 && (
+                    <RecentlyAddedHero
+                      items={recentItems}
+                      total={recentTotal}
+                    />
+                  )}
+                </>
+              ) : (
+                <>
+                  {recentItems.length > 0 && (
+                    <RecentlyAddedHero
+                      items={recentItems}
+                      total={recentTotal}
+                    />
+                  )}
+                  <SerendipityHero
+                    album={serendipity.album}
+                    isLoading={serendipity.isLoading}
+                    onReshuffle={serendipity.reshuffle}
+                  />
+                </>
               )}
-              <SerendipityHero
-                album={serendipity.album}
-                isLoading={serendipity.isLoading}
-                onReshuffle={serendipity.reshuffle}
-              />
             </div>
           </div>
         )}

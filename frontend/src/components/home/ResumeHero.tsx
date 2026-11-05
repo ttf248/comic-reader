@@ -32,7 +32,7 @@ export default function ResumeHero({ cards }: Props) {
 
   return (
     <section
-      className="photo-desk home-resume"
+      className="hero-panel home-resume"
       data-testid="resume-hero"
       aria-labelledby="resume-heading"
     >
@@ -40,24 +40,24 @@ export default function ResumeHero({ cards }: Props) {
         <h2 id="resume-heading" className="section-title">
           {copy.resumeTitle}
         </h2>
-        <span className="reading-desk__muted tabular-nums">
+        <span className="hero-panel__muted tabular-nums">
           {cards.length} {copy.resumeCountLabel}
         </span>
       </div>
-      <div className="photo-desk__feature">
+      <div className="hero-panel__feature">
         <Link
           to={featured.to}
-          className="photo-cover"
+          className="hero-cover hero-cover--print"
           aria-label={`${copy.resumeButton}「${featured.displayTitle ?? featured.title}」`}
         >
           <Cover card={featured} large />
         </Link>
         <div className="min-w-0">
-          <p className="reading-desk__muted">{copy.resumeHint}</p>
-          <h3 className="reading-desk__title line-clamp-2">
+          <p className="hero-panel__muted">{copy.resumeHint}</p>
+          <h3 className="hero-panel__title line-clamp-2">
             {featured.displayTitle ?? featured.title}
           </h3>
-          <p className="reading-desk__muted mt-3 tabular-nums">
+          <p className="hero-panel__muted mt-3 tabular-nums">
             {featured.imageCount ?? 0} {copy.mediaUnit}
             {featured.lastSeenAt && (
               <>
@@ -74,7 +74,7 @@ export default function ResumeHero({ cards }: Props) {
         </div>
       </div>
       {rest.length > 0 && (
-        <div className="reading-queue">
+        <div className="hero-queue">
           {rest.map((card) => (
             <ResumeQueueItem key={card.id} card={card} />
           ))}
@@ -83,7 +83,7 @@ export default function ResumeHero({ cards }: Props) {
       {cards.length > 4 && (
         <Link
           to={recentsRoute("photo")}
-          className="reading-desk__muted inline-flex items-center gap-2 self-end mt-4 min-h-7"
+          className="hero-panel__muted inline-flex items-center gap-2 self-end mt-4 min-h-7"
         >
           还有 {cards.length - 4} 本最近看过 <ArrowRightLineIcon size={12} />
         </Link>
@@ -95,10 +95,10 @@ export default function ResumeHero({ cards }: Props) {
 function ResumeQueueItem({ card }: { card: CardData }) {
   const copy = photoCopy();
   return (
-    <div className="reading-queue__item">
+    <div className="hero-queue__item">
       <Link
         to={card.to}
-        className="reading-queue__open"
+        className="hero-queue__open"
         aria-label={`${copy.resumeButton}「${card.displayTitle ?? card.title}」`}
       >
         <span className="w-10 h-10 shrink-0 rounded-md overflow-hidden bg-bg-media">
@@ -108,7 +108,7 @@ function ResumeQueueItem({ card }: { card: CardData }) {
           <span className="block truncate text-body font-medium">
             {card.displayTitle ?? card.title}
           </span>
-          <span className="reading-desk__muted block mt-1 tabular-nums">
+          <span className="hero-panel__muted block mt-1 tabular-nums">
             {card.imageCount ?? 0} {copy.mediaUnit}
             {card.lastSeenAt && (
               <>

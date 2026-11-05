@@ -33,7 +33,7 @@ export function UnreadHero({
   const copy = comicCopy();
   return (
     <section
-      className="discovery-panel"
+      className="hero-panel"
       data-testid="unread-hero"
       aria-labelledby="unread-heading"
     >
@@ -66,7 +66,7 @@ export function UnreadHero({
           </Link>
         </div>
       </div>
-      <div className="discovery-grid">
+      <div className="hero-grid">
         {cards.slice(0, 4).map((card) => (
           <AlbumCard
             key={card.id}
@@ -118,7 +118,7 @@ export function ContinueHero({
   const copy = comicCopy();
   return (
     <section
-      className="reading-desk"
+      className="hero-panel"
       data-testid="continue-hero"
       aria-labelledby="continue-heading"
     >
@@ -126,24 +126,24 @@ export function ContinueHero({
         <h2 id="continue-heading" className="section-title">
           {copy.continueTitle}
         </h2>
-        <span className="reading-desk__muted tabular-nums">
+        <span className="hero-panel__muted tabular-nums">
           {cards.length} {copy.unfinishedCountLabel}
         </span>
         <button
           type="button"
           onClick={onClearAll}
-          className="reading-desk__muted inline-flex items-center gap-1 ml-auto min-h-7 px-1 rounded"
+          className="hero-panel__muted inline-flex items-center gap-1 ml-auto min-h-7 px-1 rounded"
           title={copy.markAllTitle}
         >
           <CloseIcon size={12} />
           清空
         </button>
       </div>
-      <div className="reading-desk__feature">
+      <div className="hero-panel__feature">
         <StagePoster card={featured} onClick={() => onContinue(featured)} />
         <div className="min-w-0">
-          <p className="reading-desk__muted">上次，看到这里</p>
-          <h3 className="reading-desk__title line-clamp-2">
+          <p className="hero-panel__muted">上次，看到这里</p>
+          <h3 className="hero-panel__title line-clamp-2">
             {featured.displayTitle ?? featured.title}
           </h3>
           <StageInfo
@@ -154,7 +154,7 @@ export function ContinueHero({
         </div>
       </div>
       {rest.length > 0 && (
-        <div className="reading-queue">
+        <div className="hero-queue">
           {rest.map((card) => (
             <QueueItem
               key={card.id}
@@ -168,7 +168,7 @@ export function ContinueHero({
       {cards.length > 4 && (
         <Link
           to={recentsRoute("comic")}
-          className="reading-desk__muted inline-flex items-center gap-2 self-end mt-4 min-h-7"
+          className="hero-panel__muted inline-flex items-center gap-2 self-end mt-4 min-h-7"
         >
           还有 {cards.length - 4} 本在读 <ArrowRightLineIcon size={12} />
         </Link>
@@ -190,7 +190,7 @@ function StagePoster({
       type="button"
       onClick={onClick}
       aria-label={`${copy.continueTitle}「${card.title}」`}
-      className="reading-cover"
+      className="hero-cover hero-cover--book"
     >
       <Cover card={card} large />
     </button>
@@ -211,7 +211,7 @@ function StageInfo({
   const copy = comicCopy();
   return (
     <div className="mt-4">
-      <p className="reading-desk__muted tabular-nums">
+      <p className="hero-panel__muted tabular-nums">
         {copy.positionVerb} {index + 1} / {total}
         {copy.showReadingPercent && (
           <span className="ml-3">已读 {percent}%</span>
@@ -260,10 +260,10 @@ function QueueItem({
 }) {
   const copy = comicCopy();
   return (
-    <div className="reading-queue__item group">
+    <div className="hero-queue__item group">
       <button
         type="button"
-        className="reading-queue__open"
+        className="hero-queue__open"
         onClick={onOpen}
         aria-label={`${copy.continueTitle}「${card.title}」`}
       >
@@ -274,7 +274,7 @@ function QueueItem({
           <span className="block truncate text-body font-medium">
             {card.displayTitle ?? card.title}
           </span>
-          <span className="reading-desk__muted block mt-1 tabular-nums">
+          <span className="hero-panel__muted block mt-1 tabular-nums">
             {copy.positionVerb} {(card.progress?.index ?? 0) + 1} /{" "}
             {card.progress?.total ?? 0}
           </span>
@@ -283,7 +283,7 @@ function QueueItem({
       <button
         type="button"
         onClick={onRemove}
-        className="reading-queue__remove"
+        className="hero-queue__remove"
         title={`将「${card.title}」${copy.markFinishedLabel}`}
         aria-label={`将${card.title}${copy.markFinishedLabel}`}
       >
