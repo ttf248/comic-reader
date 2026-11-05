@@ -34,7 +34,7 @@ export function RecentlyAddedHero({ items, total }: RecentlyAddedProps) {
   if (cards.length === 0) return null;
   return (
     <section
-      className="discovery-panel"
+      className="discovery-panel home-recent"
       data-testid="recently-added-hero"
       aria-labelledby="recently-added-heading"
     >
@@ -94,7 +94,7 @@ export function SerendipityHero({
   const card = nodeSummaryToCard(album);
   return (
     <section
-      className="serendipity-desk"
+      className="photo-desk home-serendipity"
       data-testid="serendipity-hero"
       aria-labelledby="serendipity-heading"
     >
@@ -114,11 +114,11 @@ export function SerendipityHero({
           {isLoading ? copy.serendipityLoading : copy.serendipityButton}
         </button>
       </div>
-      <div className="serendipity-desk__feature">
+      <div className="photo-desk__feature">
         <Link
           to={card.to}
           aria-label={`打开相册「${card.title}」`}
-          className="serendipity-cover"
+          className="photo-cover"
         >
           <Cover card={card} large />
         </Link>

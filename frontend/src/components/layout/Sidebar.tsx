@@ -17,12 +17,15 @@ import {
   useLibraryActivitySummary,
   useLibraryDashboard,
 } from "../../hooks/useLibrary";
+import { useHistoryCards } from "../../hooks/useHistory";
 import { useAppMode } from "../../hooks/useAppMode";
 import { libraryApi } from "../../api/library";
 import { albumRoute, favoritesRoute, homeRoute, recentsRoute, unreadRoute } from "../../utils/path";
 import { thumbUrl } from "../../api/thumbs";
 import { nodeSummaryToCard } from "../../utils/libraryCard";
-import { comicCopy, workbenchCopy } from "../../utils/workbench";
+import type { CardData } from "../album/AlbumGrid";
+import { timeAgo } from "../../utils/date";
+import { comicCopy, photoCopy, workbenchCopy } from "../../utils/workbench";
 import {
   continueReadingTarget,
   readingPercent,
@@ -102,7 +105,10 @@ export default function Sidebar({
     if (!randomAlbum.isPending) randomAlbum.mutate();
   };
 
-  // 继续阅读只属于漫画工作台：照片侧栏不显示在读摘要。
+  // 侧栏的「继续」区：漫画侧是在读进度，照片侧是上次打开过的那本。
+  //
+  // 两侧各有各的线索：漫画有页码与完成状态，照片只有访问历史。照片那边
+  // 不显示进度条，也不出现「读完」字样 —— 照片没有读完这回事。
   const dashboard = useLibraryDashboard();
   const inProgress = useMemo(
     () =>
@@ -111,24 +117,27 @@ export default function Sidebar({
         : [],
     [dashboard.data, mode],
   );
-  const continueCard = useMemo(() => {
-    const first = inProgress[0];
-    if (!first) return null;
-    return {
-      ...nodeSummaryToCard(first.album),
-      progress: { index: first.pageIndex, total: first.pageCount },
-    };
-  }, [inProgress]);
-  // 其余在读：最多 5 条紧凑行，再多就只给一个总数提示。
-  const continueRest = useMemo(
-    () =>
-      inProgress.slice(1, 6).map((item) => ({
+  // 照片侧：最近看过的相册（访问历史里按当前侧收敛的那部分）。
+  const resumeCards = useHistoryCards(mode, mode === "photo").cards;
+  const resumeEntries = useMemo(() => {
+    if (mode === "comic") {
+      return inProgress.map((item) => ({
         ...nodeSummaryToCard(item.album),
         progress: { index: item.pageIndex, total: item.pageCount },
-      })),
-    [inProgress],
-  );
-  const continueRestCount = Math.max(0, inProgress.length - 6);
+      }));
+    }
+    return resumeCards;
+  }, [mode, inProgress, resumeCards]);
+  const resumeFirst = resumeEntries[0] ?? null;
+  // 其余条目：最多 5 条紧凑行，再多就只给一个总数提示。
+  const resumeRest = resumeEntries.slice(1, 6);
+  const resumeRestCount = Math.max(0, resumeEntries.length - 6);
+  const resumeTitle =
+    mode === "comic" ? comicCopy().continueTitle : photoCopy().resumeTitle;
+  const resumeCountLabel =
+    mode === "comic"
+      ? comicCopy().unfinishedCountLabel
+      : photoCopy().resumeCountLabel;
 
   // 选中态：比侧栏亮一档的灰块 + 白字。
   // 侧栏是墨黑表面，选中态靠明度差而不是色相来区分，
@@ -272,39 +281,34 @@ export default function Sidebar({
           : renderGroup("照片", PHOTO_GROUP, () => 0)}
       </nav>
 
-      {/* 「继续阅读」区：紧跟导航，填掉侧栏中段的空白。
-          上面是"正在翻的那本"，下面是"接下来几本"。
-          它只出现在漫画工作台 —— 照片这边没有阅读进度。 */}
-      {!collapsed && mode === "comic" && continueCard && (
+      {/* 「继续」区：紧跟导航，填掉侧栏中段的空白。
+          漫画侧是"正在翻的那本"，照片侧是"上次打开的那本"。
+          两侧的措辞与线索各自成套，不共用一套词。 */}
+      {!collapsed && resumeFirst && (
         <div className="px-4 pt-5 pb-2 min-h-0 overflow-y-auto">
           <div className="px-1 pb-2 flex items-baseline gap-2">
-            <span className="text-[12.5px] text-rail-muted">
-              {comicCopy().continueTitle}
-            </span>
+            <span className="text-[12.5px] text-rail-muted">{resumeTitle}</span>
             <span className="text-[12.5px] text-rail-muted tabular-nums">
-              {inProgress.length} 本
+              {resumeEntries.length} {resumeCountLabel}
             </span>
           </div>
-          <ContinueMiniCard
-            title={continueCard.displayTitle ?? continueCard.title}
-            coverPath={continueCard.coverPath}
-            index={continueCard.progress?.index ?? 0}
-            total={continueCard.progress?.total ?? 0}
-            onOpen={() => navigate(continueReadingTarget(continueCard))}
+          <ResumeMiniCard
+            card={resumeFirst}
+            onOpen={() => navigate(continueReadingTarget(resumeFirst))}
           />
-          {continueRest.map((card) => (
-            <ContinueRow
+          {resumeRest.map((card) => (
+            <ResumeRow
               key={card.id}
-              title={card.displayTitle ?? card.title}
-              coverPath={card.coverPath}
-              index={card.progress?.index ?? 0}
-              total={card.progress?.total ?? 0}
+              card={card}
               onOpen={() => navigate(continueReadingTarget(card))}
             />
           ))}
-          {continueRestCount > 0 && (
+          {resumeRestCount > 0 && (
             <div className="px-2 pt-1.5 text-[12.5px] text-rail-muted tabular-nums">
-              还有 {continueRestCount} 本没{comicCopy().finishVerb}
+              还有 {resumeRestCount} 本
+              {mode === "comic"
+                ? `没${comicCopy().finishVerb}`
+                : "最近看过"}
             </div>
           )}
         </div>
@@ -370,86 +374,89 @@ function Logo() {
   return <div className="brand-mark">L</div>;
 }
 
-// 紧凑行：侧栏「继续」区里其余在读书目的单行形态。
-function ContinueRow({
-  title,
-  coverPath,
-  index,
-  total,
+// 侧栏「继续」区的两个条目形态。
+//
+// 两侧共用版式，但线索各自成套：漫画给「读到第几页」与进度条，照片给
+// 「上次浏览」的时间 —— 照片不留进度，画一条进度条就是编造事实。
+function ResumeRow({
+  card,
   onOpen,
 }: {
-  title: string;
-  coverPath?: string;
-  index: number;
-  total: number;
+  card: CardData;
   onOpen: () => void;
 }) {
-  const percent = readingPercent({ index, total });
+  const isComic = card.contentKind === "comic";
+  const title = card.displayTitle ?? card.title;
+  const percent = readingPercent({
+    index: card.progress?.index ?? 0,
+    total: card.progress?.total ?? 0,
+  });
   return (
     <button
       type="button"
       onClick={onOpen}
-      title={`${comicCopy().continueTitle}「${title}」`}
+      title={`${resumeLabel(card)}「${title}」`}
       className="w-full mt-1 rounded-md px-1 py-1 flex items-center gap-2.5 text-left transition-colors hover:bg-rail-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rail-accent"
     >
       <span className="relative w-[26px] h-[34px] shrink-0 rounded overflow-hidden bg-rail-hover block">
-        {coverPath ? (
+        {card.coverPath ? (
           <img
-            src={thumbUrl(coverPath)}
+            src={thumbUrl(card.coverPath)}
             alt=""
             loading="lazy"
             decoding="async"
             className="w-full h-full object-cover object-[50%_30%]"
           />
         ) : null}
-        <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-black/40">
-          <span
-            className="block h-full bg-white/90"
-            style={{ width: `${percent}%` }}
-          />
-        </span>
+        {isComic && (
+          <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-black/40">
+            <span
+              className="block h-full bg-white/90"
+              style={{ width: `${percent}%` }}
+            />
+          </span>
+        )}
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-[12.5px] text-rail-fg truncate leading-tight">
           {title}
         </span>
         <span className="block text-[12.5px] text-rail-muted tabular-nums mt-0.5">
-          {comicCopy().positionVerb} {index + 1} / {total}
+          {resumeHint(card)}
         </span>
       </span>
     </button>
   );
 }
 
-// 「接着读」迷你卡：侧栏常驻最近在读的一本。
+// 「接着看 / 继续读」迷你卡：侧栏常驻的那一条。
 //
-// 版式参照播放器的"正在播放"条：左侧封面缩略图 + 右侧标题与进度。
-// 点击直接回到上次看到的那一页（与首页封面台同一份跳转逻辑）。
-function ContinueMiniCard({
-  title,
-  coverPath,
-  index,
-  total,
+// 版式参照播放器的"正在播放"条：左侧封面缩略图 + 右侧标题与线索。
+// 漫画侧点击回到上次看到的那一页，照片侧点击回到那本相册。
+function ResumeMiniCard({
+  card,
   onOpen,
 }: {
-  title: string;
-  coverPath?: string;
-  index: number;
-  total: number;
+  card: CardData;
   onOpen: () => void;
 }) {
-  const percent = readingPercent({ index, total });
+  const isComic = card.contentKind === "comic";
+  const title = card.displayTitle ?? card.title;
+  const percent = readingPercent({
+    index: card.progress?.index ?? 0,
+    total: card.progress?.total ?? 0,
+  });
   return (
     <button
       type="button"
       onClick={onOpen}
-      title={`${comicCopy().continueTitle}「${title}」`}
+      title={`${resumeLabel(card)}「${title}」`}
       className="mt-2 w-full rounded-lg bg-rail-hover hover:bg-rail-hover p-2 flex gap-2.5 items-center text-left transition-colors group/mini focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rail-accent"
     >
       <span className="relative w-9 h-12 shrink-0 rounded overflow-hidden bg-rail-hover block">
-        {coverPath ? (
+        {card.coverPath ? (
           <img
-            src={thumbUrl(coverPath)}
+            src={thumbUrl(card.coverPath)}
             alt=""
             loading="lazy"
             decoding="async"
@@ -458,23 +465,47 @@ function ContinueMiniCard({
         ) : null}
       </span>
       <span className="min-w-0 flex-1">
-        {/* 标题直接起排：外层分组标题已经写了"继续阅读"，
+        {/* 标题直接起排：外层分组标题已经写了这一区的名字，
             这里再写一遍是重复信息。
             用 --fg-muted 而不是 --fg-subtle：卡片底色是 bg-rail-hover，
             fg-subtle 在这个底上只有 4.4:1（AA 要求 4.5:1）。 */}
         <span className="block text-[13px] font-medium text-rail-fg truncate leading-tight group-hover/mini:text-rail-accent transition-colors">
           {title}
         </span>
-        <span className="mt-1.5 block h-[3px] rounded-full bg-rail-hover overflow-hidden">
-          <span
-            className="block h-full rounded-full bg-rail-accent"
-            style={{ width: `${percent}%` }}
-          />
-        </span>
+        {isComic && (
+          <span className="mt-1.5 block h-[3px] rounded-full bg-rail-hover overflow-hidden">
+            <span
+              className="block h-full rounded-full bg-rail-accent"
+              style={{ width: `${percent}%` }}
+            />
+          </span>
+        )}
         <span className="mt-1 block text-[12.5px] text-rail-muted tabular-nums">
-          {comicCopy().positionVerb} {index + 1} / {total}
+          {resumeHint(card)}
         </span>
       </span>
     </button>
   );
+}
+
+// 这一条属于哪一侧的动作名：漫画「继续阅读」，照片「接着看」。
+function resumeLabel(card: CardData): string {
+  return card.contentKind === "comic"
+    ? comicCopy().continueTitle
+    : photoCopy().resumeTitle;
+}
+
+// 这一条属于哪一侧的线索文案。
+//
+// 漫画给页码进度，照片给「上次浏览」的时间 —— 照片没有阅读位置，
+// 说不出「读到第几张」。
+function resumeHint(card: CardData): string {
+  if (card.contentKind === "comic") {
+    return `${comicCopy().positionVerb} ${(card.progress?.index ?? 0) + 1} / ${
+      card.progress?.total ?? 0
+    }`;
+  }
+  return card.lastSeenAt
+    ? `${photoCopy().resumeLastSeenLabel} ${timeAgo(card.lastSeenAt)}`
+    : photoCopy().resumeCountLabel;
 }

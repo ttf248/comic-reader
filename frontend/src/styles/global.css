@@ -97,6 +97,39 @@
   .home-overview > :only-child {
     grid-column: 1 / -1;
   }
+  /* 照片侧首屏的两栏骨架（只在分两栏的断点生效）。
+     默认：宽栏是照片墙，窄栏是「随手看看」。
+     有「接着看」时：宽栏让给「接着看」，照片墙移到第二行通栏 ——
+     照片墙横贯一行更像一面展陈墙，也不用把窄栏挤成两行。
+     窄屏只有一栏，这些定位一律不生效，区块按文档顺序单列排下。 */
+  @media (min-width: 1280px) {
+    .home-overview > .home-recent {
+      grid-column: 1;
+      grid-row: 1;
+    }
+    .home-overview > .home-serendipity {
+      grid-column: 2;
+      grid-row: 1;
+    }
+    .home-overview--with-resume > .home-resume {
+      grid-column: 1;
+      grid-row: 1;
+    }
+    .home-overview--with-resume > .home-serendipity {
+      grid-column: 2;
+      grid-row: 1;
+    }
+    .home-overview--with-resume > .home-recent {
+      grid-column: 1 / -1;
+      grid-row: 2;
+    }
+    /* 只剩一个区块时通栏。 */
+    .home-overview > .home-recent:only-child,
+    .home-overview > .home-serendipity:only-child,
+    .home-overview > .home-resume:only-child {
+      grid-column: 1 / -1;
+    }
+  }
   .reading-desk {
     display: flex;
     flex-direction: column;
@@ -149,9 +182,10 @@
     color: var(--feature-muted);
     font-size: 12.5px;
   }
-  /* 照片侧的「随手看看」：与漫画的阅读台共用面板外壳（边框、圆角、
-     feature 底色），但封面是方的、不倾斜 —— 照片是展陈，不是书。 */
-  .serendipity-desk {
+  /* 照片侧的展陈面板（「接着看」「随手看看」）：与漫画的阅读台共用面板
+     外壳（边框、圆角、feature 底色），但封面是方的、不倾斜 ——
+     照片是展陈，不是书。 */
+  .photo-desk {
     display: flex;
     flex-direction: column;
     min-width: 0;
@@ -161,14 +195,17 @@
     background: var(--feature-bg);
     color: var(--feature-fg);
   }
-  .serendipity-desk__feature {
+  .photo-desk__feature {
     display: grid;
     grid-template-columns: minmax(0, 132px) minmax(0, 1fr);
     align-items: center;
     gap: clamp(16px, 2vw, 24px);
     padding-block: 20px;
+    /* 内容不跟着面板一起拉满：宽屏上标题会横跨整个屏幕，
+       视线要跨很远才能找到右边的按钮。 */
+    max-width: 900px;
   }
-  .serendipity-cover {
+  .photo-cover {
     position: relative;
     width: 100%;
     aspect-ratio: 1 / 1;
@@ -524,7 +561,8 @@
       gap: 18px;
     }
     .reading-desk,
-    .discovery-panel {
+    .discovery-panel,
+    .photo-desk {
       padding: 18px;
       border-radius: 18px;
     }
@@ -536,34 +574,6 @@
     .reading-desk__title {
       font-size: 22px;
     }
-    /* 照片侧的「随手看看」：与漫画的阅读台共用面板外壳（边框、圆角、
-     feature 底色），但封面是方的、不倾斜 —— 照片是展陈，不是书。 */
-  .serendipity-desk {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    padding: 24px;
-    border: 1px solid var(--border);
-    border-radius: 22px;
-    background: var(--feature-bg);
-    color: var(--feature-fg);
-  }
-  .serendipity-desk__feature {
-    display: grid;
-    grid-template-columns: minmax(0, 132px) minmax(0, 1fr);
-    align-items: center;
-    gap: clamp(16px, 2vw, 24px);
-    padding-block: 20px;
-  }
-  .serendipity-cover {
-    position: relative;
-    width: 100%;
-    aspect-ratio: 1 / 1;
-    overflow: hidden;
-    border-radius: 12px;
-    background: var(--bg-media);
-    box-shadow: var(--shadow-sm);
-  }
   .reading-queue {
       grid-template-columns: 1fr;
       gap: 14px;

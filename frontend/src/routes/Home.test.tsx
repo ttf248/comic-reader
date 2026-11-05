@@ -248,3 +248,39 @@ it("照片工作台不显示继续阅读与未读区", async () => {
   expect(screen.queryByTestId("unread-hero")).toBeNull();
   expect(screen.getByText("全部照片")).toBeTruthy();
 });
+
+// 照片侧的对称物：漫画有「继续阅读」，照片有「接着看」。
+it("照片工作台显示「接着看」专区", async () => {
+  useAppModeStore.setState({ preference: "photo", hydrated: true });
+  vi.mocked(historyApi.list).mockResolvedValue({
+    history: [
+      {
+        albumId: "a_1",
+        name: "2023年测试相册",
+        imageCount: 3,
+        openedAt: "2024-05-01T00:00:00Z",
+      },
+    ],
+  });
+  renderHome();
+  await waitFor(() => expect(screen.getByTestId("resume-hero")).toBeTruthy());
+  expect(screen.getByTestId("resume-hero").textContent).toContain(
+    "2023年测试相册",
+  );
+});
+
+it("漫画工作台不显示「接着看」专区", async () => {
+  vi.mocked(historyApi.list).mockResolvedValue({
+    history: [
+      {
+        albumId: "a_1",
+        name: "2023年测试相册",
+        imageCount: 3,
+        openedAt: "2024-05-01T00:00:00Z",
+      },
+    ],
+  });
+  renderHome();
+  await waitFor(() => expect(screen.getByTestId("album-grid")).toBeTruthy());
+  expect(screen.queryByTestId("resume-hero")).toBeNull();
+});

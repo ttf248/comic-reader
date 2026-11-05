@@ -389,6 +389,43 @@ test("工作台模式切换：两套菜单完全隔离，模式持久化在服�
   await page.request.patch("/api/prefs", { data: { appMode: "photo" } });
 });
 
+// 隔离不只在菜单上：两侧共用的卡片、预览与计数单位也各归各。
+// 照片这边说「浏览 / 张 / 本」，漫画那边说「阅读 / 页 / 卷」。
+test("两侧的措辞与计数单位各归各", async ({ page }) => {
+  await liveRoots(page.request);
+  await setWorkbenchMode(page.request, "photo");
+  await scannedNodes(page.request, "photo");
+
+  await page.goto("/photo");
+  const photoCard = page.getByRole("link", { name: /打开相册/ }).first();
+  await expect(photoCard).toBeVisible();
+  await photoCard.evaluate((el) => el.scrollIntoView({ block: "center" }));
+  await photoCard.hover();
+  const preview = page.getByRole("dialog", { name: /预览/ });
+  await expect(preview).toBeVisible();
+  // 照片相册没有阅读进度，预览里也不该冒出漫画的说法。
+  await expect(preview.getByText("阅读进度")).toHaveCount(0);
+  await expect(preview).not.toContainText("尚未阅读");
+  // 照片相册的图片按「张」计数。
+  await expect(preview).toContainText("张");
+
+  await setWorkbenchMode(page.request, "comic");
+  await scannedNodes(page.request, "comic");
+  await page.goto("/comic");
+  const comicCard = page.getByRole("link", { name: /打开相册/ }).first();
+  await expect(comicCard).toBeVisible();
+  await comicCard.evaluate((el) => el.scrollIntoView({ block: "center" }));
+  await comicCard.hover();
+  const comicPreview = page.getByRole("dialog", { name: /预览/ });
+  await expect(comicPreview).toBeVisible();
+  // 漫画侧的预览不说「浏览」。
+  await expect(comicPreview).not.toContainText("尚未浏览");
+  // 漫画相册的图片按「页」计数。
+  await expect(comicPreview).toContainText("页");
+
+  await resetWorkbenchMode(page.request);
+});
+
 for (const recovery of ["manual", "automatic"] as const) {
   test(`扫描进度连接中断后${recovery === "manual" ? "手动" : "自动"}恢复同一任务，不重复启动扫描`, async ({
     page,
@@ -904,7 +941,11 @@ test("视频封面按原始比例完整显示，不裁切也不补黑边", async
   };
   const fileId = media.page.items.find((item) => item.kind === "video")!.id;
   await page.goto(albumUrl(album!));
-  const cover = page.locator(`img[src="/api/thumbs/${fileId}"]`).first();
+  // 限定在照片墙的网格里：侧栏的「接着看」也会显示同一本相册的封面缩略图，
+  // 全页取第一个会取到侧栏那张，测的就不是网格里的视频封面了。
+  const cover = page
+    .locator(`[data-virtuoso-scroller] img[src="/api/thumbs/${fileId}"]`)
+    .first();
   await expect(cover).toBeVisible();
   await expect
     .poll(() => cover.evaluate((image: HTMLImageElement) => image.naturalWidth))

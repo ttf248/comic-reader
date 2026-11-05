@@ -324,9 +324,25 @@ it("后台刷新失败保留上次访问顺序，切换名称排序后隐藏访�
   expect(order()).toEqual(nameExpected);
 });
 
-it.each(noticePages)("%s 名称排序不读取访问历史", async (_name, path) => {
+// 主页是这组用例里的例外：它的「接着看」专区要读访问历史，
+// 与排序无关。其余页面的历史只服务于「最近看」排序，名称排序不该碰它。
+const historyFreeSortPages = noticePages.filter(
+  ([_name, path]) => path !== "/",
+);
+
+it.each(historyFreeSortPages)(
+  "%s 名称排序不读取访问历史",
+  async (_name, path) => {
+    useSearchStore.getState().setSortBy("name");
+    renderPage(path);
+    await waitFor(() => expect(order()).toEqual(nameExpected));
+    expect(historyApi.list).not.toHaveBeenCalled();
+  },
+);
+
+it("主页读访问历史是为了「接着看」，名称排序的结果不受影响", async () => {
   useSearchStore.getState().setSortBy("name");
-  renderPage(path);
+  renderPage("/");
   await waitFor(() => expect(order()).toEqual(nameExpected));
-  expect(historyApi.list).not.toHaveBeenCalled();
+  expect(historyApi.list).toHaveBeenCalled();
 });

@@ -119,6 +119,18 @@ export interface PhotoCopy extends WorkbenchCopy {
   serendipityLoading: string;
   /** 打开这本的按钮文案。 */
   serendipityOpenButton: string;
+  /** 「接着看」专区的标题。 */
+  resumeTitle: string;
+  /** 「接着看」专区的眉标。 */
+  resumeEyebrow: string;
+  /** 「接着看」专区的提示语。 */
+  resumeHint: string;
+  /** 「接着看」的主按钮文案。 */
+  resumeButton: string;
+  /** 「接着看」里表示「上次看过」的措辞。 */
+  resumeLastSeenLabel: string;
+  /** 「接着看」队列项的计数说明。 */
+  resumeCountLabel: string;
 }
 
 const PHOTO: PhotoCopy = {
@@ -147,6 +159,12 @@ const PHOTO: PhotoCopy = {
   serendipityButton: "换一本",
   serendipityLoading: "找一本…",
   serendipityOpenButton: "打开看看",
+  resumeTitle: "接着看",
+  resumeEyebrow: "回到刚才那本",
+  resumeHint: "上次看过的那本",
+  resumeButton: "接着看",
+  resumeLastSeenLabel: "上次浏览",
+  resumeCountLabel: "本最近看过",
 };
 
 const COMIC: ComicCopy = {

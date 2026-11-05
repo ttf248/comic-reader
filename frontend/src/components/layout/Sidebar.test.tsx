@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Sidebar from "./Sidebar";
+import { historyApi } from "../../api/prefs";
 
 const dashboard = {
   dashboard: {
@@ -16,11 +17,19 @@ const dashboard = {
   },
 };
 
+// 照片侧的「接着看」区要按访问历史取相册摘要。
+const nodes = { items: [] as unknown[] };
+
 vi.mock("../../hooks/useLibrary", () => ({
   useLibraryActivitySummary: () => ({
     data: { summary: { unreadCount: 69 } },
   }),
   useLibraryDashboard: () => ({ data: dashboard }),
+  useLibraryNodes: () => ({ data: { items: nodes.items, missing: [] } }),
+}));
+
+vi.mock("../../api/prefs", () => ({
+  historyApi: { list: vi.fn().mockResolvedValue({ history: [] }) },
 }));
 
 // 工作台模式：默认覆盖漫画工作台（侧栏分组与「继续阅读」措辞），
@@ -66,6 +75,8 @@ describe("Sidebar", () => {
     dashboard.dashboard.unreadCount = 69;
     appMode.mode = "comic";
     appMode.setMode.mockClear();
+    nodes.items = [];
+    vi.mocked(historyApi.list).mockResolvedValue({ history: [] });
   });
 
   it("有在读相册时显示「接着读」迷你卡，含标题与进度", () => {
@@ -113,7 +124,7 @@ describe("Sidebar", () => {
     renderSidebar();
     expect(screen.getByText("第二本")).toBeInTheDocument();
     expect(screen.getByText("读到 3 / 8")).toBeInTheDocument();
-    expect(screen.getByText("3 本")).toBeInTheDocument();
+    expect(screen.getByText("3 本还没读完")).toBeInTheDocument();
   });
 
   // 两个模式的侧栏完全隔离：漫画这边有未读与阅读措辞，照片这边一样都没有。
@@ -156,6 +167,64 @@ describe("Sidebar", () => {
     renderSidebar();
     expect(screen.queryByText("继续阅读")).not.toBeInTheDocument();
     expect(screen.queryByText("某本漫画")).not.toBeInTheDocument();
+  });
+
+  // 照片侧的对称物：漫画有「继续阅读」，照片有「接着看」。
+  it("照片工作台显示「接着看」区，给出上次浏览的时间", async () => {
+    appMode.mode = "photo";
+    vi.mocked(historyApi.list).mockResolvedValue({
+      history: [
+        {
+          albumId: "a_p1",
+          name: "去年夏天",
+          imageCount: 40,
+          openedAt: "2024-05-01T00:00:00Z",
+        },
+      ],
+    });
+    nodes.items = [
+      {
+        id: "a_p1",
+        kind: "album",
+        name: "去年夏天",
+        displayName: "去年夏天",
+        imageCount: 40,
+        coverImages: [],
+        contentKind: "photo",
+      },
+    ];
+    renderSidebar();
+    expect(await screen.findByText("接着看")).toBeInTheDocument();
+    expect(screen.getByText("去年夏天")).toBeInTheDocument();
+    // 照片侧只有「浏览」的说法，没有漫画的页码进度。
+    expect(screen.queryByText(/读到/)).not.toBeInTheDocument();
+    expect(screen.getByText(/上次浏览/)).toBeInTheDocument();
+  });
+
+  it("漫画工作台不出现照片侧的「接着看」区", () => {
+    vi.mocked(historyApi.list).mockResolvedValue({
+      history: [
+        {
+          albumId: "a_p1",
+          name: "去年夏天",
+          imageCount: 40,
+          openedAt: "2024-05-01T00:00:00Z",
+        },
+      ],
+    });
+    nodes.items = [
+      {
+        id: "a_p1",
+        kind: "album",
+        name: "去年夏天",
+        displayName: "去年夏天",
+        imageCount: 40,
+        coverImages: [],
+        contentKind: "photo",
+      },
+    ];
+    renderSidebar();
+    expect(screen.queryByText("接着看")).not.toBeInTheDocument();
   });
 
   it("不再提供「随机未读」：该动作在未读页与首页已有入口", () => {

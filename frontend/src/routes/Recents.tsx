@@ -3,13 +3,12 @@ import { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSearchStore } from "../store/searchStore";
 import { useUIStore } from "../store/uiStore";
-import type { Prefs } from "../api/prefs";
-import { useHistory } from "../hooks/useHistory";
+import { useHistoryCards } from "../hooks/useHistory";
 import { useImageActivities } from "../hooks/useImageActivity";
 import { useAppMode } from "../hooks/useAppMode";
 import { workbenchCopy } from "../utils/workbench";
 import { useGalleryContextSync } from "../hooks/useGalleryContextSync";
-import AlbumGrid, { type CardData } from "../components/album/AlbumGrid";
+import AlbumGrid from "../components/album/AlbumGrid";
 import AlbumGridSkeleton from "../components/album/AlbumGridSkeleton";
 import { ListFilterBar } from "../components/common/ListFilterBar";
 import EmptyState from "../components/common/EmptyState";
@@ -17,10 +16,7 @@ import { ClockIcon } from "../components/common/Icon";
 import { decodeFavPath, homeRoute } from "../utils/path";
 import { compareDatesDesc, formatRelative } from "../utils/date";
 import type { GalleryContextEntry } from "../utils/galleryContext";
-import { useLibraryNodes } from "../hooks/useLibrary";
-import { nodeSummaryToCard, cardMatchesQuery } from "../utils/libraryCard";
-
-const EMPTY_HISTORY: Prefs["history"] = [];
+import { cardMatchesQuery } from "../utils/libraryCard";
 
 // 最近访问：从后端 history 列表中读取。带阅读进度。
 export default function Recents() {
@@ -30,35 +26,12 @@ export default function Recents() {
   const sortBy = useSearchStore((s) => s.sortBy);
   const minImageCount = useSearchStore((s) => s.minImageCount);
 
-  const historyQuery = useHistory();
   const { mode } = useAppMode();
   const copy = workbenchCopy(mode);
 
-  // history 顺序:OpenedAt 倒序
-  const history = historyQuery.data?.history ?? EMPTY_HISTORY;
-  const historyIds = useMemo(
-    () => history.map((item) => item.albumId),
-    [history],
-  );
-  const nodesQuery = useLibraryNodes(historyIds);
-  const nodesById = useMemo(
-    () =>
-      new Map((nodesQuery.data?.items ?? []).map((node) => [node.id, node])),
-    [nodesQuery.data],
-  );
-
-  const cards = useMemo<CardData[]>(() => {
-    const out: CardData[] = [];
-    for (const h of history) {
-      const node = nodesById.get(h.albumId);
-      if (!node || node.kind !== "album") continue;
-      // 最近访问是用户的真实足迹，但工作台只呈现当前这一类：
-      // 照片工作台里不该冒出一本漫画。
-      if (node.contentKind !== mode) continue;
-      out.push({ ...nodeSummaryToCard(node), lastSeenAt: h.openedAt });
-    }
-    return out;
-  }, [history, nodesById, mode]);
+  // 访问历史按当前工作台收敛：照片侧只列照片相册。
+  const { history, cards, resolvedCount, historyQuery, nodesQuery } =
+    useHistoryCards(mode);
 
   const progressPaths = useMemo(
     () => cards.map((c) => decodeFavPath(c.to)).filter(Boolean),
@@ -139,13 +112,13 @@ export default function Recents() {
         eyebrow={copy.recentsEyebrow}
         description={
           <p className="text-[13px] text-fg-muted mt-2 tabular-nums">
-            {history.length > 0 ? (
+            {cards.length > 0 ? (
               <>
                 <span className="text-fg font-medium">{cards.length}</span> 个
                 <span className="text-fg-subtle mx-1.5">·</span>
                 最近打开{" "}
                 <span className="text-fg">
-                  {formatRelative(history[0]?.openedAt)}
+                  {formatRelative(cards[0]?.lastSeenAt)}
                 </span>
               </>
             ) : historyQuery.isLoading ? (
@@ -188,27 +161,32 @@ export default function Recents() {
         <AlbumGridSkeleton variant={viewMode} label={`正在加载${copy.recentsTitle}…`} />
       ) : history.length > 0 && nodesQuery.isLoading && cards.length === 0 ? (
         <AlbumGridSkeleton variant={viewMode} label={`正在加载${copy.recentsTitle}…`} />
-      ) : loadFailed && cards.length === 0 ? null : history.length === 0 ? (
-        <EmptyState
-          title={copy.recentsEmpty}
-          description="打开任意一个文件夹开始浏览，它会出现在这里。"
-          icon={<ClockIcon size={20} />}
-          action={
-            <button onClick={() => navigate(homeRoute(mode))} className="btn btn-primary">
-              去主页看看
-            </button>
-          }
-        />
-      ) : cards.length === 0 ? (
-        <EmptyState
-          title="最近访问的相册暂不可用"
-          description="相册可能已移动，或媒体库尚未完成扫描。"
-          action={
-            <button onClick={() => navigate(homeRoute(mode))} className="btn btn-outline">
-              去主页看看
-            </button>
-          }
-        />
+      ) : loadFailed && cards.length === 0 ? null : cards.length === 0 ? (
+        // 这一侧没有记录。两种成因给两种说法：访问过的相册全被移出
+        // 媒体库了，说「可能已移动」；这些记录全都属于另一侧，就只说
+        // 「还没有记录」——照片侧不该知道漫画那边有人翻过书。
+        history.length > 0 && resolvedCount === 0 ? (
+          <EmptyState
+            title="最近访问的相册暂不可用"
+            description="相册可能已移动，或媒体库尚未完成扫描。"
+            action={
+              <button onClick={() => navigate(homeRoute(mode))} className="btn btn-outline">
+                去主页看看
+              </button>
+            }
+          />
+        ) : (
+          <EmptyState
+            title={copy.recentsEmpty}
+            description="打开任意一个文件夹开始浏览，它会出现在这里。"
+            icon={<ClockIcon size={20} />}
+            action={
+              <button onClick={() => navigate(homeRoute(mode))} className="btn btn-primary">
+                去主页看看
+              </button>
+            }
+          />
+        )
       ) : filtered.length === 0 ? (
         <EmptyState
           title="没有匹配的最近访问"

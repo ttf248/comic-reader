@@ -7,7 +7,7 @@ import { useFavoritesByMode } from "../hooks/useFavoritesByMode";
 import { useMarkAlbumRead, useMarkAlbumsRead } from "../hooks/useImageActivity";
 import { useGalleryContextSync } from "../hooks/useGalleryContextSync";
 import { scanApi } from "../api/scan";
-import { useViewedSort } from "../hooks/useHistory";
+import { useHistoryCards, useViewedSort } from "../hooks/useHistory";
 import { libraryApi } from "../api/library";
 import AlbumGrid, { type CardData } from "../components/album/AlbumGrid";
 import AlbumGridSkeleton from "../components/album/AlbumGridSkeleton";
@@ -21,6 +21,7 @@ import {
   RecentlyAddedHero,
   SerendipityHero,
 } from "../components/home/PhotoHeroes";
+import ResumeHero from "../components/home/ResumeHero";
 import { useSerendipityAlbum } from "../hooks/useSerendipityAlbum";
 import { useUIStore } from "../store/uiStore";
 import { useAppMode } from "../hooks/useAppMode";
@@ -90,10 +91,14 @@ export default function Home() {
     [dashboard, isComic],
   );
   const unreadCount = isComic ? (dashboard?.unreadCount ?? 0) : 0;
-  // 照片侧的首屏专区：最近加入 + 随手看看。它们与漫画侧的「继续阅读 /
-  // 未读」一一对应，但内容完全不同。
+  // 照片侧的首屏专区：接着看 + 最近加入 + 随手看看。它们与漫画侧的
+  // 「继续阅读 / 未读」一一对应，但内容完全不同：漫画有进度与已读，
+  // 照片只有「上次打开过哪本」。
   const recentAlbums = useLibraryRecentAlbums(mode, 8, !isComic);
   const serendipity = useSerendipityAlbum(!isComic);
+  // 「接着看」的数据是访问历史：照片相册其实一直在记，只是原先只有
+  // 「最近浏览」页在用。
+  const resumeCards = useHistoryCards(mode, !isComic).cards;
   const recentItems = useMemo(
     () => recentAlbums.data?.page.items ?? [],
     [recentAlbums.data],
@@ -349,7 +354,11 @@ export default function Home() {
   const hasSeriesIndex = hasContent && isComic && seriesGroups.length > 0;
 
   // 主 CTA：有进度 → 继续上次；否则 → 随机翻翻
+  //
+  // 照片侧没有进度，但有「上次打开过的那本」：它就是照片侧的主 CTA，
+  // 与漫画侧的「继续阅读」位置对等。
   const primaryAlbum = inProgressAll[0];
+  const hasPrimaryEntry = isComic ? !!primaryAlbum : resumeCards.length > 0;
   const scanLabel = sse.isRunning
     ? "扫描中…"
     : startScan.isPending
@@ -406,8 +415,9 @@ export default function Home() {
         </div>
 
         {/* 次级入口：没有在读内容时，「随机一本」升为主操作。
-            有在读内容时它退到次级，避免和「继续阅读」抢主位。 */}
-        {!primaryAlbum && (
+            有在读内容时它退到次级，避免和「继续阅读」抢主位。
+            照片侧的对应物是「接着看」。 */}
+        {!hasPrimaryEntry && (
           <div className="mt-5 flex items-center gap-2 flex-wrap">
             <button
               onClick={onShuffle}
@@ -467,12 +477,19 @@ export default function Home() {
       )}
 
       {/* 照片侧的首屏专区：与漫画侧的「继续阅读 / 未读」位置对齐，
-          内容却是照片自己的 —— 最近加入与随手看看。 */}
+          内容却是照片自己的 —— 接着看、最近加入与随手看看。 */}
       {hasContent &&
         !isComic &&
-        (recentItems.length > 0 || serendipity.album !== null) && (
+        (resumeCards.length > 0 ||
+          recentItems.length > 0 ||
+          serendipity.album !== null) && (
           <div className="page-shell">
-            <div className="home-overview">
+            <div
+              className={`home-overview${
+                resumeCards.length > 0 ? " home-overview--with-resume" : ""
+              }`}
+            >
+              {resumeCards.length > 0 && <ResumeHero cards={resumeCards} />}
               {recentItems.length > 0 && (
                 <RecentlyAddedHero items={recentItems} total={recentTotal} />
               )}

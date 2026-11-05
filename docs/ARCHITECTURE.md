@@ -132,7 +132,9 @@ SIGINT/SIGTERM 触发停止接收连接、取消扫描/转码并强制刷新扫�
 - 收藏里的智能标签按名解析（`POST /api/tags/query`），接口同时给出两侧的册数：客户端据此区分「这个标签在库里不存在」（失效，可清理）与「它只属于另一侧」（不可见，但不是失效）。把两者混为一谈会导致用户在另一侧点一次「清理失效收藏」就删掉自己的收藏。
 - 阅读器整屏脱离 AppShell，侧栏不可见，顶部提供工作台 chip 切模式（切模式即离开阅读器回到外壳）。
 - 模式也决定视觉基调：`<html data-mode>` 由 `WorkbenchModeProvider` 写入，CSS token 按 `:root[data-theme][data-mode]` 组合覆盖（`--brand*` / `--feature-bg` / `--mode-tint`），画布与文字保持中性灰阶。封面画幅同样按侧取默认值（照片 1:1、漫画 2:3），见 `utils/workbench.ts` 的 `coverRatioForMode`。
-- 首页首屏专区按侧各成一套：漫画是「继续阅读 / 未读」，照片是「最近加入 / 随手看看」。照片侧的数据源是 `GET /api/library/recent?kind=photo`（按业务日期倒序的最近相册）与 `GET /api/albums/random?kind=photo`（随手一本），组件在 `components/home/PhotoHeroes.tsx`，随机结果由 `hooks/useSerendipityAlbum.ts` 用「种子」做查询键换取。
+- 首页首屏专区按侧各成一套：漫画是「继续阅读 / 未读」，照片是「接着看 / 最近加入 / 随手看看」。照片侧的数据源是 `GET /api/library/recent?kind=photo`（按业务日期倒序的最近相册）与 `GET /api/albums/random?kind=photo`（随手一本），组件在 `components/home/PhotoHeroes.tsx`，随机结果由 `hooks/useSerendipityAlbum.ts` 用「种子」做查询键换取。
+- 照片侧的「接着看」与漫画侧的「继续阅读」对称，数据源不同：漫画读的是阅读进度，照片读的是访问历史。`hooks/useHistory.ts` 的 `useHistoryCards` 把 `GET /api/history` 与 `POST /api/library/nodes/query` 合成按侧收敛的卡片列表，组件 `components/home/ResumeHero.tsx`（首页首屏专区）、侧栏的「继续」区与「最近浏览」页共用它。它额外返回 `resolvedCount`（仍存在于媒体库里的访问记录条数），用来区分「这一侧没有记录」与「访问过的相册全被移出媒体库」——两者的提示语不同，后者才提「相册可能已移动」。
+- 措辞与计数单位的唯一真相源是 `utils/workbench.ts` 的词表（`workbenchCopy(mode)`），两侧共用组件从**卡片自身的** `contentKind` 取词，而不是从当前工作台取：一张卡永远知道自己属于照片还是漫画，取不到时按照片兜底。照片说「张 / 本 / 浏览」，漫画说「页 / 卷 / 阅读」。
 - 索引维度按侧分：照片按年份（`components/home/YearTimeline.tsx`），漫画按作品（`components/home/SeriesTimeline.tsx`，集合即作品）。两者共用 `components/home/Timeline.tsx` 的视觉骨架。
 
 ### 查询、导航与网格
