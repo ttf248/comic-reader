@@ -365,6 +365,13 @@ export default function Home() {
       ? "启动中…"
       : "重新扫描";
 
+  // 库规模：按当前工作台算，这一侧只有多少相册、多少集合。
+  const librarySize = manifest
+    ? isComic
+      ? `${manifest.statistics.comicAlbumCount ?? 0} 本漫画 · ${manifest.statistics.comicCollectionCount ?? 0} 个集合`
+      : `${manifest.statistics.photoAlbumCount ?? 0} 本相册 · ${manifest.statistics.photoCollectionCount ?? 0} 个集合`
+    : "";
+
   // 「继续上次」直跳画廊：进首页最大的目的是「接着看」，
   // 中转 Album 详情会多一次点击，对随手翻翻的场景不友好。
   // 跳转目标的拼装集中在 utils/continueReading.ts，侧栏的迷你卡复用同一份逻辑。
@@ -390,10 +397,17 @@ export default function Home() {
                 <>
                   <span>{copy.libraryDescription}</span>
                   <span className="mx-2 text-fg-subtle">·</span>
+                  {/* 库规模属于当前工作台：这一侧只有多少相册、多少集合。
+                      它原来常驻顶栏，与这里、以及状态栏的「上次扫描」
+                      是同一组上下文散在三处 —— 收进页头，只说一次。 */}
+                  <span className="tabular-nums">{librarySize}</span>
                   {manifest.scannedAt && (
-                    <span className="text-fg-subtle">
-                      上次更新 {formatTime(manifest.scannedAt)}
-                    </span>
+                    <>
+                      <span className="mx-2 text-fg-subtle">·</span>
+                      <span className="text-fg-subtle">
+                        上次更新 {formatTime(manifest.scannedAt)}
+                      </span>
+                    </>
                   )}
                 </>
               ) : (

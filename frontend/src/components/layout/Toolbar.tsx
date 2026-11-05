@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { scanApi } from "../../api/scan";
 import { useScanSSE } from "../../hooks/useScanSSE";
@@ -9,23 +9,30 @@ import { useUIStore } from "../../store/uiStore";
 import { useAppMode } from "../../hooks/useAppMode";
 import { libraryApi } from "../../api/library";
 import { libraryQueryKeys, useLibraryManifest } from "../../hooks/useLibrary";
+import { useMediaQuery, WIDE_LAYOUT_QUERY } from "../../hooks/useMediaQuery";
 import ThemeSwitcher from "../common/ThemeSwitcher";
 import GlobalSearch from "../common/GlobalSearch";
+import ModeSwitch from "./ModeSwitch";
 import {
-  ScanIcon,
   MoreHorizontalIcon,
   RefreshIcon,
   HelpIcon,
   MenuIcon,
+  AlertIcon,
 } from "../common/Icon";
 
-// 顶部工具栏（精简后）：
-//   左侧：极简字标
+// 顶部工具栏：
+//   左侧：工作台模式（照片 / 漫画）
 //   中部：全局搜索
-//   右侧：主题 / 帮助 / 更多(扫描 + 刷新缓存)
+//   右侧：扫描告警 / 帮助 / 主题 / 更多(刷新缓存)
 //
 // 排序 / 视图模式 / 视图 chips 已迁移到各 list 页面的 filter strip,
-//  让 toolbar 只承担"全局信息 + 主题"职责,避免挤 7+ 控件。
+//  让 toolbar 只承担"全局动作"职责,避免挤 7+ 控件。
+//
+// 媒体库规模不再常驻顶栏：它和页头的「上次更新」是同一组上下文，
+// 放在页头才是它的语境。底部状态栏也已移除 —— 它的「就绪」是填充
+// 文案，秒级时钟对一个本地媒体库没有意义，而扫描进度本来就由
+// 左下角的 ScanProgress 浮卡负责。
 export default function Toolbar({
   onOpenMobileNav,
   mobileMenuButtonRef,
@@ -38,19 +45,15 @@ export default function Toolbar({
   const queryClient = useQueryClient();
   const pushToast = useUIStore((s) => s.pushToast);
 
-  // 沉浸场景（照片墙的大图预览）里，顶栏的搜索与库规模会与浮层抢注意力，
+  // 沉浸场景（照片墙的大图预览）里，顶栏的搜索会与浮层抢注意力，
   // 收起来更干净。阅读器整屏脱离 AppShell，不经过这里。
   const immersiveOverlay = useUIStore((s) => s.immersiveOverlay);
   const onGallery = immersiveOverlay;
-  // 媒体库规模：放在顶栏左槽，作为全局上下文（底部状态栏不再重复）。
-  // 规模按当前工作台算：这一侧只有多少相册、多少集合。
   const manifest = useLibraryManifest().data?.manifest;
-  const { mode } = useAppMode();
-  const libraryContext = manifest
-    ? mode === "comic"
-      ? `${manifest.statistics.comicAlbumCount ?? 0} 本漫画 · ${manifest.statistics.comicCollectionCount ?? 0} 个集合`
-      : `${manifest.statistics.photoAlbumCount ?? 0} 本相册 · ${manifest.statistics.photoCollectionCount ?? 0} 个集合`
-    : "";
+  const warningCount = manifest?.statistics.warningCount ?? 0;
+  const { mode, setMode } = useAppMode();
+  // 宽屏时模式切换在顶栏；窄屏顶栏放不下，改为在侧栏抽屉里。
+  const isWide = useMediaQuery(WIDE_LAYOUT_QUERY);
 
   const startScan = useMutation({
     mutationFn: () => scanApi.start(),
@@ -121,21 +124,19 @@ export default function Toolbar({
           )}
         </div>
 
-        {/* 左槽：全局上下文（媒体库规模）。
-            旧版顶栏只有"搜索 + 右侧三个图标"，中间空出六七百像素，
-            看起来像被遗弃的控件区。把库规模放进左槽、搜索居中、
-            动作靠右，顶栏才是一个有结构的应用栏。 */}
-        {!onGallery && (
-          <div className="hidden xl:block shrink-0 mr-8">
-            <span className="toolbar-caption mb-1">我的媒体库</span>
-            <span className="text-meta text-fg-muted tabular-nums">
-              {libraryContext}
-            </span>
+        {/* 左槽：工作台模式。
+            它原来在侧栏品牌区下方。搬到顶栏有三个好处：侧栏因此只
+            剩「品牌 + 本工作台的入口」，模式切换与全局动作同属一层；
+            侧栏折叠成 72px 时模式切换不再被挤成两枚图标；
+            顶栏左槽也就不必再塞一份和页头重复的库规模。 */}
+        {!onGallery && isWide && (
+          <div className="shrink-0 mr-4">
+            <ModeSwitch mode={mode} onChange={setMode} tone="surface" />
           </div>
         )}
-        {onGallery && <div className="hidden lg:block shrink-0" />}
 
-        {/* 中槽：搜索。居中放置，和左右两槽形成对称。 */}
+        {/* 中槽：搜索。整条顶栏里它是最主要的功能，左对齐放在模式切换
+            之后；动作组靠右。 */}
         {!onGallery && (
           <div className="flex-1 min-w-0 flex justify-start">
             <div className="w-full max-w-[620px]">
@@ -146,6 +147,18 @@ export default function Toolbar({
         {onGallery && <div className="flex-1 min-w-0" />}
 
         <div className="flex items-center gap-1 shrink-0 ml-auto">
+          {/* 扫描问题：全局条件，平时没有，只有真有未读干净的目录时才出现。
+              点进去是设置页里的扫描告警明细。 */}
+          {warningCount > 0 && (
+            <Link
+              to="/settings"
+              className="inline-flex items-center gap-1 h-9 px-2.5 rounded-md text-meta text-warning hover:bg-bg-subtle transition-colors"
+              title="扫描完成但有部分目录或媒体未能完整读取"
+            >
+              <AlertIcon size={13} />
+              <span className="tabular-nums">{warningCount}</span>
+            </Link>
+          )}
           <button
             onClick={() =>
               window.dispatchEvent(new CustomEvent("comic:open-help"))
@@ -159,13 +172,11 @@ export default function Toolbar({
           <ThemeSwitcher compact />
           {!onGallery && (
             <MoreMenu
-              onScan={() => startScan.mutate()}
               onRefresh={() =>
                 void queryClient.invalidateQueries({
                   queryKey: libraryQueryKeys.root,
                 })
               }
-              scanPending={startScan.isPending || sse.isRunning}
             />
           )}
         </div>
@@ -177,17 +188,12 @@ export default function Toolbar({
 // 说明：页面标题由各路由自己渲染（page-title 样式），顶栏不再重复展示
 // 面包屑，避免同一信息出现两次、顶部白白占掉一块高度。
 
-// kebab 菜单: 扫描 + 刷新缓存
-// 收纳了原来 toolbar 上两个独立的次级按钮,让 toolbar 更克制。
-function MoreMenu({
-  onScan,
-  onRefresh,
-  scanPending,
-}: {
-  onScan: () => void;
-  onRefresh: () => void;
-  scanPending: boolean;
-}) {
+// kebab 菜单: 刷新缓存。
+//
+// 「重新扫描」不在这里：它已经有一个始终可见的入口（页头右上角），
+// 外加 Ctrl+S。三个入口做同一件事，多出来的那个只会在菜单深处
+// 增加一次"这个菜单里到底有什么"的猜测。
+function MoreMenu({ onRefresh }: { onRefresh: () => void }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -246,22 +252,6 @@ function MoreMenu({
           aria-label="更多操作"
           className="absolute right-0 top-full mt-1.5 min-w-[180px] bg-bg-elevated border border-border rounded-lg shadow-lg py-1 z-40 fade-up"
         >
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              onScan();
-            }}
-            disabled={scanPending}
-            className="w-full flex items-center gap-2.5 px-3 py-1.5 text-body text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors disabled:opacity-50"
-          >
-            <ScanIcon size={12} />
-            <span>{scanPending ? "扫描中…" : "重新扫描"}</span>
-            <span className="ml-auto text-badge text-fg-subtle font-mono">
-              Ctrl+S
-            </span>
-          </button>
           <button
             type="button"
             role="menuitem"

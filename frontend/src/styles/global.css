@@ -7,7 +7,7 @@
     scroll-behavior: smooth;
   }
   .app-toolbar {
-    height: 76px;
+    height: 60px;
     flex-shrink: 0;
     background: var(--bg);
     border-bottom: 1px solid var(--border);
@@ -40,7 +40,7 @@
     color: var(--rail-fg);
   }
   .sidebar-brand {
-    height: 76px;
+    height: 60px;
     padding-inline: 20px;
     border-bottom: 1px solid var(--rail-line);
   }
@@ -552,7 +552,7 @@
       top: 8px;
     }
     .app-toolbar {
-      height: 64px;
+      height: 56px;
     }
     .page-heading {
       padding-top: 26px;

@@ -19,6 +19,7 @@ import {
 } from "../../hooks/useLibrary";
 import { useHistoryCards } from "../../hooks/useHistory";
 import { useAppMode } from "../../hooks/useAppMode";
+import { useMediaQuery, WIDE_LAYOUT_QUERY } from "../../hooks/useMediaQuery";
 import { libraryApi } from "../../api/library";
 import { albumRoute, favoritesRoute, homeRoute, recentsRoute, unreadRoute } from "../../utils/path";
 import { thumbUrl } from "../../api/thumbs";
@@ -85,6 +86,8 @@ export default function Sidebar({
   const pushToast = useUIStore((s) => s.pushToast);
   const { mode, setMode } = useAppMode();
   const copy = workbenchCopy(mode);
+  // 宽屏时模式切换在顶栏；窄屏侧栏就是抽屉，切模式留在抽屉里。
+  const isWide = useMediaQuery(WIDE_LAYOUT_QUERY);
   // 未读只属于漫画工作台：照片侧栏没有未读入口，也就没有它的徽标。
   const unreadCount = useLibraryActivitySummary().data?.summary.unreadCount ?? 0;
   const navRef = useRef<HTMLElement>(null);
@@ -129,9 +132,6 @@ export default function Sidebar({
     return resumeCards;
   }, [mode, inProgress, resumeCards]);
   const resumeFirst = resumeEntries[0] ?? null;
-  // 其余条目：最多 5 条紧凑行，再多就只给一个总数提示。
-  const resumeRest = resumeEntries.slice(1, 6);
-  const resumeRestCount = Math.max(0, resumeEntries.length - 6);
   const resumeTitle =
     mode === "comic" ? comicCopy().continueTitle : photoCopy().resumeTitle;
   const resumeCountLabel =
@@ -261,13 +261,10 @@ export default function Sidebar({
         </button>
       </div>
 
-      {/* 工作台模式切换：它决定下面所有列表呈现哪一类相册。
-          折叠态也留着它 —— 切模式在两种形态下都要一步可达。 */}
-      {collapsed ? (
-        <div className="px-4 pt-4 flex justify-center">
-          <ModeSwitch mode={mode} onChange={setMode} compact />
-        </div>
-      ) : (
+      {/* 工作台模式切换：宽屏时它在顶栏左槽（与全局动作同层），
+          窄屏顶栏放不下，改为留在这里 —— 侧栏在窄屏就是抽屉，
+          打开抽屉即可切模式。两处互斥，DOM 里始终只有一份。 */}
+      {!isWide && (
         <div className="px-4 pt-4">
           <ModeSwitch mode={mode} onChange={setMode} />
         </div>
@@ -283,9 +280,12 @@ export default function Sidebar({
 
       {/* 「继续」区：紧跟导航，填掉侧栏中段的空白。
           漫画侧是"正在翻的那本"，照片侧是"上次打开的那本"。
-          两侧的措辞与线索各自成套，不共用一套词。 */}
+          两侧的措辞与线索各自成套，不共用一套词。
+
+          这里只留当前这一本：完整列表由首页的首屏专区与「最近浏览 /
+          最近阅读」页承担。侧栏再挂一份，既重复又把侧栏中段塞满。 */}
       {!collapsed && resumeFirst && (
-        <div className="px-4 pt-5 pb-2 min-h-0 overflow-y-auto">
+        <div className="px-4 pt-5 pb-2 min-h-0">
           <div className="px-1 pb-2 flex items-baseline gap-2">
             <span className="text-meta text-rail-muted">{resumeTitle}</span>
             <span className="text-meta text-rail-muted tabular-nums">
@@ -296,20 +296,19 @@ export default function Sidebar({
             card={resumeFirst}
             onOpen={() => navigate(continueReadingTarget(resumeFirst))}
           />
-          {resumeRest.map((card) => (
-            <ResumeRow
-              key={card.id}
-              card={card}
-              onOpen={() => navigate(continueReadingTarget(card))}
-            />
-          ))}
-          {resumeRestCount > 0 && (
-            <div className="px-2 pt-1.5 text-meta text-rail-muted tabular-nums">
-              还有 {resumeRestCount} 本
-              {mode === "comic"
-                ? `没${comicCopy().finishVerb}`
-                : "最近看过"}
-            </div>
+          {resumeEntries.length > 1 && (
+            <Link
+              to={recentsRoute(mode)}
+              className="mt-2 flex items-center gap-1 px-1 text-meta text-rail-muted hover:text-rail-fg transition-colors"
+            >
+              <span>
+                还有 {resumeEntries.length - 1} 本
+                {mode === "comic"
+                  ? `没${comicCopy().finishVerb}`
+                  : "最近看过"}
+              </span>
+              <ChevronRightIcon size={11} />
+            </Link>
           )}
         </div>
       )}
@@ -354,15 +353,6 @@ export default function Sidebar({
         {/* 「随机未读」原本也在这里，与「未读」页 / 首页的"随机未读"重复,
             已移除 —— 同一动作只保留一个入口。 */}
       </div>
-
-      {!collapsed && (
-        <div className="px-4 pb-3.5">
-          <div className="flex items-center gap-2 text-meta text-rail-muted">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-success" />
-            <span>已就绪</span>
-          </div>
-        </div>
-      )}
     </aside>
   );
 }
@@ -372,61 +362,6 @@ function Logo() {
   // 字母直接放在底板上（不再用一层绝对定位的兄弟节点盖上去）：
   // 兄弟节点的方式会让对比度检查工具读不到深色底板，把白字判成白底白字。
   return <div className="brand-mark">L</div>;
-}
-
-// 侧栏「继续」区的两个条目形态。
-//
-// 两侧共用版式，但线索各自成套：漫画给「读到第几页」与进度条，照片给
-// 「上次浏览」的时间 —— 照片不留进度，画一条进度条就是编造事实。
-function ResumeRow({
-  card,
-  onOpen,
-}: {
-  card: CardData;
-  onOpen: () => void;
-}) {
-  const isComic = card.contentKind === "comic";
-  const title = card.displayTitle ?? card.title;
-  const percent = readingPercent({
-    index: card.progress?.index ?? 0,
-    total: card.progress?.total ?? 0,
-  });
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      title={`${resumeLabel(card)}「${title}」`}
-      className="w-full mt-1 rounded-md px-1 py-1 flex items-center gap-2.5 text-left transition-colors hover:bg-rail-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rail-accent"
-    >
-      <span className="relative w-[26px] h-[34px] shrink-0 rounded overflow-hidden bg-rail-hover block">
-        {card.coverPath ? (
-          <img
-            src={thumbUrl(card.coverPath)}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            className="w-full h-full object-cover object-[50%_30%]"
-          />
-        ) : null}
-        {isComic && (
-          <span className="absolute bottom-0 left-0 right-0 h-[2px] bg-black/40">
-            <span
-              className="block h-full bg-white/90"
-              style={{ width: `${percent}%` }}
-            />
-          </span>
-        )}
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-meta text-rail-fg truncate leading-tight">
-          {title}
-        </span>
-        <span className="block text-meta text-rail-muted tabular-nums mt-0.5">
-          {resumeHint(card)}
-        </span>
-      </span>
-    </button>
-  );
 }
 
 // 「接着看 / 继续读」迷你卡：侧栏常驻的那一条。

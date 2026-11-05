@@ -10,7 +10,6 @@ import { scanApi } from "../../api/scan";
 import { useScanSSE } from "../../hooks/useScanSSE";
 import Sidebar from "./Sidebar";
 import Toolbar from "./Toolbar";
-import StatusBar from "./StatusBar";
 import ScanProgress from "../album/ScanProgress";
 import HelpOverlay from "../common/HelpOverlay";
 import ErrorBoundary from "../common/ErrorBoundary";
@@ -154,7 +153,6 @@ export default function AppShell() {
             <Outlet />
           </ErrorBoundary>
         </main>
-        <StatusBar />
       </div>
       {mobileNavOpen && (
         <button

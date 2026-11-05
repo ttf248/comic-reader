@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { fireEvent } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import Toolbar from "./Toolbar";
@@ -14,6 +15,7 @@ const manifest = {
       comicAlbumCount: 44,
       photoCollectionCount: 20,
       comicCollectionCount: 8,
+      warningCount: 0,
     },
     scannedAt: "2026-11-03T00:00:00Z",
   },
@@ -52,6 +54,12 @@ vi.mock("../common/ThemeSwitcher", () => ({
   default: () => <button aria-label="主题" />,
 }));
 
+// 宽屏：模式切换在顶栏左槽（窄屏时它在侧栏抽屉里）。
+vi.mock("../../hooks/useMediaQuery", () => ({
+  WIDE_LAYOUT_QUERY: "(min-width: 1024px)",
+  useMediaQuery: () => true,
+}));
+
 function renderToolbar() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -68,9 +76,16 @@ describe("Toolbar", () => {
     vi.clearAllMocks();
   });
 
-  it("左槽显示媒体库规模，作为全局上下文", () => {
+  // 库规模原来常驻顶栏，与页头的「上次更新」、状态栏的「上次扫描」是
+  // 同一组上下文散在三处。它归到页头，顶栏不再重复。
+  it("不再常驻媒体库规模", () => {
     renderToolbar();
-    expect(screen.getByText("60 本相册 · 20 个集合")).toBeInTheDocument();
+    expect(screen.queryByText("60 本相册 · 20 个集合")).not.toBeInTheDocument();
+  });
+
+  it("宽屏时左槽是工作台模式切换", () => {
+    renderToolbar();
+    expect(screen.getByRole("group", { name: "工作台模式" })).toBeInTheDocument();
   });
 
   it("中槽是搜索，右槽是全局动作", () => {
@@ -78,5 +93,14 @@ describe("Toolbar", () => {
     expect(screen.getByLabelText("搜索文件夹或标签")).toBeInTheDocument();
     expect(screen.getByLabelText("快捷键帮助")).toBeInTheDocument();
     expect(screen.getByLabelText("更多")).toBeInTheDocument();
+  });
+
+  // 「重新扫描」已经有一个可见入口（页头）+ Ctrl+S，kebab 菜单里
+  // 只留刷新缓存。
+  it("更多菜单里不再重复「重新扫描」", () => {
+    renderToolbar();
+    fireEvent.click(screen.getByLabelText("更多"));
+    expect(screen.getByRole("menuitem", { name: "刷新缓存" })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: /重新扫描/ })).not.toBeInTheDocument();
   });
 });

@@ -115,16 +115,20 @@ describe("Sidebar", () => {
     expect(screen.queryByText("继续阅读")).not.toBeInTheDocument();
   });
 
-  it("其余在读以紧凑行列出，并给出剩余数量", () => {
+  // 侧栏只留当前这一本，其余的交给首页专区与「最近阅读」页：
+  // 侧栏再挂一份完整列表，既重复又把侧栏中段塞满。
+  it("在读只留当前这一本，其余给出一个跳转", () => {
     dashboard.dashboard.inProgress = [
       { album: albumNode, pageIndex: 5, pageCount: 20 },
       { album: { ...albumNode, id: "a_2", name: "第二本", displayName: "第二本" }, pageIndex: 2, pageCount: 8 },
       { album: { ...albumNode, id: "a_3", name: "第三本", displayName: "第三本" }, pageIndex: 0, pageCount: 30 },
     ];
     renderSidebar();
-    expect(screen.getByText("第二本")).toBeInTheDocument();
-    expect(screen.getByText("读到 3 / 8")).toBeInTheDocument();
     expect(screen.getByText("3 本还没读完")).toBeInTheDocument();
+    expect(screen.getByText(/还有 2 本没读完/)).toBeInTheDocument();
+    // 其余条目不再逐条列出。
+    expect(screen.queryByText("第二本")).not.toBeInTheDocument();
+    expect(screen.queryByText("第三本")).not.toBeInTheDocument();
   });
 
   // 两个模式的侧栏完全隔离：漫画这边有未读与阅读措辞，照片这边一样都没有。
