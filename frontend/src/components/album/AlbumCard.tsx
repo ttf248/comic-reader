@@ -423,7 +423,7 @@ function GridCard({
 
         <div className="album-tile__meta min-w-0">
           <div
-            className="text-label font-medium text-fg truncate-2 leading-snug transition-colors group-hover:text-accent"
+            className="text-label font-medium text-fg truncate-2 leading-snug transition-colors group-hover:text-brand-ink"
             title={data.displayTitle ?? data.title}
           >
             {data.displayTitle ?? data.title}
