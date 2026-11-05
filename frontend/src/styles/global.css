@@ -290,6 +290,15 @@
   .album-tile__meta {
     padding: 12px 0 7px;
   }
+  /* 标题占满两行的高度。
+     标题长到要折行时，它下面那行会把元信息顶下去，同一网格行的卡片
+     于是参差不齐（一半的元信息在半空，一半在底下）。留一个空行给
+     一行标题，元信息行就在整行卡片上对齐了。
+
+     只在网格里留：首屏面板的卡片高度由面板决定，不需要这条。 */
+  .library-grid .album-tile__title {
+    min-height: calc(2 * 1.375em);
+  }
   .album-tile > .absolute {
     top: 16px;
     right: 16px;
