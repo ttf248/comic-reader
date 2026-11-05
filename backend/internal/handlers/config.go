@@ -13,32 +13,47 @@ import (
 //
 // 配置接口是唯一允许返回本机绝对配置路径的回环接口。
 type ConfigResponse struct {
-	CacheMaxSizeMB        int64    `json:"cacheMaxSizeMB"`
-	MediaRoots            []string `json:"mediaRoots"`
-	Host                  string   `json:"host"`
-	Port                  int      `json:"port"`
-	AccessMode            string   `json:"accessMode"`
-	AccessTokenConfigured bool     `json:"accessTokenConfigured"`
-	CacheDir              string   `json:"cacheDir"`
-	ThumbSizeW            int      `json:"thumbSizeW"`
-	ThumbSizeH            int      `json:"thumbSizeH"`
-	ThumbCacheSize        int      `json:"thumbCacheSize"`
-	CacheMaxAgeDays       int      `json:"cacheMaxAgeDays"`
-	AllowOsOpen           bool     `json:"allowOsOpen"`
-	StaticDir             string   `json:"staticDir"`
-	FFmpegPath            string   `json:"ffmpegPath"`
-	FFmpegAvailable       bool     `json:"ffmpegAvailable"`
-	ConfigPath            string   `json:"configPath"`
+	CacheMaxSizeMB int64 `json:"cacheMaxSizeMB"`
+	// MediaRoots 是媒体根列表，每项同时携带路径与内容属性。
+	// 前端按它渲染「每个目录选照片还是漫画」的单选控件。
+	MediaRoots            []MediaRootResponse `json:"mediaRoots"`
+	Host                  string              `json:"host"`
+	Port                  int                 `json:"port"`
+	AccessMode            string              `json:"accessMode"`
+	AccessTokenConfigured bool                `json:"accessTokenConfigured"`
+	CacheDir              string              `json:"cacheDir"`
+	ThumbSizeW            int                 `json:"thumbSizeW"`
+	ThumbSizeH            int                 `json:"thumbSizeH"`
+	ThumbCacheSize        int                 `json:"thumbCacheSize"`
+	CacheMaxAgeDays       int                 `json:"cacheMaxAgeDays"`
+	AllowOsOpen           bool                `json:"allowOsOpen"`
+	StaticDir             string              `json:"staticDir"`
+	FFmpegPath            string              `json:"ffmpegPath"`
+	FFmpegAvailable       bool                `json:"ffmpegAvailable"`
+	ConfigPath            string              `json:"configPath"`
 
 	// 排除规则:对外暴露完整三件套(SkipHidden + SystemFiles + ExcludePatterns),
 	// 让前端能完整还原当前配置;而不是只暴露 ExcludePatterns 一项。
 	SkipHidden      bool     `json:"skipHidden"`
 	SystemFiles     []string `json:"systemFiles"`
 	ExcludePatterns []string `json:"excludePatterns"`
+}
 
-	// 内容用途：默认按哪种方式打开相册，以及每个媒体根的按根默认值。
-	DefaultContentKind  string            `json:"defaultContentKind"`
-	RootContentKinds    map[string]string `json:"rootContentKinds"`
+// MediaRootResponse 是媒体根在配置接口中的对外形态。
+type MediaRootResponse struct {
+	Path string `json:"path"`
+	// Kind 是该目录的内容属性："photo" 或 "comic"。两者互斥。
+	Kind string `json:"kind"`
+}
+
+// mediaRootResponses 把配置里的媒体根条目转成对外形态。
+func mediaRootResponses(cfg *config.Config) []MediaRootResponse {
+	roots := cfg.NormalizedRoots()
+	out := make([]MediaRootResponse, 0, len(roots))
+	for _, root := range roots {
+		out = append(out, MediaRootResponse{Path: root.Path, Kind: root.Kind})
+	}
+	return out
 }
 
 // ConfigUpdateResponse PUT /api/config 的响应体。
@@ -53,7 +68,6 @@ type ConfigUpdateResponse struct {
 func ConfigGetHandler(mgr *config.Manager) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		cfg := mgr.Get()
-		roots := cfg.Roots()
 		// ffmpegAvailable 在 handler 层做一次探测,避免前端再发请求。
 		// 注意:这里的探测是每次 GET 都跑的(成本 < 50ms),但 Config 页
 		// 打开频次极低,影响可忽略。如果将来要 hot path 也用,可以加 30s TTL。
@@ -63,7 +77,7 @@ func ConfigGetHandler(mgr *config.Manager) fiber.Handler {
 			ffAvailable = services.FFmpegAvailableAt(ffPath)
 		}
 		return c.JSON(ConfigResponse{
-			MediaRoots:            roots,
+			MediaRoots:            mediaRootResponses(cfg),
 			Host:                  cfg.Host,
 			Port:                  cfg.Port,
 			AccessMode:            cfg.AccessMode,
@@ -82,11 +96,6 @@ func ConfigGetHandler(mgr *config.Manager) fiber.Handler {
 			SkipHidden:            cfg.SkipHidden,
 			SystemFiles:           cfg.SystemFiles,
 			ExcludePatterns:       cfg.ExcludePatterns,
-			DefaultContentKind: cfg.DefaultContentKind,
-			RootContentKinds: services.NormalizedRootContentKinds(
-				roots,
-				cfg.RootContentKinds,
-			),
 		})
 	}
 }
@@ -123,7 +132,7 @@ func ConfigUpdateHandler(mgr *config.Manager, onUpdate func(c *config.Config, me
 		return c.JSON(ConfigUpdateResponse{
 			OK: true,
 			Config: ConfigResponse{
-				MediaRoots:            newRoots,
+				MediaRoots:            mediaRootResponses(newCfg),
 				Host:                  newCfg.Host,
 				Port:                  newCfg.Port,
 				AccessMode:            newCfg.AccessMode,
@@ -142,11 +151,6 @@ func ConfigUpdateHandler(mgr *config.Manager, onUpdate func(c *config.Config, me
 				SkipHidden:            newCfg.SkipHidden,
 				SystemFiles:           newCfg.SystemFiles,
 				ExcludePatterns:       newCfg.ExcludePatterns,
-				DefaultContentKind: newCfg.DefaultContentKind,
-				RootContentKinds: services.NormalizedRootContentKinds(
-					newRoots,
-					newCfg.RootContentKinds,
-				),
 			},
 			RequiresRestart:   requiresRestart,
 			MediaRootsChanged: mediaRootsChanged,

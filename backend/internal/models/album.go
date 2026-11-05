@@ -145,11 +145,9 @@ type Album struct {
 	// 列表里几十张卡片同名，用户无法分辨归属目录；Location 提供唯一且
 	// 稳定的展示标识。
 	Location string `json:"location,omitempty"`
-	// ContentKind 是相册的浏览用途："photo"（照片墙）或 "comic"（漫画阅读）。
-	// 由媒体根默认值与相册级覆盖共同决定，不按图片数量推断。
+	// ContentKind 是相册的内容属性："photo"（照片）或 "comic"（漫画）。
+	// 它完全继承自所属媒体根的属性，不按图片数量推断，也不单独设置。
 	ContentKind string `json:"contentKind,omitempty"`
-	// ContentKindOverridden 标记用户是否手动切换过这本相册的用途。
-	ContentKindOverridden bool `json:"contentKindOverridden,omitempty"`
 }
 
 // MarshalJSON 保证当前 API 的媒体列表始终是数组，避免调用方区分 null 与 []。
@@ -189,6 +187,9 @@ type Collection struct {
 	Albums      []Album      `json:"albums"`
 	Collections []Collection `json:"collections,omitempty"` // 嵌套子集合
 	AlbumCount  int          `json:"albumCount"`            // 直属于本层的相册数（不含嵌套集合）
+	// ContentKind 是集合的内容属性："photo" 或 "comic"。
+	// 集合只出现在一个媒体根下，因此继承该根的属性。
+	ContentKind string `json:"contentKind,omitempty"`
 }
 
 // MarshalJSON 确保 nil Albums 序列化为 `[]`；Collections 省略字段时

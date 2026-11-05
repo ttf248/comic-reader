@@ -73,6 +73,11 @@ func newLibraryPageFixture(t *testing.T) libraryPageFixture {
 		}},
 	}
 	catalog := NewResourceCatalog()
+	// 夹具里的内容都属于同一个漫画目录：目录属性决定了列表作用域，
+	// 这里统一按 comic 作用域查询。
+	catalog.SetContentKindPolicy(NewContentKindPolicy([]RootKind{
+		{Path: root, Kind: models.ContentKindComic},
+	}))
 	catalog.Publish(result, []string{root})
 	return libraryPageFixture{
 		catalog: catalog, root: root,
@@ -126,7 +131,7 @@ func TestLibraryManifestIncludesBoundedWarningDetails(t *testing.T) {
 func TestLibraryChildrenUsesRevisionBoundCursorAndNaturalOrder(t *testing.T) {
 	fixture := newLibraryPageFixture(t)
 	snapshot := fixture.catalog.Acquire()
-	first, err := PageLibraryChildren(snapshot, fixture.rootID, LibraryKindAll, "", 2)
+	first, err := PageLibraryChildren(snapshot, fixture.rootID, LibraryKindComic, "", 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +151,7 @@ func TestLibraryChildrenUsesRevisionBoundCursorAndNaturalOrder(t *testing.T) {
 	if strings.Contains(string(encoded), `"author"`) {
 		t.Fatalf("album summary must not expose removed author alias: %s", encoded)
 	}
-	second, err := PageLibraryChildren(snapshot, fixture.rootID, LibraryKindAll, first.NextCursor, 2)
+	second, err := PageLibraryChildren(snapshot, fixture.rootID, LibraryKindComic, first.NextCursor, 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +159,7 @@ func TestLibraryChildrenUsesRevisionBoundCursorAndNaturalOrder(t *testing.T) {
 		t.Fatalf("second page=%+v", second)
 	}
 
-	nested, err := PageLibraryChildren(snapshot, fixture.collectionID, LibraryKindAll, "", 60)
+	nested, err := PageLibraryChildren(snapshot, fixture.collectionID, LibraryKindComic, "", 60)
 	if err != nil || len(nested.Items) != 1 || nested.Items[0].Name != "nested1" {
 		t.Fatalf("collection children=(%+v, %v)", nested, err)
 	}
@@ -162,7 +167,7 @@ func TestLibraryChildrenUsesRevisionBoundCursorAndNaturalOrder(t *testing.T) {
 	assertNoAbsolutePathInJSON(t, second)
 
 	fixture.catalog.Publish(&models.ScanResult{Roots: []string{fixture.root}}, []string{fixture.root})
-	if _, err := PageLibraryChildren(fixture.catalog.Acquire(), fixture.rootID, LibraryKindAll, first.NextCursor, 2); !errors.Is(err, ErrStalePageCursor) {
+	if _, err := PageLibraryChildren(fixture.catalog.Acquire(), fixture.rootID, LibraryKindComic, first.NextCursor, 2); !errors.Is(err, ErrStalePageCursor) {
 		t.Fatalf("stale cursor error=%v, want ErrStalePageCursor", err)
 	}
 }
@@ -217,7 +222,7 @@ func TestUnreadLibraryAlbumsUsesActivityIndexAndRevisionCursor(t *testing.T) {
 	snapshot := fixture.catalog.Acquire()
 	index := NewUnreadLibraryIndex()
 	started := StartedAlbums{Image: map[string]struct{}{fixture.albumID: {}}}
-	first, err := index.Page(snapshot, started, 1, LibraryKindAll, "", 2)
+	first, err := index.Page(snapshot, started, 1, LibraryKindComic, "", 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -229,7 +234,7 @@ func TestUnreadLibraryAlbumsUsesActivityIndexAndRevisionCursor(t *testing.T) {
 			t.Fatalf("started image album appeared in unread page=%+v", first)
 		}
 	}
-	second, err := index.Page(snapshot, started, 1, LibraryKindAll, first.NextCursor, 2)
+	second, err := index.Page(snapshot, started, 1, LibraryKindComic, first.NextCursor, 2)
 	if err != nil || len(second.Items) != 1 || second.NextCursor != "" {
 		t.Fatalf("second unread page=(%+v, %v)", second, err)
 	}
@@ -242,18 +247,18 @@ func TestUnreadLibraryIndexCachesByCatalogAndActivityRevision(t *testing.T) {
 	index := NewUnreadLibraryIndex()
 	started := StartedAlbums{Image: map[string]struct{}{fixture.albumID: {}}}
 
-	first, err := index.Page(snapshot, started, 1, LibraryKindAll, "", 2)
+	first, err := index.Page(snapshot, started, 1, LibraryKindComic, "", 2)
 	if err != nil || first.Total != 3 || len(first.Items) != 2 || first.NextCursor == "" {
 		t.Fatalf("first unread page=(%+v, %v)", first, err)
 	}
 	// 同一活动版本意味着调用方提供的是同一不可变活动快照；即使后续调用
 	// 传入了不同 map，缓存也必须保持第一次构建的索引，不能重复筛全库。
-	second, err := index.Page(snapshot, StartedAlbums{}, 1, LibraryKindAll, first.NextCursor, 2)
+	second, err := index.Page(snapshot, StartedAlbums{}, 1, LibraryKindComic, first.NextCursor, 2)
 	if err != nil || second.Total != 3 || len(second.Items) != 1 || second.NextCursor != "" {
 		t.Fatalf("cached unread page=(%+v, %v)", second, err)
 	}
 
-	refreshed, err := index.Page(snapshot, StartedAlbums{}, 2, LibraryKindAll, "", 2)
+	refreshed, err := index.Page(snapshot, StartedAlbums{}, 2, LibraryKindComic, "", 2)
 	if err != nil || refreshed.Total != 4 || len(refreshed.Items) != 2 || refreshed.NextCursor == "" {
 		t.Fatalf("refreshed unread page=(%+v, %v)", refreshed, err)
 	}
@@ -261,20 +266,20 @@ func TestUnreadLibraryIndexCachesByCatalogAndActivityRevision(t *testing.T) {
 
 func TestLibrarySearchUsesPrecomputedPathSafeIndex(t *testing.T) {
 	fixture := newLibraryPageFixture(t)
-	hits := SearchLibrary(fixture.catalog.Acquire(), "旅行", LibraryKindAll, 10)
+	hits := SearchLibrary(fixture.catalog.Acquire(), "旅行", LibraryKindComic, 10)
 	if len(hits) != 3 || hits[0].Kind != "album" || hits[0].Path != fixture.albumID ||
 		hits[1].Kind != "album" || hits[1].Name != "album10" ||
 		hits[2].Kind != "smartCollection" || hits[2].Path != "smart:旅行" {
 		t.Fatalf("search hits=%+v", hits)
 	}
-	if collectionHits := SearchLibrary(fixture.catalog.Acquire(), "collection3", LibraryKindAll, 10); len(collectionHits) != 1 ||
+	if collectionHits := SearchLibrary(fixture.catalog.Acquire(), "collection3", LibraryKindComic, 10); len(collectionHits) != 1 ||
 		collectionHits[0].Kind != "collection" || collectionHits[0].Path != fixture.collectionID {
 		t.Fatalf("collection search hits=%+v", collectionHits)
 	}
 	assertNoAbsolutePathInJSON(t, hits)
 
 	empty := NewResourceCatalog()
-	if hits := SearchLibrary(empty.Acquire(), "旅行", LibraryKindAll, 10); len(hits) != 0 {
+	if hits := SearchLibrary(empty.Acquire(), "旅行", LibraryKindComic, 10); len(hits) != 0 {
 		t.Fatalf("unready library search hits=%+v", hits)
 	}
 }
@@ -287,7 +292,7 @@ func TestLibrarySummaryCarriesVirtualAlbumLocation(t *testing.T) {
 	fixture := newLibraryPageFixture(t)
 	snapshot := fixture.catalog.Acquire()
 
-	children, err := PageLibraryChildren(snapshot, fixture.rootID, LibraryKindAll, "", 50)
+	children, err := PageLibraryChildren(snapshot, fixture.rootID, LibraryKindComic, "", 50)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -312,7 +317,7 @@ func TestLibrarySummaryCarriesVirtualAlbumLocation(t *testing.T) {
 		t.Fatalf("virtual displayName=%q, want %q", virtual.DisplayName, filepath.Base(fixture.root))
 	}
 
-	hits := SearchLibrary(snapshot, filepath.Base(fixture.root), LibraryKindAll, 10)
+	hits := SearchLibrary(snapshot, filepath.Base(fixture.root), LibraryKindComic, 10)
 	if len(hits) != 1 || hits[0].Kind != "album" ||
 		hits[0].Name != filepath.Base(fixture.root) {
 		t.Fatalf("search by location hits=%+v", hits)
@@ -354,12 +359,15 @@ func TestUnreadIndexExcludesVideoOnlyAlbumAfterVideoActivity(t *testing.T) {
 		AlbumCount: 2, ScannedAt: time.Date(2025, 2, 2, 0, 0, 0, 0, time.UTC), Duration: 1,
 	}
 	catalog := NewResourceCatalog()
+	catalog.SetContentKindPolicy(NewContentKindPolicy([]RootKind{
+		{Path: root, Kind: models.ContentKindComic},
+	}))
 	catalog.Publish(result, []string{root})
 	snapshot := catalog.Acquire()
 	unreadIndex := NewUnreadLibraryIndex()
 	videoAlbumID := catalog.ExternalID(videoAlbumPath, ResourceAlbum)
 
-	summary, err := unreadIndex.Summary(snapshot, StartedAlbums{}, 1, LibraryKindAll)
+	summary, err := unreadIndex.Summary(snapshot, StartedAlbums{}, 1, LibraryKindComic)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -369,7 +377,7 @@ func TestUnreadIndexExcludesVideoOnlyAlbumAfterVideoActivity(t *testing.T) {
 
 	// 只有视频活动时，纯视频相册已翻开，不再计入未读。
 	started := StartedAlbums{Video: map[string]struct{}{videoAlbumID: {}}}
-	summary, err = unreadIndex.Summary(snapshot, started, 2, LibraryKindAll)
+	summary, err = unreadIndex.Summary(snapshot, started, 2, LibraryKindComic)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -378,7 +386,7 @@ func TestUnreadIndexExcludesVideoOnlyAlbumAfterVideoActivity(t *testing.T) {
 	}
 
 	// 图片相册仍然只认图片活动：视频活动不算它已翻开。
-	page, err := unreadIndex.Page(snapshot, started, 3, LibraryKindAll, "", 10)
+	page, err := unreadIndex.Page(snapshot, started, 3, LibraryKindComic, "", 10)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -392,7 +400,7 @@ func TestRandomLibraryAlbumAndActivitySummaryUsePublishedIndex(t *testing.T) {
 	snapshot := fixture.catalog.Acquire()
 	unreadIndex := NewUnreadLibraryIndex()
 
-	random, err := RandomLibraryAlbum(snapshot, LibraryKindAll)
+	random, err := RandomLibraryAlbum(snapshot, LibraryKindComic)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -401,7 +409,7 @@ func TestRandomLibraryAlbumAndActivitySummaryUsePublishedIndex(t *testing.T) {
 	}
 
 	started := StartedAlbums{Image: map[string]struct{}{fixture.albumID: {}}}
-	summary, err := unreadIndex.Summary(snapshot, started, 1, LibraryKindAll)
+	summary, err := unreadIndex.Summary(snapshot, started, 1, LibraryKindComic)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -413,7 +421,7 @@ func TestRandomLibraryAlbumAndActivitySummaryUsePublishedIndex(t *testing.T) {
 	for _, album := range snapshot.state.library.albums {
 		excludeAll[album.ID] = struct{}{}
 	}
-	if _, err := unreadIndex.Random(snapshot, StartedAlbums{Image: excludeAll}, 2, LibraryKindAll); !errors.Is(err, ErrLibraryNoMatchingAlbum) {
+	if _, err := unreadIndex.Random(snapshot, StartedAlbums{Image: excludeAll}, 2, LibraryKindComic); !errors.Is(err, ErrLibraryNoMatchingAlbum) {
 		t.Fatalf("all albums excluded error=%v, want ErrLibraryNoMatchingAlbum", err)
 	}
 	assertNoAbsolutePathInJSON(t, summary)
@@ -428,7 +436,7 @@ func TestLibraryHomeDashboardUsesCurrentImageCountAndLimitedUnreadPreview(t *tes
 	dashboard, err := unreadIndex.Dashboard(snapshot, []models.Activity{{
 		AlbumID: fixture.albumID, MediaKind: models.MediaKindImage,
 		PageIndex: 1, PageCount: 99, Updated: time.Now().UTC(),
-	}}, nil, started, 1, LibraryKindAll)
+	}}, started, 1, LibraryKindComic)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -450,10 +458,13 @@ func TestLibraryActivitySummaryKeepsCurrentEmptyAlbumUnreadAfterRescan(t *testin
 	albumPath := filepath.Join(root, "video-only")
 	videoPath := filepath.Join(albumPath, "clip.mp4")
 	catalog := NewResourceCatalog()
+	catalog.SetContentKindPolicy(NewContentKindPolicy([]RootKind{
+		{Path: root, Kind: models.ContentKindComic},
+	}))
 	catalog.Publish(&models.ScanResult{
 		Roots: []string{root},
 		Albums: []models.Album{{
-			Type: "album", Path: albumPath, Name: "video-only",
+			Type: "album", Path: albumPath, Name: "video-only", SourceRoot: root,
 			VideoFiles: []string{videoPath}, VideoCount: 1, CoverImage: videoPath, CoverKind: "video",
 		}},
 	}, []string{root})
@@ -462,15 +473,15 @@ func TestLibraryActivitySummaryKeepsCurrentEmptyAlbumUnreadAfterRescan(t *testin
 	snapshot := catalog.Acquire()
 	started := StartedAlbums{Image: map[string]struct{}{albumID: {}}}
 	unreadIndex := NewUnreadLibraryIndex()
-	summary, err := unreadIndex.Summary(snapshot, started, 1, LibraryKindAll)
+	summary, err := unreadIndex.Summary(snapshot, started, 1, LibraryKindComic)
 	if err != nil || summary.UnreadCount != 1 {
 		t.Fatalf("summary=(%+v, %v)", summary, err)
 	}
-	random, err := unreadIndex.Random(snapshot, started, 1, LibraryKindAll)
+	random, err := unreadIndex.Random(snapshot, started, 1, LibraryKindComic)
 	if err != nil || random.ID != albumID {
 		t.Fatalf("random unread=(%+v, %v)", random, err)
 	}
-	unread, err := unreadIndex.Page(snapshot, started, 1, LibraryKindAll, "", 60)
+	unread, err := unreadIndex.Page(snapshot, started, 1, LibraryKindComic, "", 60)
 	if err != nil || unread.Total != 1 || len(unread.Items) != 1 || unread.Items[0].ID != albumID {
 		t.Fatalf("unread page=(%+v, %v)", unread, err)
 	}
@@ -527,12 +538,12 @@ func TestLibraryPageResponsesDoNotMutatePublishedIndex(t *testing.T) {
 	if snapshot.state.library == nil || len(snapshot.state.library.children[fixture.rootID]) != 4 {
 		t.Fatalf("page index was not precomputed: %+v", snapshot.state.library)
 	}
-	first, err := PageLibraryChildren(snapshot, fixture.rootID, LibraryKindAll, "", 2)
+	first, err := PageLibraryChildren(snapshot, fixture.rootID, LibraryKindComic, "", 2)
 	if err != nil {
 		t.Fatal(err)
 	}
 	first.Items[0].Name = "mutated by caller"
-	again, err := PageLibraryChildren(snapshot, fixture.rootID, LibraryKindAll, "", 2)
+	again, err := PageLibraryChildren(snapshot, fixture.rootID, LibraryKindComic, "", 2)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -543,15 +554,15 @@ func TestLibraryPageResponsesDoNotMutatePublishedIndex(t *testing.T) {
 
 func TestTagsAndTagAlbumsArePagedWithoutFullAlbums(t *testing.T) {
 	fixture := newLibraryPageFixture(t)
-	tags, err := PageLibraryTags(fixture.catalog.Acquire(), LibraryKindAll, "", 60)
+	tags, err := PageLibraryTags(fixture.catalog.Acquire(), LibraryKindComic, "", 60)
 	if err != nil || len(tags.Items) != 1 || tags.Items[0].Tag != "旅行" || tags.Items[0].AlbumCount != 2 {
 		t.Fatalf("tags=(%+v, %v)", tags, err)
 	}
-	albums, err := PageTagAlbums(fixture.catalog.Acquire(), "旅行", LibraryKindAll, "", 1)
+	albums, err := PageTagAlbums(fixture.catalog.Acquire(), "旅行", LibraryKindComic, "", 1)
 	if err != nil || len(albums.Items) != 1 || albums.Items[0].Name != "album2" || albums.NextCursor == "" {
 		t.Fatalf("tag albums=(%+v, %v)", albums, err)
 	}
-	if _, err := PageTagAlbums(fixture.catalog.Acquire(), "不存在", LibraryKindAll, "", 60); !errors.Is(err, ErrLibraryTagNotFound) {
+	if _, err := PageTagAlbums(fixture.catalog.Acquire(), "不存在", LibraryKindComic, "", 60); !errors.Is(err, ErrLibraryTagNotFound) {
 		t.Fatalf("missing tag error=%v", err)
 	}
 	assertNoAbsolutePathInJSON(t, tags)
@@ -560,7 +571,7 @@ func TestTagsAndTagAlbumsArePagedWithoutFullAlbums(t *testing.T) {
 
 func TestLibraryPageRejectsCursorFromAnotherScope(t *testing.T) {
 	fixture := newLibraryPageFixture(t)
-	children, err := PageLibraryChildren(fixture.catalog.Acquire(), fixture.rootID, LibraryKindAll, "", 1)
+	children, err := PageLibraryChildren(fixture.catalog.Acquire(), fixture.rootID, LibraryKindComic, "", 1)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -10,6 +10,7 @@ import (
 	"github.com/tianlongxiang/local-gallery/internal/config"
 	"github.com/tianlongxiang/local-gallery/internal/handlers"
 	"github.com/tianlongxiang/local-gallery/internal/middleware"
+	"github.com/tianlongxiang/local-gallery/internal/models"
 	"github.com/tianlongxiang/local-gallery/internal/services"
 )
 
@@ -19,7 +20,16 @@ func TestNestedRootsPublishUniqueOwnedAlbumsAndReadableMedia(t *testing.T) {
 	roots := []string{h.root, child}
 	_, validator := middleware.PathSafetyMiddleware(roots)
 	h.app.Get("/api/media/:id", middleware.ResourceParam(h.catalog, validator), handlers.MediaHandler(nil, nil, nil))
-	if _, err := h.mgr.Update(config.ConfigPatch{MediaRoots: roots, MediaRootsSet: true}); err != nil {
+	entries := make([]config.MediaRoot, 0, len(roots))
+	for _, root := range roots {
+		entries = append(entries, config.MediaRoot{Path: root, Kind: string(models.ContentKindComic)})
+	}
+	// 两个根都是漫画目录：属性按目录设置，父子根各自继承。
+	h.catalog.SetContentKindPolicy(services.NewContentKindPolicy([]services.RootKind{
+		{Path: h.root, Kind: models.ContentKindComic},
+		{Path: child, Kind: models.ContentKindComic},
+	}))
+	if _, err := h.mgr.Update(config.ConfigPatch{MediaRoots: entries, MediaRootsSet: true}); err != nil {
 		t.Fatal(err)
 	}
 	cachePath := filepath.Join(h.cache, "nested-scan.json")
@@ -45,7 +55,7 @@ func TestNestedRootsPublishUniqueOwnedAlbumsAndReadableMedia(t *testing.T) {
 	}
 	seen := make(map[string]bool)
 	for _, root := range manifest.Manifest.Roots {
-		res, body = h.do(t, http.MethodGet, "/api/library/"+root.ID+"/children", nil)
+		res, body = h.do(t, http.MethodGet, "/api/library/"+root.ID+"/children?kind=comic", nil)
 		var nodes struct {
 			Page services.LibraryPage[services.LibraryNodeSummary] `json:"page"`
 		}

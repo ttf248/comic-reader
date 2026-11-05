@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/tianlongxiang/local-gallery/internal/config"
 	"github.com/tianlongxiang/local-gallery/internal/services"
 )
 
@@ -39,17 +40,17 @@ func TestEquivalentRootConfigurationKeepsRevisionAndUniqueChildren(t *testing.T)
 	if runtime.GOOS == "windows" {
 		roots = append(roots, strings.ToUpper(h.root))
 	}
-	res, body := h.do(t, http.MethodPut, "/api/config", map[string]any{"mediaRoots": roots})
+	res, body := h.do(t, http.MethodPut, "/api/config", map[string]any{"mediaRoots": mediaRootsOf(roots)})
 	var updated struct {
 		MediaRootsChanged bool `json:"mediaRootsChanged"`
 		Config            struct {
-			MediaRoots []string `json:"mediaRoots"`
+			MediaRoots []config.MediaRoot `json:"mediaRoots"`
 		} `json:"config"`
 	}
 	if res.StatusCode != http.StatusOK || json.Unmarshal(body, &updated) != nil {
 		t.Fatalf("config status=%d body=%s", res.StatusCode, body)
 	}
-	if updated.MediaRootsChanged || len(updated.Config.MediaRoots) != 1 || updated.Config.MediaRoots[0] != h.root {
+	if updated.MediaRootsChanged || len(updated.Config.MediaRoots) != 1 || updated.Config.MediaRoots[0].Path != h.root {
 		t.Fatalf("equivalent roots reported a configuration change: %s", body)
 	}
 	_, after := h.do(t, http.MethodGet, "/api/library/manifest", nil)
@@ -66,7 +67,7 @@ func TestEquivalentRootConfigurationKeepsRevisionAndUniqueChildren(t *testing.T)
 	if manifest.Manifest.Statistics.AlbumCount != 2 || manifest.Manifest.Statistics.RootCount != 1 {
 		t.Fatalf("root aliases duplicated scan: %+v", manifest.Manifest.Statistics)
 	}
-	res, body = h.do(t, http.MethodGet, "/api/library/"+manifest.Manifest.Roots[0].ID+"/children?limit=1", nil)
+	res, body = h.do(t, http.MethodGet, "/api/library/"+manifest.Manifest.Roots[0].ID+"/children?limit=1&kind=comic", nil)
 	var page struct {
 		Page services.LibraryPage[services.LibraryNodeSummary] `json:"page"`
 	}
@@ -74,7 +75,7 @@ func TestEquivalentRootConfigurationKeepsRevisionAndUniqueChildren(t *testing.T)
 		t.Fatalf("invalid children page: status=%d body=%s", res.StatusCode, body)
 	}
 	firstID := page.Page.Items[0].ID
-	res, body = h.do(t, http.MethodGet, "/api/library/"+manifest.Manifest.Roots[0].ID+"/children?limit=1&cursor="+page.Page.NextCursor, nil)
+	res, body = h.do(t, http.MethodGet, "/api/library/"+manifest.Manifest.Roots[0].ID+"/children?limit=1&kind=comic&cursor="+page.Page.NextCursor, nil)
 	page.Page = services.LibraryPage[services.LibraryNodeSummary]{}
 	if res.StatusCode != http.StatusOK || json.Unmarshal(body, &page) != nil || len(page.Page.Items) != 1 || page.Page.Items[0].ID == firstID || page.Page.NextCursor != "" {
 		t.Fatalf("aliases duplicated paginated child IDs: status=%d body=%s", res.StatusCode, body)

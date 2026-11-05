@@ -6,17 +6,12 @@ import (
 	"time"
 )
 
-// MediaKind 区分活动记录的媒体语义。图片保存相册页码，视频保存单个文件的播放时间。
+// MediaKind 区分活动记录的媒体语义。图片保存漫画读到第几页，视频保存单个文件的播放时间。
 type MediaKind string
 
 const (
 	// MediaKindImage 是漫画阅读进度：一本漫画读到第几页。
 	MediaKindImage MediaKind = "image"
-	// MediaKindPhoto 是照片浏览进度：照片墙里最后看到第几张。
-	//
-	// 它与漫画进度分开存：同一本相册可以在两种用途之间切换，
-	// 照片浏览到第 12 张不应该变成漫画读到第 12 页。
-	MediaKindPhoto MediaKind = "photo"
 	// MediaKindVideo 是视频播放位置。
 	MediaKindVideo MediaKind = "video"
 )
@@ -29,10 +24,10 @@ const (
 	ActivityCompleted  ActivityStatus = "completed"
 )
 
-// Activity 统一表示图片阅读、照片浏览与视频播放活动。
+// Activity 统一表示漫画阅读与视频播放活动。
 //
 // 非视频活动的唯一键是 albumId + mediaKind；视频活动再加 itemId，
-// 因此同一混合相册的图片页码与每个视频的播放位置互不覆盖。
+// 因此同一混合相册的漫画页码与每个视频的播放位置互不覆盖。
 type Activity struct {
 	AlbumID    string         `json:"albumId"`
 	MediaKind  MediaKind      `json:"mediaKind"`
@@ -63,7 +58,7 @@ func NormalizeActivity(activity Activity) (Activity, error) {
 		return Activity{}, errors.New("invalid activity album id")
 	}
 	switch activity.MediaKind {
-	case MediaKindImage, MediaKindPhoto:
+	case MediaKindImage:
 		if activity.ItemID != "" || activity.PageCount <= 0 || activity.PageIndex < 0 ||
 			activity.PageIndex >= activity.PageCount || activity.PositionMS != 0 || activity.DurationMS != 0 {
 			return Activity{}, errors.New("invalid image activity")
@@ -96,7 +91,7 @@ func (identity ActivityIdentity) Key() (string, bool) {
 		return "", false
 	}
 	switch identity.MediaKind {
-	case MediaKindImage, MediaKindPhoto:
+	case MediaKindImage:
 		if identity.ItemID != "" {
 			return "", false
 		}

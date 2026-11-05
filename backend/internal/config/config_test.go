@@ -89,7 +89,8 @@ func TestLoadFile_MissingReturnsDefault(t *testing.T) {
 func TestLoadFile_OverridesDefaults(t *testing.T) {
 	path := writeTempYAML(t, `
 mediaRoots:
-  - 'D:\photos'
+  - path: 'D:\photos'
+    kind: photo
 port: 9090
 accessMode: lan
 accessToken: 0123456789abcdef0123456789abcdef
@@ -179,11 +180,11 @@ func TestValidate(t *testing.T) {
 		wantErr bool
 	}{
 		{"empty_root", func(c *Config) { c.MediaRoots = nil }, false},
-		{"missing_root", func(c *Config) { c.MediaRoots = []string{filepath.Join(dir, "nope")} }, false},
+		{"missing_root", func(c *Config) { c.MediaRoots = []MediaRoot{{Path: filepath.Join(dir, "nope"), Kind: DefaultMediaRootKind}} }, false},
 		{"file_not_dir", func(c *Config) {
 			f := filepath.Join(dir, "f.txt")
 			os.WriteFile(f, []byte("x"), 0o644)
-			c.MediaRoots = []string{f}
+			c.MediaRoots = []MediaRoot{{Path: f, Kind: DefaultMediaRootKind}}
 		}, false},
 		{"bad_port_low", func(c *Config) { c.Port = 0 }, true},
 		{"bad_port_high", func(c *Config) { c.Port = 70000 }, true},
@@ -204,11 +205,11 @@ func TestValidate(t *testing.T) {
 		{"lan_with_strong_token", func(c *Config) {
 			c.AccessMode = AccessModeLAN
 			c.AccessToken = "0123456789abcdef0123456789abcdef"
-			c.MediaRoots = []string{dir}
+			c.MediaRoots = []MediaRoot{{Path: dir, Kind: DefaultMediaRootKind}}
 		}, false},
 		{"bad_thumb_w", func(c *Config) { c.ThumbSizeW = 0 }, true},
 		{"bad_thumb_h", func(c *Config) { c.ThumbSizeH = -1 }, true},
-		{"ok", func(c *Config) { c.MediaRoots = []string{dir} }, false},
+		{"ok", func(c *Config) { c.MediaRoots = []MediaRoot{{Path: dir, Kind: DefaultMediaRootKind}} }, false},
 	}
 
 	for _, tc := range cases {
@@ -235,7 +236,11 @@ func TestAddr(t *testing.T) {
 
 func TestEmptyRootDoesNotBecomeWorkingDirectory(t *testing.T) {
 	cfg := Default()
-	cfg.MediaRoots = []string{"", " ", "\t"}
+	cfg.MediaRoots = []MediaRoot{
+		{Path: "", Kind: DefaultMediaRootKind},
+		{Path: " ", Kind: DefaultMediaRootKind},
+		{Path: "\t", Kind: DefaultMediaRootKind},
+	}
 	if roots := cfg.Roots(); len(roots) != 0 {
 		t.Fatalf("blank roots resolved to a directory: %v", roots)
 	}

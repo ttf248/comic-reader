@@ -43,6 +43,16 @@ type harness struct {
 	runner  *services.AsyncScanRunner
 }
 
+// mediaRootsOf 把路径列表转成带内容属性的媒体根条目。
+// 集成测试只关心目录是否被扫描，不区分照片与漫画，因此统一用默认属性。
+func mediaRootsOf(paths []string) []config.MediaRoot {
+	entries := make([]config.MediaRoot, 0, len(paths))
+	for _, path := range paths {
+		entries = append(entries, config.MediaRoot{Path: path, Kind: config.DefaultMediaRootKind})
+	}
+	return entries
+}
+
 func newHarness(t *testing.T) *harness {
 	t.Helper()
 	// 使用自定义可清理的临时目录，避开 fasthttp 文件句柄延迟释放导致的
@@ -81,7 +91,7 @@ func newHarness(t *testing.T) *harness {
 
 	// config.Manager 持有根路径，便于 handler 拿到动态根
 	mgr := config.NewManagerWith(&config.Config{
-		MediaRoots:      []string{root},
+		MediaRoots:      []config.MediaRoot{{Path: root, Kind: string(models.ContentKindComic)}},
 		Host:            "127.0.0.1",
 		Port:            8080,
 		AccessMode:      config.AccessModeLocal,
@@ -116,6 +126,10 @@ func newHarness(t *testing.T) *harness {
 	runner := services.NewAsyncScanRunner()
 	t.Cleanup(func() { _ = runner.Shutdown(context.Background()) })
 	catalog := services.NewResourceCatalog()
+	// 内容属性按目录设置：这套夹具装的是漫画卷，因此根目录是漫画目录。
+	catalog.SetContentKindPolicy(services.NewContentKindPolicy([]services.RootKind{
+		{Path: root, Kind: models.ContentKindComic},
+	}))
 	unreadIndex := services.NewUnreadLibraryIndex()
 	runner.SetCatalog(catalog)
 	prefsStore := store.NewPrefsStore(prefs)
@@ -324,7 +338,7 @@ func TestPagedLibraryFlowAfterScan(t *testing.T) {
 		t.Fatalf("unexpected manifest: %+v", manifest.Manifest)
 	}
 
-	res, body = h.do(t, http.MethodGet, "/api/library/"+rootID+"/children?limit=1", nil)
+	res, body = h.do(t, http.MethodGet, "/api/library/"+rootID+"/children?limit=1&kind=comic", nil)
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("children status=%d body=%s", res.StatusCode, body)
 	}
@@ -342,7 +356,7 @@ func TestPagedLibraryFlowAfterScan(t *testing.T) {
 		t.Fatalf("children page exposed absolute root: %s", body)
 	}
 
-	res, body = h.do(t, http.MethodGet, "/api/library/activity-summary", nil)
+	res, body = h.do(t, http.MethodGet, "/api/library/activity-summary?kind=comic", nil)
 	if res.StatusCode != http.StatusOK || bytes.Contains(body, []byte(h.root)) {
 		t.Fatalf("activity summary status=%d body=%s", res.StatusCode, body)
 	}
@@ -353,7 +367,7 @@ func TestPagedLibraryFlowAfterScan(t *testing.T) {
 		t.Fatalf("invalid activity summary: %s err=%v", body, err)
 	}
 
-	res, body = h.do(t, http.MethodGet, "/api/library/dashboard", nil)
+	res, body = h.do(t, http.MethodGet, "/api/library/dashboard?kind=comic", nil)
 	if res.StatusCode != http.StatusOK || bytes.Contains(body, []byte(h.root)) {
 		t.Fatalf("library dashboard status=%d body=%s", res.StatusCode, body)
 	}
@@ -364,7 +378,7 @@ func TestPagedLibraryFlowAfterScan(t *testing.T) {
 		t.Fatalf("invalid library dashboard: %s err=%v", body, err)
 	}
 
-	res, body = h.do(t, http.MethodGet, "/api/library/unread?limit=1", nil)
+	res, body = h.do(t, http.MethodGet, "/api/library/unread?limit=1&kind=comic", nil)
 	if res.StatusCode != http.StatusOK || bytes.Contains(body, []byte(h.root)) {
 		t.Fatalf("unread page status=%d body=%s", res.StatusCode, body)
 	}
@@ -375,12 +389,12 @@ func TestPagedLibraryFlowAfterScan(t *testing.T) {
 		t.Fatalf("invalid unread page: %s err=%v", body, err)
 	}
 
-	res, body = h.do(t, http.MethodGet, "/api/albums/random?scope=unread", nil)
+	res, body = h.do(t, http.MethodGet, "/api/albums/random?scope=unread&kind=comic", nil)
 	if res.StatusCode != http.StatusOK || bytes.Contains(body, []byte(h.root)) {
 		t.Fatalf("random unread status=%d body=%s", res.StatusCode, body)
 	}
 
-	res, body = h.do(t, http.MethodGet, "/api/search?q=作者A", nil)
+	res, body = h.do(t, http.MethodGet, "/api/search?q=作者A&kind=comic", nil)
 	if res.StatusCode != http.StatusOK || bytes.Contains(body, []byte(h.root)) {
 		t.Fatalf("search status=%d body=%s", res.StatusCode, body)
 	}
@@ -429,7 +443,7 @@ func TestPagedLibraryFlowAfterScan(t *testing.T) {
 		t.Fatalf("invalid node query: %s err=%v", body, err)
 	}
 
-	res, body = h.do(t, http.MethodGet, "/api/tags?limit=1", nil)
+	res, body = h.do(t, http.MethodGet, "/api/tags?limit=1&kind=comic", nil)
 	if res.StatusCode != http.StatusOK {
 		t.Fatalf("tags status=%d body=%s", res.StatusCode, body)
 	}
@@ -439,7 +453,7 @@ func TestPagedLibraryFlowAfterScan(t *testing.T) {
 	if err := json.Unmarshal(body, &tags); err != nil || len(tags.Page.Items) != 1 || tags.Page.Items[0].Tag != "作者A" {
 		t.Fatalf("invalid tags page: %s err=%v", body, err)
 	}
-	res, body = h.do(t, http.MethodGet, "/api/tags/"+url.PathEscape(tags.Page.Items[0].Tag)+"/albums?limit=1", nil)
+	res, body = h.do(t, http.MethodGet, "/api/tags/"+url.PathEscape(tags.Page.Items[0].Tag)+"/albums?limit=1&kind=comic", nil)
 	var tagged struct {
 		Page services.LibraryPage[services.LibraryNodeSummary] `json:"page"`
 	}
@@ -720,14 +734,24 @@ func TestConfig_Get(t *testing.T) {
 	if res.StatusCode != 200 {
 		t.Fatalf("status=%d body=%s", res.StatusCode, body)
 	}
-	var got map[string]interface{}
-	json.Unmarshal(body, &got)
-	roots, ok := got["mediaRoots"].([]interface{})
-	if !ok || len(roots) != 1 || roots[0] != h.root {
-		t.Errorf("mediaRoots=%v want [%q]", got["mediaRoots"], h.root)
+	var got struct {
+		MediaRoots []struct {
+			Path string `json:"path"`
+			Kind string `json:"kind"`
+		} `json:"mediaRoots"`
+		AllowOsOpen bool `json:"allowOsOpen"`
 	}
-	if got["allowOsOpen"] != false {
-		t.Errorf("allowOsOpen=%v", got["allowOsOpen"])
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.MediaRoots) != 1 || got.MediaRoots[0].Path != h.root {
+		t.Errorf("mediaRoots=%+v want [%q]", got.MediaRoots, h.root)
+	}
+	if got.MediaRoots[0].Kind != string(models.ContentKindComic) {
+		t.Errorf("media root kind=%q, want %q", got.MediaRoots[0].Kind, models.ContentKindComic)
+	}
+	if got.AllowOsOpen != false {
+		t.Errorf("allowOsOpen=%v", got.AllowOsOpen)
 	}
 }
 
@@ -1006,7 +1030,7 @@ func TestVideoStream_FaststartRemux(t *testing.T) {
 	t.Cleanup(func() { os.RemoveAll(rootDir) })
 
 	mgr := config.NewManagerWith(&config.Config{
-		MediaRoots:      []string{rootDir},
+		MediaRoots:      []config.MediaRoot{{Path: rootDir, Kind: config.DefaultMediaRootKind}},
 		Host:            "127.0.0.1",
 		Port:            8080,
 		CacheDir:        cache,

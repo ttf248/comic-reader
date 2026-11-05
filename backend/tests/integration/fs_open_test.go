@@ -46,7 +46,7 @@ func newFsOpenHarness(t *testing.T) *fsOpenHarness {
 	catalog := services.NewResourceCatalog()
 	catalog.Publish(result, []string{root})
 	cfg := config.Default()
-	cfg.MediaRoots = []string{root}
+	cfg.MediaRoots = []config.MediaRoot{{Path: root, Kind: config.DefaultMediaRootKind}}
 	cfg.CacheDir = t.TempDir()
 	cfg.StaticDir = ""
 	cfg.AllowOsOpen = true
@@ -153,7 +153,7 @@ func TestFsOpenRejectsDirectoryLinksAfterScan(t *testing.T) {
 func TestFsOpenRootChangesInvalidateOldCatalogPaths(t *testing.T) {
 	h := newFsOpenHarness(t)
 	id := h.catalog.ExternalID(h.file, services.ResourceFile)
-	response, body := doHTTPJSON(t, h.app, http.MethodPut, "http://127.0.0.1/api/config", map[string]any{"mediaRoots": []string{t.TempDir()}})
+	response, body := doHTTPJSON(t, h.app, http.MethodPut, "http://127.0.0.1/api/config", map[string]any{"mediaRoots": []config.MediaRoot{{Path: t.TempDir(), Kind: config.DefaultMediaRootKind}}})
 	requireFsResponse(t, response.StatusCode, body, http.StatusOK, "")
 	if _, ok := h.catalog.Lookup(id); !ok {
 		t.Fatal("test must retain the old scan snapshot")

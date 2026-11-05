@@ -5,6 +5,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/tianlongxiang/local-gallery/internal/models"
 )
 
 func TestScanEquivalentRootSpellingsProduceOneLibrary(t *testing.T) {
@@ -29,6 +31,9 @@ func TestScanEquivalentRootSpellingsProduceOneLibrary(t *testing.T) {
 		t.Fatalf("aliases duplicated library: roots=%v albums=%d", result.Roots, result.AlbumCount)
 	}
 	catalog := NewResourceCatalog()
+	catalog.SetContentKindPolicy(NewContentKindPolicy([]RootKind{
+		{Path: root, Kind: models.ContentKindComic},
+	}))
 	catalog.Publish(result, paths)
 	manifest, err := BuildLibraryManifest(catalog.Acquire())
 	if err != nil {
@@ -37,7 +42,7 @@ func TestScanEquivalentRootSpellingsProduceOneLibrary(t *testing.T) {
 	if manifest.Statistics.RootCount != 1 || manifest.Statistics.AlbumCount != 1 {
 		t.Fatalf("aliases duplicated manifest: %+v", manifest.Statistics)
 	}
-	page, err := PageLibraryChildren(catalog.Acquire(), manifest.Roots[0].ID, LibraryKindAll, "", 10)
+	page, err := PageLibraryChildren(catalog.Acquire(), manifest.Roots[0].ID, LibraryKindComic, "", 10)
 	if err != nil || page.Total != 1 || len(page.Items) != 1 {
 		t.Fatalf("aliases duplicated children: total=%d items=%d err=%v", page.Total, len(page.Items), err)
 	}

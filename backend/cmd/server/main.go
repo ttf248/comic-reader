@@ -32,6 +32,7 @@ import (
 	"github.com/tianlongxiang/local-gallery/internal/handlers"
 	"github.com/tianlongxiang/local-gallery/internal/httputil"
 	"github.com/tianlongxiang/local-gallery/internal/middleware"
+	"github.com/tianlongxiang/local-gallery/internal/models"
 	"github.com/tianlongxiang/local-gallery/internal/services"
 	"github.com/tianlongxiang/local-gallery/internal/store"
 )
@@ -158,21 +159,21 @@ func main() {
 	}
 	defer func() { _ = mediaDimensions.Close() }()
 
-	// 内容用途（照片墙 / 漫画阅读器）：默认策略来自配置，个别相册可手动覆盖。
-	// 两者只影响「这本相册用什么方式打开」，不影响扫描结果，因此可热更新。
-	contentKinds := services.NewContentKindStore(cacheLayout.ContentKindsPath)
-	if err := contentKinds.Load(); err != nil {
-		log.Printf("警告：加载内容用途覆盖失败 %v", err)
-	}
+	// 内容属性（照片 / 漫画）：由媒体根目录的属性决定，目录下的相册与集合
+	// 一并继承。属性只影响「这本相册用什么方式打开」与列表归属，
+	// 不影响扫描结果，因此可热更新。
 	contentKindPolicy := func(snapshot *config.Config) services.ContentKindPolicy {
-		return services.NewContentKindPolicy(
-			snapshot.DefaultContentKind,
-			snapshot.Roots(),
-			snapshot.RootContentKinds,
-		)
+		roots := snapshot.NormalizedRoots()
+		entries := make([]services.RootKind, 0, len(roots))
+		for _, root := range roots {
+			entries = append(entries, services.RootKind{
+				Path: root.Path,
+				Kind: models.NormalizeContentKind(root.Kind),
+			})
+		}
+		return services.NewContentKindPolicy(entries)
 	}
 	resourceCatalog.SetContentKindPolicy(contentKindPolicy(cfg))
-	resourceCatalog.SetContentKindOverrides(contentKinds.Snapshot())
 	mgr.OnChange("content_kind", func(snapshot *config.Config) {
 		resourceCatalog.SetContentKindPolicy(contentKindPolicy(snapshot))
 	})
@@ -348,10 +349,6 @@ func main() {
 	// file 必须是 path 子路径 + 真实存在的文件；越权请求会被 400 拒绝。
 	api.Put("/albums/:id/cover", resourceParam, handlers.AlbumSetCoverHandler(scanCache, coverOverrides, resourceCatalog))
 	api.Delete("/albums/:id/cover", resourceParam, handlers.AlbumClearCoverHandler(scanCache, coverOverrides, resourceCatalog))
-	// 内容用途：用户手动切换相册的打开方式（照片墙 / 漫画阅读器）。
-	api.Get("/albums/:id/content-kind", resourceParam, handlers.AlbumContentKindHandler(resourceCatalog, contentKinds, activities))
-	api.Put("/albums/:id/content-kind", resourceParam, handlers.AlbumContentKindHandler(resourceCatalog, contentKinds, activities))
-	api.Delete("/albums/:id/content-kind", resourceParam, handlers.AlbumContentKindHandler(resourceCatalog, contentKinds, activities))
 	api.Get("/search", handlers.SearchHandler(resourceCatalog))
 	api.Get("/tags", handlers.LibraryTagsPageHandler(resourceCatalog))
 	api.Get("/tags/:tag/albums", handlers.TagAlbumsPageHandler(resourceCatalog))

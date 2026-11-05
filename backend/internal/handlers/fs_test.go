@@ -32,7 +32,7 @@ func fsOpenFixture(t *testing.T) (string, string, *services.ResourceCatalog, *co
 	}
 	catalog.Publish(result, []string{root})
 	cfg := config.Default()
-	cfg.MediaRoots = []string{root}
+	cfg.MediaRoots = []config.MediaRoot{{Path: root, Kind: config.DefaultMediaRootKind}}
 	cfg.AllowOsOpen = true
 	return root, picture, catalog, config.NewManagerWith(cfg, "")
 }

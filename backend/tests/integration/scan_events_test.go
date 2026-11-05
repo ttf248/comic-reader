@@ -101,7 +101,7 @@ func TestMultiRootScanProgressMatchesPublishedLibrary(t *testing.T) {
 	for _, name := range []string{"one", "two", "three"} {
 		writePNG(t, filepath.Join(second, name, "page.png"), 1, 1)
 	}
-	response, body := h.do(t, http.MethodPut, "/api/config", map[string]any{"mediaRoots": []string{h.root, second}})
+	response, body := h.do(t, http.MethodPut, "/api/config", map[string]any{"mediaRoots": mediaRootsOf([]string{h.root, second})})
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("configure roots: %d %s", response.StatusCode, body)
 	}

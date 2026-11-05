@@ -51,23 +51,68 @@ const (
 // 3) 都没有 → Available()=false,视频封面回退到客户端抽帧
 const DefaultFFmpegPath = "../bin/ffmpeg/windows/amd64/ffmpeg.exe"
 
+// MediaRoot 是一个媒体根目录及其内容属性。
+//
+// 属性（Kind）是这个目录里内容的性质："photo" 照片或 "comic" 漫画，
+// 两者互斥——一个目录只能是一种。目录下的相册与集合继承它。
+type MediaRoot struct {
+	Path string `yaml:"path" json:"path"`
+	Kind string `yaml:"kind" json:"kind"`
+}
+
+// UnmarshalYAML 解析媒体根条目。
+//
+// 条目必须是「路径 + 属性」的映射：属性由目录自己决定，不能只写路径。
+// 旧写法（直接写一个路径字符串）会得到一条指明新写法的错误，
+// 而不是被悄悄当成照片目录。
+func (r *MediaRoot) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind == yaml.ScalarNode {
+		return fmt.Errorf(
+			"mediaRoots 条目必须写成 {path: \"...\", kind: photo|comic} 映射，不再支持只写路径",
+		)
+	}
+	type plain MediaRoot
+	var value plain
+	if err := node.Decode(&value); err != nil {
+		return err
+	}
+	*r = MediaRoot(value)
+	return nil
+}
+
+// DefaultMediaRootKind 是目录未显式写属性时使用的属性。
+//
+// 属性只有两种且互斥：一个目录要么是照片目录，要么是漫画目录。
+const DefaultMediaRootKind = "photo"
+
+// NormalizeMediaRootKind 归一化目录属性；空值或非法值回落到默认属性。
+func NormalizeMediaRootKind(value string) string {
+	switch strings.TrimSpace(value) {
+	case "photo", "comic":
+		return strings.TrimSpace(value)
+	default:
+		return DefaultMediaRootKind
+	}
+}
+
 // Config 后端总配置（YAML 字段保持 camelCase）。
 //
-// 媒体根只使用 `mediaRoots` 数组字段，避免多个配置入口产生歧义。
+// 媒体根只使用 `mediaRoots` 数组字段，避免多个配置入口产生歧义；
+// 每个元素同时携带目录路径与它的内容属性。
 type Config struct {
-	MediaRoots      []string `yaml:"mediaRoots"`
-	Host            string   `yaml:"host"`
-	Port            int      `yaml:"port"`
-	AccessMode      string   `yaml:"accessMode"`
-	AccessToken     string   `yaml:"accessToken" json:"-"`
-	AllowOsOpen     bool     `yaml:"allowOsOpen"`
-	CacheDir        string   `yaml:"cacheDir"`
-	ThumbSizeW      int      `yaml:"thumbSizeW"`
-	ThumbSizeH      int      `yaml:"thumbSizeH"`
-	ThumbCacheSize  int      `yaml:"thumbCacheSize"`
-	CacheMaxAgeDays int      `yaml:"cacheMaxAgeDays"`
-	CacheMaxSizeMB  int64    `yaml:"cacheMaxSizeMB"`
-	StaticDir       string   `yaml:"staticDir"`
+	MediaRoots      []MediaRoot `yaml:"mediaRoots"`
+	Host            string      `yaml:"host"`
+	Port            int         `yaml:"port"`
+	AccessMode      string      `yaml:"accessMode"`
+	AccessToken     string      `yaml:"accessToken" json:"-"`
+	AllowOsOpen     bool        `yaml:"allowOsOpen"`
+	CacheDir        string      `yaml:"cacheDir"`
+	ThumbSizeW      int         `yaml:"thumbSizeW"`
+	ThumbSizeH      int         `yaml:"thumbSizeH"`
+	ThumbCacheSize  int         `yaml:"thumbCacheSize"`
+	CacheMaxAgeDays int         `yaml:"cacheMaxAgeDays"`
+	CacheMaxSizeMB  int64       `yaml:"cacheMaxSizeMB"`
+	StaticDir       string      `yaml:"staticDir"`
 
 	// FFmpegPath ffmpeg 可执行文件绝对路径。空 → 走 DefaultFFmpegPath。
 	// 留空且 DefaultFFmpegPath 不存在 → 服务端抽帧关闭,视频封面仍由浏览器
@@ -88,28 +133,63 @@ type Config struct {
 	SystemFiles     []string `yaml:"systemFiles"`
 	ExcludePatterns []string `yaml:"excludePatterns"`
 
-	// DefaultContentKind 是相册的全局默认浏览用途："photo"（照片墙）或
-	// "comic"（漫画阅读器）。缺省为 photo。
-	//
-	// RootContentKinds 是「媒体根 → 用途」的按根默认值，键是媒体根路径
-	// （相对路径按进程 CWD 解析）。单个相册可以在界面上手动切换并覆盖它。
-	//
-	// 用途只决定「这本相册用什么方式打开」，与文件是图片还是视频无关。
-	DefaultContentKind string            `yaml:"defaultContentKind"`
-	RootContentKinds   map[string]string `yaml:"rootContentKinds"`
 }
 
 // Roots 返回规范化后的所有媒体根目录（绝对路径、去空、去重、保序）。
 //
 // 永远返回非 nil 切片（避免下游 nil 检查）。
 func (c *Config) Roots() []string {
-	return pathutil.NormalizeRoots(c.MediaRoots)
+	roots := c.NormalizedRoots()
+	out := make([]string, 0, len(roots))
+	for _, root := range roots {
+		out = append(out, root.Path)
+	}
+	return out
+}
+
+// NormalizedRoots 返回规范化后的媒体根条目：路径绝对化、去空、去重、保序，
+// 并为每个条目补齐内容属性（未写时用全局默认）。
+//
+// 去重按平台规则折叠大小写（Windows 忽略、其它平台区分），保留首次出现的写法。
+func (c *Config) NormalizedRoots() []MediaRoot {
+	result := make([]MediaRoot, 0, len(c.MediaRoots))
+	seen := make(map[string]struct{}, len(c.MediaRoots))
+	for _, root := range c.MediaRoots {
+		path := strings.TrimSpace(root.Path)
+		if path == "" {
+			continue
+		}
+		absolute, err := filepath.Abs(path)
+		if err != nil {
+			// 保留无法绝对化的输入，让后续路径校验报告错误，不能静默漏掉一个根。
+			absolute = filepath.Clean(path)
+		}
+		key := pathutil.RootKey(absolute)
+		if _, exists := seen[key]; exists {
+			continue
+		}
+		seen[key] = struct{}{}
+		result = append(result, MediaRoot{
+			Path: absolute,
+			Kind: NormalizeMediaRootKind(root.Kind),
+		})
+	}
+	return result
+}
+
+// RootKinds 返回「规范化根路径 → 内容属性」映射，供用途策略使用。
+func (c *Config) RootKinds() map[string]string {
+	kinds := make(map[string]string)
+	for _, root := range c.NormalizedRoots() {
+		kinds[root.Path] = root.Kind
+	}
+	return kinds
 }
 
 // Default 返回内置默认配置（缓存目录指向 CWD/.local-gallery）。
 func Default() *Config {
 	return &Config{
-		MediaRoots:      []string{filepath.Join(".", "media")},
+		MediaRoots:      []MediaRoot{{Path: filepath.Join(".", "media"), Kind: DefaultMediaRootKind}},
 		Host:            "127.0.0.1",
 		Port:            8080,
 		AccessMode:      AccessModeLocal,
@@ -129,9 +209,6 @@ func Default() *Config {
 		SkipHidden:      true,
 		SystemFiles:     nil,
 		ExcludePatterns: nil,
-		// 内容用途默认按照片墙打开；漫画库在设置页按媒体根单独指定。
-		DefaultContentKind: "photo",
-		RootContentKinds:   nil,
 	}
 }
 
@@ -187,7 +264,7 @@ func LoadFile(path string) (*Config, error) {
 // MediaRoots 非 nil 表示 YAML 显式提供，空数组表示尚未配置媒体库。
 func mergeFile(dst, file *Config) {
 	if file.MediaRoots != nil {
-		dst.MediaRoots = append([]string(nil), file.MediaRoots...)
+		dst.MediaRoots = append([]MediaRoot(nil), file.MediaRoots...)
 	}
 	if file.Host != "" {
 		dst.Host = file.Host
@@ -240,17 +317,7 @@ func mergeFile(dst, file *Config) {
 	if file.ExcludePatterns != nil {
 		dst.ExcludePatterns = append([]string(nil), file.ExcludePatterns...)
 	}
-	// 内容用途:defaultContentKind 非空即覆盖;rootContentKinds 非 nil 即替换
-	// (含显式空 map → 清空按根默认值)。
-	if file.DefaultContentKind != "" {
-		dst.DefaultContentKind = file.DefaultContentKind
-	}
-	if file.RootContentKinds != nil {
-		dst.RootContentKinds = make(map[string]string, len(file.RootContentKinds))
-		for k, v := range file.RootContentKinds {
-			dst.RootContentKinds[k] = v
-		}
-	}
+	// 内容属性随 mediaRoots 条目整体替换，无需单独合并。
 }
 
 // Validate 校验运行参数，不要求媒体目录在线；管理员仍可进入设置页修复目录。
@@ -281,12 +348,9 @@ func (c *Config) Validate() error {
 	if c.CacheMaxSizeMB < 0 || c.CacheMaxSizeMB > 1048576 {
 		return errors.New("cacheMaxSizeMB must be between 0 and 1048576")
 	}
-	if c.DefaultContentKind != "" && c.DefaultContentKind != "photo" && c.DefaultContentKind != "comic" {
-		return errors.New("defaultContentKind must be photo or comic")
-	}
-	for path, kind := range c.RootContentKinds {
-		if kind != "photo" && kind != "comic" {
-			return fmt.Errorf("rootContentKinds[%s] must be photo or comic", path)
+	for _, root := range c.MediaRoots {
+		if root.Kind != "" && root.Kind != "photo" && root.Kind != "comic" {
+			return fmt.Errorf("mediaRoots kind must be photo or comic (got %q)", root.Kind)
 		}
 	}
 	return nil

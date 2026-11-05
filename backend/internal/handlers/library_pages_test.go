@@ -25,18 +25,21 @@ func TestLibraryPageHandlersCursorStatusAndResponseShape(t *testing.T) {
 	result := &models.ScanResult{
 		Roots: []string{root}, AlbumCount: 2,
 		Albums: []models.Album{
-			{Type: "album", Path: album1Path, Name: "album1", ImageFiles: []string{file1}, ImageCount: 1, CoverImage: file1, CoverKind: "image"},
-			{Type: "album", Path: album2Path, Name: "album2", VideoFiles: []string{file2}, VideoCount: 1, CoverImage: file2, CoverKind: "video"},
+			{Type: "album", Path: album1Path, Name: "album1", SourceRoot: root, ImageFiles: []string{file1}, ImageCount: 1, CoverImage: file1, CoverKind: "image"},
+			{Type: "album", Path: album2Path, Name: "album2", SourceRoot: root, VideoFiles: []string{file2}, VideoCount: 1, CoverImage: file2, CoverKind: "video"},
 		},
 		SmartCollections: []models.SmartCollection{{
 			Type: "smartCollection", Tag: "收藏", AlbumCount: 2,
 			Albums: []models.Album{
-				{Type: "album", Path: album1Path, Name: "album1", ImageFiles: []string{file1}, ImageCount: 1, CoverImage: file1},
-				{Type: "album", Path: album2Path, Name: "album2", VideoFiles: []string{file2}, VideoCount: 1, CoverImage: file2},
+				{Type: "album", Path: album1Path, Name: "album1", SourceRoot: root, ImageFiles: []string{file1}, ImageCount: 1, CoverImage: file1},
+				{Type: "album", Path: album2Path, Name: "album2", SourceRoot: root, VideoFiles: []string{file2}, VideoCount: 1, CoverImage: file2},
 			}, CoverImage: file1,
 		}},
 	}
 	catalog := services.NewResourceCatalog()
+	catalog.SetContentKindPolicy(services.NewContentKindPolicy([]services.RootKind{
+		{Path: root, Kind: models.ContentKindComic},
+	}))
 	catalog.Publish(result, []string{root})
 	rootID := catalog.ExternalID(root, services.ResourceRoot)
 	albumID := catalog.ExternalID(album1Path, services.ResourceAlbum)
@@ -70,7 +73,7 @@ func TestLibraryPageHandlersCursorStatusAndResponseShape(t *testing.T) {
 	}
 	assertHandlerBodyHasNoAbsolutePath(t, manifestResp.Body)
 
-	firstResp, err := app.Test(httptest.NewRequest("GET", "/api/library/"+rootID+"/children?limit=1", nil))
+	firstResp, err := app.Test(httptest.NewRequest("GET", "/api/library/"+rootID+"/children?limit=1&kind=comic", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -99,7 +102,7 @@ func TestLibraryPageHandlersCursorStatusAndResponseShape(t *testing.T) {
 	}
 	assertHandlerBodyHasNoAbsolutePath(t, mediaResp.Body)
 
-	randomResp, err := app.Test(httptest.NewRequest("GET", "/api/albums/random", nil))
+	randomResp, err := app.Test(httptest.NewRequest("GET", "/api/albums/random?kind=comic", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +116,7 @@ func TestLibraryPageHandlersCursorStatusAndResponseShape(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	summaryResp, err := app.Test(httptest.NewRequest("GET", "/api/library/activity-summary", nil))
+	summaryResp, err := app.Test(httptest.NewRequest("GET", "/api/library/activity-summary?kind=comic", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +134,7 @@ func TestLibraryPageHandlersCursorStatusAndResponseShape(t *testing.T) {
 		t.Fatalf("activity summary=%+v", summaryBody.Summary)
 	}
 
-	randomUnreadResp, err := app.Test(httptest.NewRequest("GET", "/api/albums/random?scope=unread", nil))
+	randomUnreadResp, err := app.Test(httptest.NewRequest("GET", "/api/albums/random?scope=unread&kind=comic", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -149,7 +152,7 @@ func TestLibraryPageHandlersCursorStatusAndResponseShape(t *testing.T) {
 		t.Fatalf("started album appeared in random unread=%+v", randomUnreadBody.Album)
 	}
 
-	dashboardResp, err := app.Test(httptest.NewRequest("GET", "/api/library/dashboard", nil))
+	dashboardResp, err := app.Test(httptest.NewRequest("GET", "/api/library/dashboard?kind=comic", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +170,7 @@ func TestLibraryPageHandlersCursorStatusAndResponseShape(t *testing.T) {
 		t.Fatalf("dashboard=%+v", dashboardBody.Dashboard)
 	}
 
-	unreadResp, err := app.Test(httptest.NewRequest("GET", "/api/library/unread", nil))
+	unreadResp, err := app.Test(httptest.NewRequest("GET", "/api/library/unread?kind=comic", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +211,7 @@ func TestLibraryPageHandlersCursorStatusAndResponseShape(t *testing.T) {
 		t.Fatalf("node query=%+v", queryBody.Result)
 	}
 
-	searchResp, err := app.Test(httptest.NewRequest("GET", "/api/search?q=album1", nil))
+	searchResp, err := app.Test(httptest.NewRequest("GET", "/api/search?q=album1&kind=comic", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +220,7 @@ func TestLibraryPageHandlersCursorStatusAndResponseShape(t *testing.T) {
 	}
 	assertHandlerBodyHasNoAbsolutePath(t, searchResp.Body)
 
-	invalidResp, err := app.Test(httptest.NewRequest("GET", "/api/tags?cursor=not-a-cursor", nil))
+	invalidResp, err := app.Test(httptest.NewRequest("GET", "/api/tags?cursor=not-a-cursor&kind=comic", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +239,7 @@ func TestLibraryPageHandlersCursorStatusAndResponseShape(t *testing.T) {
 	// 资源已从新 revision 消失时，也必须先识别旧游标并返回 409；因此
 	// 这两条纯目录读取路由不应挂 ResourceParam 文件系统中间件。
 	catalog.Publish(&models.ScanResult{Roots: []string{root}}, []string{root})
-	staleResp, err := app.Test(httptest.NewRequest("GET", "/api/library/"+rootID+"/children?limit=1&cursor="+first.Page.NextCursor, nil))
+	staleResp, err := app.Test(httptest.NewRequest("GET", "/api/library/"+rootID+"/children?limit=1&kind=comic&cursor="+first.Page.NextCursor, nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -252,7 +255,7 @@ func TestLibraryPageHandlersCursorStatusAndResponseShape(t *testing.T) {
 		t.Fatalf("stale cursor body=%+v", staleBody)
 	}
 
-	badLimitResp, err := app.Test(httptest.NewRequest("GET", "/api/tags?limit=nope", nil))
+	badLimitResp, err := app.Test(httptest.NewRequest("GET", "/api/tags?limit=nope&kind=comic", nil))
 	if err != nil {
 		t.Fatal(err)
 	}

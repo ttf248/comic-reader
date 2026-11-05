@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"sync"
 	"sync/atomic"
 
@@ -221,19 +220,13 @@ func cloneConfig(c *Config) *Config {
 	cp := *c
 	// 深拷贝切片，避免外部修改影响内部状态
 	if c.MediaRoots != nil {
-		cp.MediaRoots = append([]string(nil), c.MediaRoots...)
+		cp.MediaRoots = append([]MediaRoot(nil), c.MediaRoots...)
 	}
 	if c.SystemFiles != nil {
 		cp.SystemFiles = append([]string(nil), c.SystemFiles...)
 	}
 	if c.ExcludePatterns != nil {
 		cp.ExcludePatterns = append([]string(nil), c.ExcludePatterns...)
-	}
-	if c.RootContentKinds != nil {
-		cp.RootContentKinds = make(map[string]string, len(c.RootContentKinds))
-		for k, v := range c.RootContentKinds {
-			cp.RootContentKinds[k] = v
-		}
 	}
 	return &cp
 }
@@ -283,15 +276,26 @@ func marshalConfig(cfg *Config) ([]byte, error) {
 		)
 	}
 
-	// mediaRoots 数组
-	roots := cfg.Roots()
+	// mediaRoots 数组：每个条目写 path 与 kind。
+	roots := cfg.NormalizedRoots()
 	rootsNode := &yaml.Node{
 		Kind:    yaml.SequenceNode,
 		Tag:     "!!seq",
 		Content: make([]*yaml.Node, 0, len(roots)),
 	}
 	for _, r := range roots {
-		rootsNode.Content = append(rootsNode.Content, scalarString(r))
+		entry := &yaml.Node{
+			Kind:    yaml.MappingNode,
+			Tag:     "!!map",
+			Content: make([]*yaml.Node, 0, 4),
+		}
+		entry.Content = append(entry.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "path"},
+			scalarString(r.Path),
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "kind"},
+			scalarString(r.Kind),
+		)
+		rootsNode.Content = append(rootsNode.Content, entry)
 	}
 	addKV("mediaRoots", rootsNode)
 
@@ -311,8 +315,6 @@ func marshalConfig(cfg *Config) ([]byte, error) {
 	addKV("skipHidden", scalarBool(cfg.SkipHidden))
 	addKV("systemFiles", stringSliceNode(cfg.SystemFiles))
 	addKV("excludePatterns", stringSliceNode(cfg.ExcludePatterns))
-	addKV("defaultContentKind", scalarString(normalizedDefaultContentKind(cfg.DefaultContentKind)))
-	addKV("rootContentKinds", stringMapNode(cfg.RootContentKinds))
 	return yaml.Marshal(root)
 }
 
@@ -344,41 +346,10 @@ func stringSliceNode(s []string) *yaml.Node {
 	return n
 }
 
-// normalizedDefaultContentKind 把空值补成默认的 photo。
-// 空值只可能来自「代码里手工构造的 Config」，YAML 落盘后总是显式值。
-func normalizedDefaultContentKind(value string) string {
-	if value == "" {
-		return "photo"
-	}
-	return value
-}
-
-// stringMapNode 序列化为 YAML 映射。nil 与空映射都输出空映射 `{}`，
-// 让用户明确「可配置但当前为空」,而不是看上去缺字段。
-func stringMapNode(m map[string]string) *yaml.Node {
-	n := &yaml.Node{
-		Kind:    yaml.MappingNode,
-		Tag:     "!!map",
-		Content: make([]*yaml.Node, 0, len(m)*2),
-	}
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		n.Content = append(n.Content,
-			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: k, Style: yaml.DoubleQuotedStyle},
-			scalarString(m[k]),
-		)
-	}
-	return n
-}
-
 // applyPatch 把 patch 中的显式字段合并到 dst。Set 标志由 ConfigPatch 提供。
 func applyPatch(dst *Config, p *ConfigPatch) {
 	if p.MediaRootsSet {
-		dst.MediaRoots = append([]string(nil), p.MediaRoots...)
+		dst.MediaRoots = append([]MediaRoot(nil), p.MediaRoots...)
 	}
 	if p.HostSet {
 		dst.Host = p.Host
@@ -428,15 +399,6 @@ func applyPatch(dst *Config, p *ConfigPatch) {
 	}
 	if p.ExcludePatternsSet {
 		dst.ExcludePatterns = append([]string(nil), p.ExcludePatterns...)
-	}
-	if p.DefaultContentKindSet {
-		dst.DefaultContentKind = p.DefaultContentKind
-	}
-	if p.RootContentKindsSet {
-		dst.RootContentKinds = make(map[string]string, len(p.RootContentKinds))
-		for k, v := range p.RootContentKinds {
-			dst.RootContentKinds[k] = v
-		}
 	}
 }
 

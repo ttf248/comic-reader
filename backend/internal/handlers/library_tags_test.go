@@ -17,8 +17,8 @@ import (
 func TestTagAlbumsPathDecoding(t *testing.T) {
 	root := t.TempDir()
 	albums := []models.Album{
-		{Type: "album", Path: filepath.Join(root, "one"), Name: "one"},
-		{Type: "album", Path: filepath.Join(root, "two"), Name: "two"},
+		{Type: "album", Path: filepath.Join(root, "one"), Name: "one", SourceRoot: root},
+		{Type: "album", Path: filepath.Join(root, "two"), Name: "two", SourceRoot: root},
 	}
 	labels := []string{"作者A", "作者 A", "C++", "100%", "字面%20", "字面%2F", "字面%25"}
 	result := &models.ScanResult{Roots: []string{root}, Albums: albums, AlbumCount: len(albums)}
@@ -28,12 +28,15 @@ func TestTagAlbumsPathDecoding(t *testing.T) {
 		})
 	}
 	catalog := services.NewResourceCatalog()
+	catalog.SetContentKindPolicy(services.NewContentKindPolicy([]services.RootKind{
+		{Path: root, Kind: models.ContentKindComic},
+	}))
 	catalog.Publish(result, []string{root})
 	app := fiber.New()
 	app.Get("/api/tags/:tag/albums", TagAlbumsPageHandler(catalog))
 	for _, label := range labels {
 		t.Run(label, func(t *testing.T) {
-			response, err := app.Test(httptest.NewRequest("GET", "/api/tags/"+url.PathEscape(label)+"/albums", nil))
+			response, err := app.Test(httptest.NewRequest("GET", "/api/tags/"+url.PathEscape(label)+"/albums?kind=comic", nil))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -52,7 +55,7 @@ func TestTagAlbumsPathDecoding(t *testing.T) {
 	}
 	t.Run("invalid escape", func(t *testing.T) {
 		request := httptest.NewRequest("GET", "/", nil)
-		request.URL.Opaque = "/api/tags/%zz/albums"
+		request.URL.Opaque = "/api/tags/%zz/albums?kind=comic"
 		request.RequestURI = request.URL.Opaque
 		response, err := app.Test(request)
 		if err != nil {

@@ -9,14 +9,15 @@ import (
 	"github.com/tianlongxiang/local-gallery/internal/models"
 )
 
-// kindFixture 是一个混排用途的媒体库：两本照片相册、两本漫画相册，
-// 外加一个装着漫画卷的集合。它用来验证「工作台模式」下的列表过滤。
-//
-// 根目录下有 4 本相册 + 1 个集合；集合里的卷算在漫画一侧。
+// kindFixture 是一个按目录属性分开的媒体库：照片根下两本相册，漫画根下
+// 两本相册与一个装着漫画卷的集合。它用来验证两个工作台的数据隔离：
+// 照片工作台只看到照片根的内容，漫画工作台只看到漫画根的内容。
 type kindFixture struct {
 	catalog       *ResourceCatalog
-	root          string
-	rootID        string
+	photoRoot     string
+	comicRoot     string
+	photoRootID   string
+	comicRootID   string
 	collectionID  string
 	photoAlbumID  string
 	comicAlbumID  string
@@ -26,16 +27,18 @@ type kindFixture struct {
 
 func newKindFixture(t *testing.T) kindFixture {
 	t.Helper()
-	root := t.TempDir()
-	photoPath := filepath.Join(root, "photo")
-	comicPath := filepath.Join(root, "comic")
-	photoTagPath := filepath.Join(root, "photo-tag")
-	comicTagPath := filepath.Join(root, "comic-tag")
-	collectionPath := filepath.Join(root, "shelf")
+	parent := t.TempDir()
+	photoRoot := filepath.Join(parent, "photos")
+	comicRoot := filepath.Join(parent, "comics")
+	photoPath := filepath.Join(photoRoot, "photo")
+	comicPath := filepath.Join(comicRoot, "comic")
+	photoTagPath := filepath.Join(photoRoot, "photo-tag")
+	comicTagPath := filepath.Join(comicRoot, "comic-tag")
+	collectionPath := filepath.Join(comicRoot, "shelf")
 	collectionComicPath := filepath.Join(collectionPath, "volume1")
 
 	// 每本相册 3 张图：在读位置才有「还没翻到最后」的空间。
-	album := func(path, name, tag string) models.Album {
+	album := func(path, name, tag, root string) models.Album {
 		files := []string{
 			filepath.Join(path, "p1.jpg"),
 			filepath.Join(path, "p2.jpg"),
@@ -47,18 +50,18 @@ func newKindFixture(t *testing.T) kindFixture {
 			CoverImage: files[0], CoverKind: "image", Tags: []string{tag},
 		}
 	}
-	photo := album(photoPath, "photo", "风景")
-	comic := album(comicPath, "comic", "漫画")
-	photoTag := album(photoTagPath, "photo-tag", "共同")
-	comicTag := album(comicTagPath, "comic-tag", "共同")
-	volume := album(collectionComicPath, "volume1", "连载")
+	photo := album(photoPath, "photo", "风景", photoRoot)
+	comic := album(comicPath, "comic", "漫画", comicRoot)
+	photoTag := album(photoTagPath, "photo-tag", "共同", photoRoot)
+	comicTag := album(comicTagPath, "comic-tag", "共同", comicRoot)
+	volume := album(collectionComicPath, "volume1", "连载", comicRoot)
 
 	collection := models.Collection{
 		Type: "collection", Path: collectionPath, Name: "shelf", DisplayName: "shelf",
-		SourceRoot: root, Albums: []models.Album{volume}, AlbumCount: 1,
+		SourceRoot: comicRoot, Albums: []models.Album{volume}, AlbumCount: 1,
 	}
 	result := &models.ScanResult{
-		Roots:           []string{root},
+		Roots:           []string{photoRoot, comicRoot},
 		Albums:          []models.Album{photo, comic, photoTag, comicTag},
 		Collections:     []models.Collection{collection},
 		AlbumCount:      5,
@@ -71,17 +74,18 @@ func newKindFixture(t *testing.T) kindFixture {
 		},
 	}
 	catalog := NewResourceCatalog()
-	catalog.Publish(result, []string{root})
-	// 漫画相册与漫画卷显式标成 comic，其余保持全局默认 photo。
-	catalog.SetContentKindOverrides(map[string]models.ContentKind{
-		filepath.Clean(comicPath):           models.ContentKindComic,
-		filepath.Clean(comicTagPath):        models.ContentKindComic,
-		filepath.Clean(collectionComicPath): models.ContentKindComic,
-	})
+	// 属性只按目录设：照片根是照片，漫画根是漫画。
+	catalog.SetContentKindPolicy(NewContentKindPolicy([]RootKind{
+		{Path: photoRoot, Kind: models.ContentKindPhoto},
+		{Path: comicRoot, Kind: models.ContentKindComic},
+	}))
+	catalog.Publish(result, []string{photoRoot, comicRoot})
 	return kindFixture{
 		catalog:       catalog,
-		root:          root,
-		rootID:        catalog.ExternalID(root, ResourceRoot),
+		photoRoot:     photoRoot,
+		comicRoot:     comicRoot,
+		photoRootID:   catalog.ExternalID(photoRoot, ResourceRoot),
+		comicRootID:   catalog.ExternalID(comicRoot, ResourceRoot),
 		collectionID:  catalog.ExternalID(collectionPath, ResourceCollection),
 		photoAlbumID:  catalog.ExternalID(photoPath, ResourceAlbum),
 		comicAlbumID:  catalog.ExternalID(comicPath, ResourceAlbum),
@@ -90,43 +94,49 @@ func newKindFixture(t *testing.T) kindFixture {
 	}
 }
 
-func TestLibraryChildrenFiltersAlbumsByKind(t *testing.T) {
+func TestLibraryChildrenAreIsolatedByRootKind(t *testing.T) {
 	fixture := newKindFixture(t)
 	snapshot := fixture.catalog.Acquire()
 
-	all, err := PageLibraryChildren(snapshot, fixture.rootID, LibraryKindAll, "", 50)
+	photo, err := PageLibraryChildren(snapshot, fixture.photoRootID, LibraryKindPhoto, "", 50)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if all.Total != 5 {
-		t.Fatalf("all children total=%d, want 5", all.Total)
-	}
-
-	photo, err := PageLibraryChildren(snapshot, fixture.rootID, LibraryKindPhoto, "", 50)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// 2 本照片相册 + 1 个集合（集合恒返回）。
-	if photo.Total != 3 {
-		t.Fatalf("photo children total=%d, want 3", photo.Total)
+	if photo.Total != 2 {
+		t.Fatalf("photo children total=%d, want 2", photo.Total)
 	}
 	for _, item := range photo.Items {
-		if item.Kind == string(ResourceAlbum) && item.ContentKind != string(LibraryKindPhoto) {
-			t.Fatalf("photo scope leaked comic album %+v", item)
+		if item.ContentKind != string(LibraryKindPhoto) {
+			t.Fatalf("photo scope leaked a comic node %+v", item)
 		}
 	}
 
-	comic, err := PageLibraryChildren(snapshot, fixture.rootID, LibraryKindComic, "", 50)
+	comic, err := PageLibraryChildren(snapshot, fixture.comicRootID, LibraryKindComic, "", 50)
 	if err != nil {
 		t.Fatal(err)
 	}
+	// 2 本漫画相册 + 1 个漫画集合。
 	if comic.Total != 3 {
 		t.Fatalf("comic children total=%d, want 3", comic.Total)
 	}
 	for _, item := range comic.Items {
-		if item.Kind == string(ResourceAlbum) && item.ContentKind != string(LibraryKindComic) {
-			t.Fatalf("comic scope leaked photo album %+v", item)
+		if item.ContentKind != string(LibraryKindComic) {
+			t.Fatalf("comic scope leaked a photo node %+v", item)
 		}
+	}
+}
+
+// 集合继承所属目录的属性：漫画目录下的集合在照片工作台里不该出现。
+func TestLibraryChildrenFilterCollectionsByRootKind(t *testing.T) {
+	fixture := newKindFixture(t)
+	snapshot := fixture.catalog.Acquire()
+
+	photo, err := PageLibraryChildren(snapshot, fixture.comicRootID, LibraryKindPhoto, "", 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if photo.Total != 0 {
+		t.Fatalf("photo scope kept comic-root children: %+v", photo.Items)
 	}
 }
 
@@ -134,17 +144,17 @@ func TestLibraryCursorScopeSeparatesKinds(t *testing.T) {
 	fixture := newKindFixture(t)
 	snapshot := fixture.catalog.Acquire()
 
-	first, err := PageLibraryChildren(snapshot, fixture.rootID, LibraryKindPhoto, "", 1)
+	first, err := PageLibraryChildren(snapshot, fixture.comicRootID, LibraryKindComic, "", 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if first.NextCursor == "" {
 		t.Fatal("expected a next cursor for the first page")
 	}
-	if _, err := PageLibraryChildren(snapshot, fixture.rootID, LibraryKindComic, first.NextCursor, 1); !errors.Is(err, ErrInvalidPageCursor) {
+	if _, err := PageLibraryChildren(snapshot, fixture.comicRootID, LibraryKindPhoto, first.NextCursor, 1); !errors.Is(err, ErrInvalidPageCursor) {
 		t.Fatalf("cross-kind cursor error=%v, want ErrInvalidPageCursor", err)
 	}
-	if _, err := PageLibraryChildren(snapshot, fixture.rootID, LibraryKindPhoto, first.NextCursor, 1); err != nil {
+	if _, err := PageLibraryChildren(snapshot, fixture.comicRootID, LibraryKindComic, first.NextCursor, 1); err != nil {
 		t.Fatalf("same-kind cursor error=%v", err)
 	}
 }
@@ -222,6 +232,25 @@ func TestLibraryManifestReportsPerKindAlbumCounts(t *testing.T) {
 	}
 }
 
+// manifest 报告每个根的属性，前端据此把目录归到对应的工作台。
+func TestLibraryManifestReportsRootKind(t *testing.T) {
+	fixture := newKindFixture(t)
+	manifest, err := BuildLibraryManifest(fixture.catalog.Acquire())
+	if err != nil {
+		t.Fatal(err)
+	}
+	kinds := map[string]string{}
+	for _, root := range manifest.Roots {
+		kinds[root.ID] = root.ContentKind
+	}
+	if kinds[fixture.photoRootID] != string(models.ContentKindPhoto) {
+		t.Fatalf("photo root kind=%q", kinds[fixture.photoRootID])
+	}
+	if kinds[fixture.comicRootID] != string(models.ContentKindComic) {
+		t.Fatalf("comic root kind=%q", kinds[fixture.comicRootID])
+	}
+}
+
 func TestRandomLibraryAlbumRespectsKind(t *testing.T) {
 	fixture := newKindFixture(t)
 	snapshot := fixture.catalog.Acquire()
@@ -237,7 +266,7 @@ func TestRandomLibraryAlbumRespectsKind(t *testing.T) {
 	}
 }
 
-func TestSearchLibraryFiltersAlbumHitsByKind(t *testing.T) {
+func TestSearchLibraryFiltersHitsByKind(t *testing.T) {
 	fixture := newKindFixture(t)
 	snapshot := fixture.catalog.Acquire()
 
@@ -255,13 +284,14 @@ func TestSearchLibraryFiltersAlbumHitsByKind(t *testing.T) {
 	if len(albumPaths) != 1 || albumPaths[0] != fixture.photoTagAlbum {
 		t.Fatalf("photo search album hits=%+v", hits)
 	}
-	// 智能标签是导航容器，不参与用途过滤：它仍然出现在结果里。
+	// 标签跨两个属性，但照片工作台里它只保留照片侧的那本。
 	if !smartFound {
-		t.Fatalf("search dropped the smart collection: %+v", hits)
+		t.Fatalf("search dropped the shared tag: %+v", hits)
 	}
 }
 
-func TestUnreadIndexIsBucketedByKind(t *testing.T) {
+// 未读只统计漫画相册：照片目录下的相册不记录阅读进度。
+func TestUnreadIndexOnlyCountsComicAlbums(t *testing.T) {
 	fixture := newKindFixture(t)
 	snapshot := fixture.catalog.Acquire()
 	index := NewUnreadLibraryIndex()
@@ -270,8 +300,8 @@ func TestUnreadIndexIsBucketedByKind(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if photo.Total != 2 {
-		t.Fatalf("photo unread total=%d, want 2", photo.Total)
+	if photo.Total != 0 {
+		t.Fatalf("photo unread total=%d, want 0", photo.Total)
 	}
 	comic, err := index.Page(snapshot, StartedAlbums{}, 1, LibraryKindComic, "", 50)
 	if err != nil {
@@ -280,104 +310,57 @@ func TestUnreadIndexIsBucketedByKind(t *testing.T) {
 	if comic.Total != 3 {
 		t.Fatalf("comic unread total=%d, want 3", comic.Total)
 	}
-	all, err := index.Page(snapshot, StartedAlbums{}, 1, LibraryKindAll, "", 50)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if all.Total != 5 {
-		t.Fatalf("all unread total=%d, want 5", all.Total)
-	}
 }
 
-// 照片相册可能同时存在一条 photo 活动与一条用途拆分之前留下的 image 活动：
-// 在读位置必须取 photo 的那条，不能因为 image 更新就指向漫画页码。
-func TestDashboardInProgressUsesKindMatchingActivity(t *testing.T) {
+// 在读位置只来自漫画阅读记录；照片工作台没有这一区。
+func TestDashboardInProgressOnlyCoversComicAlbums(t *testing.T) {
 	fixture := newKindFixture(t)
 	snapshot := fixture.catalog.Acquire()
 	index := NewUnreadLibraryIndex()
 
 	now := time.Now().UTC()
 	dashboard, err := index.Dashboard(snapshot,
-		[]models.Activity{{
-			AlbumID: fixture.photoAlbumID, MediaKind: models.MediaKindImage,
-			PageIndex: 2, PageCount: 3, Updated: now.Add(time.Minute),
-		}},
-		[]models.Activity{{
-			AlbumID: fixture.photoAlbumID, MediaKind: models.MediaKindPhoto,
-			PageIndex: 0, PageCount: 3, Updated: now,
-		}},
-		StartedAlbums{}, 1, LibraryKindAll)
+		[]models.Activity{
+			{
+				AlbumID: fixture.comicAlbumID, MediaKind: models.MediaKindImage,
+				PageIndex: 1, PageCount: 3, Updated: now,
+			},
+			{
+				AlbumID: fixture.photoAlbumID, MediaKind: models.MediaKindImage,
+				PageIndex: 1, PageCount: 3, Updated: now,
+			},
+		},
+		StartedAlbums{}, 1, LibraryKindComic)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var found bool
-	for _, progress := range dashboard.InProgress {
-		if progress.Album.ID != fixture.photoAlbumID {
-			continue
-		}
-		found = true
-		if progress.PageIndex != 0 {
-			t.Fatalf("photo album took the comic position: %+v", progress)
-		}
-		if progress.MediaKind != string(models.MediaKindPhoto) {
-			t.Fatalf("photo album media kind=%q, want photo", progress.MediaKind)
-		}
+	if len(dashboard.InProgress) != 1 {
+		t.Fatalf("in progress=%+v, want only the comic album", dashboard.InProgress)
 	}
-	if !found {
-		t.Fatalf("photo album missing from in-progress: %+v", dashboard.InProgress)
+	if dashboard.InProgress[0].Album.ID != fixture.comicAlbumID {
+		t.Fatalf("in progress album=%s", dashboard.InProgress[0].Album.ID)
+	}
+	if dashboard.InProgress[0].PageIndex != 1 {
+		t.Fatalf("page index=%d", dashboard.InProgress[0].PageIndex)
 	}
 }
 
-// 用途拆分之前所有相册都写 image 活动：照片相册只有遗留记录时，
-// 位置仍然可用，但语义仍是照片浏览。
-func TestDashboardInProgressFallsBackToLegacyImageActivity(t *testing.T) {
+// 照片工作台的 dashboard 没有在读区：阅读进度只属于漫画。
+func TestDashboardHasNoInProgressInPhotoScope(t *testing.T) {
 	fixture := newKindFixture(t)
 	snapshot := fixture.catalog.Acquire()
 	index := NewUnreadLibraryIndex()
 
 	dashboard, err := index.Dashboard(snapshot,
 		[]models.Activity{{
-			AlbumID: fixture.photoAlbumID, MediaKind: models.MediaKindImage,
+			AlbumID: fixture.comicAlbumID, MediaKind: models.MediaKindImage,
 			PageIndex: 1, PageCount: 3, Updated: time.Now().UTC(),
 		}},
-		nil, StartedAlbums{}, 1, LibraryKindAll)
+		StartedAlbums{}, 1, LibraryKindPhoto)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, progress := range dashboard.InProgress {
-		if progress.Album.ID != fixture.photoAlbumID {
-			continue
-		}
-		if progress.PageIndex != 1 {
-			t.Fatalf("legacy position=%+v", progress)
-		}
-		if progress.MediaKind != string(models.MediaKindPhoto) {
-			t.Fatalf("legacy position media kind=%q, want photo", progress.MediaKind)
-		}
-		return
-	}
-	t.Fatalf("photo album missing from in-progress: %+v", dashboard.InProgress)
-}
-
-// 漫画相册只认漫画阅读记录：照片浏览活动不能冒充阅读位置。
-func TestDashboardInProgressIgnoresPhotoActivityForComicAlbum(t *testing.T) {
-	fixture := newKindFixture(t)
-	snapshot := fixture.catalog.Acquire()
-	index := NewUnreadLibraryIndex()
-
-	dashboard, err := index.Dashboard(snapshot,
-		nil,
-		[]models.Activity{{
-			AlbumID: fixture.comicAlbumID, MediaKind: models.MediaKindPhoto,
-			PageIndex: 1, PageCount: 3, Updated: time.Now().UTC(),
-		}},
-		StartedAlbums{}, 1, LibraryKindAll)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, progress := range dashboard.InProgress {
-		if progress.Album.ID == fixture.comicAlbumID {
-			t.Fatalf("comic album took a photo position: %+v", progress)
-		}
+	if len(dashboard.InProgress) != 0 {
+		t.Fatalf("photo scope kept in-progress entries: %+v", dashboard.InProgress)
 	}
 }

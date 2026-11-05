@@ -33,7 +33,7 @@ func directoryPickerApp(cfg *config.Config) (*fiber.App, *config.Manager) {
 
 func TestDirectoryPickerBrowsesAndSavesExactSelection(t *testing.T) {
 	cfg := config.Default()
-	cfg.MediaRoots = []string{t.TempDir()}
+	cfg.MediaRoots = []config.MediaRoot{{Path: t.TempDir(), Kind: config.DefaultMediaRootKind}}
 	cfg.CacheDir = t.TempDir()
 	cfg.StaticDir = ""
 	app, mgr := directoryPickerApp(cfg)
@@ -60,7 +60,7 @@ func TestDirectoryPickerBrowsesAndSavesExactSelection(t *testing.T) {
 	if err != nil || page.Items[0].Path != selected {
 		t.Fatal("selected path was guessed or altered")
 	}
-	response, body = doHTTPJSON(t, app, http.MethodPut, "http://127.0.0.1/api/config", fiber.Map{"mediaRoots": []string{page.Items[0].Path}})
+	response, body = doHTTPJSON(t, app, http.MethodPut, "http://127.0.0.1/api/config", fiber.Map{"mediaRoots": []config.MediaRoot{{Path: page.Items[0].Path, Kind: config.DefaultMediaRootKind}}})
 	if response.StatusCode != http.StatusOK || !reflect.DeepEqual(mgr.Get().Roots(), []string{selected}) {
 		t.Fatalf("selection did not save: status=%d body=%s", response.StatusCode, body)
 	}

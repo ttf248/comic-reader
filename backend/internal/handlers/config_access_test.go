@@ -17,7 +17,7 @@ const handlerTestAccessToken = "0123456789abcdef0123456789abcdef"
 
 func TestConfigGetHandlerDoesNotExposeAccessToken(t *testing.T) {
 	cfg := config.Default()
-	cfg.MediaRoots = []string{t.TempDir()}
+	cfg.MediaRoots = []config.MediaRoot{{Path: t.TempDir(), Kind: config.DefaultMediaRootKind}}
 	cfg.AccessMode = config.AccessModeLAN
 	cfg.AccessToken = handlerTestAccessToken
 	mgr := config.NewManagerWith(cfg, "")
@@ -49,7 +49,7 @@ func TestConfigGetHandlerDoesNotExposeAccessToken(t *testing.T) {
 
 func TestConfigUpdateHandlerAcceptsTokenButReturnsOnlyConfiguredFlag(t *testing.T) {
 	cfg := config.Default()
-	cfg.MediaRoots = []string{t.TempDir()}
+	cfg.MediaRoots = []config.MediaRoot{{Path: t.TempDir(), Kind: config.DefaultMediaRootKind}}
 	mgr := config.NewManagerWith(cfg, "")
 	app := fiber.New()
 	app.Put("/api/config", ConfigUpdateHandler(mgr, nil))

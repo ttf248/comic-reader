@@ -18,7 +18,7 @@ func writeValidYAML(t *testing.T, content string) string {
 		t.Fatal(err)
 	}
 	// 用 filepath.Join 替换占位符，使 root 一定存在
-	content = "mediaRoots:\n  - \"" + filepath.ToSlash(root) + "\"\n" + content
+	content = "mediaRoots:\n  - path: \"" + filepath.ToSlash(root) + "\"\n    kind: photo\n" + content
 	path := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
@@ -175,7 +175,7 @@ func TestManager_Update_RejectsInvalid(t *testing.T) {
 func TestManager_Update_SerializesConcurrentPatches(t *testing.T) {
 	for attempt := 0; attempt < 64; attempt++ {
 		cfg := Default()
-		cfg.MediaRoots = []string{t.TempDir()}
+		cfg.MediaRoots = []MediaRoot{{Path: t.TempDir(), Kind: DefaultMediaRootKind}}
 		cfg.AccessMode = AccessModeLAN
 		cfg.AccessToken = "0123456789abcdef0123456789abcdef"
 		mgr := NewManagerWith(cfg, "")
@@ -223,7 +223,7 @@ func TestManager_Update_MediaRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = mgr.Update(ConfigPatch{
-		MediaRoots:    []string{newRoot},
+		MediaRoots:    []MediaRoot{{Path: newRoot, Kind: DefaultMediaRootKind}},
 		MediaRootsSet: true,
 	})
 	if err != nil {
@@ -237,7 +237,7 @@ func TestManager_Update_MediaRoot(t *testing.T) {
 
 func TestManagerOfflineRootCanBeRepaired(t *testing.T) {
 	cfg := Default()
-	cfg.MediaRoots = []string{filepath.Join(t.TempDir(), "offline")}
+	cfg.MediaRoots = []MediaRoot{{Path: filepath.Join(t.TempDir(), "offline"), Kind: DefaultMediaRootKind}}
 	mgr := NewManagerWith(cfg, filepath.Join(t.TempDir(), "config.yaml"))
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("offline root blocks startup: %v", err)
@@ -248,10 +248,10 @@ func TestManagerOfflineRootCanBeRepaired(t *testing.T) {
 	if _, err := mgr.Update(ConfigPatch{MediaRoots: cfg.MediaRoots, MediaRootsSet: true}); err == nil {
 		t.Fatal("explicitly saving an unavailable root should fail")
 	}
-	if _, err := mgr.Update(ConfigPatch{MediaRoots: []string{t.TempDir()}, MediaRootsSet: true}); err != nil {
+	if _, err := mgr.Update(ConfigPatch{MediaRoots: []MediaRoot{{Path: t.TempDir(), Kind: DefaultMediaRootKind}}, MediaRootsSet: true}); err != nil {
 		t.Fatalf("repair root: %v", err)
 	}
-	if _, err := mgr.Update(ConfigPatch{MediaRoots: []string{}, MediaRootsSet: true}); err != nil {
+	if _, err := mgr.Update(ConfigPatch{MediaRoots: []MediaRoot{}, MediaRootsSet: true}); err != nil {
 		t.Fatalf("clear roots for setup: %v", err)
 	}
 	if err := mgr.Reload(); err != nil {
@@ -277,7 +277,7 @@ func TestManager_Update_MediaRootsMulti(t *testing.T) {
 		}
 	}
 	_, err = mgr.Update(ConfigPatch{
-		MediaRoots:    []string{root1, root2},
+		MediaRoots:    []MediaRoot{{Path: root1, Kind: DefaultMediaRootKind}, {Path: root2, Kind: DefaultMediaRootKind}},
 		MediaRootsSet: true,
 	})
 	if err != nil {

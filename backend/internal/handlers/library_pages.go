@@ -189,21 +189,16 @@ func LibraryHomeDashboardHandler(catalog *services.ResourceCatalog, activities *
 		if err != nil {
 			return httputil.Internal(c, "activity_unavailable", "activity storage is unavailable")
 		}
-		photoActivities, _, _, err := activities.PhotoActivitySnapshot()
-		if err != nil {
-			return httputil.Internal(c, "activity_unavailable", "activity storage is unavailable")
-		}
-		startedImage, startedPhoto, startedVideo, activityRevision, err := activities.StartedAlbumIDsSnapshot()
+		startedImage, startedVideo, activityRevision, err := activities.StartedAlbumIDsSnapshot()
 		if err != nil {
 			return httputil.Internal(c, "activity_unavailable", "activity storage is unavailable")
 		}
 		started := services.StartedAlbums{
 			Image: startedImage,
-			Photo: startedPhoto,
 			Video: startedVideo,
 		}
 		snapshot := catalog.Acquire()
-		dashboard, err := unreadIndex.Dashboard(snapshot, imageActivities, photoActivities, started, activityRevision, kind)
+		dashboard, err := unreadIndex.Dashboard(snapshot, imageActivities, started, activityRevision, kind)
 		if err != nil {
 			return writeLibraryPageError(c, err, snapshot.Revision())
 		}
@@ -307,20 +302,20 @@ func parseLibraryPageLimit(c *fiber.Ctx) (int, bool) {
 	return services.NormalizeLibraryPageLimit(limit), true
 }
 
-// parseLibraryKind 读取 kind 查询参数：photo / comic / all，缺省为 all（不过滤）。
+// parseLibraryKind 读取 kind 查询参数：photo / comic。
 //
-// 它对应前端的「工作台模式」：列表只呈现该用途的相册。
+// 它对应前端的「工作台模式」：列表只呈现该属性的相册与集合。
+// 参数必填 —— 媒体库按目录属性一分为二，不存在「不过滤」的第三种视图，
+// 省略它等于让服务端替用户猜一个工作台。
 func parseLibraryKind(c *fiber.Ctx) (services.LibraryKindScope, bool) {
 	switch strings.TrimSpace(c.Query("kind")) {
-	case "", "all":
-		return services.LibraryKindAll, true
 	case "photo":
 		return services.LibraryKindPhoto, true
 	case "comic":
 		return services.LibraryKindComic, true
 	default:
-		_ = httputil.BadRequest(c, "invalid_kind", "kind must be photo, comic or all")
-		return services.LibraryKindAll, false
+		_ = httputil.BadRequest(c, "invalid_kind", "kind must be photo or comic")
+		return services.LibraryKindPhoto, false
 	}
 }
 
@@ -351,15 +346,14 @@ func setLibraryRevisionETag(c *fiber.Ctx, revision uint64) {
 	c.Set(fiber.HeaderETag, `W/"library-`+strconv.FormatUint(revision, 10)+`"`)
 }
 
-// startedAlbums 汇总漫画、照片与视频活动派生的相册 ID 集合，供未读统计使用。
+// startedAlbums 汇总漫画与视频活动派生的相册 ID 集合，供未读统计使用。
 func startedAlbums(activities *store.ActivityStore) (services.StartedAlbums, uint64, error) {
-	image, photo, video, revision, err := activities.StartedAlbumIDsSnapshot()
+	image, video, revision, err := activities.StartedAlbumIDsSnapshot()
 	if err != nil {
 		return services.StartedAlbums{}, 0, err
 	}
 	return services.StartedAlbums{
 		Image: image,
-		Photo: photo,
 		Video: video,
 	}, revision, nil
 }

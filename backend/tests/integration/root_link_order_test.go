@@ -41,7 +41,11 @@ func TestExplicitLinkedRootMediaDoesNotDependOnConfigurationOrder(t *testing.T) 
 	}
 	var fileID string
 	for _, roots := range [][]string{{h.root, link}, {link, h.root}} {
-		if _, err := h.mgr.Update(config.ConfigPatch{MediaRoots: roots, MediaRootsSet: true}); err != nil {
+		entries := make([]config.MediaRoot, 0, len(roots))
+		for _, root := range roots {
+			entries = append(entries, config.MediaRoot{Path: root, Kind: config.DefaultMediaRootKind})
+		}
+		if _, err := h.mgr.Update(config.ConfigPatch{MediaRoots: entries, MediaRootsSet: true}); err != nil {
 			t.Fatal(err)
 		}
 		validator.SetRoots(roots)

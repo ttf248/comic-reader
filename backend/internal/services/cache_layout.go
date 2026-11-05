@@ -29,7 +29,6 @@ type CacheLayout struct {
 	PreferencesPath    string
 	ActivityPath       string
 	CoverOverridesPath string
-	ContentKindsPath   string
 }
 
 // ResolveCacheLayout 只计算路径，不访问文件系统。
@@ -49,7 +48,6 @@ func ResolveCacheLayout(root string) CacheLayout {
 		PreferencesPath:    filepath.Join(stateDir, "web_settings.json"),
 		ActivityPath:       filepath.Join(stateDir, "activity.json"),
 		CoverOverridesPath: filepath.Join(stateDir, "cover_overrides.json"),
-		ContentKindsPath:   filepath.Join(stateDir, "content_kinds.json"),
 	}
 }
 

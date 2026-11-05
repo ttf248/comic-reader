@@ -60,16 +60,13 @@ type ResourceCatalog struct {
 	state     atomic.Pointer[resourceCatalogState]
 	revision  atomic.Uint64
 	publishMu sync.Mutex
-	// contentKinds 是内容用途的默认策略与相册级覆盖。
+	// contentPolicy 是「媒体根 → 内容属性」的映射。
 	// 只在 publishMu 保护下读写，随每次发布一起进入快照。
-	contentPolicy   ContentKindPolicy
-	contentOverrides map[string]models.ContentKind
+	contentPolicy ContentKindPolicy
 }
 
 func NewResourceCatalog() *ResourceCatalog {
-	c := &ResourceCatalog{
-		contentPolicy: ContentKindPolicy{Default: models.DefaultContentKind},
-	}
+	c := &ResourceCatalog{}
 	c.state.Store(emptyCatalogState(0))
 	return c
 }
@@ -141,10 +138,10 @@ func (c *ResourceCatalog) RefreshCovers(cache *ScanResultCache, covers *CoverOve
 	return next, revision, true
 }
 
-// SetContentKindPolicy 更新内容用途的默认策略并重新发布快照。
+// SetContentKindPolicy 更新内容属性的目录映射并重新发布快照。
 //
-// 媒体根默认值或全局默认值变化时调用：用途不影响扫描结果，
-// 因此只需重算相册元数据，不必重新扫描磁盘。
+// 目录属性变化时调用：属性不影响扫描结果，因此只需重算相册元数据，
+// 不必重新扫描磁盘。
 func (c *ResourceCatalog) SetContentKindPolicy(policy ContentKindPolicy) uint64 {
 	c.publishMu.Lock()
 	defer c.publishMu.Unlock()
@@ -152,15 +149,7 @@ func (c *ResourceCatalog) SetContentKindPolicy(policy ContentKindPolicy) uint64 
 	return c.republishLocked()
 }
 
-// SetContentKindOverrides 替换相册级内容用途覆盖并重新发布快照。
-func (c *ResourceCatalog) SetContentKindOverrides(overrides map[string]models.ContentKind) uint64 {
-	c.publishMu.Lock()
-	defer c.publishMu.Unlock()
-	c.contentOverrides = overrides
-	return c.republishLocked()
-}
-
-// ContentKindPolicySnapshot 返回当前生效的默认策略（副本）。
+// ContentKindPolicySnapshot 返回当前生效的目录属性映射（副本）。
 func (c *ResourceCatalog) ContentKindPolicySnapshot() ContentKindPolicy {
 	c.publishMu.Lock()
 	defer c.publishMu.Unlock()
@@ -229,9 +218,9 @@ func (c *ResourceCatalog) publish(result *models.ScanResult, roots []string, cus
 	})
 	if result != nil {
 		state.result = cloneScanResult(result)
-		// 内容用途在发布这一刻定稿：相册级覆盖优先，其次媒体根默认值，
-		// 最后全局默认值。它不依赖文件内容，因此重扫也不会改变用户的选择。
-		ApplyContentKinds(state.result, c.contentOverrides, c.contentPolicy)
+		// 内容属性在发布这一刻定稿：相册与集合继承所属媒体根的属性。
+		// 它不依赖文件内容，因此重扫也不会改变用户的设置。
+		ApplyContentKinds(state.result, c.contentPolicy)
 		for i := range state.result.Albums {
 			indexAlbum(state, &state.result.Albums[i])
 		}

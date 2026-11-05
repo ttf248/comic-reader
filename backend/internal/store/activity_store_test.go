@@ -97,7 +97,7 @@ func TestActivityStoreDoesNotOverwriteNewerActivity(t *testing.T) {
 	}
 }
 
-func TestActivityStoreStartedImageAlbumIDsExcludesVideoOnlyRecords(t *testing.T) {
+func TestActivityStoreStartedAlbumIDsSeparatesImageAndVideo(t *testing.T) {
 	store, _ := newTestActivityStore(t)
 	image := imageActivity(1, 1, 3)
 	video := models.Activity{
@@ -110,7 +110,7 @@ func TestActivityStoreStartedImageAlbumIDsExcludesVideoOnlyRecords(t *testing.T)
 	if err := store.SetBatch([]models.Activity{image, video}); err != nil {
 		t.Fatal(err)
 	}
-	ids, err := store.StartedImageAlbumIDs()
+	ids, videoIDs, _, err := store.StartedAlbumIDsSnapshot()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,11 +120,17 @@ func TestActivityStoreStartedImageAlbumIDsExcludesVideoOnlyRecords(t *testing.T)
 	if _, ok := ids[image.AlbumID]; !ok {
 		t.Fatalf("missing image album ID %q", image.AlbumID)
 	}
+	if len(videoIDs) != 1 {
+		t.Fatalf("video IDs=%v", videoIDs)
+	}
+	if _, ok := videoIDs[video.AlbumID]; !ok {
+		t.Fatalf("missing video album ID %q", video.AlbumID)
+	}
 }
 
-func TestActivityStoreStartedImageAlbumIDsSnapshotTracksActivityRevision(t *testing.T) {
+func TestActivityStoreStartedAlbumIDsSnapshotTracksActivityRevision(t *testing.T) {
 	store, _ := newTestActivityStore(t)
-	ids, initialRevision, err := store.StartedImageAlbumIDsSnapshot()
+	ids, _, initialRevision, err := store.StartedAlbumIDsSnapshot()
 	if err != nil || initialRevision != 0 || len(ids) != 0 {
 		t.Fatalf("initial snapshot=(ids=%v revision=%d err=%v)", ids, initialRevision, err)
 	}
@@ -139,7 +145,7 @@ func TestActivityStoreStartedImageAlbumIDsSnapshotTracksActivityRevision(t *test
 	if err := store.Set(video); err != nil {
 		t.Fatal(err)
 	}
-	ids, videoRevision, err := store.StartedImageAlbumIDsSnapshot()
+	ids, _, videoRevision, err := store.StartedAlbumIDsSnapshot()
 	if err != nil || videoRevision <= initialRevision || len(ids) != 0 {
 		t.Fatalf("video snapshot=(ids=%v revision=%d err=%v)", ids, videoRevision, err)
 	}
@@ -148,12 +154,12 @@ func TestActivityStoreStartedImageAlbumIDsSnapshotTracksActivityRevision(t *test
 	if err := store.Set(image); err != nil {
 		t.Fatal(err)
 	}
-	ids, imageRevision, err := store.StartedImageAlbumIDsSnapshot()
+	ids, _, imageRevision, err := store.StartedAlbumIDsSnapshot()
 	if err != nil || imageRevision <= videoRevision || len(ids) != 1 {
 		t.Fatalf("image snapshot=(ids=%v revision=%d err=%v)", ids, imageRevision, err)
 	}
 	delete(ids, image.AlbumID)
-	ids, unchangedRevision, err := store.StartedImageAlbumIDsSnapshot()
+	ids, _, unchangedRevision, err := store.StartedAlbumIDsSnapshot()
 	if err != nil || unchangedRevision != imageRevision {
 		t.Fatalf("copied snapshot revision=(%d, %v), want %d", unchangedRevision, err, imageRevision)
 	}

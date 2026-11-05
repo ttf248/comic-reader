@@ -91,74 +91,28 @@ func (s *ActivityStore) Query(identities []models.ActivityIdentity) ([]models.Ac
 	return out, nil
 }
 
-// StartedImageAlbumIDs 返回至少保存过一条图片阅读活动的相册 ID 集合。
-// 该派生结果只用于图像库的未读统计，不会暴露活动位置、时间或视频记录。
-func (s *ActivityStore) StartedImageAlbumIDs() (map[string]struct{}, error) {
-	ids, _, err := s.StartedImageAlbumIDsSnapshot()
-	return ids, err
-}
-
-// StartedImageAlbumIDsSnapshot 返回图片活动派生的相册 ID 集合及当前进程内
-// 活动版本。调用方可用版本安全复用只依赖该集合的派生索引。
-func (s *ActivityStore) StartedImageAlbumIDsSnapshot() (map[string]struct{}, uint64, error) {
-	if err := s.ensureLoaded(); err != nil {
-		return nil, 0, err
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	ids := make(map[string]struct{})
-	for _, activity := range s.items {
-		if activity.MediaKind == models.MediaKindImage {
-			ids[activity.AlbumID] = struct{}{}
-		}
-	}
-	return ids, s.revision, nil
-}
-
-// StartedVideoAlbumIDsSnapshot 返回视频活动派生的相册 ID 集合及当前进程内
-// 活动版本。纯视频相册没有图片活动，未读统计只能依据视频活动判定
-// "已经翻开过"；与图片集合分开返回，避免两种媒体互相污染。
-func (s *ActivityStore) StartedVideoAlbumIDsSnapshot() (map[string]struct{}, uint64, error) {
-	if err := s.ensureLoaded(); err != nil {
-		return nil, 0, err
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	ids := make(map[string]struct{})
-	for _, activity := range s.items {
-		if activity.MediaKind == models.MediaKindVideo {
-			ids[activity.AlbumID] = struct{}{}
-		}
-	}
-	return ids, s.revision, nil
-}
-
-// StartedAlbumIDsSnapshot 在一次加锁内返回漫画、照片与视频活动各自派生的
-// 相册 ID 集合以及当前活动版本。未读统计同时需要三种集合，用同一版本号
+// StartedAlbumIDsSnapshot 在一次加锁内返回漫画与视频活动各自派生的
+// 相册 ID 集合以及当前活动版本。未读统计需要这两个集合，用同一版本号
 // 缓存派生索引。
 //
-// 漫画与照片分开统计：同一本相册可以在两种用途之间切换，
-// 「照片看到第 12 张」不应该让「漫画读到第 12 页」变成已读。
-func (s *ActivityStore) StartedAlbumIDsSnapshot() (image, photo, video map[string]struct{}, revision uint64, err error) {
+// 漫画与视频分开统计：「读到第 12 页」不等于「视频已播放」。
+func (s *ActivityStore) StartedAlbumIDsSnapshot() (image, video map[string]struct{}, revision uint64, err error) {
 	if err = s.ensureLoaded(); err != nil {
-		return nil, nil, nil, 0, err
+		return nil, nil, 0, err
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	image = make(map[string]struct{})
-	photo = make(map[string]struct{})
 	video = make(map[string]struct{})
 	for _, activity := range s.items {
 		switch activity.MediaKind {
 		case models.MediaKindImage:
 			image[activity.AlbumID] = struct{}{}
-		case models.MediaKindPhoto:
-			photo[activity.AlbumID] = struct{}{}
 		case models.MediaKindVideo:
 			video[activity.AlbumID] = struct{}{}
 		}
 	}
-	return image, photo, video, s.revision, nil
+	return image, video, s.revision, nil
 }
 
 // ImageActivitySnapshot 返回全部漫画阅读活动、对应相册 ID 集合和当前活动版本。
@@ -166,12 +120,6 @@ func (s *ActivityStore) StartedAlbumIDsSnapshot() (image, photo, video map[strin
 // 也不读取媒体库或文件系统路径。
 func (s *ActivityStore) ImageActivitySnapshot() ([]models.Activity, map[string]struct{}, uint64, error) {
 	return s.activitySnapshot(models.MediaKindImage)
-}
-
-// PhotoActivitySnapshot 返回全部照片浏览活动、对应相册 ID 集合和当前活动版本。
-// 它与漫画阅读活动分开：两种用途的进度互不影响。
-func (s *ActivityStore) PhotoActivitySnapshot() ([]models.Activity, map[string]struct{}, uint64, error) {
-	return s.activitySnapshot(models.MediaKindPhoto)
 }
 
 // activitySnapshot 返回指定媒体类型的全部活动及其相册 ID 集合。
