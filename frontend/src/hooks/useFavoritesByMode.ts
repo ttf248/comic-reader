@@ -121,7 +121,11 @@ export function useFavoritesByMode(mode: AppMode): FavoritesByMode {
   }, [favorites, nodesById, tagsByName, mode]);
 
   const missingIds = useMemo(() => {
+    // 读取失败时不能判定失效：查询失败时摘要表是空的，
+    // 若照空表判「库里没有」，用户点一次「清理失效收藏」就会把
+    // 自己所有收藏删光。读不出来的东西一律不算失效。
     if (nodesQuery.isLoading || tagsQuery.isLoading) return [];
+    if (nodesQuery.isError || tagsQuery.isError) return [];
     return favorites.filter((id) => {
       if (id.startsWith(SMART_PREFIX)) {
         // 只有库里根本没有的标签才算失效；只属于另一侧的标签不是。
@@ -129,7 +133,15 @@ export function useFavoritesByMode(mode: AppMode): FavoritesByMode {
       }
       return !nodesById.has(id);
     });
-  }, [favorites, nodesById, tagsByName, nodesQuery.isLoading, tagsQuery.isLoading]);
+  }, [
+    favorites,
+    nodesById,
+    tagsByName,
+    nodesQuery.isLoading,
+    tagsQuery.isLoading,
+    nodesQuery.isError,
+    tagsQuery.isError,
+  ]);
 
   const nodesFailed = nodeIds.length > 0 && nodesQuery.isError;
   const tagsFailed = smartNames.length > 0 && tagsQuery.isError;

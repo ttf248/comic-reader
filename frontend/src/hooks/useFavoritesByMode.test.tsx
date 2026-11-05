@@ -145,4 +145,23 @@ describe("useFavoritesByMode", () => {
       "smart:查无此标签",
     ]);
   });
+
+  // 读取失败时摘要表是空的。若照空表判「库里没有」，
+  // 用户点一次「清理失效收藏」就会把自己所有收藏删光。
+  it("摘要读取失败时不把任何收藏判成失效", async () => {
+    vi.mocked(favoritesApi.list).mockResolvedValue({
+      favorites: [photoAlbum.id, "smart:旅行"],
+    } as never);
+    vi.mocked(libraryApi.queryNodes).mockRejectedValue(new Error("offline"));
+    vi.mocked(libraryApi.queryTags).mockRejectedValue(new Error("offline"));
+    const { result } = renderHook(() => useFavoritesByMode("photo"), {
+      wrapper: wrapper(),
+    });
+
+    await waitFor(() => expect(result.current.isLoading).toBe(false));
+    expect(result.current.nodesFailed).toBe(true);
+    expect(result.current.tagsFailed).toBe(true);
+    // 读不出来的东西一律不算失效。
+    expect(result.current.missingIds).toEqual([]);
+  });
 });
