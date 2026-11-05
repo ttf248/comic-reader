@@ -14,7 +14,7 @@ import AlbumGridSkeleton from "../components/album/AlbumGridSkeleton";
 import { ListFilterBar } from "../components/common/ListFilterBar";
 import EmptyState from "../components/common/EmptyState";
 import { ClockIcon } from "../components/common/Icon";
-import { decodeFavPath } from "../utils/path";
+import { decodeFavPath, homeRoute } from "../utils/path";
 import { compareDatesDesc, formatRelative } from "../utils/date";
 import type { GalleryContextEntry } from "../utils/galleryContext";
 import { useLibraryNodes } from "../hooks/useLibrary";
@@ -58,14 +58,6 @@ export default function Recents() {
       out.push({ ...nodeSummaryToCard(node), lastSeenAt: h.openedAt });
     }
     return out;
-  }, [history, nodesById, mode]);
-
-  // 被当前工作台过滤掉的条数要说清楚，否则用户以为记录丢了。
-  const hiddenCount = useMemo(() => {
-    return history.filter((h) => {
-      const node = nodesById.get(h.albumId);
-      return node?.kind === "album" && node.contentKind !== mode;
-    }).length;
   }, [history, nodesById, mode]);
 
   const progressPaths = useMemo(
@@ -150,11 +142,6 @@ export default function Recents() {
             {history.length > 0 ? (
               <>
                 <span className="text-fg font-medium">{cards.length}</span> 个
-                {hiddenCount > 0 && (
-                  <span className="text-fg-subtle">
-                    （另有 {hiddenCount} 个属于其它类型）
-                  </span>
-                )}
                 <span className="text-fg-subtle mx-1.5">·</span>
                 最近打开{" "}
                 <span className="text-fg">
@@ -207,7 +194,7 @@ export default function Recents() {
           description="打开任意一个文件夹开始浏览，它会出现在这里。"
           icon={<ClockIcon size={20} />}
           action={
-            <button onClick={() => navigate("/")} className="btn btn-primary">
+            <button onClick={() => navigate(homeRoute(mode))} className="btn btn-primary">
               去主页看看
             </button>
           }
@@ -217,7 +204,7 @@ export default function Recents() {
           title="最近访问的相册暂不可用"
           description="相册可能已移动，或媒体库尚未完成扫描。"
           action={
-            <button onClick={() => navigate("/")} className="btn btn-outline">
+            <button onClick={() => navigate(homeRoute(mode))} className="btn btn-outline">
               去主页看看
             </button>
           }

@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useUIStore } from "../../store/uiStore";
 import { useKeyboard } from "../../hooks/useKeyboard";
-import { albumRoute } from "../../utils/path";
+import { albumRoute, decodePathTail, favoritesRoute, homeRoute, isReaderPath, recentsRoute, unreadRoute } from "../../utils/path";
 import { useFsCapabilities } from "../../hooks/useFsCapabilities";
 import { useAppMode } from "../../hooks/useAppMode";
 import { scanApi } from "../../api/scan";
@@ -35,8 +35,7 @@ export default function AppShell() {
   // 阅读器（/read）占用单键快捷键：r 是旋转，u 不是「未读」。
   // 大图预览（照片墙上的浮层）同样占用单键：它自己处理方向键与缩放，
   // 全局的 r / u 必须在它打开时让位，否则按 r 会一边旋转一边跳走整页。
-  const immersive =
-    location.pathname.startsWith("/read") || immersiveOverlay;
+  const immersive = isReaderPath(location.pathname) || immersiveOverlay;
   // 扫描进度 + 取消（提升到 AppShell 后所有路由都能看到顶部进度条）
   const scanSse = useScanSSE();
   useFsCapabilities();
@@ -61,17 +60,18 @@ export default function AppShell() {
 
   useEffect(() => {
     const titles: Record<string, string> = {
-      "/": mode === "comic" ? "漫画库" : "照片库",
-      "/recents": mode === "comic" ? "最近阅读" : "最近浏览",
-      "/favorites": mode === "comic" ? "收藏漫画" : "收藏照片",
-      "/unread": "未读",
+      [homeRoute(mode)]: mode === "comic" ? "漫画库" : "照片库",
+      [recentsRoute(mode)]: mode === "comic" ? "最近阅读" : "最近浏览",
+      [favoritesRoute(mode)]: mode === "comic" ? "收藏漫画" : "收藏照片",
+      [unreadRoute()]: "未读",
       "/settings": "设置",
     };
     const path = location.pathname;
     let base = titles[path];
     if (base === undefined) {
-      if (path.startsWith("/tags/")) {
-        const raw = decodeURIComponent(path.slice("/tags/".length));
+      if (path.includes("/tags/")) {
+        // 标签段只解码一次：路径里可能是字面 %xx。
+        const raw = decodePathTail(path, "/tags/");
         base = raw || "标签";
       } else {
         base = "文件夹";
@@ -89,7 +89,7 @@ export default function AppShell() {
 
   const randomAlbum = useMutation({
     mutationFn: () => libraryApi.randomAlbum(mode),
-    onSuccess: ({ album }) => navigate(albumRoute(album.id)),
+    onSuccess: ({ album }) => navigate(albumRoute(mode, album.id)),
     onError: () => pushToast({ kind: "info", message: "没有可随机打开的相册" }),
   });
 
@@ -113,10 +113,10 @@ export default function AppShell() {
 
   useKeyboard({
     "ctrl+b": () => toggleSidebar(),
-    "ctrl+h": () => navigate("/"),
-    "ctrl+d": () => navigate("/favorites"),
+    "ctrl+h": () => navigate(homeRoute(mode)),
+    "ctrl+d": () => navigate(favoritesRoute(mode)),
     "ctrl+,": () => navigate("/settings"),
-    "ctrl+r": () => navigate("/recents"),
+    "ctrl+r": () => navigate(recentsRoute(mode)),
     "?": () => setHelpOpen((v) => !v),
     "/": () => {
       const el = document.querySelector<HTMLInputElement>(
@@ -132,7 +132,7 @@ export default function AppShell() {
     // U → 未读页（未读只属于漫画工作台）
     u: () => {
       if (immersive || mode !== "comic") return;
-      navigate("/unread");
+      navigate(unreadRoute());
     },
   });
 

@@ -181,6 +181,7 @@ describe("Reader 媒体活动恢复门禁", () => {
         {
           id: albumId,
           kind: "album",
+          contentKind: "photo",
           name: "真实相册",
           coverImages: [],
           imageCount: 3,
@@ -213,6 +214,7 @@ describe("Reader 媒体活动恢复门禁", () => {
           {
             id: albumId,
             kind: "album",
+            contentKind: "photo",
             name: "真实相册",
             displayName: "相册展示名",
             coverImages: [],
@@ -275,6 +277,7 @@ describe("Reader 媒体活动恢复门禁", () => {
           {
             id: albumId,
             kind: "album",
+            contentKind: "photo",
             name: "真实相册",
             displayName: "真实相册",
             coverImages: [],

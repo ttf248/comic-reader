@@ -20,6 +20,7 @@ import type { GalleryContextEntry } from "../utils/galleryContext";
 import { useTagAlbums } from "../hooks/useLibrary";
 import { useAppMode } from "../hooks/useAppMode";
 import { nodeSummaryToCard } from "../utils/libraryCard";
+import { decodePathTail } from "../utils/path";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import { compareDatesDesc } from "../utils/date";
 import { useViewedSort } from "../hooks/useHistory";
@@ -31,7 +32,7 @@ export default function Tag() {
   const location = useLocation();
   const navigate = useNavigate();
   // 从原始路径读取并只解码一次，保留标签名称中的字面 %xx。
-  const tag = decodeTagPath(location.pathname);
+  const tag = decodePathTail(location.pathname, "/tags/");
 
   const query = useSearchStore((s) => s.query);
   const sortBy = useSearchStore((s) => s.sortBy);
@@ -270,14 +271,6 @@ export default function Tag() {
       </section>
     </div>
   );
-}
-
-function decodeTagPath(pathname: string): string {
-  try {
-    return decodeURIComponent(pathname.slice("/tags/".length));
-  } catch {
-    return "";
-  }
 }
 
 function Stat({

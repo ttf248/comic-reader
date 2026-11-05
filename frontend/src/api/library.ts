@@ -21,6 +21,9 @@ export interface LibraryStatistics {
   /** 按内容属性拆分的相册数。 */
   photoAlbumCount?: number;
   comicAlbumCount?: number;
+  /** 按内容属性拆分的集合数：与相册数一一对应。 */
+  photoCollectionCount?: number;
+  comicCollectionCount?: number;
   collectionCount: number;
   tagCount: number;
   warningCount: number;
@@ -80,8 +83,11 @@ export interface LibraryNodeSummary {
   /**
    * 内容属性："photo"（照片）或 "comic"（漫画）。
    * 它继承自所属媒体目录，并决定点击相册后进入哪套交互。
+   *
+   * 服务端对相册与集合恒给出该值，因此这里不是可选的：
+   * 漏设会在编译期暴露，而不是让某本漫画悄悄少一根进度条。
    */
-  contentKind?: ContentKind;
+  contentKind: ContentKind;
 }
 
 export interface LibraryMediaItem {
@@ -100,6 +106,21 @@ export interface LibraryTagSummary {
   albumCount: number;
   coverImage?: string;
   coverImages: string[];
+  /**
+   * 该标签在两种属性下的册数。
+   * 列表接口按当前属性收敛，只要一个数就够；按名解析时两个都要，
+   * 客户端据此判断「这个标签失效了」还是「它只属于另一侧」。
+   */
+  photoAlbumCount?: number;
+  comicAlbumCount?: number;
+}
+
+/** 按名解析标签的结果。 */
+export interface LibraryTagQueryResult {
+  revision: number;
+  items: LibraryTagSummary[];
+  /** 库里根本没有的标签名。 */
+  missing: string[];
 }
 
 export interface LibraryActivitySummary {
@@ -285,5 +306,27 @@ export const libraryApi = {
     collectPages((cursor) => libraryApi.tagPage(kind, cursor)),
   allTagAlbums: (tag: string, kind: AppMode) =>
     collectPages((cursor) => libraryApi.tagAlbumsPage(tag, kind, cursor)),
+  /**
+   * 「最近加入」的相册摘要，按业务日期倒序。
+   *
+   * 照片工作台不记录浏览进度，没有「继续阅读」可言；这个列表是它与
+   * 漫画侧对称的入口，也是收藏空态的推荐来源。
+   */
+  recentAlbums: (kind: AppMode, limit = 12) =>
+    api<PageResponse<LibraryNodeSummary>>("/api/library/recent", {
+      params: { kind, limit },
+    }),
+  /**
+   * 按名批量解析标签摘要。
+   *
+   * 它不按工作台属性过滤，而是同时给出两侧的册数：收藏里的智能标签
+   * 可能在任意一侧有作品，客户端需要同时知道两侧的册数，
+   * 才能区分「这个标签失效了」和「它只属于另一侧」。
+   */
+  queryTags: (names: string[]) =>
+    api<{ ok: boolean; result: LibraryTagQueryResult }>("/api/tags/query", {
+      method: "POST",
+      body: { names },
+    }),
   queryNodes,
 };

@@ -48,7 +48,7 @@ describe("Tag", () => {
     vi.clearAllMocks();
     useSearchStore.getState().reset();
     // 「已读完」统计只属于漫画工作台。
-    useAppModeStore.setState({ mode: "comic", ready: true });
+    useAppModeStore.setState({ preference: "comic", hydrated: true });
     vi.mocked(useFavorites).mockReturnValue({
       favorites: [],
       isLoading: false,

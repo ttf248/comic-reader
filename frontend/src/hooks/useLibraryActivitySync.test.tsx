@@ -57,6 +57,7 @@ it("离开未读页后变化不下载列表，返回时立即刷新未过期的�
         {
           id: "a_one",
           kind: "album",
+          contentKind: "photo",
           name: "单图",
           displayName: "单图",
           coverImages: [],

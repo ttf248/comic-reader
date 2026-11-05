@@ -5,7 +5,7 @@
 // 写入由各列表页负责，读取由 Gallery 负责。同一 session 内有效，
 // 关闭标签页或点开完全不同的来源时由写入方覆盖。
 
-import { decodeFavPath } from "./path";
+import { decodeFavPath, readerRoute } from "./path";
 import type { ContentKind } from "../api/library";
 
 export type GallerySource =
@@ -57,12 +57,12 @@ export function entryReaderUrl(entry: GalleryContextEntry): string | null {
   if (entry.contentKind !== undefined && entry.contentKind !== "comic") {
     return null;
   }
-  if (!entry.to.startsWith("/albums/")) return null;
+  if (!entry.to.includes("/albums/")) return null;
   const id = decodeFavPath(entry.to);
   if (!id) return null;
   const params = new URLSearchParams({ index: "0" });
   if (entry.name) params.set("name", entry.name);
-  return `/read/${encodeURIComponent(id)}?${params.toString()}`;
+  return `${readerRoute(id)}?${params.toString()}`;
 }
 
 export interface GalleryContext {

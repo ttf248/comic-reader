@@ -66,7 +66,7 @@ describe("GlobalSearch", () => {
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: "旅行" } });
 
-    await waitFor(() => expect(albumsApi.search).toHaveBeenCalledWith("旅行", 10, "photo"));
+    await waitFor(() => expect(albumsApi.search).toHaveBeenCalledWith("旅行", "photo", 10));
     expect(await screen.findByRole("listbox")).toBeInTheDocument();
     expect(screen.getByRole("option", { name: /旅行册/ })).toHaveAttribute(
       "aria-selected",

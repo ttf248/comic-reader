@@ -113,7 +113,7 @@ describe("Unread", () => {
       isLoading: false,
     } as never);
     // 未读页只属于漫画工作台：照片模式会被重定向回主页。
-    useAppModeStore.setState({ mode: "comic", ready: true });
+    useAppModeStore.setState({ preference: "comic", hydrated: true });
     useSearchStore.getState().reset();
     vi.mocked(useFavorites).mockReturnValue({
       favorites: [],

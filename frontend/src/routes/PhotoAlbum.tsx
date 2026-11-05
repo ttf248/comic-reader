@@ -32,6 +32,7 @@ import {
 } from "../components/common/Icon";
 import { fileManagerErrorMessage } from "../utils/fileManager";
 import { useSafeBack } from "../utils/navigation";
+import { albumRoute, homeRoute } from "../utils/path";
 
 interface Props {
   /** 相册摘要（含内容用途与封面）。 */
@@ -46,7 +47,7 @@ interface Props {
  * 收在顶部工具条，不再占用一整屏的封面区。
  */
 export default function PhotoAlbum({ album }: Props) {
-  const goBack = useSafeBack("/");
+  const goBack = useSafeBack(homeRoute("photo"));
   const queryClient = useQueryClient();
   const pushToast = useUIStore((s) => s.pushToast);
   const density = usePhotoStore((s) => s.density);
@@ -82,7 +83,7 @@ export default function PhotoAlbum({ album }: Props) {
     count: album.imageCount ?? 0,
     coverPath: album.coverImage ?? "",
     coverKind: album.coverKind ?? "image",
-    to: `/albums/${encodeURIComponent(album.id)}`,
+    to: albumRoute("photo", album.id),
     isFavorite,
   });
 

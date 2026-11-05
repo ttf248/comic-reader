@@ -24,6 +24,7 @@ beforeAll(() => {
 const node: LibraryNodeSummary = {
   id: "a_trip",
   kind: "album",
+  contentKind: "photo",
   name: "旅行记录",
   displayName: "旅行记录",
   sourceName: "素材",
@@ -94,6 +95,7 @@ it("集合属性显示聚合媒体和相册数量", async () => {
         ...node,
         id: "c_trip",
         kind: "collection",
+        contentKind: "photo",
         albumCount: 5,
         childCount: 3,
         mediaCount: 46,

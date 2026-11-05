@@ -132,7 +132,8 @@ describe("Album", () => {
     renderAlbum();
 
     expect(useLibraryNodes).toHaveBeenCalledWith(["c_year"]);
-    expect(useLibraryChildren).toHaveBeenCalledWith("c_year", 4);
+    // 集合的子节点按集合自己的属性查：kind 是必填的第二个参数。
+    expect(useLibraryChildren).toHaveBeenCalledWith("c_year", "photo", 4);
     expect(screen.getByText("2025")).toBeInTheDocument();
     expect(screen.getByText("春游")).toBeInTheDocument();
   });

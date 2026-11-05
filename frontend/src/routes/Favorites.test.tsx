@@ -9,10 +9,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
 import { favoritesApi, historyApi } from "../api/prefs";
+import { libraryApi } from "../api/library";
 import {
   useLibraryDashboard,
   useLibraryNodes,
-  useLibraryTags,
+  useLibraryRecentAlbums,
 } from "../hooks/useLibrary";
 import { useSearchStore } from "../store/searchStore";
 import Favorites from "./Favorites";
@@ -23,9 +24,18 @@ vi.mock("../api/prefs", () => ({
 }));
 vi.mock("../hooks/useLibrary", () => ({
   useLibraryNodes: vi.fn(),
-  useLibraryTags: vi.fn(),
   useLibraryDashboard: vi.fn(),
+  useLibraryRecentAlbums: vi.fn(),
 }));
+// 智能标签按名解析：接口同时给出两侧的册数，客户端据此区分
+// 「标签失效了」与「它只属于另一侧」。
+vi.mock("../api/library", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../api/library")>();
+  return {
+    ...actual,
+    libraryApi: { ...actual.libraryApi, queryTags: vi.fn() },
+  };
+});
 vi.mock("../hooks/useImageActivity", () => ({
   useImageActivities: () => ({ data: {} }),
   usePhotoActivities: () => ({ data: {} }),
@@ -77,8 +87,24 @@ beforeEach(() => {
     isFetching: false,
     refetch: vi.fn(),
   } as never);
-  vi.mocked(useLibraryTags).mockReturnValue({
-    data: { items: [{ tag: "旅行", albumCount: 1, coverImages: [] }] },
+  vi.mocked(libraryApi.queryTags).mockResolvedValue({
+    ok: true,
+    result: {
+      revision: 1,
+      items: [
+        {
+          tag: "旅行",
+          albumCount: 1,
+          coverImages: [],
+          photoAlbumCount: 1,
+          comicAlbumCount: 0,
+        },
+      ],
+      missing: [],
+    },
+  });
+  vi.mocked(useLibraryRecentAlbums).mockReturnValue({
+    data: { page: { revision: 1, items: [], total: 0 } },
     isLoading: false,
     isError: false,
     isFetching: false,
@@ -138,7 +164,7 @@ it.each(["nodes", "tags"] as const)(
       vi.mocked(favoritesApi.list).mockResolvedValue({
         favorites: ["smart:旅行"],
       });
-      vi.mocked(useLibraryTags).mockReturnValue(failed as never);
+      vi.mocked(libraryApi.queryTags).mockRejectedValue(new Error("offline"));
     }
     renderFavorites();
     expect(await screen.findByRole("alert")).toHaveTextContent(
@@ -146,7 +172,12 @@ it.each(["nodes", "tags"] as const)(
     );
     expect(screen.queryByText("没有匹配的收藏")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "重试加载" }));
-    expect(retry).toHaveBeenCalledTimes(1);
+    if (kind === "nodes") {
+      expect(retry).toHaveBeenCalledTimes(1);
+    } else {
+      // 标签走的是按名解析接口：重试再打一次它，收藏列表本身不动。
+      expect(libraryApi.queryTags).toHaveBeenCalledTimes(2);
+    }
     expect(favoritesApi.list).toHaveBeenCalledTimes(1);
   },
 );
@@ -155,13 +186,7 @@ it("标签查询失败仍保留已经解析的相册收藏", async () => {
   vi.mocked(favoritesApi.list).mockResolvedValue({
     favorites: [node.id, "smart:旅行"],
   });
-  vi.mocked(useLibraryTags).mockReturnValue({
-    data: undefined,
-    isLoading: false,
-    isError: true,
-    isFetching: false,
-    refetch: vi.fn(),
-  } as never);
+  vi.mocked(libraryApi.queryTags).mockRejectedValue(new Error("offline"));
   renderFavorites();
   expect(await screen.findByRole("alert")).toHaveTextContent(
     "仍显示已加载的收藏",
@@ -196,8 +221,8 @@ it("收藏资源均失效时不引导清除筛选", async () => {
   expect(
     await screen.findByText("收藏的 1 项内容暂时找不到"),
   ).toBeInTheDocument();
-  // 条数说的是"收藏了多少"，失效的那一项另起一行说明。
-  expect(screen.getByText("1 项")).toBeInTheDocument();
+  // 条数说的是"这一侧能看到几项"，失效的那一项另起一行说明。
+  expect(screen.getByText("0 项")).toBeInTheDocument();
   expect(
     screen.getByText("其中 1 项暂时找不到"),
   ).toBeInTheDocument();
@@ -253,10 +278,13 @@ it("名称排序不读取历史，真正的筛选空结果仍可清除", async (
 
 it("收藏为空时给出可收藏的推荐位，而不是只留一片空白", async () => {
   vi.mocked(favoritesApi.list).mockResolvedValue({ favorites: [] });
-  vi.mocked(useLibraryDashboard).mockReturnValue({
+  // 照片侧没有阅读进度，空态推荐的是最近加入的照片。
+  vi.mocked(useLibraryRecentAlbums).mockReturnValue({
     data: {
-      dashboard: {
-        unread: [
+      page: {
+        revision: 1,
+        total: 1,
+        items: [
           {
             id: "a_picnic",
             kind: "album",
@@ -264,9 +292,9 @@ it("收藏为空时给出可收藏的推荐位，而不是只留一片空白", a
             displayName: "野餐那本",
             imageCount: 12,
             coverImages: [],
+            contentKind: "photo",
           },
         ],
-        inProgress: [],
       },
     },
     isLoading: false,

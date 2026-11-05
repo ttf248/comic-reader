@@ -122,7 +122,7 @@ it("父组件重绘并更换回调时，保留当前焦点和搜索状态", () =
 it.each(["library", "image", "video"] as const)(
   "%s 场景只展示对应页面的快捷键",
   (context) => {
-    useAppModeStore.setState({ mode: "photo" });
+    useAppModeStore.setState({ preference: "photo", hydrated: true });
     render(<HelpOverlay context={context} open onClose={vi.fn()} />);
     if (context === "library") {
       expect(screen.getByText("回到照片库")).toBeInTheDocument();
@@ -150,7 +150,7 @@ it.each(["library", "image", "video"] as const)(
 
 // 照片墙是主页面的一种形态：全局操作照旧，再多一组大图预览的操作。
 it("photo 场景展示全局操作与大图预览操作", () => {
-  useAppModeStore.setState({ mode: "photo" });
+  useAppModeStore.setState({ preference: "photo", hydrated: true });
   render(<HelpOverlay context="photo" open onClose={vi.fn()} />);
   expect(screen.getByText("回到照片库")).toBeInTheDocument();
   expect(screen.getByText("照片墙")).toBeInTheDocument();
@@ -163,7 +163,7 @@ it("photo 场景展示全局操作与大图预览操作", () => {
 
 // 少数全局操作的措辞随工作台模式变化。
 it("全局操作的措辞随工作台模式变化", () => {
-  useAppModeStore.setState({ mode: "photo" });
+  useAppModeStore.setState({ preference: "photo", hydrated: true });
   render(<HelpOverlay context="library" open onClose={vi.fn()} />);
   expect(screen.getByText("随机翻翻")).toBeInTheDocument();
   expect(screen.getByText("回到照片库")).toBeInTheDocument();
@@ -171,30 +171,30 @@ it("全局操作的措辞随工作台模式变化", () => {
   expect(screen.getByText("收藏照片")).toBeInTheDocument();
 
   act(() => {
-    useAppModeStore.setState({ mode: "comic" });
+    useAppModeStore.setState({ preference: "comic", hydrated: true });
   });
   expect(screen.getByText("随机一本")).toBeInTheDocument();
   expect(screen.getByText("回到漫画库")).toBeInTheDocument();
   expect(screen.getByText("最近阅读")).toBeInTheDocument();
   expect(screen.getByText("收藏漫画")).toBeInTheDocument();
   act(() => {
-    useAppModeStore.setState({ mode: "photo" });
+    useAppModeStore.setState({ preference: "photo", hydrated: true });
   });
 });
 
 // 未读页只属于漫画工作台：照片模式下按 U 什么也不会发生，
 // 帮助浮层也不该列出这个快捷键。
 it("未读快捷键只在漫画工作台出现", () => {
-  useAppModeStore.setState({ mode: "photo" });
+  useAppModeStore.setState({ preference: "photo", hydrated: true });
   render(<HelpOverlay context="library" open onClose={vi.fn()} />);
   expect(screen.queryByText("未读相册页")).not.toBeInTheDocument();
 
   act(() => {
-    useAppModeStore.setState({ mode: "comic" });
+    useAppModeStore.setState({ preference: "comic", hydrated: true });
   });
   expect(screen.getByText("未读相册页")).toBeInTheDocument();
   act(() => {
-    useAppModeStore.setState({ mode: "photo" });
+    useAppModeStore.setState({ preference: "photo", hydrated: true });
   });
 });
 

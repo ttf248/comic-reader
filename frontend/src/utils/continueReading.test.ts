@@ -25,7 +25,7 @@ describe("continueReadingTarget", () => {
   it("漫画相册跳到上次读到的页，并带上相册名", () => {
     const target = continueReadingTarget(card());
     const url = new URL(target, "http://localhost");
-    expect(url.pathname).toBe("/read/" + encodeURIComponent("E:/存照/某本漫画"));
+    expect(url.pathname).toBe("/comic/read/" + encodeURIComponent("E:/存照/某本漫画"));
     expect(url.searchParams.get("index")).toBe("5");
     expect(url.searchParams.get("name")).toBe("某本漫画");
   });

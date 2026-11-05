@@ -19,7 +19,7 @@ import {
 } from "../../hooks/useLibrary";
 import { useAppMode } from "../../hooks/useAppMode";
 import { libraryApi } from "../../api/library";
-import { albumRoute } from "../../utils/path";
+import { albumRoute, favoritesRoute, homeRoute, recentsRoute, unreadRoute } from "../../utils/path";
 import { thumbUrl } from "../../api/thumbs";
 import { nodeSummaryToCard } from "../../utils/libraryCard";
 import { comicCopy, workbenchCopy } from "../../utils/workbench";
@@ -47,17 +47,20 @@ interface NavEntry {
 //
 // 两个模式是完全独立的界面：照片这边只有浏览、收藏与最近；
 // 漫画这边才有未读与继续阅读。菜单不混排，操作也不互相沾边。
+//
+// 两组的路径也各属一侧（/photo/… 与 /comic/…）：菜单项不是同一个
+// 页面换了个名字，而是两套互不相干的路由。
 const PHOTO_GROUP: NavEntry[] = [
-  { to: "/", label: "照片库", Icon: HomeIcon },
-  { to: "/recents", label: "最近浏览", Icon: ClockIcon },
-  { to: "/favorites", label: "收藏照片", Icon: StarIcon },
+  { to: homeRoute("photo"), label: "照片库", Icon: HomeIcon },
+  { to: recentsRoute("photo"), label: "最近浏览", Icon: ClockIcon },
+  { to: favoritesRoute("photo"), label: "收藏照片", Icon: StarIcon },
 ];
 
 const COMIC_GROUP: NavEntry[] = [
-  { to: "/", label: "漫画库", Icon: HomeIcon },
-  { to: "/unread", label: "未读", Icon: SparkleIcon },
-  { to: "/recents", label: "最近阅读", Icon: ClockIcon },
-  { to: "/favorites", label: "收藏漫画", Icon: StarIcon },
+  { to: homeRoute("comic"), label: "漫画库", Icon: HomeIcon },
+  { to: unreadRoute(), label: "未读", Icon: SparkleIcon },
+  { to: recentsRoute("comic"), label: "最近阅读", Icon: ClockIcon },
+  { to: favoritesRoute("comic"), label: "收藏漫画", Icon: StarIcon },
 ];
 
 // 设置沉到底部组：它是低频入口，不该和「主页 / 最近 / 收藏」平级。
@@ -90,7 +93,7 @@ export default function Sidebar({
 
   const randomAlbum = useMutation({
     mutationFn: () => libraryApi.randomAlbum(mode),
-    onSuccess: ({ album }) => navigate(albumRoute(album.id)),
+    onSuccess: ({ album }) => navigate(albumRoute(mode, album.id)),
     onError: () =>
       pushToast({ kind: "info", message: "没有可随机打开的相册" }),
   });
@@ -133,9 +136,14 @@ export default function Sidebar({
   const navItemClass = (isActive: boolean) =>
     `nav-entry group ${collapsed ? "nav-entry--compact" : ""} ${isActive ? "is-active" : ""}`;
 
+  // 选中态：路径完全相等才算命中。
+  //
+  // 两个模式的路径互为前缀（/photo 与 /photo/recents），用 startsWith
+  // 会让「照片库」和「最近浏览」同时亮起来。首页是精确匹配，
+  // 其余条目靠前缀命中（/photo/albums/… 归属于相册入口）。
   const isEntryActive = (entry: NavEntry) =>
-    entry.to === "/"
-      ? location.pathname === "/"
+    entry.to === homeRoute(mode)
+      ? location.pathname === entry.to
       : location.pathname.startsWith(entry.to);
 
   const renderGroup = (
@@ -244,8 +252,13 @@ export default function Sidebar({
         </button>
       </div>
 
-      {/* 工作台模式切换：它决定下面所有列表呈现哪一类相册。 */}
-      {!collapsed && (
+      {/* 工作台模式切换：它决定下面所有列表呈现哪一类相册。
+          折叠态也留着它 —— 切模式在两种形态下都要一步可达。 */}
+      {collapsed ? (
+        <div className="px-4 pt-4 flex justify-center">
+          <ModeSwitch mode={mode} onChange={setMode} compact />
+        </div>
+      ) : (
         <div className="px-4 pt-4">
           <ModeSwitch mode={mode} onChange={setMode} />
         </div>
@@ -254,7 +267,7 @@ export default function Sidebar({
       <nav ref={navRef} className="pt-5 pb-3 px-4 space-y-1.5">
         {mode === "comic"
           ? renderGroup("漫画", COMIC_GROUP, (entry) =>
-              entry.to === "/unread" ? unreadCount : 0,
+              entry.to === unreadRoute() ? unreadCount : 0,
             )
           : renderGroup("照片", PHOTO_GROUP, () => 0)}
       </nav>

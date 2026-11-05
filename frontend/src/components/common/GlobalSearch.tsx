@@ -24,7 +24,7 @@ export default function GlobalSearch() {
   const searchEnabled = searchTerm.length >= 2;
   const searchQuery = useQuery({
     queryKey: ["library", "search", mode, searchTerm],
-    queryFn: () => albumsApi.search(searchTerm, 10, mode),
+    queryFn: () => albumsApi.search(searchTerm, mode, 10),
     enabled: searchEnabled,
     staleTime: 30_000,
     retry: false,
@@ -40,10 +40,10 @@ export default function GlobalSearch() {
     setActiveIndex(-1);
     setQuery("");
     if (hit.kind === "smartCollection" && hit.path.startsWith("smart:")) {
-      navigate(tagRoute(hit.path.slice("smart:".length)));
+      navigate(tagRoute(mode, hit.path.slice("smart:".length)));
       return;
     }
-    navigate(albumRoute(hit.path));
+    navigate(albumRoute(mode, hit.path));
   }
 
   function moveActive(step: -1 | 1) {

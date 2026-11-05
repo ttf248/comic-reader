@@ -106,15 +106,22 @@ export function useLibraryUnreadAlbums() {
   });
 }
 
+/**
+ * 某个根或集合下的直属子节点。
+ *
+ * kind 由调用方给出，不取当前工作台：集合继承所属目录的属性，
+ * 用当前模式去查会把漫画集合里的卷过滤掉，集合看起来是空的。
+ */
 export function useLibraryChildren(
   parentId: string,
+  kind: AppMode,
   expectedRevision?: number,
 ) {
-  const { mode, ready } = useAppMode();
+  const { ready } = useAppMode();
   return useQuery({
-    queryKey: [...libraryQueryKeys.children(parentId, mode), expectedRevision],
+    queryKey: [...libraryQueryKeys.children(parentId, kind), expectedRevision],
     queryFn: async () => {
-      const page = await libraryApi.allChildren(parentId, mode);
+      const page = await libraryApi.allChildren(parentId, kind);
       if (
         expectedRevision !== undefined &&
         page.revision !== expectedRevision
@@ -164,6 +171,26 @@ export function useLibraryTags(enabled = true, expectedRevision?: number) {
       return page;
     },
     enabled: enabled && ready,
+  });
+}
+
+/**
+ * 「最近加入」的相册摘要。
+ *
+ * 照片工作台不记录浏览进度，没有「继续阅读」可言；这个列表是它与
+ * 漫画侧对称的入口，也是收藏空态的推荐来源。
+ */
+export function useLibraryRecentAlbums(
+  kind: AppMode,
+  limit = 12,
+  enabled = true,
+) {
+  const { ready } = useAppMode();
+  return useQuery({
+    queryKey: [...libraryQueryKeys.mode(kind), "recent", limit],
+    queryFn: () => libraryApi.recentAlbums(kind, limit),
+    enabled: ready && enabled,
+    staleTime: 60_000,
   });
 }
 

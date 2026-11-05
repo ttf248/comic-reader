@@ -14,20 +14,16 @@ import AlbumGridSkeleton from "../components/album/AlbumGridSkeleton";
 import { ListFilterBar } from "../components/common/ListFilterBar";
 import EmptyState from "../components/common/EmptyState";
 import { StarIcon } from "../components/common/Icon";
-import { decodeFavPath } from "../utils/path";
+import { decodeFavPath, homeRoute } from "../utils/path";
 import { compareDatesDesc } from "../utils/date";
 import type { GalleryContextEntry } from "../utils/galleryContext";
 import { useViewedSort } from "../hooks/useHistory";
 import {
-  useLibraryNodes,
-  useLibraryTags,
   useLibraryDashboard,
+  useLibraryRecentAlbums,
 } from "../hooks/useLibrary";
-import {
-  nodeSummaryToCard,
-  tagSummaryToCard,
-  cardMatchesQuery,
-} from "../utils/libraryCard";
+import { useFavoritesByMode } from "../hooks/useFavoritesByMode";
+import { nodeSummaryToCard, cardMatchesQuery } from "../utils/libraryCard";
 
 // 收藏页：合并 albums + smart collections 中的收藏。
 // 支持搜索 + 排序 + 阅读进度展示。
@@ -55,71 +51,32 @@ export default function Favorites() {
     sortBy === "viewed" && favorites.some((id) => id.startsWith("a_"));
   const { query: historyQuery, compareViewed } = useViewedSort(needsHistory);
 
-  const nodeIds = useMemo(
-    () => favorites.filter((id) => !id.startsWith("smart:")),
-    [favorites],
-  );
-  const smartNames = useMemo(
-    () =>
-      favorites
-        .filter((id) => id.startsWith("smart:"))
-        .map((id) => id.slice(6)),
-    [favorites],
-  );
-  const nodesQuery = useLibraryNodes(nodeIds);
-  const tagsQuery = useLibraryTags(smartNames.length > 0);
-  // 空态推荐位：拿仪表盘里的未读相册当"可以马上收藏的对象"。
-  // 仪表盘本来就常驻在侧栏 / 首页，这里复用同一份数据，不额外发请求。
+  // 收藏按工作台拆开看：另一个工作台的内容一条都不出现，
+  // 「失效」也只看库里是不是真的没有了。
+  const {
+    cards,
+    count: favoritesCount,
+    missingIds,
+    nodesFailed,
+    tagsFailed,
+    detailsLoading,
+    retry: retryFavorites,
+  } = useFavoritesByMode(mode);
+
+  // 空态推荐位：给当前这一侧「现在可以马上收藏的东西」。
+  // 漫画侧是还没翻开的漫画；照片侧没有阅读进度，改推最近加入的照片。
   const dashboardQuery = useLibraryDashboard();
-  const nodesById = useMemo(
-    () =>
-      new Map((nodesQuery.data?.items ?? []).map((node) => [node.id, node])),
-    [nodesQuery.data],
-  );
-  const tagsByName = useMemo(
-    () => new Map((tagsQuery.data?.items ?? []).map((tag) => [tag.tag, tag])),
-    [tagsQuery.data],
-  );
-
-  const cards = useMemo<CardData[]>(() => {
-    const out: CardData[] = [];
-    for (const f of favorites) {
-      if (f.startsWith("smart:")) {
-        const tagName = f.slice(6);
-        const tag = tagsByName.get(tagName);
-        if (!tag) continue;
-        // 智能标签是导航容器，跨用途成立：两种工作台都留着它。
-        out.push({ ...tagSummaryToCard(tag), isFavorite: true });
-        continue;
-      }
-      const node = nodesById.get(f);
-      if (!node) continue;
-      // 收藏是用户的显式选择，但工作台只呈现当前这一类：
-      // 照片工作台里不该冒出一本漫画。
-      if (node.contentKind !== mode) continue;
-      out.push({ ...nodeSummaryToCard(node), isFavorite: true });
-    }
-    return out;
-  }, [favorites, nodesById, tagsByName, mode]);
-
-  // 被当前工作台过滤掉的收藏数要说清楚，否则用户以为收藏丢了。
-  const hiddenCount = useMemo(() => {
-    return favorites.filter((f) => {
-      if (f.startsWith("smart:")) return false;
-      const node = nodesById.get(f);
-      return node?.kind === "album" && node.contentKind !== mode;
-    }).length;
-  }, [favorites, nodesById, mode]);
-
-  // 空态推荐位：仪表盘里的未读相册（最多 6 本）。
-  // 收藏为空时这一排就是"现在可以马上收藏的东西"。
-  const suggestions = useMemo<CardData[]>(
-    () =>
-      (dashboardQuery.data?.dashboard?.unread ?? [])
+  const recentQuery = useLibraryRecentAlbums(mode, 6);
+  const suggestions = useMemo<CardData[]>(() => {
+    if (mode === "comic") {
+      return (dashboardQuery.data?.dashboard?.unread ?? [])
         .slice(0, 6)
-        .map((album) => nodeSummaryToCard(album, "u:")),
-    [dashboardQuery.data],
-  );
+        .map((album) => nodeSummaryToCard(album, "u:"));
+    }
+    return (recentQuery.data?.page.items ?? [])
+      .slice(0, 6)
+      .map((album) => nodeSummaryToCard(album, "r:"));
+  }, [mode, dashboardQuery.data, recentQuery.data]);
 
   const progressPaths = useMemo(
     () =>
@@ -201,22 +158,9 @@ export default function Favorites() {
   useGalleryContextSync({ type: "favorites" }, favEntries);
 
   const favoritesFailed = favoritesQuery.isError;
-  const nodesFailed = nodeIds.length > 0 && nodesQuery.isError;
-  const tagsFailed = smartNames.length > 0 && tagsQuery.isError;
   const historyFailed = needsHistory && historyQuery.isError;
   const loadFailed =
     favoritesFailed || nodesFailed || tagsFailed || historyFailed;
-  const detailsLoading =
-    (nodeIds.length > 0 && nodesQuery.isLoading) ||
-    (smartNames.length > 0 && tagsQuery.isLoading);
-  // 收藏里指向已不存在资源的 id（改名 / 移动过的相册）。
-  // 详情还没查完时不能算：那时的 cards 为空只是"还没加载"，不是"找不到"。
-  const missingIds = useMemo(() => {
-    if (detailsLoading) return [];
-    return favorites.filter((f) =>
-      f.startsWith("smart:") ? !tagsByName.has(f.slice(6)) : !nodesById.has(f),
-    );
-  }, [detailsLoading, favorites, nodesById, tagsByName]);
   const missingCount = missingIds.length;
 
   // 清理失效收藏：这些条目永远渲染不出来，留着只会让收藏页一直空着。
@@ -238,13 +182,9 @@ export default function Favorites() {
   };
   const retrying =
     favoritesQuery.isFetching ||
-    (nodeIds.length > 0 && nodesQuery.isFetching) ||
-    (smartNames.length > 0 && tagsQuery.isFetching) ||
     (needsHistory && historyQuery.isFetching);
   const retryLoad = () => {
-    if (favoritesFailed) void favoritesQuery.refetch();
-    if (nodesFailed) void nodesQuery.refetch();
-    if (tagsFailed) void tagsQuery.refetch();
+    retryFavorites();
     if (historyFailed) void historyQuery.refetch();
   };
 
@@ -260,13 +200,8 @@ export default function Favorites() {
                 ? "正在加载收藏…"
                 : favoritesFailed && favorites.length === 0
                   ? "收藏暂不可用"
-                  : `${favorites.length - hiddenCount} 项`}
+                  : `${favoritesCount} 项`}
             </p>
-            {hiddenCount > 0 && (
-              <span className="text-[12.5px] text-fg-subtle">
-                另有 {hiddenCount} 项属于其它类型
-              </span>
-            )}
             {missingCount > 0 && (
               <span className="text-[12.5px] text-fg-subtle">
                 其中 {missingCount} 项暂时找不到
@@ -314,7 +249,7 @@ export default function Favorites() {
             description="收藏是给相册打星标：点封面右上角的星标，这一本就会出现在这里。下面这几本可以直接点星标试试。"
             icon={<StarIcon size={20} />}
             action={
-              <button onClick={() => navigate("/")} className="btn btn-primary">
+              <button onClick={() => navigate(homeRoute(mode))} className="btn btn-primary">
                 去主页看看
               </button>
             }
@@ -363,7 +298,7 @@ export default function Favorites() {
                   {cleaning ? "清理中…" : `清理 ${missingCount} 项失效收藏`}
                 </button>
               )}
-              <button onClick={() => navigate("/")} className="btn btn-primary">
+              <button onClick={() => navigate(homeRoute(mode))} className="btn btn-primary">
                 去主页看看
               </button>
             </div>

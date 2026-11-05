@@ -15,7 +15,11 @@ export interface SearchHit {
 }
 
 export const albumsApi = {
-  search(q: string, limit = 50, kind: AppMode = "photo") {
+  /**
+   * 全局搜索。kind 必填：媒体库按目录属性一分为二，
+   * 搜索结果只呈现当前这一侧，给个默认值只会静默搜错模式。
+   */
+  search(q: string, kind: AppMode, limit = 50) {
     return api<{ ok: boolean; results: SearchHit[]; count: number }>(
       `/api/search`,
       {

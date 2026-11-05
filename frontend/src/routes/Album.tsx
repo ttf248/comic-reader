@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import { Navigate, useNavigate, useParams } from "react-router-dom";
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearchStore } from "../store/searchStore";
 import { useFavorites } from "../hooks/useFavorites";
@@ -20,7 +20,8 @@ import {
   type CollectionLike,
 } from "../utils/albumGrouping";
 import EmptyState from "../components/common/EmptyState";
-import { decodeFavPath, readerRoute } from "../utils/path";
+import { albumRoute, decodeFavPath, decodePathTail, homeRoute, readerRoute } from "../utils/path";
+import { useAppMode } from "../hooks/useAppMode";
 import { useSafeBack } from "../utils/navigation";
 import { compareDatesDesc } from "../utils/date";
 import { ChevronLeftIcon, StarIcon } from "../components/common/Icon";
@@ -62,6 +63,7 @@ function toAlbumLike(summary: LibraryNodeSummary): AlbumLike {
     sourceName: summary.sourceName,
     virtual: summary.virtual,
     modTime: summary.modTime,
+    contentKind: summary.contentKind,
   };
 }
 
@@ -77,6 +79,7 @@ function toCollectionLike(summary: LibraryNodeSummary): CollectionLike {
     coverImages: summary.coverImages,
     sourceRoot: summary.sourceRoot,
     sourceName: summary.sourceName,
+    contentKind: summary.contentKind,
   };
 }
 
@@ -92,13 +95,16 @@ function toCollectionLike(summary: LibraryNodeSummary): CollectionLike {
  * 这里只负责按类型分派。
  */
 export default function Album() {
-  const params = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
+  const { mode } = useAppMode();
   // 返回：应用内还有历史就回退，否则回主页（直接打开相册链接时
   // navigate(-1) 会一路退出应用，停在空白页）。
-  const goBack = useSafeBack("/");
+  const goBack = useSafeBack(homeRoute(mode));
   const queryClient = useQueryClient();
-  const resourceID = decodeFavPath("/albums/" + (params["*"] ?? ""));
+  // 资源 ID 从原始路径切段并解码一次：useParams 已经解过一次，
+  // 再解会把 ID 里的字面 %xx 破坏掉。
+  const resourceID = decodePathTail(location.pathname, "/albums/");
 
   const query = useSearchStore((s) => s.query);
   const sortBy = useSearchStore((s) => s.sortBy);
@@ -110,8 +116,11 @@ export default function Album() {
   const nodeQuery = useLibraryNodes(nodeIds);
   const refetchNode = nodeQuery.refetch;
   const node = nodeQuery.data?.items[0];
+  // 集合的子节点按集合自己的属性查：集合继承所属目录的属性，
+  // 用当前工作台去查会把另一侧的成员过滤掉，集合看起来是空的。
   const childrenQuery = useLibraryChildren(
     node?.kind === "collection" ? node.id : "",
+    node?.contentKind ?? mode,
     nodeQuery.data?.revision,
   );
   const revisionChanged =
@@ -272,9 +281,11 @@ function CollectionView({
       modTime: a.modTime,
       coverPath: a.coverImage,
       coverKind: a.coverKind,
-      to: `/albums/${encodeURIComponent(a.path)}`,
+      to: albumRoute(a.contentKind, a.path),
       sourceRoot: a.sourceRoot,
       sourceName: a.sourceName,
+      // 集合里的相册要带上属性：漫画卷在集合里同样显示进度与已读完徽标。
+      contentKind: a.contentKind,
     }));
     const collCards: CardData[] = detail.collections.map((sub) => {
       return {
@@ -286,10 +297,11 @@ function CollectionView({
         count: sub.albumCount,
         coverPath: sub.coverImage ?? "",
         covers: sub.coverImages,
-        to: `/albums/${encodeURIComponent(sub.path)}`,
+        to: albumRoute(sub.contentKind, sub.path),
         sourceRoot: sub.sourceRoot,
         sourceName: sub.sourceName,
         modTime: detail.modTime,
+        contentKind: sub.contentKind,
       };
     });
     return [...albumCards, ...collCards];

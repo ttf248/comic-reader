@@ -103,6 +103,7 @@ describe("groupAlbumsAndCollectionsByYear", () => {
           mk("12.13", 1, 0, "E:\\存照\\2024年\\12.13"),
         ],
         albumCount: 3,
+        contentKind: "photo",
       },
     ];
     const g = groupAlbumsAndCollectionsByYear([], collections);
@@ -119,23 +120,27 @@ describe("groupAlbumsAndCollectionsByYear", () => {
         path: "E:\\存照\\2024年",
         name: "2024年",
         albumCount: 0,
+        contentKind: "photo" as const,
         albums: [mk("散图", 100, 0, "E:\\存照\\2024年")],
         collections: [
           {
             path: "E:\\存照\\2024年\\夏威夷-度假",
             name: "夏威夷-度假",
             albumCount: 0,
+            contentKind: "photo" as const,
             albums: [],
             collections: [
               {
                 path: "E:\\存照\\2024年\\夏威夷-度假\\相册",
                 name: "相册",
                 albumCount: 0,
+                contentKind: "photo" as const,
                 albums: [],
                 collections: [
                   {
                     path: "E:\\存照\\2024年\\夏威夷-度假\\相册\\作品",
                     name: "作品",
+                    contentKind: "photo" as const,
                     albums: [
                       mk(
                         "散图",
@@ -178,6 +183,7 @@ describe("groupAlbumsAndCollectionsByYear", () => {
           videoCount: 8,
           coverImage: "f_primary",
           coverImages: ["f_primary", "f_second"],
+          contentKind: "photo",
         },
       ],
     );
@@ -201,5 +207,6 @@ function mk(
     coverImage: "",
     imageCount,
     videoCount,
+    contentKind: "photo" as const,
   };
 }

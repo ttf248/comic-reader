@@ -6,6 +6,7 @@ import { scanApi } from "../../api/scan";
 import { useScanSSE } from "../../hooks/useScanSSE";
 import { useKeyboard } from "../../hooks/useKeyboard";
 import { useUIStore } from "../../store/uiStore";
+import { useAppMode } from "../../hooks/useAppMode";
 import { libraryApi } from "../../api/library";
 import { libraryQueryKeys, useLibraryManifest } from "../../hooks/useLibrary";
 import ThemeSwitcher from "../common/ThemeSwitcher";
@@ -42,9 +43,13 @@ export default function Toolbar({
   const immersiveOverlay = useUIStore((s) => s.immersiveOverlay);
   const onGallery = immersiveOverlay;
   // 媒体库规模：放在顶栏左槽，作为全局上下文（底部状态栏不再重复）。
+  // 规模按当前工作台算：这一侧只有多少相册、多少集合。
   const manifest = useLibraryManifest().data?.manifest;
+  const { mode } = useAppMode();
   const libraryContext = manifest
-    ? `${manifest.statistics.albumCount} 本相册 · ${manifest.statistics.collectionCount} 个集合`
+    ? mode === "comic"
+      ? `${manifest.statistics.comicAlbumCount ?? 0} 本漫画 · ${manifest.statistics.comicCollectionCount ?? 0} 个集合`
+      : `${manifest.statistics.photoAlbumCount ?? 0} 本相册 · ${manifest.statistics.photoCollectionCount ?? 0} 个集合`
     : "";
 
   const startScan = useMutation({

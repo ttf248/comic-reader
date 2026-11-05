@@ -37,7 +37,7 @@ import {
   ArrowUpRightIcon,
 } from "../components/common/Icon";
 import { displayedPageIndex } from "../utils/progress";
-import { albumRoute } from "../utils/path";
+import { albumRoute, homeRoute, readerRoute } from "../utils/path";
 import { useSafeBack } from "../utils/navigation";
 import {
   getGalleryContext,
@@ -61,8 +61,7 @@ export default function Reader() {
   const pushToast = useUIStore((s) => s.pushToast);
   const queryClient = useQueryClient();
 
-  // 漫画阅读器的路由是 /read/<album id>；旧链接里的 ?path= 仍然可用，
-  // 由 LegacyGalleryRedirect 负责转换。
+  // 漫画阅读器的路由是 /comic/read/<album id>。
   const pathParam = decodeURIComponent(routeParams["albumId"] ?? "");
   const initialIndex = Math.max(
     0,
@@ -189,7 +188,13 @@ export default function Reader() {
   // 返回：优先回到应用内的上一页；没有可回退历史时回到当前相册页。
   // 直接打开阅读器链接（刷新、复制链接到新标签页）时，navigate(-1) 会
   // 一路退出应用停在空白页，必须有兜底。
-  const goBack = useSafeBack(pathParam ? albumRoute(pathParam) : "/");
+  //
+  // 兜底落在相册自己所属的那一侧：阅读器主要是漫画用的，但照片相册
+  // 也能被视频播放页复用，返回时不该跳到另一侧去。
+  const albumSide = albumSummary?.contentKind ?? "comic";
+  const goBack = useSafeBack(
+    pathParam ? albumRoute(albumSide, pathParam) : homeRoute(albumSide),
+  );
   // 当前展示的文件路径。Gallery 中段才计算 isVideo/images/videos/index → current，
   // 但 onSetCover 要读这个值。放进 ref 让 callback 拿到最新值而不需要把 current
   // 提前到 useCallback 之前（避免引入 forward reference）。
@@ -622,7 +627,7 @@ export default function Reader() {
       const i = Math.max(0, Math.min(videos.length - 1, targetIdx));
       const next = new URLSearchParams(params);
       next.set("index", String(i));
-      navigate(`/read/${encodeURIComponent(pathParam)}?${next.toString()}`, {
+      navigate(`${readerRoute(pathParam)}?${next.toString()}`, {
         replace: true,
       });
     },
@@ -906,7 +911,7 @@ export default function Reader() {
   const openWorkbench = useCallback(
     (next: AppMode) => {
       setWorkbenchMode(next);
-      navigate("/");
+      navigate(homeRoute(next));
     },
     [navigate, setWorkbenchMode],
   );

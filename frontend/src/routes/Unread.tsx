@@ -1,6 +1,6 @@
 import PageHeading from "../components/common/PageHeading";
 import { useMemo } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useSearchStore } from "../store/searchStore";
 import { useUIStore } from "../store/uiStore";
 import { useUnreadAlbums } from "../hooks/useUnreadAlbums";
@@ -11,11 +11,11 @@ import { ListFilterBar } from "../components/common/ListFilterBar";
 import EmptyState from "../components/common/EmptyState";
 import { SparkleIcon, ShuffleIcon } from "../components/common/Icon";
 import type { GalleryContextEntry } from "../utils/galleryContext";
-import { albumRoute, decodeFavPath } from "../utils/path";
+import { albumRoute, decodeFavPath, homeRoute } from "../utils/path";
 import { compareDatesDesc } from "../utils/date";
 import { useViewedSort } from "../hooks/useHistory";
 import { comicCopy } from "../utils/workbench";
-import { useAppMode } from "../hooks/useAppMode";
+
 import { cardMatchesQuery } from "../utils/libraryCard";
 import ViewedSortNotice from "../components/common/ViewedSortNotice";
 
@@ -34,7 +34,6 @@ export default function Unread() {
   const minImageCount = useSearchStore((s) => s.minImageCount);
   const pushToast = useUIStore((s) => s.pushToast);
   const { cards, count, total, isLoading } = useUnreadAlbums();
-  const { mode } = useAppMode();
   const copy = comicCopy();
   const needsHistory = sortBy === "viewed" && cards.length > 0;
   const { query: historyQuery, compareViewed } = useViewedSort(needsHistory);
@@ -90,12 +89,8 @@ export default function Unread() {
       return;
     }
     const pick = filtered[Math.floor(Math.random() * filtered.length)];
-    navigate(albumRoute(pick.to.replace(/^\/albums\//, "")));
+    navigate(albumRoute("comic", decodeFavPath(pick.to)));
   }
-
-  // 未读页只属于漫画工作台：照片模式下没有「未读」这回事，
-  // 从地址栏直接进来时回到主页，而不是给一个空页面。
-  if (mode !== "comic") return <Navigate to="/" replace />;
 
   return (
     <div className="min-h-full">
@@ -151,7 +146,7 @@ export default function Unread() {
                 去设置
               </button>
             ) : (
-              <button onClick={() => navigate("/")} className="btn btn-outline">
+              <button onClick={() => navigate(homeRoute("comic"))} className="btn btn-outline">
                 回主页
               </button>
             )

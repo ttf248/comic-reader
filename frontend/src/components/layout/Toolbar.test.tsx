@@ -6,7 +6,15 @@ import Toolbar from "./Toolbar";
 
 const manifest = {
   manifest: {
-    statistics: { albumCount: 104, collectionCount: 28, tagCount: 3 },
+    statistics: {
+      albumCount: 104,
+      collectionCount: 28,
+      tagCount: 3,
+      photoAlbumCount: 60,
+      comicAlbumCount: 44,
+      photoCollectionCount: 20,
+      comicCollectionCount: 8,
+    },
     scannedAt: "2026-11-03T00:00:00Z",
   },
 };
@@ -62,7 +70,7 @@ describe("Toolbar", () => {
 
   it("左槽显示媒体库规模，作为全局上下文", () => {
     renderToolbar();
-    expect(screen.getByText("104 本相册 · 28 个集合")).toBeInTheDocument();
+    expect(screen.getByText("60 本相册 · 20 个集合")).toBeInTheDocument();
   });
 
   it("中槽是搜索，右槽是全局动作", () => {

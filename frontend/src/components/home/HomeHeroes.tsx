@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { thumbUrl } from "../../api/thumbs";
 import { previewUrl } from "../../api/images";
 import { useFavorites } from "../../hooks/useFavorites";
-import { decodeFavPath } from "../../utils/path";
+import { decodeFavPath, recentsRoute, unreadRoute } from "../../utils/path";
 import { readingPercent } from "../../utils/continueReading";
 import { comicCopy } from "../../utils/workbench";
 import AlbumCard from "../album/AlbumCard";
@@ -60,7 +60,7 @@ export function UnreadHero({
             <ShuffleIcon size={15} />
           </button>
           <Link
-            to="/unread"
+            to={unreadRoute()}
             className="btn btn-sm btn-ghost"
             aria-label={`查看全部${copy.unreadTitle}相册`}
           >
@@ -169,7 +169,7 @@ export function ContinueHero({
       )}
       {cards.length > 4 && (
         <Link
-          to="/recents"
+          to={recentsRoute("comic")}
           className="reading-desk__muted inline-flex items-center gap-2 self-end mt-4 min-h-7"
         >
           还有 {cards.length - 4} 本在读 <ArrowRightLineIcon size={12} />

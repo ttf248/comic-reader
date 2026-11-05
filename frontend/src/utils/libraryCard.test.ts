@@ -13,6 +13,7 @@ function node(
     name: id,
     displayName: id,
     coverImages: [],
+    contentKind: "photo",
     ...extra,
   };
 }
@@ -55,6 +56,7 @@ describe("libraryCard", () => {
         node("c_root", "collection", { albumCount: 1 }),
       ],
       tags,
+      "photo",
     );
 
     expect(cards.map((card) => card.id)).toEqual(["c:c_root", "s:旅行"]);

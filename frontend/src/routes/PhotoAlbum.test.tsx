@@ -157,7 +157,7 @@ describe("PhotoAlbum", () => {
       fireEvent.click(screen.getByRole("menuitem", { name: "复制相册链接" }));
       await waitFor(() =>
         expect(writeText).toHaveBeenCalledWith(
-          window.location.origin + "/albums/a_trip",
+          window.location.origin + "/photo/albums/a_trip",
         ),
       );
     } finally {

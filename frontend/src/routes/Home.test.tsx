@@ -106,6 +106,13 @@ vi.mock("../hooks/useLibrary", () => {
     useLibraryManifest: () => ({ data: { manifest }, isLoading: false }),
     useLibraryUnreadAlbums: () => query(mocks.items),
     useLibraryChildren: () => query(mocks.items),
+    // 照片侧的「最近加入」专区：漫画工作台不用它，这里给空列表。
+    useLibraryRecentAlbums: () => ({
+      data: { page: { revision: 1, items: [], total: 0 } },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    }),
     useTagAlbums: () => query(mocks.items),
     useLibraryTags: () => ({ data: { items: [] }, isLoading: false }),
     useLibraryNodes: () => query(mocks.items),
@@ -119,12 +126,13 @@ beforeEach(() => {
   useSearchStore.getState().reset();
   mocks.inProgress = true;
   // 「继续阅读」与「未读」属于漫画工作台，首页的这些用例都在漫画模式跑。
-  useAppModeStore.setState({ mode: "comic", ready: true });
+  useAppModeStore.setState({ preference: "comic", hydrated: true });
   vi.mocked(historyApi.list).mockResolvedValue({ history: [] });
   mocks.items = [
     {
       id: "a_1",
       kind: "album",
+      contentKind: "photo",
       name: "2023年测试相册",
       displayName: "2023年测试相册",
       imageCount: 3,
@@ -200,6 +208,7 @@ it("多本在读时保留独立发现区且未读预览不重复", async () => {
     {
       id: "a_2",
       kind: "album" as const,
+      contentKind: "photo" as const,
       name: "2024年第二本",
       displayName: "2024年第二本",
       imageCount: 3,
@@ -232,7 +241,7 @@ it("没有在读相册时未读区独立成块（没有舞台可挂）", async (
 
 // 照片工作台没有阅读进度，也没有未读：两个区块都不出现。
 it("照片工作台不显示继续阅读与未读区", async () => {
-  useAppModeStore.setState({ mode: "photo", ready: true });
+  useAppModeStore.setState({ preference: "photo", hydrated: true });
   renderHome();
   await waitFor(() => expect(screen.getByTestId("album-grid")).toBeTruthy());
   expect(screen.queryByTestId("continue-hero")).toBeNull();

@@ -1,4 +1,4 @@
-import type { LibraryNodeSummary, LibraryTagSummary } from "../api/library";
+import type { AppMode, LibraryNodeSummary, LibraryTagSummary } from "../api/library";
 import type { CardData } from "../components/album/AlbumCard";
 import { albumRoute, tagRoute } from "./path";
 
@@ -36,14 +36,14 @@ export function nodeSummaryToCard(
     coverPath: node.coverImage ?? "",
     covers: node.coverImages,
     coverKind: node.coverKind,
-    to: albumRoute(node.id),
+    to: albumRoute(node.contentKind, node.id),
     sourceRoot: node.sourceRoot,
     sourceName: node.sourceName,
     contentKind: node.contentKind,
   };
 }
 
-export function tagSummaryToCard(tag: LibraryTagSummary): CardData {
+export function tagSummaryToCard(tag: LibraryTagSummary, mode: AppMode): CardData {
   return {
     id: "s:" + tag.tag,
     variant: "smart",
@@ -51,7 +51,9 @@ export function tagSummaryToCard(tag: LibraryTagSummary): CardData {
     count: tag.albumCount,
     coverPath: tag.coverImage ?? "",
     covers: tag.coverImages,
-    to: tagRoute(tag.tag),
+    to: tagRoute(mode, tag.tag),
+    // 标签是跨目录的导航容器，它的「属于哪一侧」看当前工作台。
+    contentKind: mode,
   };
 }
 
@@ -60,12 +62,13 @@ export function tagSummaryToCard(tag: LibraryTagSummary): CardData {
 export function libraryOverviewCards(
   nodes: LibraryNodeSummary[],
   tags: LibraryTagSummary[],
+  mode: AppMode,
 ): CardData[] {
   return [
     ...nodes
       .filter((node) => !node.virtual)
       .map((node) => nodeSummaryToCard(node)),
-    ...tags.map(tagSummaryToCard),
+    ...tags.map((tag) => tagSummaryToCard(tag, mode)),
   ];
 }
 

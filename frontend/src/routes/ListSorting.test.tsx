@@ -97,6 +97,10 @@ vi.mock("../hooks/useLibrary", () => {
     useLibraryChildren: () => query(mocks.items),
     useTagAlbums: () => query(mocks.items),
     useLibraryTags: () => ({ data: { items: [] }, isLoading: false }),
+    useLibraryRecentAlbums: () => ({
+      data: { page: { revision: 1, items: [], total: 0 } },
+      isLoading: false,
+    }),
     useLibraryNodes: (ids: string[]) =>
       query(
         ids.includes("c_root")
@@ -104,6 +108,7 @@ vi.mock("../hooks/useLibrary", () => {
               {
                 id: "c_root",
                 kind: "collection",
+                contentKind: "photo",
                 name: "集合",
                 displayName: "集合",
                 coverImages: [],

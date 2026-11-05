@@ -22,7 +22,7 @@ function makeCard(path: string, name: string) {
     coverKind: "image" as const,
     // 卡片措辞跟相册自己的用途走：这条用例跑在漫画工作台里。
     contentKind: "comic" as const,
-    to: `/albums/${encodeURIComponent(path)}`,
+    to: `/comic/albums/${encodeURIComponent(path)}`,
   };
 }
 
@@ -92,11 +92,11 @@ describe("UnreadHero", () => {
     );
     const { container } = renderHero(eight, 8);
     // 发现区只预览四本，完整列表由明确链接承接。
-    const renderedCards = container.querySelectorAll('a[href^="/albums/"]');
+    const renderedCards = container.querySelectorAll('a[href^="/comic/albums/"]');
     expect(renderedCards.length).toBe(4);
     expect(
       screen.getByRole("link", { name: "查看全部未读相册" }),
-    ).toHaveAttribute("href", "/unread");
+    ).toHaveAttribute("href", "/comic/unread");
   });
 
   it("count 与 cards.length 不一致时显示 count(可能 >6)", () => {
@@ -104,7 +104,7 @@ describe("UnreadHero", () => {
     const { container } = renderHero([makeCard("/a", "A")], 7);
     const heroSection = screen.getByTestId("unread-hero");
     expect(heroSection.textContent).toMatch(/7\s*本等你翻开/);
-    expect(container.querySelectorAll('a[href^="/albums/"]').length).toBe(1);
+    expect(container.querySelectorAll('a[href^="/comic/albums/"]').length).toBe(1);
   });
 
   it("空 cards 数组仍渲染(调用方决定是否隐藏)", () => {

@@ -24,7 +24,7 @@ import { formatDuration } from "../../utils/format";
 import { isCompleted, isUnread, progressPercent } from "../../utils/progress";
 import { favoriteResourceId } from "../../utils/path";
 import { useToggleFavorite } from "../../hooks/useFavorites";
-import { comicCopy } from "../../utils/workbench";
+import { collectionUnit, comicCopy } from "../../utils/workbench";
 import type { ContentKind } from "../../api/library";
 import CardCover from "./CardCover";
 
@@ -402,15 +402,12 @@ function GridCard({
                   </span>
                 );
               }
-              // collection / smart 变体：维持 count + "卷"（语义是子相册数）
+              // collection / smart 变体：count + 计数单位（语义是子相册数）。
+              // 单位跟卡片所属的那一侧走：照片侧「本」，漫画侧「卷」。
               return (
                 <span className="shrink-0 whitespace-nowrap">
                   {data.count}{" "}
-                  {data.variant === "collection"
-                    ? "卷"
-                    : data.variant === "smart"
-                      ? "卷"
-                      : "张"}
+                  {collectionUnit(data.contentKind ?? "photo")}
                 </span>
               );
             })()}

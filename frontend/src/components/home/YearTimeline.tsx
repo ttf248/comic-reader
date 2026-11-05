@@ -10,6 +10,11 @@ interface Props {
   gridRef?: RefObject<HTMLDivElement>;
 }
 
+/**
+ * 年份索引。
+ *
+ * 点年份卡：只有一个相册时直接进去，多个则切换年份筛选并滚到网格。
+ */
 export default function YearTimeline({ groups, gridRef }: Props) {
   if (groups.length === 0) return null;
   return (

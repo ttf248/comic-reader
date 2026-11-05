@@ -100,14 +100,14 @@ function renderReader(type = "video") {
     <QueryClientProvider client={client}>
       <MemoryRouter
         initialEntries={[
-          "/albums/a_test",
-          `/read/a_test?type=${type}&index=1`,
+          "/comic/albums/a_test",
+          `/comic/read/a_test?type=${type}&index=1`,
         ]}
       >
         <Location />
         <Routes>
-          <Route path="/read/:albumId" element={<Reader />} />
-          <Route path="/albums/a_test" element={<div>相册列表</div>} />
+          <Route path="/comic/read/:albumId" element={<Reader />} />
+          <Route path="/comic/albums/a_test" element={<div>相册列表</div>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,

@@ -75,6 +75,7 @@ export interface ComicCopy extends WorkbenchCopy {
   unreadEmpty: string;
 }
 
+
 const PHOTO: WorkbenchCopy = {
   libraryTitle: "照片库",
   libraryEyebrow: "你的照片",
@@ -125,6 +126,16 @@ const COMIC: ComicCopy = {
   randomLabel: "随机一本",
 };
 
+/**
+ * 集合与标签卡片的计数单位。
+ *
+ * 那个数字是「里面有多少本相册」，不是图片数：照片侧说「本」，
+ * 漫画侧说「卷」。用「张」会让人以为那是图片数量。
+ */
+export function collectionUnit(mode: "photo" | "comic"): string {
+  return mode === "comic" ? "卷" : "本";
+}
+
 /** 返回某个工作台模式对应的文案。 */
 export function workbenchCopy(mode: AppMode): WorkbenchCopy {
   return mode === "comic" ? COMIC : PHOTO;
@@ -139,3 +150,4 @@ export function workbenchCopy(mode: AppMode): WorkbenchCopy {
 export function comicCopy(): ComicCopy {
   return COMIC;
 }
+

@@ -3,7 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { useSearchStore } from "../store/searchStore";
 import { useScanSSE } from "../hooks/useScanSSE";
-import { useFavorites } from "../hooks/useFavorites";
+import { useFavoritesByMode } from "../hooks/useFavoritesByMode";
 import { useMarkAlbumRead, useMarkAlbumsRead } from "../hooks/useImageActivity";
 import { useGalleryContextSync } from "../hooks/useGalleryContextSync";
 import { scanApi } from "../api/scan";
@@ -19,7 +19,7 @@ import { ContinueHero, UnreadHero } from "../components/home/HomeHeroes";
 import { useUIStore } from "../store/uiStore";
 import { useAppMode } from "../hooks/useAppMode";
 import { comicCopy, workbenchCopy } from "../utils/workbench";
-import { albumRoute, decodeFavPath } from "../utils/path";
+import { albumRoute, decodeFavPath, favoritesRoute, recentsRoute, unreadRoute } from "../utils/path";
 import { continueReadingTarget } from "../utils/continueReading";
 import { compareDatesDesc } from "../utils/date";
 import type { GalleryContextEntry } from "../utils/galleryContext";
@@ -66,7 +66,8 @@ export default function Home() {
   const setYearFilter = useSearchStore((s) => s.setYearFilter);
   const viewMode = useUIStore((s) => s.viewMode);
 
-  const { favorites } = useFavorites();
+  // 收藏数按当前工作台算：照片工作台的「N 收藏」不该把漫画收藏算进去。
+  const { count: favCount } = useFavoritesByMode(mode);
   // 未读与继续阅读只属于漫画工作台：照片这边不出现这两个区。
   const isComic = mode === "comic";
   // 首页只展示服务端预先限制为六本的未读预览；完整未读库交给 /unread 分页加载。
@@ -107,7 +108,7 @@ export default function Home() {
   const randomAlbum = useMutation({
     mutationFn: (scope: "any" | "unread") =>
       libraryApi.randomAlbum(mode, scope),
-    onSuccess: ({ album }) => navigate(albumRoute(album.id)),
+    onSuccess: ({ album }) => navigate(albumRoute(mode, album.id)),
     onError: (_error, scope) =>
       pushToast({
         kind: "info",
@@ -197,8 +198,8 @@ export default function Home() {
     );
   };
   const cards = useMemo(
-    () => libraryOverviewCards(overview.nodes, overview.tags),
-    [overview.nodes, overview.tags],
+    () => libraryOverviewCards(overview.nodes, overview.tags, mode),
+    [overview.nodes, overview.tags, mode],
   );
 
   // 在读列表由首页仪表盘提供，按最后阅读时间倒序且包含任意层级的相册。
@@ -315,7 +316,6 @@ export default function Home() {
     return c;
   }, [cards]);
 
-  const favCount = favorites.length;
   const isLoadingInitial =
     overview.isLoading ||
     dashboardQuery.isLoading ||
@@ -394,19 +394,19 @@ export default function Home() {
             </button>
             {isComic && (
               <QuickLink
-                to="/unread"
+                to={unreadRoute()}
                 icon={<SparkleIcon size={14} />}
                 count={unreadCount > 0 ? unreadCount : undefined}
               >
                 {comicCopy().unreadTitle}
               </QuickLink>
             )}
-            <QuickLink to="/recents" icon={<ClockIcon size={14} />}>
+            <QuickLink to={recentsRoute(mode)} icon={<ClockIcon size={14} />}>
               {copy.recentsTitle}
             </QuickLink>
             {favCount > 0 && (
               <QuickLink
-                to="/favorites"
+                to={favoritesRoute(mode)}
                 icon={<StarIcon size={13} filled />}
                 count={favCount}
               >
@@ -479,7 +479,7 @@ export default function Home() {
               </button>
             )}
             {favCount > 0 && !yearFilterActive && (
-              <button onClick={() => navigate("/favorites")} className="chip">
+              <button onClick={() => navigate(favoritesRoute(mode))} className="chip">
                 <StarIcon size={11} filled className="text-warning" />
                 <span>{favCount} 收藏</span>
               </button>

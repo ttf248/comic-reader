@@ -11,7 +11,7 @@
 //
 // 返回结果按年份倒序，每年组内按文件数倒序；这样视觉上「今年 → 去年 → 更早」自然排序。
 import type { CardData } from "../components/album/AlbumCard";
-import type { LibraryNodeSummary } from "../api/library";
+import type { ContentKind, LibraryNodeSummary } from "../api/library";
 import { albumRoute } from "./path";
 
 const OTHER_KEY = -1;
@@ -58,6 +58,8 @@ export type AlbumLike = {
   sourceName?: string;
   virtual?: boolean;
   modTime?: string;
+  /** 内容属性：决定卡片链接落在哪一侧，也决定要不要显示阅读进度。 */
+  contentKind: ContentKind;
 };
 
 export type CollectionLike = {
@@ -73,6 +75,8 @@ export type CollectionLike = {
   displayName?: string;
   sourceRoot?: string;
   sourceName?: string;
+  /** 内容属性：集合继承所属目录的属性。 */
+  contentKind: ContentKind;
 };
 
 function cardForAlbumLike(a: AlbumLike): {
@@ -92,9 +96,10 @@ function cardForAlbumLike(a: AlbumLike): {
       videoCount: a.videoCount ?? 0,
       coverPath: a.coverImage,
       coverKind: a.coverKind,
-      to: albumRoute(a.path),
+      to: albumRoute(a.contentKind, a.path),
       sourceRoot: a.sourceRoot,
       sourceName: a.sourceName,
+      contentKind: a.contentKind,
     },
     images: a.imageCount,
     videos: a.videoCount ?? 0,
@@ -136,9 +141,10 @@ function cardForCollection(c: CollectionLike): {
       count: c.albumCount,
       coverPath: c.coverImage ?? c.albums?.[0]?.coverImage ?? "",
       covers: c.coverImages,
-      to: albumRoute(c.path),
+      to: albumRoute(c.contentKind, c.path),
       sourceRoot: c.sourceRoot,
       sourceName: c.sourceName,
+      contentKind: c.contentKind,
     },
     images,
     videos,
@@ -234,6 +240,7 @@ export function groupLibraryNodesByYear(
         sourceRoot: node.sourceRoot,
         sourceName: node.sourceName,
         virtual: node.virtual,
+        contentKind: node.contentKind,
       });
       continue;
     }
@@ -248,6 +255,7 @@ export function groupLibraryNodesByYear(
       displayName: node.displayName,
       sourceRoot: node.sourceRoot,
       sourceName: node.sourceName,
+      contentKind: node.contentKind,
     });
   }
   return groupAlbumsAndCollectionsByYear(albums, collections);
