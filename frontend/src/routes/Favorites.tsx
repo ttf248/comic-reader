@@ -195,7 +195,7 @@ export default function Favorites() {
         eyebrow="值得反复翻看的"
         description={
           <div className="flex items-baseline gap-2.5 mt-2 flex-wrap">
-            <p className="text-[13px] text-fg-muted tabular-nums">
+            <p className="text-body text-fg-muted tabular-nums">
               {favoritesQuery.isLoading
                 ? "正在加载收藏…"
                 : favoritesFailed && favorites.length === 0
@@ -203,7 +203,7 @@ export default function Favorites() {
                   : `${favoritesCount} 项`}
             </p>
             {missingCount > 0 && (
-              <span className="text-[12.5px] text-fg-subtle">
+              <span className="text-meta text-fg-subtle">
                 其中 {missingCount} 项暂时找不到
               </span>
             )}
@@ -215,7 +215,7 @@ export default function Favorites() {
         <div className="page-shell mb-4">
           <div
             role="alert"
-            className="flex items-center justify-between gap-3 rounded-md border border-danger/30 bg-danger/5 px-4 py-3 text-sm"
+            className="flex items-center justify-between gap-3 rounded-md border border-danger/30 bg-danger/5 px-4 py-3 text-body"
           >
             <p>
               {favoritesFailed

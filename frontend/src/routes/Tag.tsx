@@ -172,7 +172,7 @@ export default function Tag() {
             <ChevronLeftIcon size={13} />
             <span>返回</span>
           </button>
-          <h1 className="page-title">标签：{tag}</h1>
+          <h1 className="page-title page-title--sm">标签：{tag}</h1>
         </div>
         <EmptyState
           title="未找到该标签"
@@ -188,7 +188,7 @@ export default function Tag() {
         <div className="tag-feature">
           <div className="min-w-0">
             <p className="page-eyebrow mb-3">由标签串起的故事</p>
-            <h1 className="page-title break-words">{tag}</h1>
+            <h1 className="page-title page-title--sm break-words">{tag}</h1>
             <div className="mt-4">
               {" "}
               <button
@@ -200,9 +200,9 @@ export default function Tag() {
                     });
                   })
                 }
-                className={`inline-flex items-center gap-1.5 h-9 px-3.5 rounded-md text-sm transition-colors ${
+                className={`inline-flex items-center gap-1.5 h-9 px-3.5 rounded-md text-body transition-colors ${
                   isFav
-                    ? "bg-warning/10 text-warning hover:bg-warning/15"
+                    ? "bg-favorite/10 text-favorite hover:bg-favorite/15"
                     : "bg-bg-elevated border border-border hover:bg-bg-subtle"
                 }`}
               >
@@ -286,15 +286,15 @@ function Stat({
 }) {
   return (
     <div>
-      <div className="flex items-center gap-1.5 text-[12.5px] text-fg-muted">
+      <div className="flex items-center gap-1.5 text-meta text-fg-muted">
         {icon}
         <span>{label}</span>
       </div>
-      <div className="text-lg font-display font-semibold mt-1 tabular-nums">
+      <div className="text-section font-display font-semibold mt-1 tabular-nums">
         {value}
       </div>
       {detail && (
-        <div className="text-[12.5px] text-fg-subtle mt-0.5">{detail}</div>
+        <div className="text-meta text-fg-subtle mt-0.5">{detail}</div>
       )}
     </div>
   );

@@ -18,7 +18,7 @@
     align-items: center;
     gap: 8px;
     color: var(--brand-ink);
-    font-size: 12.5px;
+    font-size: var(--text-meta);
     font-weight: 600;
     letter-spacing: 0.06em;
   }
@@ -52,6 +52,7 @@
     flex-shrink: 0;
     background: var(--brand-soft);
     color: var(--brand-ink);
+    /* 书脊造型：右下角收成一个尖，是造型不是尺寸，不走圆角阶梯。 */
     border-radius: 10px 10px 10px 2px;
     font: 600 27px/1 var(--font-display);
   }
@@ -62,8 +63,8 @@
     gap: 12px;
     height: 46px;
     padding-inline: 14px;
-    border-radius: 12px;
-    font-size: 14px;
+    border-radius: var(--radius-control);
+    font-size: var(--text-body);
     color: var(--rail-muted);
     transition:
       background var(--dur),
@@ -136,7 +137,7 @@
     min-width: 0;
     padding: 26px;
     border: 1px solid var(--border);
-    border-radius: 22px;
+    border-radius: var(--radius-panel);
     background: var(--feature-bg);
     color: var(--feature-fg);
   }
@@ -155,6 +156,7 @@
     aspect-ratio: 4 / 5;
     justify-self: center;
     overflow: hidden;
+    /* 书脊造型：左侧是装订边，比右侧厚。 */
     border-radius: 12px 16px 16px 12px;
     background: var(--bg-media);
     box-shadow: 8px 12px 22px rgb(0 0 0 / 18%);
@@ -175,12 +177,13 @@
   }
   .reading-desk__title {
     margin-top: 12px;
-    font: 600 clamp(24px, 2.3vw, 34px)/1.4 var(--font-display);
+    /* 展示字号：随视口缩放，两端是唯一的硬编码。 */
+    font: 600 clamp(22px, 2.3vw, 34px)/1.4 var(--font-display);
     overflow-wrap: anywhere;
   }
   .reading-desk__muted {
     color: var(--feature-muted);
-    font-size: 12.5px;
+    font-size: var(--text-meta);
   }
   /* 照片侧的展陈面板（「接着看」「随手看看」）：与漫画的阅读台共用面板
      外壳（边框、圆角、feature 底色），但封面是方的、不倾斜 ——
@@ -191,7 +194,7 @@
     min-width: 0;
     padding: 24px;
     border: 1px solid var(--border);
-    border-radius: 22px;
+    border-radius: var(--radius-panel);
     background: var(--feature-bg);
     color: var(--feature-fg);
   }
@@ -210,7 +213,7 @@
     width: 100%;
     aspect-ratio: 1 / 1;
     overflow: hidden;
-    border-radius: 12px;
+    border-radius: var(--radius-media);
     background: var(--bg-media);
     box-shadow: var(--shadow-sm);
   }
@@ -233,7 +236,7 @@
     gap: 10px;
     min-width: 0;
     width: 100%;
-    border-radius: 8px;
+    border-radius: var(--radius-media);
     text-align: left;
   }
   .reading-queue__remove {
@@ -257,7 +260,7 @@
     min-width: 0;
     padding: 24px;
     border: 1px solid var(--border);
-    border-radius: 22px;
+    border-radius: var(--radius-panel);
     background: var(--bg-elevated);
   }
   .discovery-grid {
@@ -282,11 +285,11 @@
   }
   .section-index {
     color: var(--brand-ink);
-    font: 500 12.5px/1 var(--font-mono);
+    font: 500 var(--text-meta)/1 var(--font-mono);
   }
   .album-tile {
     border: 1px solid var(--border-faint);
-    border-radius: 16px;
+    border-radius: var(--radius-tile);
     background: var(--bg-elevated);
     padding: 8px;
     transition:
@@ -298,7 +301,7 @@
     transform: translateY(-3px);
   }
   .album-tile__cover {
-    border-radius: 11px;
+    border-radius: var(--radius-media);
   }
   .album-tile__meta {
     padding: 12px 5px 7px;
@@ -348,7 +351,7 @@
     gap: 12px;
     width: 100%;
     padding: 12px;
-    border-radius: 14px;
+    border-radius: var(--radius-media);
     border: 1px solid var(--border);
     background: var(--bg-elevated);
     text-align: left;
@@ -402,14 +405,14 @@
     width: 32px;
     height: 32px;
     flex-shrink: 0;
-    border-radius: 10px;
+    border-radius: var(--radius-media);
     background: var(--brand-soft);
     color: var(--brand-ink);
   }
   .settings-section__body {
     overflow: hidden;
     border: 1px solid var(--border);
-    border-radius: 18px;
+    border-radius: var(--radius-tile);
     background: var(--bg-elevated);
     box-shadow: var(--shadow-xs);
   }
@@ -420,6 +423,7 @@
     position: relative;
     width: 70px;
     height: 76px;
+    /* 书脊造型，与品牌方块同一套轮廓。 */
     border-radius: 18px 18px 18px 4px;
     border: 1px solid var(--border);
     background: var(--brand-soft);
@@ -435,7 +439,7 @@
     align-items: start;
     padding: 24px;
     border: 1px solid var(--border);
-    border-radius: 22px;
+    border-radius: var(--radius-panel);
     background: var(--bg-elevated);
     box-shadow: var(--shadow-xs);
   }
@@ -445,7 +449,7 @@
     height: 214px;
     position: relative;
     overflow: hidden;
-    border-radius: 12px;
+    border-radius: var(--radius-media);
     box-shadow: var(--shadow-sm);
   }
   .album-summary__actions {
@@ -471,12 +475,12 @@
     padding: 30px;
     background: var(--feature-bg);
     border: 1px solid var(--border);
-    border-radius: 22px;
+    border-radius: var(--radius-panel);
   }
   .tag-feature__image {
     height: 220px;
     overflow: hidden;
-    border-radius: 12px;
+    border-radius: var(--radius-media);
     transform: rotate(3deg);
     box-shadow: var(--shadow-md);
   }
@@ -486,12 +490,12 @@
     right: 16px;
     height: 48px;
     border: 1px solid var(--overlay-border);
-    border-radius: 14px;
+    border-radius: var(--radius-control);
     background: color-mix(in srgb, var(--reader-panel) 95%, transparent);
     box-shadow: 0 4px 20px rgb(0 0 0 / 12%);
   }
   .reader-control-panel {
-    border-radius: 16px;
+    border-radius: var(--radius-tile);
     background: color-mix(in srgb, var(--reader-panel) 94%, transparent);
   }
   @media (min-width: 1280px) {
@@ -533,9 +537,6 @@
     .album-summary__actions {
       grid-column: 1 / -1;
     }
-    .album-summary .page-title {
-      font-size: 26px;
-    }
     .tag-feature {
       grid-template-columns: 1fr;
       gap: 24px;
@@ -564,15 +565,12 @@
     .discovery-panel,
     .photo-desk {
       padding: 18px;
-      border-radius: 18px;
+      border-radius: var(--radius-tile);
     }
     .reading-desk__feature {
       grid-template-columns: 108px minmax(0, 1fr);
       gap: 18px;
       padding-block: 22px;
-    }
-    .reading-desk__title {
-      font-size: 22px;
     }
   .reading-queue {
       grid-template-columns: 1fr;
@@ -591,7 +589,7 @@
     }
     .album-tile {
       padding: 5px;
-      border-radius: 12px;
+      border-radius: var(--radius-control);
     }
     .album-tile__meta {
       padding-inline: 3px;
@@ -632,7 +630,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--fg);
-  font-size: 14px;
+  font-size: var(--text-body);
   line-height: 1.65;
   letter-spacing: 0.005em;
   font-weight: 400;
@@ -653,7 +651,7 @@ body {
 }
 ::-webkit-scrollbar-thumb {
   background: var(--border-strong);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   border: 2px solid var(--bg);
 }
 ::-webkit-scrollbar-thumb:hover {
@@ -681,14 +679,18 @@ body {
   font-family: var(--font-mono);
 }
 
-/* === 焦点环：accent 描边，更明确 === */
+/* === 焦点环 ===
+   用品牌色而不是 --accent：--accent 在浅色主题里是近黑的石墨色，
+   压在深色照片上就成了一条看不见的黑边。品牌色在明暗两套画布上都
+   有足够对比度，也和「焦点属于当前工作台」的语义一致。
+   这里不写 border-radius —— outline 会自己跟随元素的圆角，
+   之前写死一个半径会让聚焦时的圆角突然变方。 */
 :focus {
   outline: none;
 }
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
-  border-radius: var(--radius-sm);
 }
 /* 在已带 border 的元素上避免双线 */
 button:focus-visible,
@@ -845,32 +847,38 @@ button:not(:disabled):active {
     padding-inline: 0;
   }
 
-  /* --- 页面主标题 --- */
+  /* --- 页面主标题 ---
+     两档：工作台首页用 --text-page（42px），其余页面用 --text-page-sm
+     （28px）。所有页面都顶着一个 42px 的大标题，标题就失去了层级 ——
+     首页与「最近浏览」看起来是同一件事。 */
   .page-title {
     font-family: var(--font-display);
-    font-size: 42px;
+    font-size: var(--text-page);
     line-height: 1.2;
     font-weight: 600;
     letter-spacing: -0.02em;
     color: var(--fg);
   }
+  .page-title--sm {
+    font-size: var(--text-page-sm);
+  }
   @media (max-width: 640px) {
     .page-title {
-      font-size: 24px;
+      font-size: var(--text-page-sm);
     }
   }
 
   /* --- 区块标题：中文优先，不用 uppercase / 大字距 --- */
   .section-title {
     font-family: var(--font-display);
-    font-size: 21px;
+    font-size: var(--text-section);
     line-height: 1.4;
     font-weight: 600;
     color: var(--fg);
     letter-spacing: 0;
   }
   .section-meta {
-    font-size: 12.5px;
+    font-size: var(--text-meta);
     line-height: 1.45;
     color: var(--fg-muted);
   }
@@ -883,8 +891,8 @@ button:not(:disabled):active {
     gap: 6px;
     height: 40px;
     padding-inline: 16px;
-    border-radius: var(--radius-md);
-    font-size: 13px;
+    border-radius: var(--radius-control);
+    font-size: var(--text-body);
     font-weight: 500;
     white-space: nowrap;
     transition:
@@ -901,8 +909,8 @@ button:not(:disabled):active {
   .btn-sm {
     height: 34px;
     padding-inline: 13px;
-    font-size: 13px;
-    border-radius: var(--radius-sm);
+    font-size: var(--text-body);
+    border-radius: var(--radius-media);
   }
 
   /* 主操作使用强调色：浅色主题是近黑的石墨，深色主题是近白。 */
@@ -942,8 +950,8 @@ button:not(:disabled):active {
     gap: 6px;
     height: 34px;
     padding-inline: 12px;
-    border-radius: var(--radius-sm);
-    font-size: 13px;
+    border-radius: var(--radius-media);
+    font-size: var(--text-body);
     color: var(--fg-muted);
     white-space: nowrap;
     transition:
@@ -968,8 +976,8 @@ button:not(:disabled):active {
     gap: 4px;
     height: 20px;
     padding-inline: 6px;
-    border-radius: var(--radius-sm);
-    font-size: 11.5px;
+    border-radius: var(--radius-media);
+    font-size: var(--text-badge);
     line-height: 1;
     font-weight: 500;
   }
@@ -978,7 +986,7 @@ button:not(:disabled):active {
   .panel {
     background: var(--bg-elevated);
     border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-tile);
   }
 
   /* --- 封面货架：横向排开的海报带 ---
@@ -1029,10 +1037,10 @@ button:not(:disabled):active {
     display: inline-flex;
     align-items: center;
     font-family: var(--font-mono);
-    font-size: 12.5px;
+    font-size: var(--text-meta);
     line-height: 1;
     padding: 3px 6px;
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-media);
     border: 1px solid var(--border);
     background: var(--bg-elevated);
     color: var(--fg-muted);
@@ -1046,10 +1054,10 @@ button:not(:disabled):active {
     display: inline-flex;
     align-items: center;
     font-family: var(--font-mono);
-    font-size: 12.5px;
+    font-size: var(--text-meta);
     line-height: 1;
     padding: 2px 5px;
-    border-radius: 4px;
+    border-radius: var(--radius-xs);
     border: 1px solid rgba(255, 255, 255, 0.18);
     background: rgba(255, 255, 255, 0.08);
     color: rgba(255, 255, 255, 0.75);

@@ -28,6 +28,8 @@ export default {
         danger: tokenColor("danger"),
         success: tokenColor("success"),
         warning: tokenColor("warning"),
+        favorite: tokenColor("favorite"),
+        focus: tokenColor("focus"),
         brand: tokenColor("brand"),
         "brand-soft": tokenColor("brand-soft"),
         "brand-ink": tokenColor("brand-ink"),
@@ -56,12 +58,26 @@ export default {
         "overlay-danger": tokenColor("overlay-danger"),
         "overlay-warning": tokenColor("overlay-warning"),
         "overlay-success": tokenColor("overlay-success"),
+        "overlay-favorite": tokenColor("overlay-favorite"),
       },
+      // 圆角数值只有一份来源（tokens.css 的语义 token）。Tailwind 侧保留
+      // 数字档名，避免同一个圆角出现「rounded-lg」和「rounded-tile」两套
+      // 叫法；样式表内部一律用语义名 var(--radius-tile) 之类。
       borderRadius: {
-        sm: "var(--radius-sm)",
-        md: "var(--radius-md)",
-        lg: "var(--radius-lg)",
-        xl: "var(--radius-xl)",
+        DEFAULT: "var(--radius-xs)",
+        sm: "var(--radius-media)",
+        md: "var(--radius-control)",
+        lg: "var(--radius-tile)",
+        xl: "var(--radius-panel)",
+      },
+      fontSize: {
+        badge: "var(--text-badge)",
+        meta: "var(--text-meta)",
+        body: "var(--text-body)",
+        label: "var(--text-label)",
+        section: "var(--text-section)",
+        "page-sm": "var(--text-page-sm)",
+        page: "var(--text-page)",
       },
       boxShadow: {
         xs: "var(--shadow-xs)",

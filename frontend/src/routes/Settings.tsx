@@ -209,7 +209,7 @@ export default function Settings() {
   const prefsError = prefsQuery.isError && (
     <div
       role="alert"
-      className="flex items-center justify-between gap-3 rounded-md border border-danger/30 bg-danger/5 px-4 py-3 mb-6 text-sm"
+      className="flex items-center justify-between gap-3 rounded-md border border-danger/30 bg-danger/5 px-4 py-3 mb-6 text-body"
     >
       <p>
         设置加载失败。
@@ -236,7 +236,7 @@ export default function Settings() {
             description="调整外观、阅读方式与本地媒体配置。"
           />
           {prefsError || (
-            <div role="status" className="text-fg-muted text-[13px]">
+            <div role="status" className="text-fg-muted text-body">
               正在加载设置…
             </div>
           )}
@@ -262,7 +262,7 @@ export default function Settings() {
           <Row label="侧边栏">
             <button
               onClick={toggleSidebar}
-              className="px-3 h-8 rounded-md border border-border-faint hover:bg-bg-subtle text-sm transition-colors"
+              className="px-3 h-8 rounded-md border border-border-faint hover:bg-bg-subtle text-body transition-colors"
             >
               {sidebarCollapsed ? "展开" : "折叠"}
             </button>
@@ -273,7 +273,7 @@ export default function Settings() {
                 <button
                   key={k}
                   onClick={() => setViewMode(k)}
-                  className={`h-8 px-3 text-[12.5px] transition-colors ${
+                  className={`h-8 px-3 text-meta transition-colors ${
                     viewMode === k
                       ? "bg-bg-subtle text-fg"
                       : "text-fg-muted hover:text-fg"
@@ -300,7 +300,7 @@ export default function Settings() {
                 <button
                   key={key}
                   onClick={() => setWorkbenchMode(key)}
-                  className={`h-8 px-3 text-[12.5px] transition-colors ${
+                  className={`h-8 px-3 text-meta transition-colors ${
                     workbenchMode === key
                       ? "bg-bg-subtle text-fg"
                       : "text-fg-muted hover:text-fg"
@@ -321,7 +321,7 @@ export default function Settings() {
                 <button
                   key={key}
                   onClick={() => setDensity(key)}
-                  className={`h-8 px-3 text-[12.5px] transition-colors ${
+                  className={`h-8 px-3 text-meta transition-colors ${
                     density === key
                       ? "bg-bg-subtle text-fg"
                       : "text-fg-muted hover:text-fg"
@@ -339,7 +339,7 @@ export default function Settings() {
               onChange={(v) => setShowInfo(v)}
             />
           </Row>
-          <p className="px-5 pb-4 text-[12.5px] text-fg-subtle -mt-2">
+          <p className="px-5 pb-4 text-meta text-fg-subtle -mt-2">
             这两项只保存在本机浏览器，不随服务端同步。
           </p>
         </Section>
@@ -358,7 +358,7 @@ export default function Settings() {
                 <button
                   key={key}
                   onClick={() => setReaderMode(key)}
-                  className={`h-8 px-3 text-[12.5px] transition-colors ${
+                  className={`h-8 px-3 text-meta transition-colors ${
                     readerMode === key
                       ? "bg-bg-subtle text-fg"
                       : "text-fg-muted hover:text-fg"
@@ -382,7 +382,7 @@ export default function Settings() {
                 <button
                   key={key}
                   onClick={() => setFit(key)}
-                  className={`h-8 px-3 text-[12.5px] transition-colors ${
+                  className={`h-8 px-3 text-meta transition-colors ${
                     fit === key
                       ? "bg-bg-subtle text-fg"
                       : "text-fg-muted hover:text-fg"
@@ -404,7 +404,7 @@ export default function Settings() {
                 <button
                   key={key}
                   onClick={() => setDirection(key)}
-                  className={`h-8 px-3 text-[12.5px] transition-colors ${
+                  className={`h-8 px-3 text-meta transition-colors ${
                     direction === key
                       ? "bg-bg-subtle text-fg"
                       : "text-fg-muted hover:text-fg"
@@ -431,7 +431,7 @@ export default function Settings() {
               onChange={(v) => patchPrefs.mutate({ showSwitchNotif: v })}
             />
           </Row>
-          <p className="px-5 pb-4 text-[12.5px] text-fg-subtle -mt-2">
+          <p className="px-5 pb-4 text-meta text-fg-subtle -mt-2">
             显示模式、适配与方向只保存在本机浏览器；自动切换与通知保存在服务端，所有设备共享。
           </p>
         </Section>
@@ -440,7 +440,7 @@ export default function Settings() {
           <Row label="图像库缓存">
             <div className="flex min-w-0 flex-1 flex-col items-end gap-2">
               <div className="flex flex-wrap items-center justify-end gap-3">
-                <span className="text-[12.5px] text-fg-muted">
+                <span className="text-meta text-fg-muted">
                   {manifest
                     ? `${manifest.statistics.albumCount} 本相册 · ${manifest.statistics.tagCount} 个标签${
                         manifest.scannedAt
@@ -455,7 +455,7 @@ export default function Settings() {
                       queryKey: libraryQueryKeys.root,
                     })
                   }
-                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border-faint hover:bg-bg-subtle text-[12.5px] transition-colors"
+                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border-faint hover:bg-bg-subtle text-meta transition-colors"
                 >
                   <RefreshIcon size={11} />
                   <span>刷新</span>
@@ -463,7 +463,7 @@ export default function Settings() {
                 <button
                   onClick={() => startScan.mutate()}
                   disabled={startScan.isPending || sse.isRunning}
-                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border-faint hover:bg-bg-subtle text-[12.5px] transition-colors disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border-faint hover:bg-bg-subtle text-meta transition-colors disabled:opacity-50"
                   title="扫描 (Ctrl+S)"
                 >
                   <RefreshIcon size={11} />
@@ -478,7 +478,7 @@ export default function Settings() {
                 <button
                   onClick={() => clearScanCache.mutate()}
                   disabled={clearScanCache.isPending}
-                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-danger/40 text-danger hover:bg-danger/5 text-[12.5px] transition-colors disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-danger/40 text-danger hover:bg-danger/5 text-meta transition-colors disabled:opacity-50"
                   title="清空图像库缓存（不会立即重新扫描）"
                 >
                   <TrashIcon size={11} />
@@ -499,7 +499,7 @@ export default function Settings() {
             {/* 统计行与细分徽章纵向排列：作为 Row 的两个并列子元素时，
               徽章会被排到统计行右边，把整行挤到换行。 */}
             <div className="flex min-w-0 flex-1 flex-col items-end gap-2">
-              <div className="flex flex-wrap items-center justify-end gap-3 text-[12.5px] text-fg-muted">
+              <div className="flex flex-wrap items-center justify-end gap-3 text-meta text-fg-muted">
                 <span className="whitespace-nowrap">
                   {cacheStats.isLoading
                     ? "计算中…"
@@ -528,7 +528,7 @@ export default function Settings() {
                 <button
                   onClick={refreshCacheStats}
                   disabled={cacheStats.isFetching}
-                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border-faint hover:bg-bg-subtle text-[12.5px] transition-colors disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border-faint hover:bg-bg-subtle text-meta transition-colors disabled:opacity-50"
                   title="重新扫描磁盘计算缓存占用"
                 >
                   {cacheStats.isFetching ? (
@@ -541,7 +541,7 @@ export default function Settings() {
                 <button
                   onClick={() => clearAll.mutate()}
                   disabled={clearAll.isPending}
-                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-danger/40 text-danger hover:bg-danger/5 text-[12.5px] transition-colors disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-danger/40 text-danger hover:bg-danger/5 text-meta transition-colors disabled:opacity-50"
                   title="清空全部缓存（缩略图 + 转换图 + 预览图 + faststart + 转码）"
                 >
                   <TrashIcon size={11} />
@@ -551,7 +551,7 @@ export default function Settings() {
               {/* 按类型细分 — 大头一目了然,转码缓存过大时可单独清。
                 五类之和等于上面的总占用,少列一类用户就对不上账。 */}
               {cacheStats.data && cacheStats.data.available && (
-                <div className="mt-2 grid w-full grid-cols-[repeat(auto-fit,minmax(112px,1fr))] gap-2 text-[12.5px]">
+                <div className="mt-2 grid w-full grid-cols-[repeat(auto-fit,minmax(112px,1fr))] gap-2 text-meta">
                   <SubUsageBadge
                     label="缩略图"
                     sub={cacheStats.data.thumbs}
@@ -599,7 +599,7 @@ export default function Settings() {
             <button
               onClick={() => pruneFav.mutate()}
               disabled={pruneFav.isPending}
-              className="h-8 px-3 rounded-md border border-border-faint hover:bg-bg-subtle text-[12.5px] transition-colors disabled:opacity-50"
+              className="h-8 px-3 rounded-md border border-border-faint hover:bg-bg-subtle text-meta transition-colors disabled:opacity-50"
             >
               {pruneFav.isPending ? "清理中…" : "清理"}
             </button>
@@ -608,7 +608,7 @@ export default function Settings() {
             <button
               onClick={() => clearHist.mutate()}
               disabled={clearHist.isPending}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-danger/40 text-danger hover:bg-danger/5 text-[12.5px] transition-colors disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-danger/40 text-danger hover:bg-danger/5 text-meta transition-colors disabled:opacity-50"
             >
               <TrashIcon size={11} />
               <span>{clearHist.isPending ? "清空中…" : "清空"}</span>
@@ -622,7 +622,7 @@ export default function Settings() {
               <ServerIcon size={13} />
             </span>
             <h2 className="section-title">服务端</h2>
-            <span className="text-[12.5px] text-fg-subtle ml-2">
+            <span className="text-meta text-fg-subtle ml-2">
               修改后自动保存，部分设置需重启
             </span>
           </div>
@@ -630,19 +630,19 @@ export default function Settings() {
         </section>
 
         <Section title="关于" icon={<InfoIcon size={13} />}>
-          <div className="text-[13px] text-fg-muted leading-relaxed">
-            <div className="font-display text-base text-fg">
+          <div className="text-body text-fg-muted leading-relaxed">
+            <div className="font-display text-label text-fg">
               Local Gallery · 本地画廊
             </div>
             <div className="mt-1">Web 版 · v{__APP_VERSION__}</div>
-            <div className="mt-4 text-[12.5px] text-fg-subtle flex items-center gap-2">
+            <div className="mt-4 text-meta text-fg-subtle flex items-center gap-2">
               <span>按</span>
               <kbd className="font-mono px-1.5 py-0.5 rounded border border-border-faint bg-bg-subtle text-fg-muted">
                 ?
               </kbd>
               <span>查看所有快捷键</span>
             </div>
-            <div className="mt-3 text-[12.5px] text-fg-subtle flex items-center gap-2">
+            <div className="mt-3 text-meta text-fg-subtle flex items-center gap-2">
               <KeyboardIcon size={12} />
               <span>媒体保存在本地，收藏与阅读记录由服务端保存</span>
             </div>
@@ -687,7 +687,7 @@ function Row({
   return (
     // 标签固定不换行：内容多的时候应该让内容换行，而不是把"缓存占用"
     // 挤成两行、同时把右侧内容裁掉。
-    <div className="settings-row flex items-center justify-between gap-4 px-5 py-4 text-sm">
+    <div className="settings-row flex items-center justify-between gap-4 px-5 py-4 text-body">
       <span
         className={`shrink-0 whitespace-nowrap ${danger ? "text-danger" : "text-fg"}`}
       >
@@ -760,7 +760,7 @@ function NumberInput({
       >
         −
       </button>
-      <span className="px-3 h-8 inline-flex items-center text-sm tabular-nums min-w-[40px] justify-center">
+      <span className="px-3 h-8 inline-flex items-center text-body tabular-nums min-w-[40px] justify-center">
         {value}
       </span>
       <button
@@ -812,7 +812,7 @@ function SubUsageBadge({
   const inner = (
     <>
       <div className="flex items-center justify-between gap-1.5">
-        <span className="text-fg-muted text-[12.5px]">{label}</span>
+        <span className="text-fg-muted text-meta">{label}</span>
         {showClear && (
           <button
             onClick={(e) => {

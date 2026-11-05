@@ -111,7 +111,7 @@ export default function Recents() {
         title={copy.recentsTitle}
         eyebrow={copy.recentsEyebrow}
         description={
-          <p className="text-[13px] text-fg-muted mt-2 tabular-nums">
+          <p className="text-body text-fg-muted mt-2 tabular-nums">
             {cards.length > 0 ? (
               <>
                 <span className="text-fg font-medium">{cards.length}</span> 个
@@ -139,7 +139,7 @@ export default function Recents() {
         <div className="page-shell mb-4">
           <div
             role="alert"
-            className="flex items-center justify-between gap-3 rounded-lg border border-danger/30 bg-danger/5 px-4 py-3 text-[13px]"
+            className="flex items-center justify-between gap-3 rounded-lg border border-danger/30 bg-danger/5 px-4 py-3 text-body"
           >
             <p>
               {historyFailed

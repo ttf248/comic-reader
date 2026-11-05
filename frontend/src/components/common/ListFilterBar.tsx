@@ -52,7 +52,7 @@ export function ListFilterBar({
                 className="chip"
               >
                 <span>{v.label}</span>
-                <span className="tabular-nums text-[12.5px] opacity-70">
+                <span className="tabular-nums text-meta opacity-70">
                   {v.count}
                 </span>
               </button>
@@ -61,7 +61,7 @@ export function ListFilterBar({
           {/* 没有视图切换 chip 的页面（如未读 / 最近）：总数靠左，
               避免整条筛选条只剩右半边、左侧空一大片。 */}
           {!viewChips?.length && (
-            <span className="text-[12.5px] text-fg-muted tabular-nums">
+            <span className="text-meta text-fg-muted tabular-nums">
               共 {totalCount} 项
             </span>
           )}
@@ -71,7 +71,7 @@ export function ListFilterBar({
             <MinImageFilter value={minImageCount} onChange={setMinImageCount} />
           )}
           {viewChips?.length ? (
-            <span className="text-[12.5px] text-fg-muted tabular-nums">
+            <span className="text-meta text-fg-muted tabular-nums">
               共 {totalCount} 项
             </span>
           ) : null}
@@ -197,7 +197,7 @@ function SortMenu({
                 setOpen(false);
                 triggerRef.current?.focus();
               }}
-              className={`w-full text-left px-3 py-1.5 text-[13px] transition-colors ${
+              className={`w-full text-left px-3 py-1.5 text-body transition-colors ${
                 o.value === value
                   ? "text-fg font-medium"
                   : "text-fg-muted hover:bg-bg-subtle hover:text-fg"
@@ -244,7 +244,7 @@ function MinImageFilter({
       title="隐藏图数少于 N 的相册(0 = 不过滤)"
     >
       <FilterIcon size={11} className="shrink-0" />
-      <span className="text-[12.5px] whitespace-nowrap">≥</span>
+      <span className="text-meta whitespace-nowrap">≥</span>
       <input
         type="number"
         min={0}
@@ -265,13 +265,13 @@ function MinImageFilter({
             setDraft(String(value));
           }
         }}
-        className="w-9 h-7 bg-transparent border-0 outline-none text-[12.5px] tabular-nums text-right focus:outline-none"
+        className="w-9 h-7 bg-transparent border-0 outline-none text-meta tabular-nums text-right focus:outline-none"
         aria-label="最少图数"
       />
       {active && (
         <button
           onClick={() => onChange(0)}
-          className="text-fg-subtle hover:text-fg text-[13px] leading-none px-0.5"
+          className="text-fg-subtle hover:text-fg text-body leading-none px-0.5"
           title="清除"
           aria-label="清除最小图数"
         >

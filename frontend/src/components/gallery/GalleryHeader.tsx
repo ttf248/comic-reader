@@ -133,17 +133,17 @@ export default function GalleryHeader({
       <button
         onClick={onBack}
         title="返回 (Esc)"
-        className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-[13px] transition-colors hover:bg-white/10"
+        className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-body transition-colors hover:bg-white/10"
       >
         <ChevronLeftIcon size={14} />
         <span className="hidden sm:inline">返回</span>
       </button>
 
       <h1 className="ml-1 flex min-w-0 flex-1 items-baseline gap-2.5 sm:gap-3">
-        <span className="truncate text-[14px] font-medium text-white">
+        <span className="truncate text-body font-medium text-white">
           {name}
         </span>
-        <span className="shrink-0 text-[12.5px] tabular-nums text-white/70">
+        <span className="shrink-0 text-meta tabular-nums text-white/70">
           {counterText}
         </span>
       </h1>
@@ -157,7 +157,7 @@ export default function GalleryHeader({
           trigger={
             <button
               type="button"
-              className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-[12.5px] text-white/75 transition-colors hover:bg-white/10"
+              className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-meta text-white/75 transition-colors hover:bg-white/10"
               title="切换工作台"
             >
               <LibraryIcon size={13} />
@@ -208,7 +208,7 @@ export default function GalleryHeader({
         <StarIcon
           size={14}
           filled={isFavorite}
-          className={isFavorite ? "text-overlay-warning" : ""}
+          className={isFavorite ? "text-overlay-favorite" : ""}
         />
       </HeaderIconButton>
 
@@ -234,33 +234,33 @@ export default function GalleryHeader({
           <PopoverItem onClick={onToggleInfo}>
             <InfoIcon size={13} />
             <span>图片信息</span>
-            <span className="ml-auto text-[12.5px] text-white/55">I</span>
+            <span className="ml-auto text-meta text-white/55">I</span>
           </PopoverItem>
         )}
         {!isVideo && onToggleOverview && (
           <PopoverItem onClick={onToggleOverview}>
             <GridIcon size={13} />
             <span>目录</span>
-            <span className="ml-auto text-[12.5px] text-white/55">T</span>
+            <span className="ml-auto text-meta text-white/55">T</span>
           </PopoverItem>
         )}
         <PopoverItem onClick={onToggleHelp}>
           <KeyboardIcon size={13} />
           <span>快捷键</span>
-          <span className="ml-auto text-[12.5px] text-white/55">?</span>
+          <span className="ml-auto text-meta text-white/55">?</span>
         </PopoverItem>
         {onSetCover && (
           <PopoverItem onClick={onSetCover}>
             <ImageIcon size={13} />
             <span>设为封面</span>
-            <span className="ml-auto text-[12.5px] text-white/55">U</span>
+            <span className="ml-auto text-meta text-white/55">U</span>
           </PopoverItem>
         )}
         {onClearCover && hasCustomCover && (
           <PopoverItem onClick={onClearCover}>
             <RefreshIcon size={13} />
             <span>清除自定义封面</span>
-            <span className="ml-auto text-[12.5px] text-white/55">⇧U</span>
+            <span className="ml-auto text-meta text-white/55">⇧U</span>
           </PopoverItem>
         )}
         {!isVideo && mode === "double" && (
@@ -273,7 +273,7 @@ export default function GalleryHeader({
               <ArrowLeftLineIcon size={13} />
             )}
             <span>阅读方向：{direction === "ltr" ? "左→右" : "右→左"}</span>
-            <span className="ml-auto text-[12.5px] text-white/55">L</span>
+            <span className="ml-auto text-meta text-white/55">L</span>
           </PopoverItem>
         )}
         {hasAlbumNav && <PopoverSeparator />}
@@ -282,25 +282,25 @@ export default function GalleryHeader({
           <PopoverItem onClick={onPrevAlbum}>
             <ArrowUpIcon size={13} />
             <span>上一本</span>
-            <span className="ml-auto text-[12.5px] text-white/55">P</span>
+            <span className="ml-auto text-meta text-white/55">P</span>
           </PopoverItem>
         )}
         {onNextAlbum && (
           <PopoverItem onClick={onNextAlbum}>
             <ArrowDownIcon size={13} />
             <span>下一本</span>
-            <span className="ml-auto text-[12.5px] text-white/55">N</span>
+            <span className="ml-auto text-meta text-white/55">N</span>
           </PopoverItem>
         )}
         <PopoverSeparator />
         <PopoverLabel>跳转</PopoverLabel>
         <PopoverItem onClick={jumpToFirst}>
           <span>{isVideo ? "第一个视频" : "第一页"}</span>
-          <span className="ml-auto text-[12.5px] text-white/55">Home</span>
+          <span className="ml-auto text-meta text-white/55">Home</span>
         </PopoverItem>
         <PopoverItem onClick={jumpToLast}>
           <span>{isVideo ? "最后一个视频" : "最后一页"}</span>
-          <span className="ml-auto text-[12.5px] text-white/55">End</span>
+          <span className="ml-auto text-meta text-white/55">End</span>
         </PopoverItem>
       </Popover>
     </header>

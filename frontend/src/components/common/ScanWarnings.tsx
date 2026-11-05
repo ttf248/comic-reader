@@ -32,7 +32,7 @@ export default function ScanWarnings({ warnings = [], total }: Props) {
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="inline-flex items-center gap-1.5 text-[12.5px] text-warning hover:text-warning/80 transition-colors"
+        className="inline-flex items-center gap-1.5 text-meta text-warning hover:text-warning/80 transition-colors"
         aria-expanded={open}
         aria-controls="scan-warning-details"
       >
@@ -44,7 +44,7 @@ export default function ScanWarnings({ warnings = [], total }: Props) {
       {open && (
         <div
           id="scan-warning-details"
-          className="mt-2 rounded-md border border-warning/25 bg-warning/5 p-3 text-[12.5px]"
+          className="mt-2 rounded-md border border-warning/25 bg-warning/5 p-3 text-meta"
           role="region"
           aria-label="扫描问题详情"
         >

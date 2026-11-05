@@ -114,7 +114,7 @@ export default function Toolbar({
             <button
               type="button"
               onClick={() => navigate(-1)}
-              className="inline-flex items-center h-9 px-3 rounded-md text-[13px] text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors"
+              className="inline-flex items-center h-9 px-3 rounded-md text-body text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors"
             >
               返回
             </button>
@@ -128,7 +128,7 @@ export default function Toolbar({
         {!onGallery && (
           <div className="hidden xl:block shrink-0 mr-8">
             <span className="toolbar-caption mb-1">我的媒体库</span>
-            <span className="text-[12.5px] text-fg-muted tabular-nums">
+            <span className="text-meta text-fg-muted tabular-nums">
               {libraryContext}
             </span>
           </div>
@@ -254,11 +254,11 @@ function MoreMenu({
               onScan();
             }}
             disabled={scanPending}
-            className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[13px] text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors disabled:opacity-50"
+            className="w-full flex items-center gap-2.5 px-3 py-1.5 text-body text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors disabled:opacity-50"
           >
             <ScanIcon size={12} />
             <span>{scanPending ? "扫描中…" : "重新扫描"}</span>
-            <span className="ml-auto text-[11.5px] text-fg-subtle font-mono">
+            <span className="ml-auto text-badge text-fg-subtle font-mono">
               Ctrl+S
             </span>
           </button>
@@ -269,7 +269,7 @@ function MoreMenu({
               setOpen(false);
               onRefresh();
             }}
-            className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[13px] text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors"
+            className="w-full flex items-center gap-2.5 px-3 py-1.5 text-body text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors"
           >
             <RefreshIcon size={12} />
             <span>刷新缓存</span>

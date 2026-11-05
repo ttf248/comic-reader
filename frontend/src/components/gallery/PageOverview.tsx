@@ -76,8 +76,8 @@ export default function PageOverview({
       aria-label="目录"
     >
       <header className="flex h-12 shrink-0 items-center gap-3 px-4">
-        <h2 className="text-[13.5px] font-medium text-white/90">目录</h2>
-        <span className="text-[12px] tabular-nums text-white/55">
+        <h2 className="text-body font-medium text-white/90">目录</h2>
+        <span className="text-meta tabular-nums text-white/55">
           共 {images.length} 页
         </span>
         <button
@@ -124,7 +124,7 @@ export default function PageOverview({
                     decoding="async"
                     className="h-full w-full object-cover"
                   />
-                  <span className="absolute bottom-1 right-1 rounded bg-black/65 px-1.5 py-0.5 text-[11px] tabular-nums text-white/90">
+                  <span className="absolute bottom-1 right-1 rounded bg-black/65 px-1.5 py-0.5 text-badge tabular-nums text-white/90">
                     {item.index + 1}
                   </span>
                 </button>

@@ -456,7 +456,7 @@ function DoublePage({ images, index, aspect, direction, imgKey }: DoubleProps) {
               className={`select-none ${pageClass()}`}
             />
           ) : (
-            <div className="text-fg-subtle text-[12.5px]">（空白）</div>
+            <div className="text-fg-subtle text-meta">（空白）</div>
           )}
         </div>
       ))}
@@ -580,7 +580,7 @@ function GalleryImage({
         title="该图片无法显示"
       >
         <ImageIcon size={28} />
-        <span className="text-[12.5px]">该图片无法显示</span>
+        <span className="text-meta">该图片无法显示</span>
       </div>
     );
   }

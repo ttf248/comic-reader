@@ -10,7 +10,7 @@ export default function ViewedSortNotice({
       <div className="px-6 lg:px-10 max-w-[1400px] mx-auto w-full mb-4">
         <div
           role="alert"
-          className="flex items-center justify-between gap-3 rounded-md border border-danger/30 bg-danger/5 px-4 py-3 text-sm"
+          className="flex items-center justify-between gap-3 rounded-md border border-danger/30 bg-danger/5 px-4 py-3 text-body"
         >
           <p>
             最近访问加载失败。
@@ -32,7 +32,7 @@ export default function ViewedSortNotice({
     return (
       <div
         role="status"
-        className="px-6 lg:px-10 max-w-[1400px] mx-auto w-full mb-4 text-sm text-fg-muted"
+        className="px-6 lg:px-10 max-w-[1400px] mx-auto w-full mb-4 text-body text-fg-muted"
       >
         正在加载最近访问…
       </div>

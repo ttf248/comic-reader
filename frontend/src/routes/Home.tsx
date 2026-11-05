@@ -385,7 +385,7 @@ export default function Home() {
           <div className="min-w-0">
             <p className="page-eyebrow">{copy.libraryEyebrow}</p>
             <h1 className="page-title">{copy.libraryTitle}</h1>
-            <p className="text-[13px] text-fg-muted mt-2">
+            <p className="text-body text-fg-muted mt-2">
               {manifest ? (
                 <>
                   <span>{copy.libraryDescription}</span>
@@ -426,7 +426,7 @@ export default function Home() {
             >
               <ShuffleIcon size={14} />
               {copy.randomLabel}
-              <span className="text-[12.5px] opacity-70">R</span>
+              <span className="text-meta opacity-70">R</span>
             </button>
             {isComic && (
               <QuickLink
@@ -555,7 +555,7 @@ export default function Home() {
             )}
             {favCount > 0 && !yearFilterActive && (
               <button onClick={() => navigate(favoritesRoute(mode))} className="chip">
-                <StarIcon size={11} filled className="text-warning" />
+                <StarIcon size={11} filled className="text-favorite" />
                 <span>{favCount} 收藏</span>
               </button>
             )}

@@ -32,11 +32,11 @@ export default function EmptyState({
           {icon}
         </div>
       )}
-      <h2 className="font-display text-[26px] font-semibold text-fg">
+      <h2 className="font-display text-page-sm font-semibold text-fg">
         {title}
       </h2>
       {description && (
-        <div className="text-[13.5px] text-fg-muted mt-2 max-w-md leading-relaxed">
+        <div className="text-body text-fg-muted mt-2 max-w-md leading-relaxed">
           {description}
         </div>
       )}

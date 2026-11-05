@@ -23,9 +23,11 @@ const TERMINAL_STATUS = new Set<TranscodeStatusValue>([
   "unavailable",
 ]);
 
+// 角标文字是中文（「排队」「转码中」「转码失败」），所以字号不能压到 9px：
+// 9px 的汉字已经糊成一团，等于把状态藏起来。两档只差内边距，字号统一。
 const SIZE_CLASS = {
-  sm: { box: "h-4 px-1 text-[9px] gap-0.5", icon: 8 },
-  lg: { box: "h-5 px-1.5 text-[11.5px] gap-1", icon: 10 },
+  sm: "h-5 px-1.5 text-meta gap-1",
+  lg: "h-5 px-2 text-meta gap-1.5",
 } as const;
 
 // 状态 → 用户可见的简短文本 + 颜色
@@ -103,7 +105,7 @@ export default function TranscodeStatusBadge({
 
   return (
     <div
-      className={`inline-flex items-center rounded-md font-medium ${sz.box} ${style.cls}`}
+      className={`inline-flex items-center rounded-md font-medium ${sz} ${style.cls}`}
       title={status.error || style.text}
     >
       <span>{style.text}</span>

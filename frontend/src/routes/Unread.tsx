@@ -98,7 +98,7 @@ export default function Unread() {
         title={copy.unreadPageTitle}
         eyebrow={copy.unreadEyebrow}
         description={
-          <p className="text-[13px] text-fg-muted mt-2 tabular-nums flex items-center gap-3 flex-wrap">
+          <p className="text-body text-fg-muted mt-2 tabular-nums flex items-center gap-3 flex-wrap">
             {isLoading ? (
               // 加载中不要报「0 本」：那是"还没数出来"，不是"没有未读"。
               <span>正在统计未读相册…</span>

@@ -125,7 +125,7 @@ export default function ContextMenu({
     <div
       ref={ref}
       style={{ position: "fixed", top: y, left: x, zIndex: 1000 }}
-      className={`min-w-[190px] border rounded-lg shadow-lg py-1.5 fade-up text-[13px] ${
+      className={`min-w-[190px] border rounded-lg shadow-lg py-1.5 fade-up text-body ${
         dark
           ? "bg-overlay-panel border-overlay-border text-overlay-fg backdrop-blur-md"
           : "bg-bg-elevated border-border"

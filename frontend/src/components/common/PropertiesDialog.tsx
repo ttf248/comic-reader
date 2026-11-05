@@ -71,7 +71,7 @@ export default function PropertiesDialog({ target, onClose }: Props) {
       onContextMenu={(event) => event.stopPropagation()}
     >
       <header className="sticky top-0 z-10 flex items-center justify-between px-5 h-12 border-b border-border-faint bg-bg-elevated">
-        <h2 id={titleId} className="font-display text-[15px] font-semibold">
+        <h2 id={titleId} className="font-display text-label font-semibold">
           属性
         </h2>
         <button
@@ -84,7 +84,7 @@ export default function PropertiesDialog({ target, onClose }: Props) {
           <CloseIcon size={14} />
         </button>
       </header>
-      <div className="p-5 text-[13px] space-y-3">
+      <div className="p-5 text-body space-y-3">
         {target.kind === "node" ? (
           <NodeProperties key={targetKey} nodeId={target.id} />
         ) : (
@@ -101,7 +101,7 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
   return (
     <>
       {query.isLoading && (
-        <p role="status" className="text-fg-muted text-[12.5px]">
+        <p role="status" className="text-fg-muted text-meta">
           加载中…
         </p>
       )}
@@ -168,7 +168,7 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
               <Field label="标签" value={node.tags.join(" · ")} />
             )}
           </dl>
-          <p className="text-[12.5px] text-fg-subtle">根据最近一次扫描记录展示。</p>
+          <p className="text-meta text-fg-subtle">根据最近一次扫描记录展示。</p>
         </>
       )}
     </>
@@ -180,7 +180,7 @@ function ImageProperties({ fileId }: { fileId: string }) {
   return (
     <>
       {loading && (
-        <p role="status" className="text-fg-muted text-[12.5px]">
+        <p role="status" className="text-fg-muted text-meta">
           加载中…
         </p>
       )}
@@ -219,7 +219,7 @@ function LoadError({
   return (
     <div
       role="alert"
-      className="flex items-center justify-between gap-3 rounded-lg border border-danger/30 bg-danger/5 p-3 text-[12.5px]"
+      className="flex items-center justify-between gap-3 rounded-lg border border-danger/30 bg-danger/5 p-3 text-meta"
     >
       <p>{message}</p>
       <button
@@ -254,12 +254,12 @@ function Field({
 }) {
   return (
     <div>
-      <dt className="text-[12.5px] font-medium text-fg-muted mb-1 flex items-center gap-1.5">
+      <dt className="text-meta font-medium text-fg-muted mb-1 flex items-center gap-1.5">
         <span>{label}</span>
         {copyable && <CopyButton value={value} title={`复制${label}`} />}
       </dt>
       <dd
-        className={`break-all text-[13px] ${mono ? "font-mono text-[12.5px] text-fg-muted" : ""}`}
+        className={`break-all text-body ${mono ? "font-mono text-meta text-fg-muted" : ""}`}
       >
         {value}
       </dd>

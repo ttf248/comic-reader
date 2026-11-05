@@ -304,10 +304,10 @@ export default function PhotoViewer({
           <CloseIcon size={16} />
         </button>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[13.5px] font-medium text-white/90">
+          <div className="truncate text-body font-medium text-white/90">
             {albumName}
           </div>
-          <div className="text-[12px] tabular-nums text-white/55">
+          <div className="text-meta tabular-nums text-white/55">
             {index + 1} / {items.length}
           </div>
         </div>
@@ -327,7 +327,7 @@ export default function PhotoViewer({
             <button
               type="button"
               onClick={onSetCover}
-              className="hidden h-9 items-center gap-1.5 rounded-md px-2.5 text-[12.5px] text-white/80 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 sm:inline-flex"
+              className="hidden h-9 items-center gap-1.5 rounded-md px-2.5 text-meta text-white/80 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 sm:inline-flex"
               title={hasCustomCover ? "更换封面" : "设为封面"}
             >
               设为封面
@@ -370,7 +370,7 @@ export default function PhotoViewer({
               <VideoPlayer src={current.id} className="h-full w-full" />
             </div>
           ) : failed ? (
-            <div className="px-6 text-center text-[13px] text-white/60">
+            <div className="px-6 text-center text-body text-white/60">
               这张图片无法显示
             </div>
           ) : (
@@ -432,7 +432,7 @@ export default function PhotoViewer({
             >
               <MinusIcon size={15} />
             </button>
-            <span className="w-12 text-center text-[12px] tabular-nums text-white/70">
+            <span className="w-12 text-center text-meta tabular-nums text-white/70">
               {Math.round(zoom * 100)}%
             </span>
             <button

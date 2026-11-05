@@ -43,7 +43,7 @@ export function RecentlyAddedHero({ items, total }: RecentlyAddedProps) {
           <p className="page-eyebrow mb-2">{copy.recentlyAddedEyebrow}</p>
           <h2 id="recently-added-heading" className="section-title">
             {copy.recentlyAddedTitle}{" "}
-            <span className="font-sans text-[13px] font-normal text-fg-muted ml-2 tabular-nums">
+            <span className="font-sans text-body font-normal text-fg-muted ml-2 tabular-nums">
               {total} {copy.recentlyAddedCountLabel}
             </span>
           </h2>

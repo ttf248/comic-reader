@@ -163,7 +163,7 @@ export default function Sidebar({
     return (
       <div className="mt-5 first:mt-0">
         <div className="px-4 pb-1 flex items-center gap-2">
-          <span className="text-[11.5px] tracking-wide transition-colors text-rail-fg">
+          <span className="text-meta tracking-wide transition-colors text-rail-fg">
             {title}
           </span>
         </div>
@@ -182,7 +182,7 @@ export default function Sidebar({
               {!collapsed && <span className="truncate">{entry.label}</span>}
               {!collapsed && badge > 0 && (
                 <span
-                  className="inline-flex items-center justify-center min-w-[22px] h-[20px] px-1.5 rounded-full bg-rail-hover text-rail-fg text-[12.5px] font-semibold tabular-nums"
+                  className="inline-flex items-center justify-center min-w-[22px] h-[20px] px-1.5 rounded-full bg-rail-hover text-rail-fg text-meta font-semibold tabular-nums"
                   aria-label={`还有 ${badge} 本`}
                 >
                   {badge > 999 ? "999+" : badge}
@@ -219,9 +219,9 @@ export default function Sidebar({
           !collapsed ? (
             <div className="flex items-center gap-2.5 min-w-0">
               <Logo />
-              <div className="leading-none min-w-0 font-display font-semibold text-[17px] truncate">
+              <div className="leading-none min-w-0 font-display font-semibold text-label truncate">
                 Local Gallery
-                <span className="block font-sans text-[12.5px] font-normal text-rail-muted mt-2">
+                <span className="block font-sans text-meta font-normal text-rail-muted mt-2">
                   本地影像档案
                 </span>
               </div>
@@ -251,7 +251,7 @@ export default function Sidebar({
                 size={12}
                 className="transition-transform group-hover/toggle:translate-x-0.5"
               />
-              <span className="text-[11.5px] font-semibold tracking-wide">
+              <span className="text-meta font-semibold tracking-wide">
                 展开
               </span>
             </>
@@ -287,8 +287,8 @@ export default function Sidebar({
       {!collapsed && resumeFirst && (
         <div className="px-4 pt-5 pb-2 min-h-0 overflow-y-auto">
           <div className="px-1 pb-2 flex items-baseline gap-2">
-            <span className="text-[12.5px] text-rail-muted">{resumeTitle}</span>
-            <span className="text-[12.5px] text-rail-muted tabular-nums">
+            <span className="text-meta text-rail-muted">{resumeTitle}</span>
+            <span className="text-meta text-rail-muted tabular-nums">
               {resumeEntries.length} {resumeCountLabel}
             </span>
           </div>
@@ -304,7 +304,7 @@ export default function Sidebar({
             />
           ))}
           {resumeRestCount > 0 && (
-            <div className="px-2 pt-1.5 text-[12.5px] text-rail-muted tabular-nums">
+            <div className="px-2 pt-1.5 text-meta text-rail-muted tabular-nums">
               还有 {resumeRestCount} 本
               {mode === "comic"
                 ? `没${comicCopy().finishVerb}`
@@ -343,7 +343,7 @@ export default function Sidebar({
           onClick={onShuffle}
           disabled={randomAlbum.isPending}
           title={`${copy.randomLabel} (R)`}
-          className={`w-full flex items-center gap-2.5 h-9 rounded-md text-[13.5px] transition-colors ${
+          className={`w-full flex items-center gap-2.5 h-9 rounded-md text-body transition-colors ${
             collapsed ? "justify-center px-0" : "px-2.5"
           } text-rail-muted hover:bg-rail-hover hover:text-rail-fg disabled:opacity-50`}
         >
@@ -357,7 +357,7 @@ export default function Sidebar({
 
       {!collapsed && (
         <div className="px-4 pb-3.5">
-          <div className="flex items-center gap-2 text-[12.5px] text-rail-muted">
+          <div className="flex items-center gap-2 text-meta text-rail-muted">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-success" />
             <span>已就绪</span>
           </div>
@@ -418,10 +418,10 @@ function ResumeRow({
         )}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-[12.5px] text-rail-fg truncate leading-tight">
+        <span className="block text-meta text-rail-fg truncate leading-tight">
           {title}
         </span>
-        <span className="block text-[12.5px] text-rail-muted tabular-nums mt-0.5">
+        <span className="block text-meta text-rail-muted tabular-nums mt-0.5">
           {resumeHint(card)}
         </span>
       </span>
@@ -469,7 +469,7 @@ function ResumeMiniCard({
             这里再写一遍是重复信息。
             用 --fg-muted 而不是 --fg-subtle：卡片底色是 bg-rail-hover，
             fg-subtle 在这个底上只有 4.4:1（AA 要求 4.5:1）。 */}
-        <span className="block text-[13px] font-medium text-rail-fg truncate leading-tight group-hover/mini:text-rail-accent transition-colors">
+        <span className="block text-body font-medium text-rail-fg truncate leading-tight group-hover/mini:text-rail-accent transition-colors">
           {title}
         </span>
         {isComic && (
@@ -480,7 +480,7 @@ function ResumeMiniCard({
             />
           </span>
         )}
-        <span className="mt-1 block text-[12.5px] text-rail-muted tabular-nums">
+        <span className="mt-1 block text-meta text-rail-muted tabular-nums">
           {resumeHint(card)}
         </span>
       </span>

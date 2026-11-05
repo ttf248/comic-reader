@@ -160,7 +160,7 @@ export default function PageSlider({ total, index, onJump, images }: Props) {
               </div>
             );
           })}
-          <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[12.5px] text-white/75 tabular-nums">
+          <div className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-meta text-white/75 tabular-nums">
             第 {scrubIndex + 1} / {total} 页
           </div>
         </div>
@@ -184,19 +184,19 @@ export default function PageSlider({ total, index, onJump, images }: Props) {
           }}
           onBlur={commit}
           autoFocus
-          className="w-12 h-7 px-1.5 text-center text-[12.5px] tabular-nums bg-overlay-panel/80 text-white rounded border border-overlay-border outline-none"
+          className="w-12 h-7 px-1.5 text-center text-meta tabular-nums bg-overlay-panel/80 text-white rounded border border-overlay-border outline-none"
           inputMode="numeric"
         />
       ) : (
         <button
           onClick={startEditing}
-          className="min-w-[44px] h-7 px-1.5 rounded text-[12.5px] tabular-nums text-white/85 hover:bg-white/10 transition-colors"
+          className="min-w-[44px] h-7 px-1.5 rounded text-meta tabular-nums text-white/85 hover:bg-white/10 transition-colors"
           title="跳转到指定页 (G)"
         >
           {safeIndex + 1}
         </button>
       )}
-      <span className="text-white/70 text-[12.5px] tabular-nums">/ {total}</span>
+      <span className="text-white/70 text-meta tabular-nums">/ {total}</span>
 
       {/* 进度条 */}
       <div className="flex-1 relative h-9 flex items-center group">
@@ -224,7 +224,7 @@ export default function PageSlider({ total, index, onJump, images }: Props) {
       </div>
 
       {/* 快捷键提示 */}
-      <span className="text-[12.5px] text-white/55 hidden md:inline">
+      <span className="text-meta text-white/55 hidden md:inline">
         <kbd className="kbd-light">G</kbd> 跳转
       </span>
     </div>

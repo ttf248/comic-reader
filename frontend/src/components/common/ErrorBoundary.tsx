@@ -39,14 +39,14 @@ export default class ErrorBoundary extends Component<Props, State> {
           role="alert"
           className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center"
         >
-          <div className="text-2xl font-semibold text-fg">图像库加载异常</div>
-          <div className="max-w-md text-sm text-fg-muted">
+          <div className="text-page-sm font-semibold text-fg">图像库加载异常</div>
+          <div className="max-w-md text-body text-fg-muted">
             {this.state.error.message || "未知错误,详见浏览器控制台"}
           </div>
           <button
             type="button"
             onClick={this.handleRetry}
-            className="rounded-md border border-border bg-bg-elevated px-4 py-2 text-sm hover:bg-bg-overlay"
+            className="rounded-md border border-border bg-bg-elevated px-4 py-2 text-body hover:bg-bg-overlay"
           >
             重试
           </button>

@@ -22,7 +22,7 @@ export default function ToastViewport() {
         return (
           <div
             key={t.id}
-            className={`pointer-events-auto flex items-center gap-3 backdrop-blur-xl rounded-lg px-3.5 py-2.5 shadow-lg min-w-[240px] max-w-[380px] fade-up text-[13px] ${
+            className={`pointer-events-auto flex items-center gap-3 backdrop-blur-xl rounded-lg px-3.5 py-2.5 shadow-lg min-w-[240px] max-w-[380px] fade-up text-body ${
               dark
                 ? 'bg-overlay-panel border border-overlay-border text-overlay-fg'
                 : 'bg-bg-elevated/95 border border-border'

@@ -323,7 +323,7 @@ function GridCard({
       <Link
         to={data.to}
         aria-label={`打开${data.variant === "album" ? "相册" : data.variant === "collection" ? "集合" : "智能视图"}“${data.displayTitle ?? data.title}”`}
-        className="group block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
+        className="group block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
       >
         <div
           className={`album-tile__cover relative ${COVER_RATIO_CLASS[coverRatio]} bg-bg-subtle overflow-hidden`}
@@ -358,7 +358,7 @@ function GridCard({
           {isComicAlbum && progressPct !== null && progressPct > 0 && (
             <>
               {!isFinished && (
-                <div className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-md bg-black/65 backdrop-blur-sm ring-1 ring-white/20 px-1.5 h-5 text-[11.5px] font-medium text-white shadow-sm">
+                <div className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-md bg-black/65 backdrop-blur-sm ring-1 ring-white/20 px-1.5 h-5 text-badge font-medium text-white shadow-sm">
                   <ReaderIcon size={11} className="shrink-0" />
                   <span className="tabular-nums">{progressPct}%</span>
                 </div>
@@ -384,7 +384,7 @@ function GridCard({
 
         <div className="album-tile__meta min-w-0">
           <div
-            className="text-[14px] font-medium text-fg truncate-2 leading-snug transition-colors group-hover:text-accent"
+            className="text-label font-medium text-fg truncate-2 leading-snug transition-colors group-hover:text-accent"
             title={data.displayTitle ?? data.title}
           >
             {data.displayTitle ?? data.title}
@@ -392,7 +392,7 @@ function GridCard({
           {/* meta 行 12.5px → 13px：全量网格一次显示几十张卡，
               12.5px 的中文在一屏里会糊成灰团，是"内容存在感不足"
               的主要来源之一。 */}
-          <div className="text-[13px] text-fg-muted mt-1 tabular-nums flex items-center gap-1.5 min-w-0">
+          <div className="text-body text-fg-muted mt-1 tabular-nums flex items-center gap-1.5 min-w-0">
             <TypeChip variant={data.variant} />
             {(() => {
               const media = formatMediaCount(data);
@@ -429,14 +429,14 @@ function GridCard({
           {/* 多根来源 badge：与标签副标题独立，作为视觉小标签放在元数据行。
               单一媒体根下每张卡片都挂同一句来源是噪音，multiRoot 为 false 时隐藏。 */}
           {data.sourceName && multiRoot && (
-            <div className="text-[12.5px] text-fg-subtle mt-0.5 inline-flex items-center gap-1">
+            <div className="text-meta text-fg-subtle mt-0.5 inline-flex items-center gap-1">
               <FolderIcon size={10} className="shrink-0" />
               <span className="truncate">来自 {data.sourceName}</span>
             </div>
           )}
           {showLastSeen && data.lastSeenAt && (
             <div
-              className="text-[12.5px] text-fg-subtle mt-0.5 tabular-nums flex items-center gap-1.5 truncate"
+              className="text-meta text-fg-subtle mt-0.5 tabular-nums flex items-center gap-1.5 truncate"
               title={`上次 ${timeAgo(data.lastSeenAt)}`}
             >
               <ClockIcon size={10} className="shrink-0 text-fg-subtle" />
@@ -462,7 +462,7 @@ function GridCard({
           放在 Link 之外：在 <a> 里嵌按钮既不合法，也会让 Enter 冒泡触发跳转。 */}
       <div className="absolute top-2 right-2 z-10 flex flex-col items-end gap-1">
         {data.coverKind === "video" && (
-          <div className="pointer-events-none inline-flex items-center gap-1 bg-bg-elevated/90 backdrop-blur text-fg text-[11.5px] font-medium px-1.5 h-5 rounded shadow-sm">
+          <div className="pointer-events-none inline-flex items-center gap-1 bg-bg-elevated/90 backdrop-blur text-fg text-badge font-medium px-1.5 h-5 rounded shadow-sm">
             <PlayFilledIcon size={9} className="text-accent" />
             {/* 时长未知时不要显示 "—"：一个破折号看起来像"读不出来 / 坏了"，
                 而不是"视频时长暂不可用"。只留播放图标。 */}
@@ -540,7 +540,7 @@ function ListCard({
       <Link
         to={data.to}
         aria-label={`打开${data.variant === "album" ? "相册" : data.variant === "collection" ? "集合" : "智能视图"}“${data.displayTitle ?? data.title}”`}
-        className="group flex flex-1 min-w-0 items-center gap-3.5 py-2 px-2.5 -mx-2.5 rounded-lg hover:bg-bg-subtle transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="group flex flex-1 min-w-0 items-center gap-3.5 py-2 px-2.5 -mx-2.5 rounded-lg hover:bg-bg-subtle transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
       >
         <div
           className="relative w-14 aspect-[4/5] rounded-md bg-bg-subtle overflow-hidden shrink-0 border border-border shadow-xs"
@@ -548,7 +548,7 @@ function ListCard({
         >
           <CardCover data={data} loading="eager" compact />
           {data.coverKind === "video" && (
-            <div className="pointer-events-none absolute top-1 right-1 inline-flex items-center gap-1 bg-bg-elevated/90 backdrop-blur text-fg text-[11.5px] font-medium px-1.5 h-5 rounded shadow-sm">
+            <div className="pointer-events-none absolute top-1 right-1 inline-flex items-center gap-1 bg-bg-elevated/90 backdrop-blur text-fg text-badge font-medium px-1.5 h-5 rounded shadow-sm">
               <PlayFilledIcon size={9} className="text-accent" />
               {/* 时长未知时不显示数字：破折号看起来像"读不出来 / 坏了"。 */}
               {hasDuration && <span>{formatDuration(data.durationSec)}</span>}
@@ -559,13 +559,13 @@ function ListCard({
         </div>
 
         <div className="flex-1 min-w-0 flex flex-col justify-center">
-          <div className="text-[14px] font-medium text-fg truncate flex items-center gap-1.5">
+          <div className="text-label font-medium text-fg truncate flex items-center gap-1.5">
             <span className="truncate" title={data.displayTitle ?? data.title}>
               {data.displayTitle ?? data.title}
             </span>
             {unread && (
               <span
-                className="inline-flex items-center gap-1 text-[13px] font-medium text-fg-muted shrink-0"
+                className="inline-flex items-center gap-1 text-body font-medium text-fg-muted shrink-0"
                 title={cardCopy.unreadTitle}
               >
                 <span
@@ -576,13 +576,13 @@ function ListCard({
               </span>
             )}
             {isFinished && isComicAlbum && (
-              <span className="inline-flex items-center gap-0.5 text-[13px] font-medium text-fg-muted shrink-0">
+              <span className="inline-flex items-center gap-0.5 text-body font-medium text-fg-muted shrink-0">
                 <CheckIcon size={11} className="text-success" />
                 <span>{cardCopy.finishedLabel}</span>
               </span>
             )}
           </div>
-          <div className="text-[13px] text-fg-subtle mt-1 flex items-center gap-2">
+          <div className="text-body text-fg-subtle mt-1 flex items-center gap-2">
             <TypeChip variant={data.variant} />
             {data.subtitle && <span className="truncate">{data.subtitle}</span>}
             {data.sourceName && multiRoot && (
@@ -600,7 +600,7 @@ function ListCard({
                   style={{ width: `${progressPct}%` }}
                 />
               </div>
-              <span className="text-[13px] text-fg-subtle tabular-nums shrink-0">
+              <span className="text-body text-fg-subtle tabular-nums shrink-0">
                 {cardCopy.positionVerb} {data.progress!.index + 1} /{" "}
                 {data.progress!.total}
               </span>
@@ -610,7 +610,7 @@ function ListCard({
 
         {/* 右侧信息列：张数 / 最近查看固定右对齐，逐行对齐便于扫读。 */}
         <div className="shrink-0 w-24 sm:w-32 text-right flex flex-col items-end gap-1">
-          <span className="text-[13px] text-fg-muted tabular-nums">
+          <span className="text-body text-fg-muted tabular-nums">
             {(() => {
               const media = formatMediaCount(data);
               if (media) {
@@ -625,7 +625,7 @@ function ListCard({
             })()}
           </span>
           {showLastSeen && data.lastSeenAt && (
-            <span className="text-[13px] text-fg-subtle inline-flex items-center gap-1">
+            <span className="text-body text-fg-subtle inline-flex items-center gap-1">
               <ClockIcon size={11} className="shrink-0 text-fg-subtle" />
               <span>上次 {timeAgo(data.lastSeenAt)}</span>
             </span>
@@ -633,7 +633,7 @@ function ListCard({
         </div>
 
         <div className="text-fg-subtle opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity pr-1">
-          <span className="text-sm">›</span>
+          <span className="text-body">›</span>
         </div>
       </Link>
 
@@ -705,7 +705,7 @@ function ReadChip() {
   const title = comicCopy().finishedLabel;
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-md bg-black/65 backdrop-blur-sm ring-1 ring-white/20 px-1.5 h-5 text-[12.5px] font-medium text-white shadow-sm"
+      className="inline-flex items-center gap-1 rounded-md bg-black/65 backdrop-blur-sm ring-1 ring-white/20 px-1.5 h-5 text-meta font-medium text-white shadow-sm"
       title={title}
     >
       <CheckIcon size={10} className="text-overlay-success" />
@@ -719,7 +719,7 @@ function ReadChip() {
 function TypeChip({ variant }: { variant: CardVariant }) {
   if (variant !== "smart") return null;
   return (
-    <span className="inline-flex shrink-0 items-center gap-1 rounded bg-bg-subtle px-1.5 py-px text-[11.5px] font-medium leading-4 text-fg-muted ring-1 ring-border-faint">
+    <span className="inline-flex shrink-0 items-center gap-1 rounded bg-bg-subtle px-1.5 py-px text-meta font-medium leading-4 text-fg-muted ring-1 ring-border-faint">
       <FolderIcon size={10} />
       标签
     </span>
@@ -758,7 +758,7 @@ function FavoriteStar({
       aria-label={fav ? `取消收藏「${label}」` : `收藏「${label}」`}
       title={fav ? "取消收藏" : "收藏"}
       className={`inline-flex items-center justify-center w-7 h-7 rounded-full bg-bg-elevated/90 backdrop-blur shadow-sm transition-opacity ${visibility} ${
-        fav ? "text-warning" : "text-fg-muted hover:text-fg"
+        fav ? "text-favorite" : "text-fg-muted hover:text-fg"
       } ${className}`}
     >
       <StarIcon size={13} filled={fav} />

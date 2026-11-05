@@ -56,7 +56,7 @@ export default function VideoCoverImage({
           <PlayFilledIcon size={18} className="text-white/85" />
         </span>
         {showExtractingHint && (
-          <span className="text-[12.5px] text-white/60 tabular-nums">
+          <span className="text-meta text-white/60 tabular-nums">
             {status === "extracting" ? "正在生成封面…" : "正在加载…"}
           </span>
         )}
@@ -71,7 +71,7 @@ export default function VideoCoverImage({
         <span className="w-11 h-11 rounded-full border border-white/20 bg-white/8 flex items-center justify-center">
           <FolderIcon size={20} className="text-white/70" />
         </span>
-        <span className="text-[12.5px] text-white/60">封面生成失败</span>
+        <span className="text-meta text-white/60">封面生成失败</span>
         {showRetryAction ? (
           <button
             type="button"
@@ -80,7 +80,7 @@ export default function VideoCoverImage({
               if (onRetry) onRetry();
               else retry();
             }}
-            className="relative z-10 text-[12px] text-white/85 hover:underline"
+            className="relative z-10 text-meta text-white/85 hover:underline"
           >
             重试
           </button>

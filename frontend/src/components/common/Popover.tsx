@@ -158,8 +158,8 @@ export default function Popover({
   // 默认菜单样式 + 用户覆盖
   const baseCls =
     tone === "reader"
-      ? "min-w-[180px] bg-overlay-panel border border-overlay-border rounded-lg shadow-2xl p-1.5 text-[13px] text-overlay-fg backdrop-blur-md"
-      : "min-w-[180px] bg-bg-elevated border border-border rounded-lg shadow-lg p-1.5 text-[13px]";
+      ? "min-w-[180px] bg-overlay-panel border border-overlay-border rounded-lg shadow-2xl p-1.5 text-body text-overlay-fg backdrop-blur-md"
+      : "min-w-[180px] bg-bg-elevated border border-border rounded-lg shadow-lg p-1.5 text-body";
   const enhancedTrigger = isValidElement(trigger)
     ? cloneElement(trigger as ReactElement<TriggerProps>, {
         "aria-haspopup": "menu",
@@ -252,7 +252,7 @@ export function PopoverItem({
           close?.();
         }
       }}
-      className={`w-full text-left flex items-center gap-2.5 px-2.5 h-9 rounded-md text-[13px] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${stateCls}`}
+      className={`w-full text-left flex items-center gap-2.5 px-2.5 h-9 rounded-md text-body transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${stateCls}`}
     >
       {children}
     </button>
@@ -274,7 +274,7 @@ export function PopoverLabel({ children }: { children: ReactNode }) {
   const tone = useContext(PopoverToneContext);
   return (
     <div
-      className={`px-2.5 pt-2 pb-1.5 text-[12.5px] font-medium ${
+      className={`px-2.5 pt-2 pb-1.5 text-meta font-medium ${
         tone === "reader" ? "text-white/50" : "text-fg-subtle"
       }`}
     >

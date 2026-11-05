@@ -156,7 +156,7 @@ export default function PhotoAlbum({ album }: Props) {
       {mediaQuery.isFetchNextPageError && (
         <div
           role="alert"
-          className="flex shrink-0 items-center justify-between gap-3 bg-warning/10 px-4 py-2.5 text-[13px] text-fg sm:px-6"
+          className="flex shrink-0 items-center justify-between gap-3 bg-warning/10 px-4 py-2.5 text-body text-fg sm:px-6"
         >
           <span>后续媒体加载失败，已加载内容仍可浏览。</span>
           <button
@@ -184,18 +184,18 @@ export default function PhotoAlbum({ album }: Props) {
           </button>
 
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-[15px] font-medium text-fg">
+            <h1 className="truncate text-label font-medium text-fg">
               {title}
             </h1>
-            <div className="text-[12px] tabular-nums text-fg-muted">
+            <div className="text-meta tabular-nums text-fg-muted">
               {album.imageCount ?? 0} 张
               {(album.videoCount ?? 0) > 0 && ` · ${album.videoCount} 个视频`}
             </div>
           </div>
 
           <div className="hidden items-center gap-1 md:flex">
-            <span className="text-[12px] text-fg-subtle">密度</span>
-            <div className="flex items-center overflow-hidden rounded-md border border-border-faint text-[12.5px]">
+            <span className="text-meta text-fg-subtle">密度</span>
+            <div className="flex items-center overflow-hidden rounded-md border border-border-faint text-meta">
               {(["compact", "cozy", "large"] as const).map((key) => (
                 <button
                   key={key}
@@ -221,7 +221,7 @@ export default function PhotoAlbum({ album }: Props) {
             onClick={toggleFavorite}
             className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors ${
               isFavorite
-                ? "text-warning hover:bg-warning/10"
+                ? "text-favorite hover:bg-favorite/10"
                 : "text-fg-muted hover:bg-bg-subtle hover:text-fg"
             }`}
             title={isFavorite ? "取消收藏" : "收藏"}
@@ -268,7 +268,7 @@ export default function PhotoAlbum({ album }: Props) {
         {/* 只有第一页就没加载出来才整页报错：后续分页失败时已加载的内容
             仍然能翻，页头的提示条已经说明了失败与重试。 */}
         {mediaQuery.isError && mediaItems.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-[13px] text-fg-muted">
+          <div className="flex h-full items-center justify-center text-body text-fg-muted">
             媒体加载失败，请重试。
           </div>
         ) : (

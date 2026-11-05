@@ -1,7 +1,7 @@
 export default function RouteLoading() {
   return (
     <div
-      className="min-h-full flex items-center justify-center gap-3 text-sm text-fg-muted"
+      className="min-h-full flex items-center justify-center gap-3 text-body text-fg-muted"
       role="status"
       aria-live="polite"
     >

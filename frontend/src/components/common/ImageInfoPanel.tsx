@@ -34,7 +34,7 @@ export default function ImageInfoPanel({ absPath, onClose }: Props) {
       "
     >
       <div className="flex items-center justify-between px-4 h-11 border-b border-white/10 shrink-0">
-        <h2 className="font-display text-[13px] font-medium text-white/85">
+        <h2 className="font-display text-body font-medium text-white/85">
           图片信息
         </h2>
         <button
@@ -46,10 +46,10 @@ export default function ImageInfoPanel({ absPath, onClose }: Props) {
           <CloseIcon size={13} />
         </button>
       </div>
-      <div className="flex-1 overflow-auto p-4 text-sm space-y-3 scroll-thin">
-        {loading && <div className="text-white/60 text-[12.5px]">加载中…</div>}
+      <div className="flex-1 overflow-auto p-4 text-body space-y-3 scroll-thin">
+        {loading && <div className="text-white/60 text-meta">加载中…</div>}
         {err !== null && (
-          <div className="text-overlay-danger text-[12.5px]">
+          <div className="text-overlay-danger text-meta">
             错误: {apiErrorMessage(err, "无法读取图片信息")}
           </div>
         )}
@@ -104,12 +104,12 @@ interface RowProps {
 function Row({ label, value, mono, copyable, copyValue }: RowProps) {
   return (
     <div>
-      <div className="text-[12.5px] text-white/60 mb-1 flex items-center gap-1.5">
+      <div className="text-meta text-white/60 mb-1 flex items-center gap-1.5">
         <span>{label}</span>
         {copyable && copyValue && <CopyButton value={copyValue} onDark />}
       </div>
       <div
-        className={`break-all ${mono ? "font-mono text-[12.5px] text-white/70" : "text-white/90"}`}
+        className={`break-all ${mono ? "font-mono text-meta text-white/70" : "text-white/90"}`}
       >
         {value}
       </div>

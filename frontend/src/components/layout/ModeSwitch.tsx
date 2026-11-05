@@ -65,7 +65,7 @@ export default function ModeSwitch({ mode, onChange, compact }: Props) {
             onClick={() => onChange(option.key)}
             aria-pressed={active}
             title={title}
-            className={`h-7 flex-1 rounded px-2.5 text-[12.5px] transition-colors ${
+            className={`h-7 flex-1 rounded px-2.5 text-meta transition-colors ${
               active
                 ? "bg-rail-accent text-rail-accent-fg font-medium"
                 : "text-rail-muted hover:text-rail-fg"

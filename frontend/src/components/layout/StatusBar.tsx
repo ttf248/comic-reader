@@ -34,7 +34,7 @@ export default function StatusBar() {
   }
 
   return (
-    <footer className="h-8 px-4 lg:px-7 flex items-center justify-between text-[12.5px] text-fg-subtle border-t border-border-faint bg-bg-elevated/60 backdrop-blur-xl">
+    <footer className="h-8 px-4 lg:px-7 flex items-center justify-between text-meta text-fg-subtle border-t border-border-faint bg-bg-elevated/60 backdrop-blur-xl">
       <div className="flex items-center gap-3 truncate">
         <span>{leftLabel}</span>
         {manifest && manifest.statistics.warningCount > 0 && (

@@ -127,7 +127,7 @@ export default function GalleryToolbar({
           onClick={zoomReset}
           title="实际大小 (0)"
           aria-label={`实际大小，当前 ${Math.round(zoom * 100)}%`}
-          className="hidden sm:inline-flex h-8 min-w-[46px] items-center justify-center rounded-md px-1 text-[12.5px] tabular-nums text-white/80 transition-colors hover:bg-white/10 hover:text-white"
+          className="hidden sm:inline-flex h-8 min-w-[46px] items-center justify-center rounded-md px-1 text-meta tabular-nums text-white/80 transition-colors hover:bg-white/10 hover:text-white"
         >
           {Math.round(zoom * 100)}%
         </button>
@@ -144,7 +144,7 @@ export default function GalleryToolbar({
         >
           <span className="inline-flex items-center gap-1">
             <RotateIcon size={15} />
-            <span className="text-[12.5px] tabular-nums">{rotation}°</span>
+            <span className="text-meta tabular-nums">{rotation}°</span>
           </span>
         </ToolButton>
 

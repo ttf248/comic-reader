@@ -277,11 +277,11 @@ export default function VideoPlayer({
       {/* 错误覆盖层（仅在没在转码时显示;转码失败时由 TranscodeProgress 接管）*/}
       {error && !isTranscoding && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="max-w-md mx-4 bg-black/80 text-white/90 text-sm px-4 py-3 rounded-md flex flex-col items-center gap-2 text-center">
+          <div className="max-w-md mx-4 bg-black/80 text-white/90 text-body px-4 py-3 rounded-md flex flex-col items-center gap-2 text-center">
             <div>{error}</div>
             <button
               type="button"
-              className="pointer-events-auto text-[12.5px] px-2 py-1 rounded border border-white/30 hover:bg-white/10"
+              className="pointer-events-auto text-meta px-2 py-1 rounded border border-white/30 hover:bg-white/10"
               onClick={() => {
                 setError(null);
                 setRetryKey((k) => k + 1);

@@ -377,8 +377,8 @@ function CollectionView({
         </button>
         <div className="flex items-end justify-between gap-4 flex-wrap">
           <div className="min-w-0">
-            <h1 className="page-title truncate">{detail.name}</h1>
-            <div className="text-[13px] text-fg-muted mt-1.5">
+            <h1 className="page-title page-title--sm truncate">{detail.name}</h1>
+            <div className="text-body text-fg-muted mt-1.5">
               <span className="tabular-nums">
                 {detail.albumCount} {collectionUnit(detail.contentKind)}
               </span>
@@ -386,9 +386,9 @@ function CollectionView({
           </div>
           <button
             onClick={onToggleFav}
-            className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-[12.5px] transition-colors ${
+            className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-meta transition-colors ${
               isFavorite
-                ? "bg-warning/10 text-warning hover:bg-warning/15"
+                ? "bg-favorite/10 text-favorite hover:bg-favorite/15"
                 : "border border-border-faint hover:bg-bg-subtle text-fg-muted"
             }`}
           >

@@ -163,11 +163,11 @@ export default function HelpOverlay({
               <KeyboardIcon size={14} />
             </div>
             <div>
-              <h2 id={titleId} className="font-display text-[15px] font-semibold">
+              <h2 id={titleId} className="font-display text-label font-semibold">
                 快捷键
               </h2>
               <p
-                className={`text-[12.5px] mt-0.5 ${
+                className={`text-meta mt-0.5 ${
                   dark ? "text-white/60" : "text-fg-subtle"
                 }`}
               >
@@ -210,7 +210,7 @@ export default function HelpOverlay({
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="搜索快捷键…"
-              className={`flex-1 h-full bg-transparent border-0 outline-none text-[13.5px] ${
+              className={`flex-1 h-full bg-transparent border-0 outline-none text-body ${
                 dark
                   ? "text-white placeholder:text-white/45"
                   : "placeholder:text-fg-subtle"
@@ -222,7 +222,7 @@ export default function HelpOverlay({
                   setQ("");
                   searchRef.current?.focus({ preventScroll: true });
                 }}
-                className={`inline-flex h-7 items-center px-2 -mr-2 rounded text-[12.5px] transition-colors ${
+                className={`inline-flex h-7 items-center px-2 -mr-2 rounded text-meta transition-colors ${
                   dark
                     ? "text-white/60 hover:text-white hover:bg-white/10"
                     : "text-fg-subtle hover:text-fg hover:bg-bg-subtle"
@@ -243,7 +243,7 @@ export default function HelpOverlay({
         >
           {total === 0 && (
             <div
-              className={`col-span-full text-center text-[13px] py-12 ${
+              className={`col-span-full text-center text-body py-12 ${
                 dark ? "text-white/60" : "text-fg-muted"
               }`}
             >
@@ -253,7 +253,7 @@ export default function HelpOverlay({
           {filteredGroups.map((g) => (
             <div key={g.title}>
               <h3
-                className={`text-[13px] font-semibold mb-3 ${
+                className={`text-body font-semibold mb-3 ${
                   dark ? "text-white" : "text-fg"
                 }`}
               >
@@ -263,7 +263,7 @@ export default function HelpOverlay({
                 {g.items.map((s) => (
                   <li
                     key={s.id}
-                    className="flex items-center justify-between text-[13px] py-1.5"
+                    className="flex items-center justify-between text-body py-1.5"
                   >
                     <span className={dark ? "text-white/75" : "text-fg-muted"}>
                       {describe(s)}

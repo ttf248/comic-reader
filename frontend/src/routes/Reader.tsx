@@ -986,7 +986,7 @@ export default function Reader() {
       // 否则浅色主题下会先闪一屏白底，再跳到黑色画布。
       <div className="reader-shell flex flex-col h-full">
         {/* 顶部条：返回 / 名称（常驻） */}
-        <div className="px-4 h-9 text-[12.5px] text-white/60 border-b border-white/10 bg-overlay-panel/60 flex items-center gap-3">
+        <div className="px-4 h-9 text-meta text-white/60 border-b border-white/10 bg-overlay-panel/60 flex items-center gap-3">
           <button
             type="button"
             onClick={goBack}
@@ -1000,23 +1000,23 @@ export default function Reader() {
         <div className="flex-1 flex items-center justify-center px-6">
           {!pathParam ? (
             <div className="text-center">
-              <div className="font-display text-[20px] font-semibold text-white/90">
+              <div className="font-display text-section font-semibold text-white/90">
                 无可显示的图片
               </div>
-              <div className="text-[13px] text-white/50 mt-1.5">
+              <div className="text-body text-white/50 mt-1.5">
                 未指定相册路径
               </div>
             </div>
           ) : loadError ? (
             <div className="text-center max-w-sm">
-              <div className="font-display text-[20px] font-semibold text-white/90 mb-2">
+              <div className="font-display text-section font-semibold text-white/90 mb-2">
                 {loadError === "EMPTY"
                   ? isVideo
                     ? "这个文件夹没有视频"
                     : "这个文件夹没有图片"
                   : "加载失败"}
               </div>
-              <div className="text-[13px] leading-relaxed text-white/60 mb-6">
+              <div className="text-body leading-relaxed text-white/60 mb-6">
                 {loadError === "EMPTY"
                   ? isVideo
                     ? "可以换个文件夹，或检查视频是否已被移动/删除。"
@@ -1027,21 +1027,21 @@ export default function Reader() {
                 <button
                   type="button"
                   onClick={goBack}
-                  className="px-4 h-9 text-[13px] rounded-md border border-white/15 bg-white/10 hover:bg-white/15 text-white/85 transition-colors"
+                  className="px-4 h-9 text-body rounded-md border border-white/15 bg-white/10 hover:bg-white/15 text-white/85 transition-colors"
                 >
                   返回
                 </button>
                 <button
                   type="button"
                   onClick={() => setReloadKey((k) => k + 1)}
-                  className="px-4 h-9 text-[13px] rounded-md bg-accent text-accent-contrast hover:opacity-90 transition-opacity"
+                  className="px-4 h-9 text-body rounded-md bg-accent text-accent-contrast hover:opacity-90 transition-opacity"
                 >
                   重试
                 </button>
               </div>
             </div>
           ) : (
-            <div className="flex flex-col items-center gap-3 text-[13px] text-white/60">
+            <div className="flex flex-col items-center gap-3 text-body text-white/60">
               <div
                 className="w-5 h-5 rounded-full border-2 border-white/40 border-t-transparent animate-spin"
                 aria-hidden
@@ -1132,7 +1132,7 @@ export default function Reader() {
         {progressFailure?.key === progressKey && (
           <div
             role="alert"
-            className="absolute top-20 left-3 right-3 z-30 mx-auto flex max-w-xl items-center justify-between gap-3 rounded-md border border-overlay-border bg-overlay-panel backdrop-blur-md p-3 text-sm text-white/85 shadow-lg"
+            className="absolute top-20 left-3 right-3 z-30 mx-auto flex max-w-xl items-center justify-between gap-3 rounded-md border border-overlay-border bg-overlay-panel backdrop-blur-md p-3 text-body text-white/85 shadow-lg"
           >
             <span>
               {progressFailure.operation === "restore"
@@ -1237,10 +1237,10 @@ export default function Reader() {
           className="absolute inset-x-0 bottom-16 z-30 mx-auto flex w-[min(560px,92vw)] items-center gap-3 rounded-lg border border-overlay-border bg-overlay-panel px-4 py-3 text-white shadow-lg backdrop-blur-md"
         >
           <div className="min-w-0 flex-1">
-            <div className="text-[13px] font-medium text-white/90">
+            <div className="text-body font-medium text-white/90">
               这本读完了
             </div>
-            <div className="text-[12px] text-white/55">
+            <div className="text-meta text-white/55">
               可以接着读下一本，或回到相册继续浏览。
             </div>
           </div>
@@ -1250,7 +1250,7 @@ export default function Reader() {
               setShowFinished(false);
               goAdjacent(1, { notify: showSwitchNotif, albumsOnly: true });
             }}
-            className="shrink-0 rounded border border-white/20 px-3 py-1.5 text-[12.5px] text-white/90 transition-colors hover:bg-white/10"
+            className="shrink-0 rounded border border-white/20 px-3 py-1.5 text-meta text-white/90 transition-colors hover:bg-white/10"
           >
             下一本
           </button>
@@ -1260,7 +1260,7 @@ export default function Reader() {
               setShowFinished(false);
               goBack();
             }}
-            className="shrink-0 rounded border border-white/20 px-3 py-1.5 text-[12.5px] text-white/90 transition-colors hover:bg-white/10"
+            className="shrink-0 rounded border border-white/20 px-3 py-1.5 text-meta text-white/90 transition-colors hover:bg-white/10"
           >
             回到相册
           </button>

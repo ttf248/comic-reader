@@ -94,27 +94,27 @@ export default function AccessGate({ children }: { children: ReactNode }) {
   return (
     <main className="min-h-screen bg-bg text-fg flex items-center justify-center px-5">
       <section className="w-full max-w-sm rounded-2xl border border-border bg-bg-elevated shadow-lg p-7">
-        <div className="w-11 h-11 rounded-xl bg-accent/10 text-accent flex items-center justify-center text-xl mb-5">
+        <div className="w-11 h-11 rounded-xl bg-accent/10 text-accent flex items-center justify-center text-page-sm mb-5">
           ◈
         </div>
-        <h1 className="text-xl font-semibold tracking-tight">本地媒体库</h1>
+        <h1 className="text-page-sm font-semibold tracking-tight">本地媒体库</h1>
 
         {state === "checking" && (
-          <p className="mt-3 text-sm text-fg-muted">正在确认访问权限…</p>
+          <p className="mt-3 text-body text-fg-muted">正在确认访问权限…</p>
         )}
 
         {state === "locked" && (
           <form className="mt-5" onSubmit={submit}>
-            <p className="text-sm text-fg-muted leading-6">
+            <p className="text-body text-fg-muted leading-6">
               这个媒体库已开启局域网访问保护。令牌只用于换取本浏览器的短期会话，不会保存在本地存储或
               URL 中。
             </p>
-            <p className="mt-2 text-[12.5px] text-fg-subtle leading-5">
+            <p className="mt-2 text-meta text-fg-subtle leading-5">
               请仅在可信家庭网络中使用；内置服务不提供 TLS，不适合互联网或不可信
               Wi-Fi。
             </p>
             <label
-              className="block mt-5 text-[12.5px] font-medium text-fg-muted"
+              className="block mt-5 text-meta font-medium text-fg-muted"
               htmlFor="access-token"
             >
               访问令牌
@@ -128,17 +128,17 @@ export default function AccessGate({ children }: { children: ReactNode }) {
               spellCheck={false}
               maxLength={256}
               autoFocus
-              className="mt-2 w-full h-10 rounded-lg border border-border bg-bg px-3 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
+              className="mt-2 w-full h-10 rounded-lg border border-border bg-bg px-3 text-body outline-none focus:border-accent focus:ring-2 focus:ring-accent/20"
             />
             {error && (
-              <p role="alert" className="mt-2 text-[12.5px] text-danger">
+              <p role="alert" className="mt-2 text-meta text-danger">
                 {error}
               </p>
             )}
             <button
               type="submit"
               disabled={submitting || token.trim().length === 0}
-              className="mt-5 w-full h-10 rounded-lg bg-accent text-accent-contrast text-sm font-medium disabled:opacity-50"
+              className="mt-5 w-full h-10 rounded-lg bg-accent text-accent-contrast text-body font-medium disabled:opacity-50"
             >
               {submitting ? "正在验证…" : "进入媒体库"}
             </button>
@@ -147,7 +147,7 @@ export default function AccessGate({ children }: { children: ReactNode }) {
 
         {state === "local-only" && (
           <div className="mt-4">
-            <p className="text-sm text-fg-muted leading-6">
+            <p className="text-body text-fg-muted leading-6">
               服务当前仅允许运行它的计算机访问。若需在局域网中使用，请先在服务端配置
               `accessMode: lan` 和强访问令牌。
             </p>
@@ -156,11 +156,11 @@ export default function AccessGate({ children }: { children: ReactNode }) {
 
         {state === "offline" && (
           <div className="mt-4">
-            <p className="text-sm text-fg-muted">无法连接媒体库服务。</p>
+            <p className="text-body text-fg-muted">无法连接媒体库服务。</p>
             <button
               type="button"
               onClick={checkSession}
-              className="mt-4 h-9 px-4 rounded-lg border border-border text-sm hover:bg-bg-hover"
+              className="mt-4 h-9 px-4 rounded-lg border border-border text-body hover:bg-bg-hover"
             >
               重试
             </button>

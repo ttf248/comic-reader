@@ -99,15 +99,15 @@ export default function TranscodeProgress({ src, onReady, onDismiss }: Props) {
   if (cancelled) {
     return (
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="max-w-md mx-4 bg-black/85 text-white/90 text-sm px-5 py-4 rounded-lg flex flex-col items-center gap-3 pointer-events-auto min-w-[320px]">
-          <div className="font-medium text-base">已取消转码</div>
-          <div className="text-[12.5px] text-white/60 text-center">
+        <div className="max-w-md mx-4 bg-black/85 text-white/90 text-body px-5 py-4 rounded-lg flex flex-col items-center gap-3 pointer-events-auto min-w-[320px]">
+          <div className="font-medium text-label">已取消转码</div>
+          <div className="text-meta text-white/60 text-center">
             已停止服务端的转码任务；重新转码会从头开始。
           </div>
           <div className="flex items-center gap-2 mt-1">
             <button
               type="button"
-              className="text-[12.5px] px-3 py-1 rounded border border-white/30 hover:bg-white/10"
+              className="text-meta px-3 py-1 rounded border border-white/30 hover:bg-white/10"
               onClick={() => {
                 setCancelled(false)
                 // 重挂 <video> 会重新请求媒体，服务端随之重新排队转码。
@@ -119,7 +119,7 @@ export default function TranscodeProgress({ src, onReady, onDismiss }: Props) {
             {onDismiss && (
               <button
                 type="button"
-                className="text-[12.5px] px-3 py-1 rounded text-white/60 hover:text-white/90"
+                className="text-meta px-3 py-1 rounded text-white/60 hover:text-white/90"
                 onClick={onDismiss}
               >
                 关闭
@@ -134,7 +134,7 @@ export default function TranscodeProgress({ src, onReady, onDismiss }: Props) {
   if (!status) {
     return (
       <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="bg-black/70 text-white/85 text-sm px-4 py-3 rounded-md">
+        <div className="bg-black/70 text-white/85 text-body px-4 py-3 rounded-md">
           正在连接转码服务…
         </div>
       </div>
@@ -152,11 +152,11 @@ export default function TranscodeProgress({ src, onReady, onDismiss }: Props) {
 
   return (
     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-      <div className="max-w-md mx-4 bg-black/85 text-white/90 text-sm px-5 py-4 rounded-lg flex flex-col items-center gap-3 pointer-events-auto min-w-[320px]">
+      <div className="max-w-md mx-4 bg-black/85 text-white/90 text-body px-5 py-4 rounded-lg flex flex-col items-center gap-3 pointer-events-auto min-w-[320px]">
         {/* 标题 */}
-        <div className="font-medium text-base">{text.title}</div>
+        <div className="font-medium text-label">{text.title}</div>
         {/* 描述 */}
-        {text.desc && <div className="text-[12.5px] text-white/60 text-center">{text.desc}</div>}
+        {text.desc && <div className="text-meta text-white/60 text-center">{text.desc}</div>}
 
         {/* 进度条（running/queued 时显示）*/}
         {(status.status === 'running' || status.status === 'queued') && (
@@ -167,7 +167,7 @@ export default function TranscodeProgress({ src, onReady, onDismiss }: Props) {
                 style={{ width: `${pct}%` }}
               />
             </div>
-            <div className="text-[12.5px] text-white/70 tabular-nums">
+            <div className="text-meta text-white/70 tabular-nums">
               {status.status === 'queued' ? '等待中' : `${pct}%`}
               {etaSec > 0 && ` · 预计 ${Math.ceil(etaSec / 60)} 分钟`}
             </div>
@@ -176,7 +176,7 @@ export default function TranscodeProgress({ src, onReady, onDismiss }: Props) {
 
         {/* 失败 */}
         {status.status === 'failed' && (
-          <div className="text-[12.5px] text-overlay-danger text-center max-w-xs break-words">
+          <div className="text-meta text-overlay-danger text-center max-w-xs break-words">
             {status.error || '未知错误'}
           </div>
         )}
@@ -186,7 +186,7 @@ export default function TranscodeProgress({ src, onReady, onDismiss }: Props) {
           {status.status === 'running' || status.status === 'queued' ? (
             <button
               type="button"
-              className="text-[12.5px] px-3 py-1 rounded border border-white/30 hover:bg-white/10"
+              className="text-meta px-3 py-1 rounded border border-white/30 hover:bg-white/10"
               onClick={onCancel}
             >
               取消转码
@@ -194,7 +194,7 @@ export default function TranscodeProgress({ src, onReady, onDismiss }: Props) {
           ) : status.status === 'failed' ? (
             <button
               type="button"
-              className="text-[12.5px] px-3 py-1 rounded border border-white/30 hover:bg-white/10"
+              className="text-meta px-3 py-1 rounded border border-white/30 hover:bg-white/10"
               onClick={() => {
                 // 重新触发：重挂载 <video> 就会重新走 Resolve
                 onReady?.()
@@ -206,7 +206,7 @@ export default function TranscodeProgress({ src, onReady, onDismiss }: Props) {
           {onDismiss && (
             <button
               type="button"
-              className="text-[12.5px] px-3 py-1 rounded text-white/60 hover:text-white/90"
+              className="text-meta px-3 py-1 rounded text-white/60 hover:text-white/90"
               onClick={onDismiss}
             >
               关闭

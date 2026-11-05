@@ -42,7 +42,7 @@ export function UnreadHero({
           <p className="page-eyebrow mb-2">{copy.unreadEyebrow}</p>
           <h2 id="unread-heading" className="section-title">
             {copy.unreadTitle}{" "}
-            <span className="font-sans text-[13px] font-normal text-fg-muted ml-2 tabular-nums">
+            <span className="font-sans text-body font-normal text-fg-muted ml-2 tabular-nums">
               {count} {copy.unreadCountLabel}
             </span>
           </h2>
@@ -271,7 +271,7 @@ function QueueItem({
           <Cover card={card} />
         </span>
         <span className="min-w-0">
-          <span className="block truncate text-[13px] font-medium">
+          <span className="block truncate text-body font-medium">
             {card.displayTitle ?? card.title}
           </span>
           <span className="reading-desk__muted block mt-1 tabular-nums">

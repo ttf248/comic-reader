@@ -105,7 +105,7 @@ function ResumeQueueItem({ card }: { card: CardData }) {
           <Cover card={card} />
         </span>
         <span className="min-w-0">
-          <span className="block truncate text-[13px] font-medium">
+          <span className="block truncate text-body font-medium">
             {card.displayTitle ?? card.title}
           </span>
           <span className="reading-desk__muted block mt-1 tabular-nums">

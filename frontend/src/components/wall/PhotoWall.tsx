@@ -157,7 +157,7 @@ export default function PhotoWall({
                       type="button"
                       onClick={() => onOpen(item, index)}
                       onContextMenu={(event) => onContextMenu?.(item, event)}
-                      className="absolute inset-0 z-0 block h-full w-full cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
+                      className="absolute inset-0 z-0 block h-full w-full cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"
                       title={item.name}
                       aria-label={isVideo ? `播放 ${item.name}` : `查看 ${item.name}`}
                     />

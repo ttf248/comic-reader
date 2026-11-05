@@ -73,13 +73,13 @@ function TimelineCard({ entry }: { entry: TimelineEntry }) {
         </span>
         <span className="min-w-0">
           <span
-            className={`block font-display text-[22px] font-semibold leading-tight text-fg truncate ${
+            className={`block font-display text-section font-semibold leading-tight text-fg truncate ${
               entry.numeric ? "tabular-nums" : ""
             }`}
           >
             {entry.label}
           </span>
-          <span className="block text-[12.5px] text-fg-muted mt-1 tabular-nums">
+          <span className="block text-meta text-fg-muted mt-1 tabular-nums">
             {entry.count}
           </span>
         </span>

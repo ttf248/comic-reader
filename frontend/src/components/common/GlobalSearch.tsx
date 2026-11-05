@@ -101,7 +101,7 @@ export default function GlobalSearch() {
           /* h-full：输入框本身要撑满 40px 的胶囊。外壳是 h-10，输入框却
              只有内容高度（23px）—— 真正能点到的只有中间那一小条，
              低于 28px 的触控下限。 */
-          className="flex-1 min-w-0 h-full bg-transparent border-0 outline-none text-[14px] placeholder:text-fg-subtle"
+          className="flex-1 min-w-0 h-full bg-transparent border-0 outline-none text-body placeholder:text-fg-subtle"
           role="combobox"
           aria-autocomplete="list"
           aria-controls="global-search-results"
@@ -142,8 +142,8 @@ export default function GlobalSearch() {
                 <div className="w-8 h-10 bg-bg-subtle rounded border border-border-faint" />
               )}
               <div className="flex-1 min-w-0">
-                <div className="text-[13.5px] truncate">{h.name}</div>
-                <div className="text-[12.5px] text-fg-subtle truncate">
+                <div className="text-body truncate">{h.name}</div>
+                <div className="text-meta text-fg-subtle truncate">
                   {h.kind === "album"
                     ? h.virtual
                       ? "本目录媒体"
@@ -170,13 +170,13 @@ export default function GlobalSearch() {
       {/* 无结果提示：用户至少敲了 2 个字符才显示，避免抖动 */}
       {open && searchEnabled && searchQuery.isFetching && (
         <div className="absolute top-full left-0 right-0 mt-1.5 bg-bg-elevated border border-border rounded-lg shadow-lg overflow-hidden z-30 fade-up">
-          <div className="px-3 py-2.5 text-[12.5px] text-fg-muted">搜索中…</div>
+          <div className="px-3 py-2.5 text-meta text-fg-muted">搜索中…</div>
         </div>
       )}
 
       {open && searchEnabled && searchQuery.isError && !searchQuery.isFetching && (
         <div className="absolute top-full left-0 right-0 mt-1.5 bg-bg-elevated border border-border rounded-lg shadow-lg overflow-hidden z-30 fade-up">
-          <div className="px-3 py-2.5 text-[12.5px] text-fg-muted">
+          <div className="px-3 py-2.5 text-meta text-fg-muted">
             搜索暂不可用，请稍后重试
           </div>
         </div>
@@ -185,7 +185,7 @@ export default function GlobalSearch() {
       {/* 无结果提示：用户至少敲了 2 个字符且请求完成才显示，避免把加载误报为无结果。 */}
       {open && searchEnabled && !searchQuery.isFetching && !searchQuery.isError && hits.length === 0 && (
         <div className="absolute top-full left-0 right-0 mt-1.5 bg-bg-elevated border border-border rounded-lg shadow-lg overflow-hidden z-30 fade-up">
-          <div className="px-3 py-2.5 text-[12.5px] text-fg-muted">
+          <div className="px-3 py-2.5 text-meta text-fg-muted">
             没有匹配「{searchTerm}」的文件夹或标签
           </div>
         </div>
