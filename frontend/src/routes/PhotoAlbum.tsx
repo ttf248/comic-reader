@@ -54,6 +54,8 @@ export default function PhotoAlbum({ album }: Props) {
   const setDensity = usePhotoStore((s) => s.setDensity);
   const { toggle: toggleFav, favorites } = useFavorites();
   const isFavorite = favorites.includes(album.id);
+  // 媒体根数量：单根时不必在页头上重复来源。
+  const multiRoot = useUIStore((s) => s.multiRoot);
 
   const mediaQuery = useAlbumMedia(album.id);
   const mediaItems = useMemo<LibraryMediaItem[]>(
@@ -187,6 +189,18 @@ export default function PhotoAlbum({ album }: Props) {
             <div className="min-w-0 flex-1">
               <h1 className="album-bar__title truncate">{title}</h1>
               <div className="album-bar__meta tabular-nums">
+                {/* 这一本在库里的位置：所属集合。散图相册的标题本身就是
+                    归属目录，没有第二层可说，就不重复报。文件夹图标说明
+                    「这一本放在这个目录里」，比光写目录名更不容易读成年份。 */}
+                {album.parentName && (
+                  <>
+                    <span className="inline-flex items-center gap-1 truncate">
+                      <FolderIcon size={11} className="shrink-0" />
+                      {album.parentName}
+                    </span>
+                    <span className="text-fg-subtle">·</span>
+                  </>
+                )}
                 <span>
                   <span className="text-fg font-medium">
                     {album.imageCount ?? 0}
@@ -204,7 +218,9 @@ export default function PhotoAlbum({ album }: Props) {
                     </span>
                   </>
                 )}
-                {album.sourceName && (
+                {/* 媒体根：只有配置了多个根才值得说，否则每本都挂一句
+                    同样的来源，是噪音。 */}
+                {multiRoot && album.sourceName && (
                   <>
                     <span className="text-fg-subtle">·</span>
                     <span className="truncate">来自 {album.sourceName}</span>
