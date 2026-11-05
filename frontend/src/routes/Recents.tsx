@@ -121,7 +121,10 @@ export default function Recents() {
                   {formatRelative(cards[0]?.lastSeenAt)}
                 </span>
               </>
-            ) : historyQuery.isLoading ? (
+            ) : historyQuery.isLoading ||
+            (history.length > 0 && nodesQuery.isLoading) ? (
+              // 记录已经在手、只是相册摘要还没到：这时说「还没有记录」
+              // 是把「还没加载完」说成了「没有」。
               "正在加载记录…"
             ) : historyFailed ? (
               "记录暂不可用"
