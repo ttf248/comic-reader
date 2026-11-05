@@ -19,6 +19,11 @@
 //
 // 退出码：横向溢出、当前跨页对齐基线失败或页面加载失败时为 1。
 import { chromium } from "@playwright/test";
+import {
+  buildRoute,
+  resolveAlbumId,
+  resolveMode,
+} from "./lib/workbench-routes.mjs";
 
 const BASE = process.env.LG_BASE ?? "http://127.0.0.1:5173";
 const THEMES = (process.env.LG_THEMES ?? "light,dark")
@@ -237,51 +242,29 @@ async function setTheme(page, theme) {
   );
 }
 
-// 相册详情页的 id 每次运行都不同：现从仪表盘取一本图多的相册。
-async function resolveAlbumRoute(page) {
-  const id = await page.evaluate(async () => {
-    const r = await fetch("/api/library/dashboard");
-    if (!r.ok) return null;
-    const j = await r.json();
-    const all = [
-      ...(j.dashboard?.unread ?? []),
-      ...(j.dashboard?.inProgress ?? []).map((p) => p.album),
-    ];
-    const hit =
-      all.find((a) => (a.imageCount ?? 0) > 3 && !(a.videoCount > 0)) ?? all[0];
-    return hit?.id ?? null;
-  });
-  return id ? `/albums/${encodeURIComponent(id)}` : null;
+// 相册详情页的 id 每次运行都不同：现从媒体根的子节点里取一本图多的相册。
+async function resolveAlbumRoute(page, mode) {
+  const id = await resolveAlbumId(page, mode);
+  return id ? `/${mode}/albums/${encodeURIComponent(id)}` : null;
 }
 
 // 进入阅读器：阅读器是沉浸场景（顶栏 + 画面 + 浮动工具条 + 底部翻页条），
 // 它的控件尺寸与字号自成一套，从没被布局审计量过。
 //
-// 阅读器有独立地址 /read/<相册 id>，直接构造即可，不必先经过相册页。
+// 阅读器只属于漫画侧，地址是 /comic/read/<相册 id>，直接构造即可，
+// 不必先经过相册页。库里没有漫画相册时跳过这一项。
 // 用 domcontentloaded 而不是 networkidle —— 阅读器里有 SSE 与预览图请求，
 // networkidle 会一直等不到。
 async function openReader(page) {
-  const albumId = await page.evaluate(async () => {
-    const r = await fetch("/api/library/dashboard");
-    if (!r.ok) return null;
-    const j = await r.json();
-    const all = [
-      ...(j.dashboard?.unread ?? []),
-      ...(j.dashboard?.inProgress ?? []).map((p) => p.album),
-    ];
-    const hit =
-      all.find((a) => (a.imageCount ?? 0) > 3 && !(a.videoCount > 0)) ??
-      all.find((a) => !(a.videoCount > 0));
-    return hit?.id ?? null;
-  });
+  const albumId = await resolveAlbumId(page, "comic");
   if (!albumId) return false;
-  await page.goto(`${BASE}/read/${encodeURIComponent(albumId)}?index=0`, {
+  await page.goto(`${BASE}/comic/read/${encodeURIComponent(albumId)}?index=0`, {
     waitUntil: "domcontentloaded",
     timeout: 60000,
   });
   // 等画面与工具条渲染完。
   const opened = await page
-    .waitForURL(/\/read\//, { timeout: 15000 })
+    .waitForURL(/\/comic\/read\//, { timeout: 15000 })
     .then(() => true)
     .catch(() => false);
   if (!opened) return false;
@@ -297,8 +280,8 @@ async function openReader(page) {
 // 用了哪种数据会在输出里写明，免得把伪造结果当成真实结果。
 let tagAuditState = { tag: null, faked: false };
 
-async function resolveTagName(page) {
-  const res = await page.request.get(`${BASE}/api/tags`);
+async function resolveTagName(page, mode) {
+  const res = await page.request.get(`${BASE}/api/tags?kind=${mode}`);
   if (res.ok()) {
     const body = await res.json();
     const items = body?.page?.items ?? [];
@@ -308,24 +291,34 @@ async function resolveTagName(page) {
   return { tag: "审计用标签", faked: true };
 }
 
-async function prepareTagRoute(page) {
-  const state = await resolveTagName(page);
+async function prepareTagRoute(page, mode) {
+  const state = await resolveTagName(page, mode);
   tagAuditState = state;
   if (!state.faked) return; // 真实数据：不用拦截
   await page.route(
     (url) =>
       url.pathname.includes("/api/tags/") && url.pathname.endsWith("/albums"),
     async (route) => {
-      const data = await page.evaluate(async () => {
-        const r = await fetch("/api/library/dashboard");
-        const j = await r.json();
-        const items = j.dashboard?.unread ?? [];
+      // 伪造的数据用当前模式下的真实相册：封面与版式都能量到，
+      // 空列表只能量到一个空页面。
+      const data = await page.evaluate(async (kind) => {
+        const manifestRes = await fetch("/api/library/manifest");
+        const manifest = await manifestRes.json();
+        const root = (manifest.manifest?.roots ?? []).find(
+          (r) => (r.contentKind ?? "photo") === kind,
+        );
+        if (!root) return { revision: 0, items: [], total: 0 };
+        const res = await fetch(
+          `/api/library/${encodeURIComponent(root.id)}/children?kind=${kind}&limit=12`,
+        );
+        const body = await res.json();
+        const items = body.page?.items ?? [];
         return {
-          revision: j.dashboard?.revision ?? 0,
+          revision: body.page?.revision ?? 0,
           items,
           total: items.length,
         };
-      });
+      }, mode);
       await route.fulfill({ json: { ok: true, page: data } });
     },
   );
@@ -348,13 +341,21 @@ async function main() {
       const page = await ctx.newPage();
       await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
       await setTheme(page, theme);
+      // 工作台模式决定路由前缀：两侧的页面各在 /photo 与 /comic 下。
+      const mode = await resolveMode(page);
 
-      await prepareTagRoute(page);
+      await prepareTagRoute(page, mode);
 
       for (const route of PAGES) {
+        // 未读页只属于漫画工作台：照片侧没有这个路由，硬走会落回首页，
+        // 量到的还是首页的数据。直接跳过。
+        if (route === "/unread" && mode !== "comic") {
+          console.log(`  · 跳过 ${theme} /unread：只有漫画工作台有未读页`);
+          continue;
+        }
         if (route === "reader") {
           if (!(await openReader(page))) {
-            console.log(`  · 跳过 ${theme} reader：库里没有可打开的相册`);
+            console.log(`  · 跳过 ${theme} reader：库里没有漫画相册`);
             continue;
           }
         } else {
@@ -362,10 +363,10 @@ async function main() {
           // 伪路由 tag：标签页用固定的标签名，数据由 prepareTagRoute 伪造。
           const target =
             route === "album"
-              ? await resolveAlbumRoute(page)
+              ? await resolveAlbumRoute(page, mode)
               : route === "tag"
-                ? `/tags/${encodeURIComponent(tagAuditState.tag)}`
-                : route;
+                ? `/${mode}/tags/${encodeURIComponent(tagAuditState.tag)}`
+                : buildRoute(route, mode);
           if (!target) {
             console.log(`  · 跳过 ${theme} ${route}：库里没有可打开的相册`);
             continue;

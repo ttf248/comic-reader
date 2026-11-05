@@ -17,6 +17,11 @@
 //
 // 退出码：有 violation 时为 1，方便提交前自查。
 import { chromium } from "@playwright/test";
+import {
+  buildRoute,
+  resolveAlbumId,
+  resolveMode,
+} from "./lib/workbench-routes.mjs";
 
 const BASE = process.env.LG_BASE ?? "http://127.0.0.1:5173";
 const THEMES = (process.env.LG_THEMES ?? "light,dark").split(",");
@@ -271,6 +276,15 @@ const AUDIT = () => {
     const cs = getComputedStyle(el);
     if (cs.visibility === "hidden" || cs.display === "none") continue;
     if (parseFloat(cs.opacity) < 0.15) continue;
+    // 祖先的 opacity 会一起作用：整组淡出的文字根本没被画出来，
+    // 按「画出来的样子」去采像素，采到的是它背后的照片 —— 那是误报。
+    // （图标通道早就按这条规则跳过了，文字通道此前只看自身。）
+    let painted = 1;
+    for (let n = el; n && n.nodeType === 1; n = n.parentElement) {
+      painted *= parseFloat(getComputedStyle(n).opacity);
+      if (painted < 0.15) break;
+    }
+    if (painted < 0.15) continue;
     const rect = el.getBoundingClientRect();
     if (rect.width < 2 || rect.height < 2) continue;
     if (el.closest(".sr-only")) continue;
@@ -748,22 +762,10 @@ async function waitForStable(page, timeout = 15000) {
   }
 }
 
-// 相册详情页的 id 每次运行都不同：现从仪表盘取一本图多的相册。
-async function resolveAlbumRoute(page) {
-  const id = await page.evaluate(async () => {
-    const r = await fetch("/api/library/dashboard");
-    if (!r.ok) return null;
-    const j = await r.json();
-    const all = [
-      ...(j.dashboard?.unread ?? []),
-      ...(j.dashboard?.inProgress ?? []).map((p) => p.album),
-    ];
-    const hit =
-      all.find((a) => (a.imageCount ?? 0) > 3 && !(a.videoCount > 0)) ??
-      all[0];
-    return hit?.id ?? null;
-  });
-  return id ? `/albums/${encodeURIComponent(id)}` : null;
+// 相册详情页的 id 每次运行都不同：现从媒体根的子节点里取一本图多的相册。
+async function resolveAlbumRoute(page, mode) {
+  const id = await resolveAlbumId(page, mode);
+  return id ? `/${mode}/albums/${encodeURIComponent(id)}` : null;
 }
 
 // 进入阅读器：阅读器的浮层（顶栏、底栏、药丸工具条）全部是"压在图片上的
@@ -772,26 +774,15 @@ async function resolveAlbumRoute(page) {
 // 直接构造 /read/<相册 id> 进阅读器：走相册页会带上 toast，
 // 它会盖住阅读器底部的浮动工具条，拍出来的 / 采样到的不是真实版式。
 async function openReader(page) {
-  const albumId = await page.evaluate(async () => {
-    const r = await fetch("/api/library/dashboard");
-    if (!r.ok) return null;
-    const j = await r.json();
-    const all = [
-      ...(j.dashboard?.unread ?? []),
-      ...(j.dashboard?.inProgress ?? []).map((p) => p.album),
-    ];
-    const hit =
-      all.find((a) => (a.imageCount ?? 0) > 3 && !(a.videoCount > 0)) ??
-      all.find((a) => !(a.videoCount > 0));
-    return hit?.id ?? null;
-  });
+  // 阅读器只属于漫画侧：/comic/read/<相册 id>。
+  const albumId = await resolveAlbumId(page, "comic");
   if (!albumId) return false;
-  await page.goto(`${BASE}/read/${encodeURIComponent(albumId)}?index=0`, {
+  await page.goto(`${BASE}/comic/read/${encodeURIComponent(albumId)}?index=0`, {
     waitUntil: "domcontentloaded",
   });
   await page.waitForTimeout(2200);
   await waitForStable(page);
-  return page.url().includes("/read/");
+  return page.url().includes("/comic/read/");
 }
 
 // 标签页：真实库里可能一个标签都没有（/api/tags 返回空数组），
@@ -805,8 +796,8 @@ async function openReader(page) {
 // 用了哪种数据会在输出里写明，免得把伪造结果当成真实结果。
 let tagAuditState = { tag: null, faked: false };
 
-async function resolveTagName(page) {
-  const res = await page.request.get(`${BASE}/api/tags`);
+async function resolveTagName(page, mode) {
+  const res = await page.request.get(`${BASE}/api/tags?kind=${mode}`);
   if (res.ok()) {
     const body = await res.json();
     const items = body?.page?.items ?? [];
@@ -816,23 +807,33 @@ async function resolveTagName(page) {
   return { tag: "审计用标签", faked: true };
 }
 
-async function prepareTagRoute(page) {
-  const state = await resolveTagName(page);
+async function prepareTagRoute(page, mode) {
+  const state = await resolveTagName(page, mode);
   tagAuditState = state;
   if (!state.faked) return; // 真实数据：不用拦截
   await page.route(
     (url) => url.pathname.includes("/api/tags/") && url.pathname.endsWith("/albums"),
     async (route) => {
-      const data = await page.evaluate(async () => {
-        const r = await fetch("/api/library/dashboard");
-        const j = await r.json();
-        const items = j.dashboard?.unread ?? [];
+      // 伪造的数据用当前模式下的真实相册：封面与配色都能量到，
+      // 空列表只能量到一个空页面。
+      const data = await page.evaluate(async (kind) => {
+        const manifestRes = await fetch("/api/library/manifest");
+        const manifest = await manifestRes.json();
+        const root = (manifest.manifest?.roots ?? []).find(
+          (r) => (r.contentKind ?? "photo") === kind,
+        );
+        if (!root) return { revision: 0, items: [], total: 0 };
+        const res = await fetch(
+          `/api/library/${encodeURIComponent(root.id)}/children?kind=${kind}&limit=12`,
+        );
+        const body = await res.json();
+        const items = body.page?.items ?? [];
         return {
-          revision: j.dashboard?.revision ?? 0,
+          revision: body.page?.revision ?? 0,
           items,
           total: items.length,
         };
-      });
+      }, mode);
       await route.fulfill({ json: { ok: true, page: data } });
     },
   );
@@ -857,7 +858,9 @@ for (const theme of THEMES) {
   });
   const page = await ctx.newPage();
   await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
-  await prepareTagRoute(page);
+  // 工作台模式决定路由前缀：两侧的页面各在 /photo 与 /comic 下。
+  const mode = await resolveMode(page);
+  await prepareTagRoute(page, mode);
   await page.evaluate(({ t, vm }) => {
     const raw = localStorage.getItem("local-gallery-ui");
     const parsed = raw ? JSON.parse(raw) : { state: {} };
@@ -866,9 +869,14 @@ for (const theme of THEMES) {
   }, { t: theme, vm: VIEWMODE });
 
   for (const route of PAGES) {
+    // 未读页只属于漫画工作台：照片侧没有这个路由，硬走会落回首页。
+    if (route === "/unread" && mode !== "comic") {
+      console.log(`  · 跳过 ${theme} /unread：只有漫画工作台有未读页`);
+      continue;
+    }
     if (route === "reader") {
       if (!(await openReader(page))) {
-        console.log(`  · 跳过 ${theme} reader：仪表盘里没有可打开的相册`);
+        console.log(`  · 跳过 ${theme} reader：库里没有漫画相册`);
         continue;
       }
     } else {
@@ -876,10 +884,10 @@ for (const theme of THEMES) {
       // 伪路由 tag：标签页用固定的标签名，数据由 prepareTagRoute 伪造。
       const target =
         route === "album"
-          ? await resolveAlbumRoute(page)
+          ? await resolveAlbumRoute(page, mode)
           : route === "tag"
-            ? `/tags/${encodeURIComponent(tagAuditState.tag)}`
-            : route;
+            ? `/${mode}/tags/${encodeURIComponent(tagAuditState.tag)}`
+            : buildRoute(route, mode);
       if (!target) {
         console.log(`  · 跳过 ${theme} ${route}：库里没有可打开的相册`);
         continue;
