@@ -12,15 +12,14 @@ export const queryClient = new QueryClient({
     queries: {
       staleTime: 5 * 60 * 1000,
       refetchOnWindowFocus: false,
-      // 4xx 是请求本身不成立（标签不存在、没有权限、资源已移走）：
-      // 重试多少次结果都一样，却要让页面多等好几秒才说出「找不到」。
-      // fetch 层本来就只重试 5xx / 408 / 429，TanStack 这层要跟它一致。
+      // 404 是「资源不存在」：标签没了、相册被移走了，重试多少次结果
+      // 都一样，却要让页面多等好几秒才说出「找不到」。
+      //
+      // 只挡 404，不挡整个 4xx：分页失败会以 400 回来（游标失效之类），
+      // 那是可以重试的，页面也靠重试把「后续媒体加载失败」这条提示
+      // 演出来（见 tests/e2e/smoke.spec.ts 的分页失败用例）。
       retry: (failureCount, error) => {
-        if (
-          error instanceof ApiError &&
-          error.status >= 400 &&
-          error.status < 500
-        ) {
+        if (error instanceof ApiError && error.status === 404) {
           return false
         }
         return failureCount < 3
