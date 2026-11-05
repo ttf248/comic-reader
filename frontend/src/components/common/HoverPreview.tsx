@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { thumbUrl } from '../../api/thumbs'
 import { timeAgo } from '../../utils/date'
+import { workbenchCopy } from '../../utils/workbench'
 import VideoCoverImage from './VideoCoverImage'
 import {
   FolderIcon,
@@ -16,7 +17,7 @@ interface Props {
   data: CardData
   /** 触发预览的卡片 DOMRect（getBoundingClientRect）。 */
   anchorRect: DOMRect
-  /** 上次阅读时间（ISO）；无则不显示。 */
+  /** 上次看过的时间（ISO）；无则不显示。 */
   lastSeenAt?: string | null
   /** 鼠标进入预览：父组件应取消正在等待的关闭 timer。 */
   onPointerEnter?: () => void
@@ -27,7 +28,7 @@ interface Props {
 // 悬停预览：在卡片右侧（或左侧）弹出一个更大、更详细的卡片。
 // 设计：
 //   - 4:5 比例封面（比网格卡片大 ~2x）
-//   - 标题 + 副标题 + 张数 + 上次阅读
+//   - 标题 + 副标题 + 张数 + 上次看过（照片说「浏览」，漫画说「阅读」）
 //   - 智能集合：附 4 张缩略图 strip
 //   - 默认靠右，溢出视口则靠左
 //   - 垂直方向：尽量对齐卡片中心；上下溢出则夹紧
@@ -80,6 +81,13 @@ export default function HoverPreview({ data, anchorRect, lastSeenAt, onPointerEn
   )
 
   const isCollection = data.variant === 'collection'
+
+  // 措辞与单位跟着这张卡自己的属性走，而不是跟着当前工作台：
+  // 悬停预览出现在两侧共用的卡片上，卡片属于照片还是漫画服务端恒给得出。
+  const kind = data.contentKind ?? 'photo'
+  const copy = workbenchCopy(kind)
+  // 阅读进度只属于漫画：照片相册没有进度可言，预览里也不该出现进度条。
+  const isComic = kind === 'comic'
 
   return createPortal(
     <div
@@ -134,7 +142,7 @@ export default function HoverPreview({ data, anchorRect, lastSeenAt, onPointerEn
             <div className="flex items-center gap-1.5 text-white/90 text-[11.5px] tabular-nums">
               <ImageIcon size={11} />
               <span>
-                {data.count} {isCollection ? '卷' : '张'}
+                {data.count} {isCollection ? copy.collectionUnit : copy.mediaUnit}
               </span>
             </div>
           </div>
@@ -151,18 +159,21 @@ export default function HoverPreview({ data, anchorRect, lastSeenAt, onPointerEn
             )}
           </div>
 
-          {/* 上次阅读：仅在 album 类型有意义 */}
+          {/* 上次看过：仅在 album 类型有意义。
+              动词跟着这一侧走——照片说「浏览」，漫画说「阅读」。 */}
           {data.variant === 'album' && (
             <div className="flex items-center gap-1.5 text-[12.5px] text-fg-muted">
               <CalendarIcon size={11} className="text-fg-subtle shrink-0" />
               <span className="truncate">
-                {lastSeenAt ? `上次 ${timeAgo(lastSeenAt)}` : '尚未阅读'}
+                {lastSeenAt
+                  ? `上次${copy.lastSeenVerb} ${timeAgo(lastSeenAt)}`
+                  : copy.neverSeenLabel}
               </span>
             </div>
           )}
 
-          {/* 进度条：仅 album 且有进度时显示 */}
-          {data.variant === 'album' && data.progress && data.progress.total > 0 && (
+          {/* 进度条：仅漫画相册且有进度时显示。照片相册没有进度可言。 */}
+          {isComic && data.variant === 'album' && data.progress && data.progress.total > 0 && (
             <div>
               <div className="flex items-center justify-between text-[11.5px] text-fg-subtle mb-1">
                 <span className="inline-flex items-center gap-1">

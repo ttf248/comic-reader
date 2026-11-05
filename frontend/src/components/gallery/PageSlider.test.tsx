@@ -48,6 +48,6 @@ it("跳转输入框有可访问名称", () => {
   render(<PageSlider total={3} index={0} onJump={vi.fn()} />);
   fireEvent.keyDown(window, { key: "g" });
   expect(
-    screen.getByRole("textbox", { name: "跳转到第几张" }),
+    screen.getByRole("textbox", { name: "跳转到第几页" }),
   ).toBeInTheDocument();
 });

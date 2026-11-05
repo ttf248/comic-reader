@@ -54,7 +54,7 @@ it("过滤和清除搜索，清除按钮消失时焦点回到搜索框", () => {
   fireEvent.click(clear);
   expect(search).toHaveValue("");
   expect(search).toHaveFocus();
-  expect(screen.getByText("下一张")).toBeInTheDocument();
+  expect(screen.getByText("下一页")).toBeInTheDocument();
 });
 
 it("浮层按键不冒泡到背景阅读器和全局快捷键", () => {
@@ -127,13 +127,13 @@ it.each(["library", "image", "video"] as const)(
     if (context === "library") {
       expect(screen.getByText("回到照片库")).toBeInTheDocument();
       expect(screen.queryByText(/旋转 90°/)).not.toBeInTheDocument();
-      expect(screen.queryByText("下一张")).not.toBeInTheDocument();
+      expect(screen.queryByText("下一页")).not.toBeInTheDocument();
     } else {
       expect(screen.queryByText("回到照片库")).not.toBeInTheDocument();
       expect(screen.getByText("当前内容设为封面")).toBeInTheDocument();
       expect(screen.getByText("清除自定义封面")).toBeInTheDocument();
       if (context === "image") {
-        expect(screen.getByText("下一张")).toBeInTheDocument();
+        expect(screen.getByText("下一页")).toBeInTheDocument();
         expect(screen.getByText(/旋转 90°/)).toBeInTheDocument();
         expect(screen.queryByText("播放 / 暂停")).not.toBeInTheDocument();
       } else {
@@ -141,7 +141,7 @@ it.each(["library", "image", "video"] as const)(
         expect(screen.getByText("快进 5 秒")).toBeInTheDocument();
         expect(screen.getByText("下一个视频")).toBeInTheDocument();
         expect(screen.getByText("静音 / 取消静音")).toBeInTheDocument();
-        expect(screen.queryByText("下一张")).not.toBeInTheDocument();
+        expect(screen.queryByText("下一页")).not.toBeInTheDocument();
         expect(screen.queryByText(/幻灯片/)).not.toBeInTheDocument();
       }
     }

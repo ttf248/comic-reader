@@ -79,6 +79,27 @@ describe("GlobalSearch", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("/tags/%E6%97%85%E8%A1%8C");
   });
 
+  it("搜索结果的计数单位跟着当前工作台走", async () => {
+    vi.mocked(albumsApi.search).mockResolvedValue({
+      ok: true,
+      count: 2,
+      results: [
+        { kind: "album", path: "a_trip", name: "旅行册", count: 12 },
+        { kind: "collection", path: "c_trip", name: "旅行", count: 3 },
+      ],
+    });
+    renderSearch();
+    const input = screen.getByRole("combobox");
+
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "旅行" } });
+
+    // 照片工作台：相册按「张」，集合按「本」。
+    expect(await screen.findByText("12 张")).toBeInTheDocument();
+    expect(screen.getByText("3 本")).toBeInTheDocument();
+    expect(screen.queryByText(/卷/)).not.toBeInTheDocument();
+  });
+
   it("在建议请求尚未结束时不误报无结果", async () => {
     let resolveSearch: ((value: {
       ok: boolean;

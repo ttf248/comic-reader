@@ -35,6 +35,27 @@ export interface WorkbenchCopy {
   favoritesEmpty: string;
   /** 随机打开一本相册的动作名。 */
   randomLabel: string;
+  /**
+   * 单张媒体的计数单位：照片「张」，漫画「页」。
+   *
+   * 漫画里一张图就是「一页」，与阅读器的「第 N 页 / 共 N 页」说法一致；
+   * 照片说「张」。
+   */
+  mediaUnit: string;
+  /**
+   * 「上次 X」里的动词：照片「浏览」，漫画「阅读」。
+   *
+   * 进度与未读属于漫画；照片没有「读完」这回事，所以它只能说「浏览」。
+   */
+  lastSeenVerb: string;
+  /** 从未看过时的说法：照片「尚未浏览」，漫画「尚未阅读」。 */
+  neverSeenLabel: string;
+  /**
+   * 集合 / 标签的计数单位：照片「本」，漫画「卷」。
+   *
+   * 那个数字是「里面有多少本相册」，不是图片数。
+   */
+  collectionUnit: string;
 }
 
 /** 漫画工作台专有的文案：进度与未读都属于漫画。 */
@@ -98,8 +119,6 @@ export interface PhotoCopy extends WorkbenchCopy {
   serendipityLoading: string;
   /** 打开这本的按钮文案。 */
   serendipityOpenButton: string;
-  /** 照片张数的单位。 */
-  photoCountLabel: string;
 }
 
 const PHOTO: PhotoCopy = {
@@ -116,6 +135,10 @@ const PHOTO: PhotoCopy = {
   favoritesTitle: "我收藏的照片",
   favoritesEmpty: "还没有收藏照片",
   randomLabel: "随机翻翻",
+  mediaUnit: "张",
+  lastSeenVerb: "浏览",
+  neverSeenLabel: "尚未浏览",
+  collectionUnit: "本",
   recentlyAddedTitle: "最近加入",
   recentlyAddedEyebrow: "刚进门的照片",
   recentlyAddedCountLabel: "本新照片",
@@ -124,7 +147,6 @@ const PHOTO: PhotoCopy = {
   serendipityButton: "换一本",
   serendipityLoading: "找一本…",
   serendipityOpenButton: "打开看看",
-  photoCountLabel: "张",
 };
 
 const COMIC: ComicCopy = {
@@ -159,6 +181,10 @@ const COMIC: ComicCopy = {
   favoritesTitle: "我收藏的漫画",
   favoritesEmpty: "还没有收藏漫画",
   randomLabel: "随机一本",
+  mediaUnit: "页",
+  lastSeenVerb: "阅读",
+  neverSeenLabel: "尚未阅读",
+  collectionUnit: "卷",
 };
 
 /**
@@ -166,9 +192,20 @@ const COMIC: ComicCopy = {
  *
  * 那个数字是「里面有多少本相册」，不是图片数：照片侧说「本」，
  * 漫画侧说「卷」。用「张」会让人以为那是图片数量。
+ *
+ * 取值来自词表本身，词表是唯一真相源。
  */
 export function collectionUnit(mode: "photo" | "comic"): string {
-  return mode === "comic" ? "卷" : "本";
+  return workbenchCopy(mode).collectionUnit;
+}
+
+/**
+ * 单张媒体的计数单位：照片「张」，漫画「页」。
+ *
+ * 漫画里一张图就是「一页」，与阅读器的「第 N 页」说法一致。
+ */
+export function mediaUnit(mode: "photo" | "comic"): string {
+  return workbenchCopy(mode).mediaUnit;
 }
 
 /**

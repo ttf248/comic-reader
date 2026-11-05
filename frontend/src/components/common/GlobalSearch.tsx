@@ -8,6 +8,7 @@ import { useAppMode } from "../../hooks/useAppMode";
 import { albumsApi, type SearchHit } from "../../api/albums";
 import { thumbUrl } from "../../api/thumbs";
 import { albumRoute, tagRoute } from "../../utils/path";
+import { collectionUnit, mediaUnit } from "../../utils/workbench";
 
 // 全局搜索框：输入时显示下拉建议（来自后端 /api/search）。
 //   - 空结果时返回静默，仅同步过滤本地视图
@@ -151,7 +152,14 @@ export default function GlobalSearch() {
                       ? "标签"
                       : "集合"}
                   {" · "}
-                  {h.count} {h.kind === "album" ? "张" : "卷"}
+                  {/* 计数与单位单独成节点：单位跟着当前工作台走
+                      （照片「张 / 本」，漫画「页 / 卷」）。 */}
+                  <span>
+                    {h.count}{" "}
+                    {h.kind === "album"
+                      ? mediaUnit(mode)
+                      : collectionUnit(mode)}
+                  </span>
                 </div>
               </div>
             </button>

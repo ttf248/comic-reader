@@ -108,7 +108,7 @@ describe("ImageGallery 连续模式", () => {
   // 翻一本相册就是 GB 级流量。必须走服务端预览图。
   it("连续模式用服务端预览图而不是原图", () => {
     render(<ImageGallery images={["f_aaa", "f_bbb"]} />);
-    const img = screen.getByAltText("第 1 张") as HTMLImageElement;
+    const img = screen.getByAltText("第 1 页") as HTMLImageElement;
     expect(img.getAttribute("src")).toContain("/api/previews/f_aaa");
     expect(img.getAttribute("src")).toContain("?w=");
   });
@@ -217,20 +217,20 @@ describe("ImageGallery 加载失败", () => {
 
   it("图片加载失败时显示提示，而不是浏览器的破图图标", () => {
     render(<ImageGallery images={["f_one"]} />);
-    const img = screen.getByAltText("第 1 张");
+    const img = screen.getByAltText("第 1 页");
     fireEvent.error(img);
     expect(screen.getByText("该图片无法显示")).toBeInTheDocument();
   });
 
   it("换图后重置失败态", async () => {
     const { rerender } = render(<ImageGallery images={["f_one"]} />);
-    fireEvent.error(screen.getByAltText("第 1 张"));
+    fireEvent.error(screen.getByAltText("第 1 页"));
     expect(screen.getByText("该图片无法显示")).toBeInTheDocument();
 
     rerender(<ImageGallery images={["f_two"]} />);
     await waitFor(() =>
       expect(screen.queryByText("该图片无法显示")).not.toBeInTheDocument(),
     );
-    expect(screen.getByAltText("第 1 张")).toBeInTheDocument();
+    expect(screen.getByAltText("第 1 页")).toBeInTheDocument();
   });
 });

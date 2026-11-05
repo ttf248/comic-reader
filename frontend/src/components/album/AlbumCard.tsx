@@ -24,7 +24,7 @@ import { formatDuration } from "../../utils/format";
 import { isCompleted, isUnread, progressPercent } from "../../utils/progress";
 import { favoriteResourceId } from "../../utils/path";
 import { useToggleFavorite } from "../../hooks/useFavorites";
-import { collectionUnit, comicCopy } from "../../utils/workbench";
+import { collectionUnit, comicCopy, mediaUnit } from "../../utils/workbench";
 import type { ContentKind } from "../../api/library";
 import CardCover from "./CardCover";
 
@@ -212,24 +212,28 @@ export default function AlbumCard({
 
 // 卡片底部"X 张 / Y 个视频 / X 张 · Y 个视频"渲染。
 //
-// 仅 album 变体按图/视频分别展示；集合/smart 走 count + "卷"（语义是子相册数）。
+// 仅 album 变体按图/视频分别展示；集合/smart 走 count + 计数单位（语义是子相册数）。
+//
+// 计数单位跟着这一张卡自己的属性走：照片说「张」，漫画说「页」——
+// 漫画里一张图就是「一页」，与阅读器的「第 N 页」说法一致。
 function formatMediaCount(
   data: CardData,
 ): { label: string; title: string } | null {
   if (data.variant !== "album") return null;
   const imgs = data.imageCount ?? 0;
   const vids = data.videoCount ?? 0;
+  const unit = mediaUnit(data.contentKind ?? "photo");
   if (imgs > 0 && vids > 0) {
     return {
-      label: `${imgs} 张 · ${vids} 个视频`,
-      title: `${imgs} 张图片 + ${vids} 个视频`,
+      label: `${imgs} ${unit} · ${vids} 个视频`,
+      title: `${imgs} ${unit} + ${vids} 个视频`,
     };
   }
   if (imgs === 0 && vids > 0) {
     return { label: `${vids} 个视频`, title: `${vids} 个视频` };
   }
   // 纯图 / 空相册。
-  return { label: `${imgs} 张`, title: `${imgs} 张` };
+  return { label: `${imgs} ${unit}`, title: `${imgs} ${unit}` };
 }
 
 function GridCard({
@@ -615,11 +619,7 @@ function ListCard({
               return (
                 <>
                   {data.count}{" "}
-                  {data.variant === "collection"
-                    ? "卷"
-                    : data.variant === "smart"
-                      ? "卷"
-                      : "张"}
+                  {collectionUnit(data.contentKind ?? "photo")}
                 </>
               );
             })()}

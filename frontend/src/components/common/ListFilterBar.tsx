@@ -2,6 +2,8 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useSearchStore, type SortKey } from "../../store/searchStore";
 import { useUIStore } from "../../store/uiStore";
 import { ChevronDownIcon, GridIcon, ListIcon, FilterIcon } from "./Icon";
+import { useAppMode } from "../../hooks/useAppMode";
+import type { AppMode } from "../../api/library";
 
 // 共享 filter strip: 视图 chips (可选) + 总数 + 排序 + 视图模式
 //
@@ -108,12 +110,15 @@ export function ListFilterBar({
   );
 }
 
-const sortOptions: { value: SortKey; label: string }[] = [
-  { value: "name", label: "按名称" },
-  { value: "count", label: "按张数" },
-  { value: "recent", label: "按最近改" },
-  { value: "viewed", label: "按最近看" },
-];
+// 排序项：按数量的说法跟着工作台走 —— 照片数「张」，漫画数「页」。
+function sortOptions(mode: AppMode): { value: SortKey; label: string }[] {
+  return [
+    { value: "name", label: "按名称" },
+    { value: "count", label: mode === "comic" ? "按页数" : "按张数" },
+    { value: "recent", label: "按最近改" },
+    { value: "viewed", label: "按最近看" },
+  ];
+}
 
 function SortMenu({
   value,
@@ -138,7 +143,9 @@ function SortMenu({
     };
   }, [open]);
 
-  const cur = sortOptions.find((o) => o.value === value) ?? sortOptions[0];
+  const { mode } = useAppMode();
+  const options = sortOptions(mode);
+  const cur = options.find((o) => o.value === value) ?? options[0];
 
   return (
     <div
@@ -180,7 +187,7 @@ function SortMenu({
           aria-label="排序选项"
           className="absolute right-0 top-full mt-1.5 min-w-[140px] bg-bg-elevated border border-border rounded-lg shadow-lg py-1 z-40 fade-up"
         >
-          {sortOptions.map((o) => (
+          {options.map((o) => (
             <button
               key={o.value}
               type="button"

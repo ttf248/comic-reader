@@ -295,11 +295,11 @@ export default function GalleryHeader({
         <PopoverSeparator />
         <PopoverLabel>跳转</PopoverLabel>
         <PopoverItem onClick={jumpToFirst}>
-          <span>{isVideo ? "第一个视频" : "第一张"}</span>
+          <span>{isVideo ? "第一个视频" : "第一页"}</span>
           <span className="ml-auto text-[12.5px] text-white/55">Home</span>
         </PopoverItem>
         <PopoverItem onClick={jumpToLast}>
-          <span>{isVideo ? "最后一个视频" : "最后张"}</span>
+          <span>{isVideo ? "最后一个视频" : "最后一页"}</span>
           <span className="ml-auto text-[12.5px] text-white/55">End</span>
         </PopoverItem>
       </Popover>

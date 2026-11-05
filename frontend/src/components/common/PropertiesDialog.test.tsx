@@ -109,6 +109,27 @@ it("集合属性显示聚合媒体和相册数量", async () => {
   expect(imageInfoApi.get).not.toHaveBeenCalled();
 });
 
+it("漫画侧的计数单位是页与卷", async () => {
+  vi.mocked(libraryApi.queryNodes).mockResolvedValueOnce({
+    revision: 1,
+    missing: [],
+    items: [
+      {
+        ...node,
+        id: "c_comic",
+        kind: "collection",
+        contentKind: "comic",
+        albumCount: 5,
+        childCount: 3,
+        mediaCount: 46,
+      },
+    ],
+  });
+  renderDialog({ kind: "node", id: "c_comic" });
+  expect(await screen.findByText("集合")).toBeInTheDocument();
+  expect(screen.getByText("5 卷")).toBeInTheDocument();
+});
+
 it("图片属性只请求文件元数据", async () => {
   renderDialog({ kind: "image", id: "f_picture" });
   expect(await screen.findByText("照片.png")).toBeInTheDocument();

@@ -303,7 +303,7 @@ export default function ImageGallery({
           <GalleryImage
             key={imgKey}
             src={imageUrl(current)}
-            alt={`第 ${index + 1} 张`}
+            alt={`第 ${index + 1} 页`}
             onDoubleClick={() => {
               const store = useGalleryStore.getState();
               if (store.zoom > 1) {
@@ -535,7 +535,7 @@ const ContinuousImage = memo(function ContinuousImage({
     <div className="w-full flex justify-center" data-image-index={index}>
       <GalleryImage
         src={previewWidth ? previewUrl(src, previewWidth) : imageUrl(src)}
-        alt={`第 ${index + 1} 张`}
+        alt={`第 ${index + 1} 页`}
         loading={nearIndex ? "eager" : "lazy"}
         decoding={nearIndex ? "sync" : "async"}
         className="select-none scale-fade"

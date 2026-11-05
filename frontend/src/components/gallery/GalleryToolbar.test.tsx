@@ -16,8 +16,8 @@ describe("GalleryToolbar 阅读控制", () => {
   it("是一个有中文可访问名的工具条", () => {
     renderToolbar();
     expect(screen.getByRole("toolbar", { name: "阅读控制" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "上一张" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "下一张" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "上一页" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "下一页" })).toBeInTheDocument();
   });
 
   it("可以直接切换阅读模式", () => {
@@ -25,7 +25,7 @@ describe("GalleryToolbar 阅读控制", () => {
     renderToolbar();
     fireEvent.click(screen.getByRole("button", { name: "连续" }));
     expect(useGalleryStore.getState().mode).toBe("continuous");
-    fireEvent.click(screen.getByRole("button", { name: "并排" }));
+    fireEvent.click(screen.getByRole("button", { name: "双页" }));
     expect(useGalleryStore.getState().mode).toBe("double");
   });
 
@@ -53,16 +53,16 @@ describe("GalleryToolbar 阅读控制", () => {
 
   it("首尾位置禁用翻页按钮", () => {
     const { onNext } = renderToolbar({ atStart: true, atEnd: false });
-    expect(screen.getByRole("button", { name: "上一张" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "下一张" })).not.toBeDisabled();
-    fireEvent.click(screen.getByRole("button", { name: "下一张" }));
+    expect(screen.getByRole("button", { name: "上一页" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "下一页" })).not.toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "下一页" }));
     expect(onNext).toHaveBeenCalled();
   });
 
   it("翻页按钮把事件交给父组件", () => {
     const { onPrev, onNext } = renderToolbar();
-    fireEvent.click(screen.getByRole("button", { name: "上一张" }));
-    fireEvent.click(screen.getByRole("button", { name: "下一张" }));
+    fireEvent.click(screen.getByRole("button", { name: "上一页" }));
+    fireEvent.click(screen.getByRole("button", { name: "下一页" }));
     expect(onPrev).toHaveBeenCalledTimes(1);
     expect(onNext).toHaveBeenCalledTimes(1);
   });

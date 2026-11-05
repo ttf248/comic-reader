@@ -127,14 +127,39 @@ describe("AlbumCard 封面语义", () => {
     );
 
     expect(screen.getByText("02:05")).toBeInTheDocument();
-    expect(screen.getByText("9 张 · 2 个视频")).toHaveAttribute(
+    // 默认是漫画相册：图片按「页」计数（照片侧才是「张」）。
+    expect(screen.getByText("9 页 · 2 个视频")).toHaveAttribute(
       "title",
-      "9 张图片 + 2 个视频",
+      "9 页 + 2 个视频",
     );
     expect(
       screen.queryByRole("button", { name: "重试" }),
     ).not.toBeInTheDocument();
   });
+
+  it("照片相册按「张」计数，与漫画侧的「页」分开", () => {
+    renderCard(card({ contentKind: "photo", imageCount: 9, videoCount: 0 }));
+
+    expect(screen.getByText("9 张")).toBeInTheDocument();
+    expect(screen.queryByText(/页/)).not.toBeInTheDocument();
+  });
+
+  it.each(["grid", "list"] as const)(
+    "%s 模式集合计数单位跟着内容属性走",
+    (variant) => {
+      renderCard(
+        card({
+          variant: "collection",
+          contentKind: "photo",
+          count: 3,
+          imageCount: undefined,
+          videoCount: undefined,
+        }),
+        variant,
+      );
+      expect(screen.getByText("3 本")).toBeInTheDocument();
+    },
+  );
 
   it.each(["grid", "list"] as const)(
     "%s 模式使用真实链接和对应画幅且没有嵌套按钮",
@@ -185,7 +210,7 @@ describe("AlbumCard 封面语义", () => {
       </QueryClientProvider>,
     );
 
-    expect(screen.getByText("9 张 · 2 个视频")).toBeInTheDocument();
+    expect(screen.getByText("9 页 · 2 个视频")).toBeInTheDocument();
     expect(screen.getByText(/上次/)).toBeInTheDocument();
   });
 });

@@ -21,6 +21,7 @@ import {
 } from "../utils/albumGrouping";
 import EmptyState from "../components/common/EmptyState";
 import { albumRoute, decodeFavPath, decodePathTail, homeRoute, readerRoute } from "../utils/path";
+import { collectionUnit } from "../utils/workbench";
 import { useAppMode } from "../hooks/useAppMode";
 import { useSafeBack } from "../utils/navigation";
 import { compareDatesDesc } from "../utils/date";
@@ -28,6 +29,7 @@ import { ChevronLeftIcon, StarIcon } from "../components/common/Icon";
 import PhotoAlbum from "./PhotoAlbum";
 import {
   LibraryRevisionChangedError,
+  type ContentKind,
   type LibraryNodeSummary,
 } from "../api/library";
 import { useLibraryChildren, useLibraryNodes } from "../hooks/useLibrary";
@@ -47,6 +49,11 @@ interface CollectionDetail {
   albums: AlbumLike[];
   collections: CollectionLike[];
   albumCount: number;
+  /**
+   * 集合的内容属性：照片「本」，漫画「卷」。
+   * 集合继承所属目录的属性，计数单位跟着那一侧走。
+   */
+  contentKind: ContentKind;
 }
 
 function toAlbumLike(summary: LibraryNodeSummary): AlbumLike {
@@ -153,6 +160,7 @@ export default function Album() {
       albums,
       collections,
       albumCount: node.albumCount ?? 0,
+      contentKind: node.contentKind,
     };
   }, [childrenQuery.data, node]);
 
@@ -371,7 +379,9 @@ function CollectionView({
           <div className="min-w-0">
             <h1 className="page-title truncate">{detail.name}</h1>
             <div className="text-[13px] text-fg-muted mt-1.5">
-              <span className="tabular-nums">{detail.albumCount} 卷</span>
+              <span className="tabular-nums">
+                {detail.albumCount} {collectionUnit(detail.contentKind)}
+              </span>
             </div>
           </div>
           <button

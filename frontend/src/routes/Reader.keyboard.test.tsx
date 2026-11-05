@@ -234,7 +234,7 @@ describe("Reader 按媒体类型隔离快捷键", () => {
     await pressKey("End");
     await pressKey("PageDown");
     expect(useUIStore.getState().toasts.at(-1)?.message).toBe(
-      "已是最后一个视频 · 相册里另有 3 张图片",
+      "已是最后一个视频 · 相册里另有 3 页图片",
     );
   });
 
@@ -265,7 +265,7 @@ describe("Reader 按媒体类型隔离快捷键", () => {
     expect(items).not.toContain("图片");
   });
 
-  it("图片阅读器的更多菜单保留图片信息与张数说法", async () => {
+  it("图片阅读器的更多菜单保留图片信息与页数说法", async () => {
     renderReader("image");
     await screen.findByTestId("image-gallery");
     await act(async () => {
@@ -276,8 +276,8 @@ describe("Reader 按媒体类型隔离快捷键", () => {
       .map((el) => el.textContent ?? "")
       .join("|");
     expect(items).toContain("图片信息");
-    expect(items).toContain("第一张");
-    expect(items).toContain("最后张");
+    expect(items).toContain("第一页");
+    expect(items).toContain("最后一页");
   });
 
   it("阅读器右键菜单可以在系统文件管理器中定位当前文件", async () => {

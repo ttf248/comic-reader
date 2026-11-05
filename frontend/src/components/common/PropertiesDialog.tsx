@@ -3,6 +3,7 @@ import { useImageInfo } from "../../hooks/useImageInfo";
 import { useLibraryNodes } from "../../hooks/useLibrary";
 import { formatSize } from "../../utils/format";
 import { formatDateTime } from "../../utils/date";
+import { collectionUnit, mediaUnit } from "../../utils/workbench";
 import { CloseIcon } from "./Icon";
 import CopyButton from "./CopyButton";
 
@@ -141,12 +142,19 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
             />
             {node.kind === "album" ? (
               <>
-                <Field label="图片" value={`${node.imageCount ?? 0} 张`} />
+                {/* 图片计数单位跟着内容属性走：照片「张」，漫画「页」。 */}
+                <Field
+                  label="图片"
+                  value={`${node.imageCount ?? 0} ${mediaUnit(node.contentKind)}`}
+                />
                 <Field label="视频" value={`${node.videoCount ?? 0} 个`} />
               </>
             ) : (
               <>
-                <Field label="相册数量" value={`${node.albumCount ?? 0} 本`} />
+                <Field
+                  label="相册数量"
+                  value={`${node.albumCount ?? 0} ${collectionUnit(node.contentKind)}`}
+                />
                 <Field label="直属项目" value={`${node.childCount ?? 0} 项`} />
               </>
             )}

@@ -128,7 +128,7 @@ export function SerendipityHero({
             {card.displayTitle ?? card.title}
           </h3>
           <p className="reading-desk__muted mt-3 tabular-nums">
-            {card.imageCount ?? 0} {copy.photoCountLabel}
+            {card.imageCount ?? 0} {copy.mediaUnit}
             {(card.videoCount ?? 0) > 0 && ` · ${card.videoCount} 个视频`}
           </p>
           <div className="mt-5">

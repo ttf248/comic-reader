@@ -24,7 +24,7 @@ import {
 interface Props {
   onPrev: () => void;
   onNext: () => void;
-  /** 当前是否第一张 / 最后一张（用于禁用翻页按钮）。 */
+  /** 当前是否第一页 / 最后一页（用于禁用翻页按钮）。 */
   atStart?: boolean;
   atEnd?: boolean;
 }
@@ -35,9 +35,9 @@ const MODE_OPTIONS: {
   icon: typeof SinglePageIcon;
   key: string;
 }[] = [
-  { value: "single", label: "单张", icon: SinglePageIcon, key: "1" },
+  { value: "single", label: "单页", icon: SinglePageIcon, key: "1" },
   { value: "continuous", label: "连续", icon: ScrollPageIcon, key: "2" },
-  { value: "double", label: "并排", icon: DoublePageIcon, key: "3" },
+  { value: "double", label: "双页", icon: DoublePageIcon, key: "3" },
 ];
 
 const FIT_LABEL: Record<FitMode, string> = {
@@ -81,8 +81,8 @@ export default function GalleryToolbar({
         <ToolButton
           onClick={onPrev}
           disabled={atStart}
-          title="上一张 (←)"
-          ariaLabel="上一张"
+          title="上一页 (←)"
+          ariaLabel="上一页"
         >
           <ChevronLeftIcon size={16} />
         </ToolButton>
@@ -153,8 +153,8 @@ export default function GalleryToolbar({
         <ToolButton
           onClick={onNext}
           disabled={atEnd}
-          title="下一张 (→)"
-          ariaLabel="下一张"
+          title="下一页 (→)"
+          ariaLabel="下一页"
         >
           <ChevronRightIcon size={16} />
         </ToolButton>

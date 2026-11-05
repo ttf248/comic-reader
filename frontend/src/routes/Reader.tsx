@@ -671,11 +671,11 @@ export default function Reader() {
       kind: "info",
       message: isVideo
         ? siblingCount > 0
-          ? `已是最后一个视频 · 相册里另有 ${siblingCount} 张图片`
+          ? `已是最后一个视频 · 相册里另有 ${siblingCount} 页图片`
           : "已是最后一个视频"
         : siblingCount > 0
           ? `图片已看完 · 还有 ${siblingCount} 个视频`
-          : "已是最后一张",
+          : "已是最后一页",
       ttl: 1500,
     });
     // 读完一本后给一个明确的收尾入口：接着读下一本，或回到相册。

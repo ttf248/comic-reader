@@ -350,7 +350,7 @@ export default function Settings() {
             <div className="flex items-center border border-border-faint rounded-md overflow-hidden">
               {(
                 [
-                  ["single", "单张"],
+                  ["single", "单页"],
                   ["continuous", "连续"],
                   ["double", "双页"],
                 ] as const

@@ -342,7 +342,7 @@ test("扫描并打开示例相册", async ({ page }) => {
     })
     .toBe(1);
   await page.goto(readerUrl(albumId));
-  await expect(page.getByTitle("跳转到指定张 (G)")).toHaveText("2");
+  await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("2");
 });
 
 test("工作台模式切换：两套菜单完全隔离，模式持久化在服务端偏好里", async ({
@@ -1219,7 +1219,7 @@ for (const kind of ["image", "video"] as const) {
           element.currentTime = 5;
           element.volume = 1;
         });
-      } else await expect(page.getByTitle("跳转到指定张 (G)")).toHaveText("1");
+      } else await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("1");
       const initialURL = page.url();
       const opener = page.getByTitle("更多", { exact: true });
       if (menuType === "popover") await opener.click();
@@ -1254,7 +1254,7 @@ for (const kind of ["image", "video"] as const) {
             video.evaluate((element: HTMLVideoElement) => element.currentTime),
           )
           .toBeCloseTo(5, 1);
-      else await expect(page.getByTitle("跳转到指定张 (G)")).toHaveText("1");
+      else await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("1");
       await page.keyboard.press("Escape");
       await expect(menu).not.toBeVisible();
       await expect(page).toHaveURL(initialURL);
@@ -1301,7 +1301,7 @@ for (const kind of ["image", "video"] as const) {
         )
         .toBeCloseTo(5, 1);
     } else {
-      await expect(page.getByTitle("跳转到指定张 (G)")).toHaveText("1");
+      await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("1");
       await page.keyboard.press("Control+g");
       await expect(page.locator('input[inputmode="numeric"]')).toHaveCount(0);
       await page.keyboard.press("g");
@@ -1309,7 +1309,7 @@ for (const kind of ["image", "video"] as const) {
       await expect(input).toBeFocused();
       await input.fill("2");
       await input.press("Enter");
-      await expect(page.getByTitle("跳转到指定张 (G)")).toHaveText("2");
+      await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("2");
     }
     await back.focus();
     await page.keyboard.press("Space");
@@ -1508,7 +1508,7 @@ for (const kind of ["image", "video"] as const) {
         element.muted = false;
         element.currentTime = 5;
       });
-    } else await expect(page.getByTitle("跳转到指定张 (G)")).toHaveText("1");
+    } else await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("1");
     const opener = page.getByTitle("更多", { exact: true });
     await opener.click();
     await page.getByRole("menuitem", { name: "快捷键", exact: false }).click();
@@ -1535,7 +1535,7 @@ for (const kind of ["image", "video"] as const) {
       await expect(dialog.getByText(/旋转 90°/)).toHaveCount(0);
       await expect(dialog.getByText(/幻灯片/)).toHaveCount(0);
     } else
-      await expect(dialog.getByText("下一张", { exact: true })).toBeVisible();
+      await expect(dialog.getByText("下一页", { exact: true })).toBeVisible();
     await search.fill("Space");
     await expect(
       dialog.getByText(kind === "video" ? "播放 / 暂停" : "幻灯片播放/暂停", {
@@ -1558,7 +1558,7 @@ for (const kind of ["image", "video"] as const) {
           (element: HTMLVideoElement) => element.paused && !element.muted,
         ),
       ).toBe(true);
-    } else await expect(page.getByTitle("跳转到指定张 (G)")).toHaveText("1");
+    } else await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("1");
     await page.keyboard.press("Escape");
     await expect(dialog).not.toBeVisible();
     // 第一次 Esc 只关帮助，地址仍停在阅读器上。
@@ -2711,12 +2711,12 @@ test("排序选项支持键盘确认取消和自然移出焦点", async ({ page 
     await expect(first).toBeFocused();
     await page.keyboard.press("Tab");
     await expect(
-      page.getByRole("button", { name: "按张数", exact: true }),
+      page.getByRole("button", { name: "按页数", exact: true }),
     ).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(options).toHaveCount(0);
     await expect(trigger).toBeFocused();
-    await expect(trigger).toContainText("按张数");
+    await expect(trigger).toContainText("按页数");
     await page.keyboard.press("Tab");
     await expect(grid).toBeFocused();
   });
@@ -2731,7 +2731,7 @@ test("排序选项支持键盘确认取消和自然移出焦点", async ({ page 
     await page.keyboard.press("Escape");
     await expect(options).toHaveCount(0);
     await expect(trigger).toBeFocused();
-    await expect(trigger).toContainText("按张数");
+    await expect(trigger).toContainText("按页数");
   });
 
   await test.step("Tab 从最后一项移出时关闭选项并保留下一控件焦点", async () => {
@@ -4539,7 +4539,7 @@ test("阅读器按 G 跳转时预填值被选中，输入张数直接替换而�
   expect(album).toBeDefined();
   await page.goto(readerUrl(album!.id, `?index=0`));
   // 等阅读器挂载（路由是懒加载的），否则按键会落在挂载之前
-  await expect(page.getByTitle("跳转到指定张 (G)")).toHaveText("1");
+  await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("1");
 
   // 进入跳转编辑态：预填当前张数并全选
   await page.keyboard.press("g");
@@ -4551,7 +4551,7 @@ test("阅读器按 G 跳转时预填值被选中，输入张数直接替换而�
   await expect(input).toHaveValue("100");
   await page.keyboard.press("Enter");
 
-  await expect(page.getByTitle("跳转到指定张 (G)")).toHaveText("100");
+  await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("100");
 });
 
 test("阅读器加载态沿用深色画布，不闪白底", async ({ page }) => {
@@ -4607,7 +4607,7 @@ test("阅读器放大与旋转真正作用到图片上", async ({ page }) => {
   const album = nodes.find((node) => node.name === "sample-paged-images");
   expect(album).toBeDefined();
   await page.goto(readerUrl(album!.id, `?index=0`));
-  await expect(page.getByTitle("跳转到指定张 (G)")).toHaveText("1");
+  await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("1");
 
   const img = page.locator("[data-image-gallery] img").first();
   const matrix = async () =>
@@ -4635,7 +4635,7 @@ test("图片信息面板不遮挡阅读器顶栏：宽屏并排，窄屏落到�
   const album = nodes.find((node) => node.name === "sample-paged-images");
   expect(album).toBeDefined();
   await page.goto(readerUrl(album!.id, `?index=0`));
-  await expect(page.getByTitle("跳转到指定张 (G)")).toHaveText("1");
+  await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("1");
 
   const panel = page.getByTestId("image-info-panel");
   const header = page.locator("header").first();
@@ -4683,7 +4683,7 @@ test("阅读器「原始」适配模式按像素显示图片，超出视口时�
   const album = nodes.find((node) => node.name === "sample-original-size");
   expect(album).toBeDefined();
   await page.goto(readerUrl(album!.id, `?index=0`));
-  await expect(page.getByTitle("跳转到指定张 (G)")).toHaveText("1");
+  await expect(page.getByTitle("跳转到指定页 (G)")).toHaveText("1");
 
   const img = page.locator("[data-image-gallery] img").first();
   // 切到「原始」适配模式：适应 → 按宽 → 按高 → 原始
@@ -4862,11 +4862,11 @@ test("窄屏阅读器不再显示右侧悬浮控件，阅读设置收进底部�
   // 阅读设置改由底部浮动工具条提供（窄屏也直接可点，不需要再开菜单）。
   const toolbar = page.getByRole("toolbar", { name: "阅读控制" });
   await expect(toolbar).toBeVisible();
-  await toolbar.getByRole("button", { name: "并排" }).click();
+  await toolbar.getByRole("button", { name: "双页" }).click();
   await expect(page.getByText("1–2 /")).toBeVisible();
 
   // 工具条让开后，图片右三分之一可以正常翻到下一张。
-  await toolbar.getByRole("button", { name: "单张" }).click();
+  await toolbar.getByRole("button", { name: "单页" }).click();
   await expect(page.getByText(new RegExp(`^1 / ${total}$`))).toBeVisible();
   await page.mouse.click(360, 300);
   await expect(page.getByText(new RegExp(`^2 / ${total}$`))).toBeVisible();
@@ -5009,7 +5009,7 @@ test("阅读器底部工具条常驻阅读模式与适配方式，切换后写�
   // 键盘路径依旧可用：1 / 2 / 3 切模式。
   await page.keyboard.press("1");
   await expect(
-    group.getByRole("button", { name: "单张", exact: true }),
+    group.getByRole("button", { name: "单页", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
 });
 
@@ -5190,5 +5190,5 @@ test("阅读器全屏按钮可点击，点击后阅读器控制仍然可用", as
   // 阅读器状态不被破坏"。
   await page.waitForTimeout(400);
   await expect(page.getByRole("toolbar", { name: "阅读控制" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "下一张" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "下一页" })).toBeEnabled();
 });
