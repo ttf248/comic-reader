@@ -37,7 +37,7 @@ Fiber middleware → handlers → services/store → models + 本地文件
 
 发布时构建 raw 扫描结果、ID 表、manifest、目录直属子项、全局相册、媒体自然顺序、标签与搜索索引，集合统计聚合全部后代。结果与索引通过一次原子指针更新发布为同一 revision，分页请求不重新遍历目录树。
 
-每个请求只 Acquire 一次 `CatalogSnapshot`，资源参数中间件把快照固定到 Fiber Locals，handler 沿用同一版本。分页游标绑定 revision 和作用域，重扫后的过期游标由客户端丢弃已合并页面后重新读取，具体错误见 API。作用域是全等比较的字符串，列表作用域带内容用途段（`library-children:<父 id>:<用途>`、`library-unread:<用途>` 等），跨用途复用旧游标会被拒绝为 `invalid_cursor`。
+每个请求只 Acquire 一次 `CatalogSnapshot`，资源参数中间件把快照固定到 Fiber Locals，handler 沿用同一版本。分页游标绑定 revision 和作用域，重扫后的过期游标由客户端丢弃已合并页面后重新读取，具体错误见 API。作用域是全等比较的字符串，列表作用域带内容属性段（`library-children:<父 id>:<属性>`、`library-unread:<属性>` 等），跨属性复用旧游标会被拒绝为 `invalid_cursor`。
 
 请求先过 `AccessGate`，再解析资源与校验路径。门禁检查 Host、Origin / Fetch Metadata、local/LAN 认证；配置与目录管理再加回环限制。LAN SSE 使用 HttpOnly 同源会话，不把令牌放 URL；会话驻留内存，令牌轮换使旧会话失效。当前服务不终止 TLS，使用边界是本机或可信家庭网络。
 
@@ -105,9 +105,8 @@ ID 只能证明扫描时的身份。每次媒体、批量元数据及系统打�
 | ------------------------------------------------ | ------------------------------------------------------------ |
 | `state/scan_cache.json`                          | 扫描重启恢复；普通派生缓存清理不触及                         |
 | `state/web_settings.json`                        | 收藏、历史与服务端偏好（含工作台模式）                       |
-| `state/activity.json`                            | 漫画阅读、照片浏览、视频播放活动                             |
+| `state/activity.json`                            | 漫画阅读、视频播放活动                                       |
 | `state/cover_overrides.json`                     | 自定义封面                                                   |
-| `state/content_kinds.json`                       | 单个相册的内容用途覆盖（照片墙 / 漫画阅读器）               |
 | `derived/thumbnails/`、`converted/`、`previews/` | 缩略图、整图格式转换、阅读器预览，各自独立统计/清理          |
 | `derived/media_dimensions.jsonl`                  | 媒体像素宽高（照片墙排布用），可由源文件重建                |
 | `derived/video-faststart/`、`video-transcode/`   | 可重建视频产物                                               |
@@ -123,12 +122,12 @@ SIGINT/SIGTERM 触发停止接收连接、取消扫描/转码并强制刷新扫�
 
 ### 工作台模式
 
-工作台模式（`appMode`）与相册用途（`contentKind`）是两个正交概念：模式决定「现在看哪一类」，用途决定「这本相册点开进哪种交互」。模式是用户偏好，存服务端 `Prefs`（`state/web_settings.json`），前端经 `hooks/useAppMode.ts` 读写；相册用途存 `state/content_kinds.json`，按「相册覆盖 > 媒体根默认 > 全局默认」在发布时落值。
+工作台模式（`appMode`）就是目录的内容属性（`contentKind`）：`photo` / `comic` 两档互斥，没有不过滤的第三档。属性写在配置里（`mediaRoots[].kind`），目录下的相册与集合在发布时一并继承，没有单本相册的归类动作。模式本身是用户偏好，存服务端 `Prefs`（`state/web_settings.json`），前端经 `hooks/useAppMode.ts` 读写。
 
-- 模式只过滤列表，不改直达行为：`/albums/<漫画 id>`、`/read/<照片 id>` 仍进入该相册自己的交互。归类（移到照片库 / 移到漫画库 / 恢复默认类型）改的是用途，会让这本相册从另一个模式的列表里消失。
-- 服务端列表接口接受 `kind`（`photo` / `comic` / `all`，缺省 `all`）：子节点、未读、随机、标签、标签相册与搜索按相册用途过滤，集合节点恒返回（导航容器，其 `albumCount` 恒为全部后代）。manifest 的 `albumCount` 是全库总数，另给 `photoAlbumCount` / `comicAlbumCount`。
-- 过滤发生在分页之前：发布时预切好的有序切片按用途筛成子序列，游标里的偏移是过滤后列表的偏移。用途进游标作用域，跨用途复用被拒绝为 `invalid_cursor`。
-- 未读/在读派生按 `(catalogRevision, activityRevision)` 缓存，缓存与用途无关，用途过滤是请求期后置筛选。在读位置按 `(相册, 活动类型)` 建索引：漫画相册只认 `image`；照片相册优先 `photo`，缺失时回退遗留的 `image` 活动。
+- 模式决定列表呈现哪一半，也决定相册点开进照片墙还是阅读器：照片工作台只列照片目录的相册，漫画工作台只列漫画目录的相册，两套菜单与措辞各自成套。
+- 服务端列表接口的 `kind` 查询参数（`photo` / `comic`）必填，缺失或非法返回 `400 invalid_kind`：子节点、未读、随机、标签、标签相册与搜索按目录属性过滤，集合节点恒返回（导航容器，其 `albumCount` 恒为全部后代）。manifest 的 `albumCount` 是全库总数，另给 `photoAlbumCount` / `comicAlbumCount`。
+- 过滤发生在分页之前：发布时预切好的有序切片按属性筛成子序列，游标里的偏移是过滤后列表的偏移。属性进游标作用域，跨属性复用被拒绝为 `invalid_cursor`。
+- 未读/在读派生按 `(catalogRevision, activityRevision)` 缓存，缓存与属性无关，属性过滤是请求期后置筛选。未读下标只收漫画相册：照片目录下的相册不记录阅读进度，没有「未读」这个概念。
 - 前端查询键带模式段（`["library", ..., "mode", mode]`），切模式即换键自动重取，旧模式缓存保留。媒体清单与 `nodes/query` 与模式无关，键不带模式。收藏与历史的资源 ID 集合不分类型，由前端按摘要里的 `contentKind` 客户端过滤。
 - 阅读器整屏脱离 AppShell，侧栏不可见，顶部提供工作台 chip 切模式（切模式即离开阅读器回到外壳）。
 
@@ -136,7 +135,7 @@ SIGINT/SIGTERM 触发停止接收连接、取消扫描/转码并强制刷新扫�
 
 - TanStack Query 管理库、媒体、偏好、收藏与历史；Zustand 管理本机 UI、阅读器和扫描连接会话。主题与 Toast 在应用层统一挂载，阅读器独立于 AppShell 但仍有错误边界与访问门禁。
 - 路由在 `App.tsx` 懒加载：`/`、`/recents`、`/favorites`、`/unread`、`/albums/*`、`/tags/*`、`/settings`，漫画阅读器 `/read/:albumId` 使用相册 ID 和 0-based index，视频加 `type=video`。旧的 `/gallery?path=…` 链接由兼容路由转到 `/read/<相册 id>`，参数原样带过去。标签按单个路径段编码，直接打开链接的返回有应用内兜底。
-- 相册入口按内容用途分派：照片相册 `/albums/<相册 id>` 直接渲染照片墙，漫画相册重定向到阅读器。用途由服务端给出（媒体根默认值 + 单个相册覆盖），前端不按图片数量推断。
+- 相册入口按内容属性分派：照片目录的相册 `/albums/<相册 id>` 直接渲染照片墙，漫画目录的相册重定向到阅读器。属性由服务端给出（所属目录的 `kind`），前端不按图片数量推断。
 - 常驻导航仅取 activity-summary、随机相册或已加载 dashboard；首页一次取得未读计数、有限预览与在读摘要，不下载全库。完整未读索引按“库 revision + 活动版本”复用，列表按需分页。
 - `AlbumGrid` 绑定最近的纵向滚动祖先，网格/列表只挂视口附近条目。
 - 照片墙（`components/wall`）按每张图的真实宽高比做自适应排布：宽高比来自服务端媒体分页返回的像素宽高（由 `MediaDimensionService` 读图片头得到并缓存），排布算法是纯函数，容器宽度或密度变化时重算。行高度由算法确定，`Virtuoso` 只负责按行虚拟化；虚拟窗口参数保持在安全范围内，避免尺寸树展开过深触发爆栈。总数占位保留整本相册的滚动长度，行范围换算回媒体序号后由 `useMediaGridPagination` 连续补页，失败保留内容并暂停自动请求，显式重试恢复。容器与窗口的验证要求见设计文档。
@@ -144,8 +143,8 @@ SIGINT/SIGTERM 触发停止接收连接、取消扫描/转码并强制刷新扫�
 
 ### 活动、收藏与历史
 
-- 漫画按 `albumId + image` 保存页码；照片浏览按 `albumId + photo` 保存最后看到的一张；视频按 `albumId + video + itemId` 保存毫秒位置。图片最后一页、视频 98% 派生完成；无图片活动表示未读，纯视频相册改用视频活动。两种用途拆分之前的相册只有 `image` 活动，这些旧记录仍然算作翻过，未读统计不会把已读相册退回未读。
-- 未读判定按相册的内容用途选择活动类型（漫画相册看 `image`，照片相册看 `photo`）；用户手动切换用途（归类）时清除另一种用途的进度，避免位置被误读。
+- 漫画按 `albumId + image` 保存页码；视频按 `albumId + video + itemId` 保存毫秒位置。图片最后一页、视频 98% 派生完成；无图片活动表示未读，纯视频相册改用视频活动。照片浏览不留进度记录，因此没有 `photo` 活动类型。
+- 未读判定只针对漫画相册（看 `image` 活动）；照片目录下的相册不记录进度，也就不存在未读。
 - 阅读进度恢复成功前禁止写入，只有明确的 `activity_not_found` 可当新记录；其他失败持续提示并可重试，避免自动播放/初始页覆盖旧位置。保存失败重试使用当前有效位置，切资源忽略旧失败，卸载 keepalive 仅尽力写入。
 - `useVideoActivity` 收拢恢复、节流保存与卸载补写，回调通过 ref 转发以避免查询重启。活动写入由应用级 `useLibraryActivitySync` 统一失效首页、计数与未读缓存。
 - 收藏/历史/偏好写入成功后先将服务端确认结果写共享查询缓存，再后台刷新，后续 GET 失败不能复活已删除记录或回退新设置。切换收藏读取当前缓存，首次查询未确认不盲写；清理失效项只过滤已知缓存，不凭移除清单构造空列表。

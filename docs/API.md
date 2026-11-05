@@ -76,9 +76,9 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 读取或更新 `config.yaml`。与下文的目录选择接口同属允许处理绝对路径的本机配置管理例外，只接受服务端回环地址请求；远程请求返回 `403 local_access_required`。
 
-可更新字段：`mediaRoots`、`host`、`port`、`accessMode`、`accessToken`、`cacheDir`、`thumbSizeW`、`thumbSizeH`、`thumbCacheSize`、`cacheMaxAgeDays`、`cacheMaxSizeMB`、`ffmpegPath`、`allowOsOpen`、`staticDir`、`skipHidden`、`excludePatterns`、`systemFiles`、`defaultContentKind`、`rootContentKinds`。`accessToken` 永不在 GET/PUT 响应中回显，只返回 `accessTokenConfigured`。
+可更新字段：`mediaRoots`、`host`、`port`、`accessMode`、`accessToken`、`cacheDir`、`thumbSizeW`、`thumbSizeH`、`thumbCacheSize`、`cacheMaxAgeDays`、`cacheMaxSizeMB`、`ffmpegPath`、`allowOsOpen`、`staticDir`、`skipHidden`、`excludePatterns`、`systemFiles`。`accessToken` 永不在 GET/PUT 响应中回显，只返回 `accessTokenConfigured`。
 
-`defaultContentKind` 是相册的全局默认浏览用途（`photo` / `comic`，缺省 `photo`）；`rootContentKinds` 是「媒体根路径 → 用途」映射，键用与 `mediaRoots` 同一套规范化路径。两者都可热更新：用途只决定「相册用什么方式打开」，不影响扫描结果，改完立即生效，不需要重新扫描。
+`mediaRoots` 的每个条目同时携带目录路径与它的内容属性：`{ "path": "E:\照片", "kind": "photo" }`。`kind` 只有 `photo` 与 `comic` 两种且互斥，决定该目录里的相册与集合按哪种方式浏览、归入哪个工作台。缺省 `kind` 按 `photo` 处理；非法 `kind` 返回 `400 invalid_config`。属性可热更新：它只决定「相册用什么方式打开」与列表归属，不影响扫描结果，改完立即生效，不需要重新扫描。
 
 `mediaRoots` 相对进程 CWD 绝对化、清理路径分隔与 `.`、去空并保序去重，响应和写回 YAML 均使用规范化后的路径，保留首次出现的大小写。Windows 比较时忽略大小写，其他平台区分大小写；不通过解析符号链接或 junction 合并不同路径。仅增加等价写法、重复项或调整顺序时，`mediaRootsChanged=false`，保留现有媒体库、revision 和有效扫描缓存。
 
@@ -121,27 +121,27 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 相册同时返回 `date` 与 `dateSource`。`dateSource` 取值为 `captured` / `folder` / `modified`，服务端按该顺序降级；目录日期只接受 `YYYY`、`YYYY-MM`、`YYYY-MM-DD`、`YYYYMMDD` 或严格的 `YYYY/MM/DD` 路径分段，不会从任意名称子串中猜测。
 
 媒体库浏览只使用下列 revision 分页接口。除 `/api/library/manifest`、
-`/api/library/nodes/query` 与 `/api/albums/:albumId/media` 外，它们都接受可选的
-`kind` 查询参数，取值 `photo` / `comic` / `all`（缺省 `all`，即不过滤）：
+`/api/library/nodes/query` 与 `/api/albums/:albumId/media` 外，它们都接受必填的
+`kind` 查询参数，取值 `photo` / `comic`：
 
-- `GET /api/library/manifest`：返回根列表、扫描时间和相册/集合/标签/告警统计，不包含目录树或媒体数组；`warnings` 最多返回前 100 条脱敏告警详情，完整数量见 `statistics.warningCount`。`statistics.albumCount` 恒为全库相册总数，另带 `photoAlbumCount` 与 `comicAlbumCount` 两个按用途拆分的计数——库规模不随工作台模式跳变。
-- `GET /api/library/activity-summary`：返回当前 revision 的 `albumCount` 与 `unreadCount`，供常驻导航显示未读 badge；不返回相册清单或活动详情。带 `kind` 时两个计数都收敛到该用途。
-- `GET /api/library/dashboard`：返回首页所需的 `albumCount`、`unreadCount`、最多 6 本 `unread` 相册摘要与全部 `inProgress` 阅读摘要；不返回全量相册列表。每条在读摘要的 `pageCount` 始终以当前扫描结果为准，`mediaKind` 说明这个位置的语义（`photo` 是照片墙里翻到第几张，`image` 是漫画读到第几页）。
-- `GET /api/library/unread?limit=60&cursor=...`：分页返回尚未翻开过的相册摘要；已读和在读相册不会传输。有图片的相册以图片阅读活动判定，纯视频相册以视频播放活动判定（没有图片活动可依）。
-- `GET /api/library/:rootOrCollectionId/children?limit=60&cursor=...`：分页返回直属相册与子集合摘要。集合是导航容器，**不参与用途过滤**，恒返回；其 `albumCount` 恒为全部后代。
-- `GET /api/albums/random?scope=unread`：随机返回一个相册摘要；不传 `scope` 时从全库抽取，`scope=unread` 时只从尚未保存图片阅读活动的相册中抽取。没有匹配相册返回 `404 no_matching_album`。
+- `GET /api/library/manifest`：返回根列表、扫描时间和相册/集合/标签/告警统计，不包含目录树或媒体数组；`warnings` 最多返回前 100 条脱敏告警详情，完整数量见 `statistics.warningCount`。`statistics.albumCount` 恒为全库相册总数，另带 `photoAlbumCount` 与 `comicAlbumCount` 两个按属性拆分的计数——库规模不随工作台模式跳变。
+- `GET /api/library/activity-summary`：返回当前 revision 的 `albumCount` 与 `unreadCount`，供常驻导航显示未读 badge；不返回相册清单或活动详情。两个计数都收敛到 `kind` 指定的属性。
+- `GET /api/library/dashboard`：返回首页所需的 `albumCount`、`unreadCount`、最多 6 本 `unread` 相册摘要与全部 `inProgress` 阅读摘要；不返回全量相册列表。每条在读摘要的 `pageCount` 始终以当前扫描结果为准。阅读进度只属于漫画工作台：`kind=photo` 时 `inProgress` 恒为空。
+- `GET /api/library/unread?limit=60&cursor=...`：分页返回尚未翻开过的相册摘要；已读和在读相册不会传输。有图片的相册以漫画阅读活动判定，纯视频相册以视频播放活动判定（没有阅读活动可依）。未读只统计漫画目录的相册：`kind=photo` 时恒为空。
+- `GET /api/library/:rootOrCollectionId/children?limit=60&cursor=...`：分页返回直属相册与子集合摘要。相册与集合都继承所属目录的属性，因此都参与 `kind` 过滤；属性不匹配的目录返回空页。集合摘要的 `albumCount` 恒为全部后代。
+- `GET /api/albums/random?scope=unread`：随机返回一个相册摘要；只在该属性的相册里抽取，`scope=unread` 时进一步只从未保存阅读活动的相册中抽取。没有匹配相册返回 `404 no_matching_album`。
 - `GET /api/albums/:albumId/media?limit=60&cursor=...`：按统一自然顺序返回媒体；`index` 是相册内总序号，`kindIndex` 是图片或视频各自序号。图片项另带 `width` / `height`（原始像素宽高，未知时为 0），照片墙据此按真实宽高比排布，不必在浏览器里逐张探测。媒体流与工作台模式无关。
 - `POST /api/library/nodes/query`：body 为 `{ "ids": ["a_...", "c_..."] }`，按输入顺序批量解析相册/集合摘要；单批最多 500 项，失效 ID 返回在 `missing` 中。直达链接、收藏与最近浏览都靠它解析摘要，**不受工作台模式影响**。
-- `GET /api/tags?limit=60&cursor=...`：分页返回标签摘要。带 `kind` 时每个标签的 `albumCount` 按该用途重算，该用途下没有相册的标签整个不出现。
+- `GET /api/tags?limit=60&cursor=...`：分页返回标签摘要。每个标签的 `albumCount` 按 `kind` 指定的属性重算，该属性下没有相册的标签整个不出现。
 - `GET /api/tags/:tag/albums?limit=60&cursor=...`：分页返回标签下的相册摘要。`tag` 按单个 URL 路径段编码，服务端只解码一次，支持中文、空格、`+`、`%` 及字面 `%xx`；非法百分号编码返回 `400 invalid_tag`，解码后为空返回 `400 missing_tag`，不存在的标签返回 `404 tag_not_found`。
 
-`kind` 只过滤**相册**：集合与智能标签是导航容器，恒返回。非法取值返回 `400 invalid_kind`。
+`kind` 过滤全部命中：相册与集合按其目录属性归属，标签则按「该属性下是否还有相册」判断——只含漫画的标签不出现在照片工作台的结果里。缺失或非法取值返回 `400 invalid_kind`。
 
 `limit` 默认 60、最大 200。响应统一为 `{ "ok": true, "page": { "revision": 42,
 "items": [], "total": 0, "nextCursor": "..." } }`；manifest 和分页响应都带
 `ETag: W/"library-<revision>"`。游标带签名并绑定资源作用域与 revision，篡改或跨资源
 复用返回 `400 invalid_cursor`，扫描发布新版本后返回 `409 stale_cursor`，客户端应丢弃
-已合并页面并从 manifest 重试。**切换工作台模式后旧游标一律失效**（作用域含用途），
+已合并页面并从 manifest 重试。**切换工作台模式后旧游标一律失效**（作用域含目录属性），
 客户端应从第一页重新拉取。
 
 节点摘要不携带媒体数组。相册摘要通过 `tags: string[]` 返回目录名解析出的全部标签，
@@ -150,10 +150,10 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 相册摘要的 `hasCustomCover` 为 `true` 时表示当前 revision 已应用用户设置的人工封面；
 失效的覆盖记录不会出现在此字段中。
 
-相册摘要另带内容用途三件套：`contentKind` 是当前生效的用途（`photo` 照片墙 /
-`comic` 漫画阅读器），`contentKindDefault` 是取消覆盖后会回落到的用途，
-`contentKindOverridden` 表示用户是否手动切换过这一本。用途决定点击相册后进入
-照片墙还是阅读器，与相册里是图片还是视频无关，也不按图片数量推断。
+节点摘要的 `contentKind` 是该节点的内容属性（`photo` 照片墙 / `comic` 漫画阅读器），
+完全继承自所属媒体根的属性。属性决定点击相册后进入照片墙还是阅读器，也决定它
+出现在哪个工作台；它与相册里是图片还是视频无关，也不按图片数量推断。
+`/api/library/manifest` 的根摘要同样带 `contentKind`。
 
 ### `DELETE /api/library`
 
@@ -161,11 +161,11 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 ## 相册与搜索
 
-### `GET /api/search?q=<keyword>&limit=50&kind=photo|comic|all`
+### `GET /api/search?q=<keyword>&limit=50&kind=photo|comic`
 
 搜索按名称和标签匹配相册、集合和标签，结果中的 `path` 是相册/集合 ID；相册与标签结果可带 `tags: string[]`。标签结果使用 `smart:<tag>` 作为内部标签标识，前端统一转换到 `/tags/<tag>`。搜索条目在每次媒体库 revision 发布时预计算，查询不会递归读取完整目录树。
 
-`kind` 与其它列表接口同义（缺省 `all`），只过滤**相册**命中；集合与智能标签是导航容器，恒返回。
+`kind` 与其它列表接口同义（必填），过滤全部命中：相册与集合按目录属性归属，标签按该属性下是否还有相册判断。
 
 散图（"本目录媒体"）的搜索条目 `name` 是归属目录路径，并带 `virtual: true`：它的展示名与同名集合完全一致，前端据此把类型标签显示成"本目录媒体"而不是"文件夹"。
 
@@ -176,21 +176,6 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 ### `DELETE /api/albums/:albumId/cover`
 
 清除自定义封面并恢复扫描器默认封面。
-
-### `GET /api/albums/:albumId/content-kind`
-
-返回这本相册的内容用途：`{ "ok": true, "contentKind": "photo", "contentKindDefault": "photo", "contentKindOverridden": false }`。
-
-### `PUT /api/albums/:albumId/content-kind`
-
-body 为 `{ "kind": "photo" | "comic" }`。写入相册级覆盖并立即生效：用途只影响「这本相册
-用什么方式打开」，不影响扫描结果，因此覆盖在重扫后依然保留。切换用途会清除这本相册在
-另一种用途下的进度记录，避免「照片看到第 12 张」被当成「漫画读到第 12 页」。
-非法 `kind` 返回 `400 invalid_content_kind`。
-
-### `DELETE /api/albums/:albumId/content-kind`
-
-撤销相册级覆盖，回落到媒体根默认值（没有则回落到全局默认值 `defaultContentKind`）。
 
 ## 媒体、缩略图与视频
 
@@ -303,28 +288,28 @@ body 为 `{ "kind": "photo" | "comic" }`。写入相册级覆盖并立即生效�
 偏好响应中的 `favorites`、`history` 以及清理响应中的 `removed` 始终为数组；没有条目时返回 `[]`，不返回 `null`。删除最后一个收藏、清空最近访问和无变化清理同样遵循此约定。
 
 - `GET /api/prefs`、`PATCH /api/prefs`：读取或修改界面偏好。高频媒体活动不再混入偏好响应。
-  `appMode` 是全局工作台模式，取值 `photo` / `comic` / `all`（缺省 `photo`），决定列表呈现哪一类相册；
-  非法值返回 `400 invalid_app_mode`。它与相册级的 `contentKind` 正交：模式只过滤列表，
-  不改变任何一本相册自己的打开方式。
+  `appMode` 是全局工作台模式，取值 `photo` / `comic`（缺省 `photo`），决定列表呈现哪一类相册；
+  非法值返回 `400 invalid_app_mode`。两个模式互斥且完整覆盖媒体库：目录属性把媒体库分成
+  照片与漫画两半，工作台一次只面对其中一半。
 - `GET /api/favorites`：返回 `{ "favorites": ["<resourceId>"] }`。
 - `POST /api/favorites`、`DELETE /api/favorites`：body 为 `{ "resourceId": "a_... | c_... | smart:<tag>" }`。
 - `POST /api/favorites/prune`：按当前资源目录移除已失效相册/集合 ID，返回 `{ "removed": ["<resourceId>"] }`，不访问 ID 对应的文件路径；智能标签保留。资源目录尚未完成首次加载时返回 `409`，不会删除收藏。
 - `GET /api/history`、`DELETE /api/history`。
 - `POST /api/history`：body 为 `{ "albumId": "a_...", "name": "...", "imageCount": 42 }`。
 
-媒体活动使用复合标识：漫画阅读为 `albumId + mediaKind=image`，照片浏览为
-`albumId + mediaKind=photo`，视频为 `albumId + mediaKind=video + itemId`。
-漫画页码、照片位置与每个视频的播放位置互不覆盖。
+媒体活动使用复合标识：漫画阅读为 `albumId + mediaKind=image`，视频为
+`albumId + mediaKind=video + itemId`。漫画页码与每个视频的播放位置互不覆盖。
+照片浏览不留进度记录，因此没有 `mediaKind=photo`。
 
-- `GET /api/activity?albumId=<albumId>&mediaKind=image`：读取漫画阅读活动；`mediaKind=photo` 读取照片浏览活动。视频查询还必须传 `itemId=<fileId>`。
-- `PUT /api/activity`：幂等写入单条活动。漫画 body 为 `{ "albumId": "a_...", "mediaKind": "image", "pageIndex": 12, "pageCount": 30 }`；照片 body 把 `mediaKind` 换成 `photo`（`pageIndex` 是最后看到的那一张）；视频 body 为 `{ "albumId": "a_...", "mediaKind": "video", "itemId": "f_...", "positionMs": 42000, "durationMs": 120000 }`。
+- `GET /api/activity?albumId=<albumId>&mediaKind=image`：读取漫画阅读活动。视频查询还必须传 `itemId=<fileId>`。
+- `PUT /api/activity`：幂等写入单条活动。漫画 body 为 `{ "albumId": "a_...", "mediaKind": "image", "pageIndex": 12, "pageCount": 30 }`；视频 body 为 `{ "albumId": "a_...", "mediaKind": "video", "itemId": "f_...", "positionMs": 42000, "durationMs": 120000 }`。
 - `POST /api/activity/query`：body 为 `{ "items": [{ "albumId": "a_...", "mediaKind": "image" }] }`，按精确标识批量读取，返回 `{ "activities": [], "count": 0 }`。
 - `PUT /api/activity/batch`：body 为 `{ "activities": [...] }`，整批校验后一次原子落盘；单批最多 10000 条。
 - `DELETE /api/activity?...`：幂等删除单条；`DELETE /api/activity/all` 清空全部图片和视频活动。
 
-`/api/library/activity-summary`、`/api/library/dashboard` 与 `/api/library/unread` 均按相册的实际媒体判定未读：有图片的相册按它的内容用途选择活动类型（漫画相册看 `image`，照片相册看 `photo`），纯视频相册没有图片活动，改以是否存在视频播放活动为准——播放过就不再计入未读，避免视频相册永久停留在未读列表。两种用途拆分之前的所有相册都只有 `image` 活动，这些旧记录仍然算作「翻过」，不会让已读相册重新变成未读。前者用于常驻导航，仪表盘用于首页，专用分页端点用于完整未读列表。
+`/api/library/activity-summary`、`/api/library/dashboard` 与 `/api/library/unread` 均按漫画阅读活动判定未读：有图片的漫画相册看它的 `image` 活动，纯视频的漫画相册改以是否存在视频播放活动为准——播放过就不再计入未读，避免视频相册永久停留在未读列表。前者用于常驻导航，仪表盘用于首页，专用分页端点用于完整未读列表。
 
-仪表盘的 `inProgress` 位置按相册当前用途挑选：漫画相册只认 `image` 活动；照片相册优先 `photo` 活动，缺少时回退到用途拆分之前遗留的 `image` 记录。回退位置仍然按「照片浏览」语义上报（`mediaKind: "photo"`），前端不会把漫画页码当成照片位置显示。
+未读与在读都属于漫画工作台的概念：照片目录下的相册不记录阅读进度，因此 `kind=photo` 时三个接口的未读计数恒为 0、`inProgress` 恒为空。仪表盘的 `inProgress` 只上报漫画相册的阅读页码。
 
 响应中 `status` 为 `in_progress` / `completed`，由服务端按实际位置派生。图片到达
 `pageCount - 1` 完成；视频到达 98% 完成。`/api/progress` 不提供。
