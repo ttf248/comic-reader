@@ -2,9 +2,11 @@ import { describe, it, expect } from "vitest";
 import {
   extractYear,
   groupAlbumsAndCollectionsByYear,
+  groupLibraryNodesBySeries,
   type AlbumLike,
   type CollectionLike,
 } from "./albumGrouping";
+import type { LibraryNodeSummary } from "../api/library";
 
 describe("extractYear", () => {
   it("parses a 4-digit year in 1900-2100 range", () => {
@@ -210,3 +212,46 @@ function mk(
     contentKind: "photo" as const,
   };
 }
+
+describe("groupLibraryNodesBySeries", () => {
+  const node = (
+    id: string,
+    kind: "album" | "collection",
+    name: string,
+    extra: Partial<LibraryNodeSummary> = {},
+  ): LibraryNodeSummary => ({
+    id,
+    kind,
+    name,
+    displayName: name,
+    coverImages: [],
+    contentKind: "comic",
+    ...extra,
+  });
+
+  it("集合即作品，卷多的排前面", () => {
+    const groups = groupLibraryNodesBySeries([
+      node("c_small", "collection", "短篇", { albumCount: 2 }),
+      node("c_big", "collection", "长篇", { albumCount: 30 }),
+    ]);
+    expect(groups.map((g) => g.label)).toEqual(["长篇", "短篇"]);
+    expect(groups[0].count).toBe(30);
+    // 链接落在漫画侧：作品属于漫画工作台。
+    expect(groups[0].to).toBe("/comic/albums/c_big");
+  });
+
+  it("直挂根下的卷归到未归入作品，不丢弃", () => {
+    const groups = groupLibraryNodesBySeries([
+      node("c_big", "collection", "长篇", { albumCount: 30 }),
+      node("a_1", "album", "散卷", { coverImage: "f_1" }),
+      node("a_2", "album", "另一卷"),
+    ]);
+    expect(groups.map((g) => g.label)).toEqual(["长篇", "未归入作品"]);
+    expect(groups[1].count).toBe(2);
+    expect(groups[1].coverPath).toBe("f_1");
+  });
+
+  it("空输入返回空数组", () => {
+    expect(groupLibraryNodesBySeries([])).toEqual([]);
+  });
+});

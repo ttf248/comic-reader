@@ -6,7 +6,7 @@ import { useUIStore } from "../store/uiStore";
 import { useFavorites } from "../hooks/useFavorites";
 import { useImageActivities } from "../hooks/useImageActivity";
 import { useAppMode } from "../hooks/useAppMode";
-import { workbenchCopy } from "../utils/workbench";
+import { workbenchCopy, coverRatioForMode } from "../utils/workbench";
 import { useGalleryContextSync } from "../hooks/useGalleryContextSync";
 import AlbumGrid, { type CardData } from "../components/album/AlbumGrid";
 import AlbumCard from "../components/album/AlbumCard";
@@ -273,7 +273,8 @@ export default function Favorites() {
                       alwaysShowFavorite
                       /* 整排都是未读，"新"角标是噪音 */
                       showUnreadBadge={false}
-                      coverRatio="2/3"
+                      /* 画幅跟着工作台：照片方形，漫画竖版 */
+                      coverRatio={coverRatioForMode(mode)}
                     />
                   </div>
                 ))}
@@ -325,7 +326,6 @@ export default function Favorites() {
             <AlbumGrid
               items={filtered}
               variant={viewMode}
-              coverRatio="2/3"
               cardMinWidth={224}
             />
           </div>

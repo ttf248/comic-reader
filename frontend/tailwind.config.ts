@@ -43,6 +43,8 @@ export default {
         "feature-bg": tokenColor("feature-bg"),
         "feature-fg": tokenColor("feature-fg"),
         "feature-muted": tokenColor("feature-muted"),
+        // 工作台模式的点缀色：照片侧冷、漫画侧暖，随 <html data-mode> 切换。
+        "mode-tint": tokenColor("mode-tint"),
         "reader-bg": tokenColor("reader-bg"),
         "reader-panel": tokenColor("reader-panel"),
         "overlay-bg": tokenColor("overlay-bg"),

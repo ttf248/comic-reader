@@ -1,0 +1,41 @@
+import { useState } from "react";
+import { thumbUrl } from "../../api/thumbs";
+import { previewUrl } from "../../api/images";
+import { FolderIcon } from "../common/Icon";
+import type { CardData } from "../album/AlbumGrid";
+
+/**
+ * 封面图。
+ *
+ * 两个工作台的首页 hero 都要显示封面，不各写一份：
+ * 图片按原比例裁切（object-cover），视频保留完整画面（object-contain），
+ * 大图用预览尺寸而不是缩略图。
+ */
+export default function Cover({
+  card,
+  large = false,
+}: {
+  card: CardData;
+  large?: boolean;
+}) {
+  const [failedSource, setFailedSource] = useState<string | null>(null);
+  const src = card.coverPath
+    ? large && card.coverKind !== "video"
+      ? previewUrl(card.coverPath, 640)
+      : thumbUrl(card.coverPath)
+    : "";
+  return src && src !== failedSource ? (
+    <img
+      src={src}
+      alt=""
+      loading={large ? "eager" : "lazy"}
+      decoding="async"
+      onError={() => setFailedSource(src)}
+      className={`w-full h-full ${card.coverKind === "video" ? "object-contain" : "object-cover object-[50%_30%]"}`}
+    />
+  ) : (
+    <span className="w-full h-full flex items-center justify-center text-white/70">
+      <FolderIcon size={large ? 28 : 16} />
+    </span>
+  );
+}

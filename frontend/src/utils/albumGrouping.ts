@@ -260,3 +260,66 @@ export function groupLibraryNodesByYear(
   }
   return groupAlbumsAndCollectionsByYear(albums, collections);
 }
+
+/**
+ * 一组「按连载分」的漫画。
+ *
+ * 与年份分组不同：漫画常常不以年份命名，一部作品横跨好几年，
+ * 按年份分组会把同一部作品拆散在好几处。集合就是作品 ——
+ * 服务端把集合的成员聚合成一份「作品数」，这里直接按集合分组。
+ */
+export interface SeriesGroup {
+  /** 稳定键：集合 id；散图那一组用固定值。 */
+  key: string;
+  /** 展示用的系列名。 */
+  label: string;
+  /** 进入该系列的链接。 */
+  to: string;
+  /** 该系列的卷数。 */
+  count: number;
+  /** 封面（可为空）。 */
+  coverPath?: string;
+}
+
+/**
+ * 按「所属连载」给漫画分组。
+ *
+ * 根目录下的集合就是一部作品；直接挂在根下的卷没有作品归属，
+ * 归到「未归入作品」一组，不丢弃。
+ */
+export function groupLibraryNodesBySeries(
+  nodes: LibraryNodeSummary[],
+): SeriesGroup[] {
+  const groups: SeriesGroup[] = [];
+  let looseCount = 0;
+  let looseCover: string | undefined;
+  let looseTo = "";
+  for (const node of nodes) {
+    if (node.kind === "collection") {
+      groups.push({
+        key: node.id,
+        label: node.displayName || node.name,
+        to: albumRoute(node.contentKind, node.id),
+        count: node.albumCount ?? 0,
+        coverPath: node.coverImage ?? node.coverImages?.[0],
+      });
+      continue;
+    }
+    // 直挂根下的卷：没有上级集合。
+    looseCount += 1;
+    if (!looseCover && node.coverImage) looseCover = node.coverImage;
+    if (!looseTo) looseTo = albumRoute(node.contentKind, node.id);
+  }
+  if (looseCount > 0) {
+    groups.push({
+      key: "",
+      label: "未归入作品",
+      to: looseTo,
+      count: looseCount,
+      coverPath: looseCover,
+    });
+  }
+  // 卷多的作品排前面。
+  groups.sort((a, b) => b.count - a.count);
+  return groups;
+}

@@ -76,6 +76,8 @@ export interface CardData {
    * 进度与「已读完」只在漫画属性下出现。
    */
   contentKind?: ContentKind;
+  /** 所属系列（漫画侧按连载分组用）：相册直接上级集合的名字。 */
+  parentName?: string;
 }
 
 interface Props {
@@ -110,13 +112,14 @@ interface Props {
   alwaysShowFavorite?: boolean;
 }
 
-export type CoverRatio = "4/5" | "2/3" | "16/9" | "4/3";
+export type CoverRatio = "4/5" | "2/3" | "16/9" | "4/3" | "1/1";
 
 const COVER_RATIO_CLASS: Record<CoverRatio, string> = {
   "4/5": "aspect-[4/5]",
   "2/3": "aspect-[2/3]",
   "16/9": "aspect-video",
   "4/3": "aspect-[4/3]",
+  "1/1": "aspect-square",
 };
 
 // 通用卡片：网格（统一 4:5 封面）/ 列表（横向缩略图 + 元数据）。

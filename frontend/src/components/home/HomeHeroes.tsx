@@ -1,18 +1,16 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { Link } from "react-router-dom";
-import { thumbUrl } from "../../api/thumbs";
-import { previewUrl } from "../../api/images";
 import { useFavorites } from "../../hooks/useFavorites";
 import { decodeFavPath, recentsRoute, unreadRoute } from "../../utils/path";
 import { readingPercent } from "../../utils/continueReading";
 import { comicCopy } from "../../utils/workbench";
 import AlbumCard from "../album/AlbumCard";
 import type { CardData } from "../album/AlbumGrid";
+import Cover from "./Cover";
 import {
   ArrowRightLineIcon,
   CheckIcon,
   CloseIcon,
-  FolderIcon,
   ShuffleIcon,
 } from "../common/Icon";
 
@@ -176,29 +174,6 @@ export function ContinueHero({
         </Link>
       )}
     </section>
-  );
-}
-
-function Cover({ card, large = false }: { card: CardData; large?: boolean }) {
-  const [failedSource, setFailedSource] = useState<string | null>(null);
-  const src = card.coverPath
-    ? large && card.coverKind !== "video"
-      ? previewUrl(card.coverPath, 640)
-      : thumbUrl(card.coverPath)
-    : "";
-  return src && src !== failedSource ? (
-    <img
-      src={src}
-      alt=""
-      loading={large ? "eager" : "lazy"}
-      decoding="async"
-      onError={() => setFailedSource(src)}
-      className={`w-full h-full ${card.coverKind === "video" ? "object-contain" : "object-cover object-[50%_30%]"}`}
-    />
-  ) : (
-    <span className="w-full h-full flex items-center justify-center text-white/70">
-      <FolderIcon size={large ? 28 : 16} />
-    </span>
   );
 }
 

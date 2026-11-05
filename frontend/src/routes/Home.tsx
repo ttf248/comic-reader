@@ -15,7 +15,13 @@ import { ListFilterBar } from "../components/common/ListFilterBar";
 import EmptyState from "../components/common/EmptyState";
 import ViewedSortNotice from "../components/common/ViewedSortNotice";
 import YearTimeline from "../components/home/YearTimeline";
+import SeriesTimeline from "../components/home/SeriesTimeline";
 import { ContinueHero, UnreadHero } from "../components/home/HomeHeroes";
+import {
+  RecentlyAddedHero,
+  SerendipityHero,
+} from "../components/home/PhotoHeroes";
+import { useSerendipityAlbum } from "../hooks/useSerendipityAlbum";
 import { useUIStore } from "../store/uiStore";
 import { useAppMode } from "../hooks/useAppMode";
 import { comicCopy, workbenchCopy } from "../utils/workbench";
@@ -24,10 +30,12 @@ import { continueReadingTarget } from "../utils/continueReading";
 import { compareDatesDesc } from "../utils/date";
 import type { GalleryContextEntry } from "../utils/galleryContext";
 import {
+  groupLibraryNodesBySeries,
   groupLibraryNodesByYear,
+  type SeriesGroup,
   type YearGroup,
 } from "../utils/albumGrouping";
-import { useLibraryDashboard, useLibraryOverview } from "../hooks/useLibrary";
+import { useLibraryDashboard, useLibraryOverview, useLibraryRecentAlbums } from "../hooks/useLibrary";
 import {
   libraryOverviewCards,
   nodeSummaryToCard,
@@ -82,6 +90,15 @@ export default function Home() {
     [dashboard, isComic],
   );
   const unreadCount = isComic ? (dashboard?.unreadCount ?? 0) : 0;
+  // 照片侧的首屏专区：最近加入 + 随手看看。它们与漫画侧的「继续阅读 /
+  // 未读」一一对应，但内容完全不同。
+  const recentAlbums = useLibraryRecentAlbums(mode, 8, !isComic);
+  const serendipity = useSerendipityAlbum(!isComic);
+  const recentItems = useMemo(
+    () => recentAlbums.data?.page.items ?? [],
+    [recentAlbums.data],
+  );
+  const recentTotal = recentAlbums.data?.page.total ?? recentItems.length;
   const dashboardProgressByID = useMemo(
     () =>
       new Map(
@@ -216,6 +233,13 @@ export default function Home() {
     [overview.nodes],
   );
 
+  // 漫画侧按连载分组：漫画常常不以年份命名，按年份分会把同一部作品
+  // 拆散在好几处。照片侧不分组 —— 照片的天然维度是时间。
+  const seriesGroups = useMemo<SeriesGroup[]>(
+    () => (isComic ? groupLibraryNodesBySeries(overview.nodes) : []),
+    [overview.nodes, isComic],
+  );
+
   // 切换视图到 collection/smart 时清掉 yearFilter（年份只对 album 有意义）
   useEffect(() => {
     if (yearFilter !== null && view !== "all" && view !== "album") {
@@ -321,6 +345,8 @@ export default function Home() {
     dashboardQuery.isLoading ||
     (!manifest && !!(sse.isRunning || sse.scanId));
   const hasContent = !!manifest && cards.length > 0;
+  // 漫画侧多一条「作品」索引，章节序号因此往后挪一位。
+  const hasSeriesIndex = hasContent && isComic && seriesGroups.length > 0;
 
   // 主 CTA：有进度 → 继续上次；否则 → 随机翻翻
   const primaryAlbum = inProgressAll[0];
@@ -440,11 +466,43 @@ export default function Home() {
         </div>
       )}
 
-      {/* === 时间线（仅当有内容时显示） === */}
-      {hasContent && yearGroups.length > 0 && (
+      {/* 照片侧的首屏专区：与漫画侧的「继续阅读 / 未读」位置对齐，
+          内容却是照片自己的 —— 最近加入与随手看看。 */}
+      {hasContent &&
+        !isComic &&
+        (recentItems.length > 0 || serendipity.album !== null) && (
+          <div className="page-shell">
+            <div className="home-overview">
+              {recentItems.length > 0 && (
+                <RecentlyAddedHero items={recentItems} total={recentTotal} />
+              )}
+              <SerendipityHero
+                album={serendipity.album}
+                isLoading={serendipity.isLoading}
+                onReshuffle={serendipity.reshuffle}
+              />
+            </div>
+          </div>
+        )}
+
+      {/* === 索引条 ===
+          漫画多一条「作品」索引：漫画常常不以年份命名，一部作品横跨
+          好几年，按年份分会把同一部作品拆散。年份索引两边都留着 ——
+          它筛的是下方网格，不只服务索引条本身。 */}
+      {hasContent && isComic && seriesGroups.length > 0 && (
         <section className="page-shell pt-9">
           <div className="section-heading">
             <span className="section-index">01</span>
+            <h2 className="section-title">作品</h2>
+            <span className="section-meta">按作品浏览</span>
+          </div>
+          <SeriesTimeline groups={seriesGroups} />
+        </section>
+      )}
+      {hasContent && yearGroups.length > 0 && (
+        <section className="page-shell pt-9">
+          <div className="section-heading">
+            <span className="section-index">{isComic ? "02" : "01"}</span>
             <h2 className="section-title">时间线</h2>
             <span className="section-meta">按年份浏览</span>
           </div>
@@ -459,7 +517,7 @@ export default function Home() {
       {(hasContent || isLoadingInitial) && (
         <section ref={gridRef} className="page-shell pt-10 pb-4 scroll-mt-6">
           <div className="section-heading">
-            <span className="section-index">02</span>
+            <span className="section-index">{hasSeriesIndex ? "03" : "02"}</span>
             <h2 className="section-title">
               {yearFilterActive ? copy.yearSectionTitle : copy.sectionTitle}
             </h2>

@@ -1,6 +1,7 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import AlbumGrid, { type CardData } from "./AlbumGrid";
+import { useAppModeStore } from "../../store/appModeStore";
 import type { ReactNode } from "react";
 
 const virtuoso = vi.hoisted(() => ({
@@ -123,15 +124,30 @@ describe("AlbumGrid", () => {
     ).toBe(true);
     unmount();
 
-    // 默认使用横幅照片卡，收藏可独立选择海报画幅。
+    // 不传画幅时按工作台取默认：照片侧方形（展陈墙），漫画侧竖版（书脊）。
     virtuoso.grid.mockClear();
     albumCardMock.props.length = 0;
+    act(() => {
+      useAppModeStore.setState({ preference: "photo", hydrated: true });
+    });
     render(<AlbumGrid items={cards} variant="grid" />);
     props = virtuoso.grid.mock.calls[0]?.[0] as { listClassName: string };
     expect(props.listClassName).toContain("library-grid");
     expect(
       albumCardMock.props.every(
-        (p) => (p as { coverRatio?: string }).coverRatio === "4/3",
+        (p) => (p as { coverRatio?: string }).coverRatio === "1/1",
+      ),
+    ).toBe(true);
+
+    virtuoso.grid.mockClear();
+    albumCardMock.props.length = 0;
+    act(() => {
+      useAppModeStore.setState({ preference: "comic", hydrated: true });
+    });
+    render(<AlbumGrid items={cards} variant="grid" />);
+    expect(
+      albumCardMock.props.every(
+        (p) => (p as { coverRatio?: string }).coverRatio === "2/3",
       ),
     ).toBe(true);
   });

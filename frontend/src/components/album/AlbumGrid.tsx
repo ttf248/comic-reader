@@ -12,7 +12,9 @@ import AlbumContextMenu from "./AlbumContextMenu";
 import PropertiesDialog from "../common/PropertiesDialog";
 import { useFavorites } from "../../hooks/useFavorites";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
+import { useAppMode } from "../../hooks/useAppMode";
 import { favoriteResourceId } from "../../utils/path";
+import { coverRatioForMode } from "../../utils/workbench";
 import { useUIStore, type ViewMode } from "../../store/uiStore";
 
 export type { CardData } from "./AlbumCard";
@@ -25,7 +27,12 @@ interface Props {
   showLastSeen?: boolean;
   /** 是否显示「新」角标（整页都是未读的列表关掉） */
   showUnreadBadge?: boolean;
-  /** 当前调用方选择的封面画幅，可随页面目标与陈列方式调整。 */
+  /**
+   * 当前调用方选择的封面画幅。
+   *
+   * 不传时按工作台取默认值：照片侧方形（展陈墙），漫画侧竖版（书脊）。
+   * 调用方显式传值时以此为准（如收藏页的密集陈列）。
+   */
   coverRatio?: CoverRatio;
   /** 网格列宽下限。越大越疏朗。 */
   cardMinWidth?: 164 | 224;
@@ -62,7 +69,7 @@ export default function AlbumGrid({
   variant = "grid",
   showLastSeen,
   showUnreadBadge = true,
-  coverRatio = "4/3",
+  coverRatio,
   cardMinWidth = 164,
 }: Props) {
   const [menu, setMenu] = useState<{
@@ -92,6 +99,10 @@ export default function AlbumGrid({
   const veryWide = useMediaQuery(VERY_WIDE_QUERY);
 
   const { favorites } = useFavorites();
+
+  // 封面画幅按工作台取默认：照片是方的，漫画是竖的。
+  const { mode: workbench } = useAppMode();
+  const ratio = coverRatio ?? coverRatioForMode(workbench);
 
   // 当前提供标准与宽松两套照片网格，断点由语义样式统一维护。
   const gridColsClass =
@@ -123,7 +134,7 @@ export default function AlbumGrid({
         variant={mode}
         showLastSeen={showLastSeen}
         showUnreadBadge={showUnreadBadge}
-        coverRatio={coverRatio}
+        coverRatio={ratio}
         onContextMenu={(e) => {
           e.preventDefault();
           setMenu({ x: e.clientX, y: e.clientY, item: it });

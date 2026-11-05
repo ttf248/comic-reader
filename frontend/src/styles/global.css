@@ -149,6 +149,34 @@
     color: var(--feature-muted);
     font-size: 12.5px;
   }
+  /* 照片侧的「随手看看」：与漫画的阅读台共用面板外壳（边框、圆角、
+     feature 底色），但封面是方的、不倾斜 —— 照片是展陈，不是书。 */
+  .serendipity-desk {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    padding: 24px;
+    border: 1px solid var(--border);
+    border-radius: 22px;
+    background: var(--feature-bg);
+    color: var(--feature-fg);
+  }
+  .serendipity-desk__feature {
+    display: grid;
+    grid-template-columns: minmax(0, 132px) minmax(0, 1fr);
+    align-items: center;
+    gap: clamp(16px, 2vw, 24px);
+    padding-block: 20px;
+  }
+  .serendipity-cover {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+    border-radius: 12px;
+    background: var(--bg-media);
+    box-shadow: var(--shadow-sm);
+  }
   .reading-queue {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -201,6 +229,11 @@
     gap: 18px 14px;
   }
   .home-overview > .discovery-panel:only-child .discovery-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  /* 宽栏里的展陈墙：照片侧的「最近加入」占主栏，四张一排才像一面照片墙，
+     两张一排会变成两张巨幅海报，反而不是展陈。 */
+  .discovery-grid--wall {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
   .section-heading {
@@ -503,7 +536,35 @@
     .reading-desk__title {
       font-size: 22px;
     }
-    .reading-queue {
+    /* 照片侧的「随手看看」：与漫画的阅读台共用面板外壳（边框、圆角、
+     feature 底色），但封面是方的、不倾斜 —— 照片是展陈，不是书。 */
+  .serendipity-desk {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    padding: 24px;
+    border: 1px solid var(--border);
+    border-radius: 22px;
+    background: var(--feature-bg);
+    color: var(--feature-fg);
+  }
+  .serendipity-desk__feature {
+    display: grid;
+    grid-template-columns: minmax(0, 132px) minmax(0, 1fr);
+    align-items: center;
+    gap: clamp(16px, 2vw, 24px);
+    padding-block: 20px;
+  }
+  .serendipity-cover {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+    border-radius: 12px;
+    background: var(--bg-media);
+    box-shadow: var(--shadow-sm);
+  }
+  .reading-queue {
       grid-template-columns: 1fr;
       gap: 14px;
     }

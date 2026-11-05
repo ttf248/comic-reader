@@ -75,8 +75,34 @@ export interface ComicCopy extends WorkbenchCopy {
   unreadEmpty: string;
 }
 
+/**
+ * 照片工作台专有的文案。
+ *
+ * 照片没有进度与未读，但同样有「下一步可以做什么」：
+ * 最近加入的照片与随手看看的一本，是它与漫画侧对称的首屏专区。
+ */
+export interface PhotoCopy extends WorkbenchCopy {
+  /** 「最近加入」专区的标题。 */
+  recentlyAddedTitle: string;
+  /** 该专区的眉标。 */
+  recentlyAddedEyebrow: string;
+  /** 该专区的计数单位。 */
+  recentlyAddedCountLabel: string;
+  /** 「随手看看」专区的标题。 */
+  serendipityTitle: string;
+  /** 该专区的提示语。 */
+  serendipityHint: string;
+  /** 换一本的按钮文案。 */
+  serendipityButton: string;
+  /** 换一本进行中的文案。 */
+  serendipityLoading: string;
+  /** 打开这本的按钮文案。 */
+  serendipityOpenButton: string;
+  /** 照片张数的单位。 */
+  photoCountLabel: string;
+}
 
-const PHOTO: WorkbenchCopy = {
+const PHOTO: PhotoCopy = {
   libraryTitle: "照片库",
   libraryEyebrow: "你的照片",
   libraryDescription: "照片、故事与每一次重逢",
@@ -90,6 +116,15 @@ const PHOTO: WorkbenchCopy = {
   favoritesTitle: "我收藏的照片",
   favoritesEmpty: "还没有收藏照片",
   randomLabel: "随机翻翻",
+  recentlyAddedTitle: "最近加入",
+  recentlyAddedEyebrow: "刚进门的照片",
+  recentlyAddedCountLabel: "本新照片",
+  serendipityTitle: "随手看看",
+  serendipityHint: "不一定是你在找的那本",
+  serendipityButton: "换一本",
+  serendipityLoading: "找一本…",
+  serendipityOpenButton: "打开看看",
+  photoCountLabel: "张",
 };
 
 const COMIC: ComicCopy = {
@@ -136,6 +171,16 @@ export function collectionUnit(mode: "photo" | "comic"): string {
   return mode === "comic" ? "卷" : "本";
 }
 
+/**
+ * 封面卡片的默认画幅。
+ *
+ * 照片是方的（展陈墙，1:1）；漫画是竖的（书脊，2:3）。
+ * 两个工作台看起来像两套产品，这条就是其中最直观的一条。
+ */
+export function coverRatioForMode(mode: "photo" | "comic"): "1/1" | "2/3" {
+  return mode === "comic" ? "2/3" : "1/1";
+}
+
 /** 返回某个工作台模式对应的文案。 */
 export function workbenchCopy(mode: AppMode): WorkbenchCopy {
   return mode === "comic" ? COMIC : PHOTO;
@@ -151,3 +196,11 @@ export function comicCopy(): ComicCopy {
   return COMIC;
 }
 
+/**
+ * 照片工作台的专有文案。
+ *
+ * 与漫画文案一样不随模式切换：这些措辞只出现在照片工作台的专有区块里。
+ */
+export function photoCopy(): PhotoCopy {
+  return PHOTO;
+}

@@ -88,6 +88,13 @@ export interface LibraryNodeSummary {
    * 漏设会在编译期暴露，而不是让某本漫画悄悄少一根进度条。
    */
   contentKind: ContentKind;
+  /**
+   * 所属系列：相册直接上级集合的名字。
+   *
+   * 漫画常常不以年份命名，按年份分组会把它们全塞进「其他」；
+   * 所属系列是漫画侧更自然的分组依据。没有上级集合时为空。
+   */
+  parentName?: string;
 }
 
 export interface LibraryMediaItem {
