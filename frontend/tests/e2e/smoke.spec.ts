@@ -397,7 +397,12 @@ test("两侧的措辞与计数单位各归各", async ({ page }) => {
   await scannedNodes(page.request, "photo");
 
   await page.goto("/photo");
-  const photoCard = page.getByRole("link", { name: /打开相册/ }).first();
+  // 取一张卡片上的链接，而不是页面上第一个「打开相册」链接：首屏专区
+  // 里也有指向相册的链接（随手看看的封面），它不是卡片，没有悬停预览。
+  const photoCard = page
+    .getByTestId("album-card")
+    .first()
+    .getByRole("link", { name: /打开相册/ });
   await expect(photoCard).toBeVisible();
   await photoCard.evaluate((el) => el.scrollIntoView({ block: "center" }));
   await photoCard.hover();
@@ -412,7 +417,10 @@ test("两侧的措辞与计数单位各归各", async ({ page }) => {
   await setWorkbenchMode(page.request, "comic");
   await scannedNodes(page.request, "comic");
   await page.goto("/comic");
-  const comicCard = page.getByRole("link", { name: /打开相册/ }).first();
+  const comicCard = page
+    .getByTestId("album-card")
+    .first()
+    .getByRole("link", { name: /打开相册/ });
   await expect(comicCard).toBeVisible();
   await comicCard.evaluate((el) => el.scrollIntoView({ block: "center" }));
   await comicCard.hover();
@@ -4784,7 +4792,12 @@ test("时间线年份卡的筛选按钮可访问名不与卡片本身混淆", as
 
 test("卡片悬停预览完整落在视口内，不被视口下缘裁掉", async ({ page }) => {
   await page.goto("/");
-  const card = page.getByRole("link", { name: /打开相册/ }).first();
+  // 明确取一张卡片上的链接：首屏专区里也有指向相册的链接（随手看看的
+  // 封面），它不是卡片，没有悬停预览。
+  const card = page
+    .getByTestId("album-card")
+    .first()
+    .getByRole("link", { name: /打开相册/ });
   await expect(card).toBeVisible();
   // 把卡片滚到视口下缘：预览会向下溢出，只有按整体高度夹紧才不会越界。
   await card.evaluate((el) => el.scrollIntoView({ block: "end" }));
@@ -4836,7 +4849,10 @@ test("窄屏下顶栏不横向溢出，筛选标签保持一行", async ({ page 
 
 test("卡片右上角的星标可以直接收藏，且不会跳转", async ({ page, request }) => {
   await page.goto("/");
-  const link = page.getByRole("link", { name: /^打开相册/ }).first();
+  // 明确取一张卡片，而不是页面上第一个「打开相册」链接：首屏专区里也有
+  // 指向相册的链接（随手看看的封面），它不是卡片，也没有星标。
+  const card = page.getByTestId("album-card").first();
+  const link = card.getByRole("link", { name: /^打开相册/ });
   const href = await link.getAttribute("href");
   expect(href).toBeTruthy();
   const albumId = decodeURIComponent(href!.split("/albums/")[1] ?? "");
@@ -4847,7 +4863,7 @@ test("卡片右上角的星标可以直接收藏，且不会跳转", async ({ pa
     /^打开相册“/,
     "",
   ).replace(/”$/, "");
-  const star = page.getByRole("button", {
+  const star = card.getByRole("button", {
     name: `收藏「${title}」`,
     exact: true,
   });
@@ -4866,7 +4882,7 @@ test("卡片右上角的星标可以直接收藏，且不会跳转", async ({ pa
     })
     .toBe(true);
   // 卡片上的星标切换成「取消收藏」。
-  const unfavorite = page.getByRole("button", {
+  const unfavorite = card.getByRole("button", {
     name: `取消收藏「${title}」`,
     exact: true,
   });

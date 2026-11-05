@@ -349,6 +349,7 @@ function GridCard({
       onPointerCancel={onPressEnd}
       onPointerLeave={onPressEnd}
       className="album-tile relative group select-none"
+      data-testid="album-card"
     >
       <Link
         to={data.to}
