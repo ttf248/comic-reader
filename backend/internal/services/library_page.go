@@ -737,6 +737,10 @@ func PageTagAlbums(snapshot CatalogSnapshot, tag string, kind LibraryKindScope, 
 //
 // kind 过滤全部命中：相册与集合继承目录属性，标签则按「该属性下是否还有
 // 相册」判断 —— 一个只含漫画的标签不该出现在照片工作台的搜索结果里。
+//
+// 命中按匹配质量排序后再截断：搜索索引是按目录顺序排的，先截断等于
+// 「前 N 条碰巧命中的」，用户搜「2015」看到的第一条可能是一本只是
+// 恰好待在「2015年」目录下的散图。
 func SearchLibrary(snapshot CatalogSnapshot, query string, kind LibraryKindScope, limit int) []LibrarySearchHit {
 	if !snapshot.Ready() || snapshot.state == nil || snapshot.state.library == nil {
 		return []LibrarySearchHit{}
@@ -745,20 +749,96 @@ func SearchLibrary(snapshot CatalogSnapshot, query string, kind LibraryKindScope
 	if needle == "" || limit <= 0 {
 		return []LibrarySearchHit{}
 	}
-	results := make([]LibrarySearchHit, 0, min(limit, len(snapshot.state.library.search)))
-	for _, hit := range snapshot.state.library.search {
+	scored := make([]scoredSearchHit, 0, len(snapshot.state.library.search))
+	for order, hit := range snapshot.state.library.search {
 		if !searchHitMatchesKind(snapshot, hit, kind) {
 			continue
 		}
-		if !strings.Contains(strings.ToLower(hit.Name), needle) && !containsTag(hit.Tags, needle) {
+		rank, pos, ok := searchHitScore(hit, needle)
+		if !ok {
 			continue
 		}
-		results = append(results, hit)
+		scored = append(scored, scoredSearchHit{hit: hit, rank: rank, pos: pos, order: order})
+	}
+	sort.SliceStable(scored, func(i, j int) bool {
+		left, right := scored[i], scored[j]
+		if left.rank != right.rank {
+			return left.rank < right.rank
+		}
+		if left.pos != right.pos {
+			return left.pos < right.pos
+		}
+		// 同等匹配质量下短名字更可能是用户要找的那本。
+		if len(left.hit.Name) != len(right.hit.Name) {
+			return len(left.hit.Name) < len(right.hit.Name)
+		}
+		return left.order < right.order
+	})
+	results := make([]LibrarySearchHit, 0, min(limit, len(scored)))
+	for _, item := range scored {
+		results = append(results, item.hit)
 		if len(results) == limit {
 			break
 		}
 	}
 	return results
+}
+
+// scoredSearchHit 是一条命中连同它的匹配质量。
+type scoredSearchHit struct {
+	hit   LibrarySearchHit
+	rank  int // 越小越靠前，见 searchHitScore
+	pos   int // 命中位置，越小越靠前
+	order int // 原始顺序，同分时保持稳定
+}
+
+// 匹配质量的档位。
+const (
+	searchRankExact   = 0 // 名字完全等于查询
+	searchRankPrefix  = 1 // 名字以查询开头
+	searchRankContain = 2 // 名字里包含查询
+	searchRankTag     = 3 // 标签命中
+	searchRankPath    = 4 // 只在散图的整条归属路径里命中
+)
+
+// searchHitScore 给一条命中打分，返回档位与命中位置。
+//
+// 散图（虚拟相册）的 Name 是它的归属目录路径，例如
+// 「2015年/南昌大学」。用户找的是「哪一本」，所以命中它自己那一段
+// 目录名才算数；只命中上级目录名（路径里的「2015年」）说明这一本跟
+// 查询没什么关系，只是恰好待在一个同名目录下 —— 那一档排在最后。
+func searchHitScore(hit LibrarySearchHit, needle string) (rank int, pos int, ok bool) {
+	name := strings.ToLower(hit.Name)
+	if hit.Virtual {
+		segment := name
+		if i := strings.LastIndex(segment, "/"); i >= 0 {
+			segment = segment[i+1:]
+		}
+		if idx := strings.Index(segment, needle); idx == 0 {
+			return searchRankPrefix, 0, true
+		} else if idx > 0 {
+			return searchRankContain, idx, true
+		}
+		if idx := strings.Index(name, needle); idx >= 0 {
+			return searchRankPath, idx, true
+		}
+		if containsTag(hit.Tags, needle) {
+			return searchRankTag, 0, true
+		}
+		return 0, 0, false
+	}
+	if name == needle {
+		return searchRankExact, 0, true
+	}
+	if idx := strings.Index(name, needle); idx == 0 {
+		return searchRankPrefix, 0, true
+	} else if idx > 0 {
+		return searchRankContain, idx, true
+	}
+	if containsTag(hit.Tags, needle) {
+		return searchRankTag, 0, true
+	}
+	return 0, 0, false
 }
 
 // searchHitMatchesKind 判断一条命中是否属于当前属性的工作台。
