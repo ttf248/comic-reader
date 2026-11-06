@@ -98,13 +98,6 @@
   .home-overview > :only-child {
     grid-column: 1 / -1;
   }
-  /* 照片侧的两块首屏面板等宽。
-     漫画侧「继续阅读」要放下进度轨道与队列，给宽一点；照片侧的
-     「接着看」只有一本主角 + 三本队列，1.5 倍宽会让主角那一行右侧
-     空出一大片，队列也拉不满，整块读起来是半张空纸。 */
-  :root[data-mode="photo"] .home-overview {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  }
   /* 照片侧首屏的两栏骨架（只在分两栏的断点生效）。
      宽屏：第一行「接着看」+「随手看看」，第二行「最近加入」通栏 ——
      四张方照横贯一行更像一面展陈墙，也不用把窄栏挤成两行。
@@ -114,6 +107,17 @@
      记录时换成「最近加入 → 随手看看」，同样先宽后窄。宽屏与窄屏
      的阅读顺序必须一致，否则同一份内容在不同宽度下读法不同。 */
   @media (min-width: 1280px) {
+    /* 照片侧的两块首屏面板等宽。
+       漫画侧「继续阅读」要放下进度轨道与队列，给宽一点；照片侧的
+       「接着看」只有一本主角 + 三本队列，1.5 倍宽会让主角那一行右侧
+       空出一大片，队列也拉不满，整块读起来是半张空纸。
+
+       这条规则必须待在这个断点里：单列规则（max-width: 1279px）
+       的特异性更低，放在外面会把窄屏压成两栏 —— 窄屏上两块面板
+       并排，标题会被挤成一列竖排的字。 */
+    :root[data-mode="photo"] .home-overview {
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
     .home-overview--with-resume > .home-resume {
       grid-column: 1;
       grid-row: 1;
@@ -318,6 +322,13 @@
     overflow: hidden;
     border-radius: var(--radius-media);
     background: var(--bg-media);
+  }
+  /* 窄屏：队列改成一列。三列并排时每列只剩一百来像素，
+     标题被截成「存…」，计数被折成三行。 */
+  @media (max-width: 639px) {
+    .resume-queue {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
   /* 面板里的卡片墙：两列是默认，四列才像一面照片墙。 */
   .hero-grid {
@@ -1240,6 +1251,13 @@
     .detail-head__cover {
       width: 72px;
       height: 72px;
+    }
+    /* 照片侧的裱框封面在窄屏保留自己的比例与内白：
+       缩成 72px 后四张代表图只剩色块，认不出「里面有什么」。 */
+    .detail-head__cover--print {
+      width: 96px;
+      height: 96px;
+      padding: 6px;
     }
     .detail-head__cover--book {
       width: 76px;
