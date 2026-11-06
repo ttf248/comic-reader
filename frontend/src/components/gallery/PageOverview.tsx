@@ -1,7 +1,7 @@
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Virtuoso } from "react-virtuoso";
 import { thumbUrl } from "../../api/thumbs";
-import { CloseIcon } from "../common/Icon";
+import { CloseIcon, SinglePageIcon } from "../common/Icon";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 
 interface Props {
@@ -44,6 +44,19 @@ export default function PageOverview({
         ? COLUMNS.medium
         : COLUMNS.narrow;
 
+  // 取不到缩略图的页：留住一个空壳，记下来改画页形记号。
+  const [failed, setFailed] = useState<ReadonlySet<string>>(
+    () => new Set<string>(),
+  );
+  const markFailed = useCallback((id: string) => {
+    setFailed((prev) => {
+      if (prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.add(id);
+      return next;
+    });
+  }, []);
+
   const rows = useMemo(() => {
     const list: { key: string; items: { id: string; index: number }[] }[] = [];
     for (let start = 0; start < images.length; start += columns) {
@@ -67,6 +80,11 @@ export default function PageOverview({
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // 换了一本册子，上一本的失败记录就不再作数。
+  useEffect(() => {
+    setFailed(new Set<string>());
+  }, [images]);
+
   return (
     <div
       data-testid="page-overview"
@@ -75,15 +93,18 @@ export default function PageOverview({
       aria-modal="true"
       aria-label="目录"
     >
-      <header className="flex h-12 shrink-0 items-center gap-3 px-4">
-        <h2 className="text-body font-medium text-white/90">目录</h2>
-        <span className="text-meta tabular-nums text-white/55">
+      <header className="flex h-14 shrink-0 items-center gap-3 px-5 border-b border-white/10">
+        <h2 className="text-label font-medium text-white/90">目录</h2>
+        <span className="text-meta tabular-nums text-white/50">
           共 {images.length} 页
         </span>
+        {/* 快捷键提示放在关闭键旁边：目录是按需打开的浮层，
+            用完立刻关掉是常态，怎么关得写在眼前。 */}
+        <span className="ml-auto text-meta text-white/35">T / Esc 关闭</span>
         <button
           type="button"
           onClick={onClose}
-          className="ml-auto inline-flex h-8 w-8 items-center justify-center rounded-md text-white/75 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-white/75 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
           title="关闭目录 (T / Esc)"
           aria-label="关闭目录"
         >
@@ -91,7 +112,7 @@ export default function PageOverview({
         </button>
       </header>
 
-      <div className="min-h-0 flex-1 px-4 pb-4">
+      <div className="min-h-0 flex-1 px-5 pb-5 pt-4">
         <Virtuoso
           data={rows}
           style={{ height: "100%" }}
@@ -108,23 +129,42 @@ export default function PageOverview({
                   key={item.id}
                   type="button"
                   onClick={() => onJump(item.index)}
-                  className={`group relative aspect-[3/4] overflow-hidden rounded border bg-white/5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 ${
+                  className={`group relative aspect-[3/4] overflow-hidden rounded border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80 ${
                     item.index === index
-                      ? "border-white/80"
+                      ? "border-white/90 ring-1 ring-white/30"
                       : "border-white/10 hover:border-white/40"
                   }`}
                   title={`第 ${item.index + 1} 页`}
                   aria-label={`跳到第 ${item.index + 1} 页`}
                   aria-current={item.index === index ? "true" : undefined}
                 >
-                  <img
-                    src={thumbUrl(item.id)}
-                    alt={`第 ${item.index + 1} 页`}
-                    loading="lazy"
-                    decoding="async"
-                    className="h-full w-full object-cover"
-                  />
-                  <span className="absolute bottom-1 right-1 rounded bg-black/65 px-1.5 py-0.5 text-badge tabular-nums text-white/90">
+                  {/* 缩略图取不到时（解码失败、格式不支持）留一块底色和
+                      页形记号 —— 空着的黑格子看着像页面没加载出来。 */}
+                  <span
+                    aria-hidden="true"
+                    className="absolute inset-0 grid place-items-center bg-white/[0.06] text-white/25"
+                  >
+                    <SinglePageIcon size={18} />
+                  </span>
+                  {!failed.has(item.id) && (
+                    <img
+                      src={thumbUrl(item.id)}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      className="relative h-full w-full object-cover"
+                      onError={() => markFailed(item.id)}
+                    />
+                  )}
+                  {/* 当前页的页码反过来印（白底深字）：一屏几十张缩略图
+                      里，只有这一张要能一眼认出来。 */}
+                  <span
+                    className={`absolute bottom-1 right-1 rounded px-1.5 py-0.5 text-badge tabular-nums ${
+                      item.index === index
+                        ? "bg-white text-black"
+                        : "bg-black/65 text-white/90"
+                    }`}
+                  >
                     {item.index + 1}
                   </span>
                 </button>

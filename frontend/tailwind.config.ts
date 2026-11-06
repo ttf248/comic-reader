@@ -33,6 +33,10 @@ export default {
         brand: tokenColor("brand"),
         "brand-soft": tokenColor("brand-soft"),
         "brand-ink": tokenColor("brand-ink"),
+        // 压在品牌色上的文字色。品牌色跟着主题与工作台翻明暗，
+        // 压在它上面的字也要跟着翻 —— 没有这一项，模式切换按钮
+        // 会继承正文色，明亮两套主题下都读不清。
+        "brand-contrast": tokenColor("brand-contrast"),
         "rail-bg": tokenColor("rail-bg"),
         "rail-fg": tokenColor("rail-fg"),
         "rail-muted": tokenColor("rail-muted"),

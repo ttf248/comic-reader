@@ -730,7 +730,9 @@ function ListCard({
             )}
             {isComicAlbum && (
               <>
-                <span className="flex-1 min-w-8 h-[3px] bg-bg-strong rounded-full overflow-hidden">
+                {/* 轨道给固定宽度，不占满整行：一条横贯半屏的空条
+                    读起来是分隔线，不是进度条。 */}
+                <span className="w-20 shrink-0 h-[3px] bg-bg-strong rounded-full overflow-hidden">
                   <span
                     className="block h-full bg-brand"
                     style={{
