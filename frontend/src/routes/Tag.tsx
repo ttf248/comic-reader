@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, Navigate } from "react-router-dom";
 import { useSearchStore } from "../store/searchStore";
 import { useUIStore } from "../store/uiStore";
 import { useFavorites } from "../hooks/useFavorites";
@@ -20,7 +20,7 @@ import type { GalleryContextEntry } from "../utils/galleryContext";
 import { useTagAlbums } from "../hooks/useLibrary";
 import { useAppMode } from "../hooks/useAppMode";
 import { nodeSummaryToCard } from "../utils/libraryCard";
-import { decodePathTail } from "../utils/path";
+import { decodePathTail, homeRoute } from "../utils/path";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import { compareDatesDesc } from "../utils/date";
 import { useViewedSort } from "../hooks/useHistory";
@@ -152,6 +152,12 @@ export default function Tag() {
 
   const cover = albums.length > 0 ? albums[coverIdx % albums.length] : null;
   const isFav = favorites.includes(`smart:${tag}`);
+
+  // 标签页必须带标签名（/tags/<标签>）。只到 /tags 时没有标签可讲，
+  // 回到工作台首页 —— 与其摆一个空的「标签：」，不如给个能逛的地方。
+  if (!tag) {
+    return <Navigate to={homeRoute(mode)} replace />;
+  }
 
   if (albumsQuery.isLoading) {
     return (

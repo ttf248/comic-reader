@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import Tag from "./Tag";
 import { useTagAlbums } from "../hooks/useLibrary";
 import { useFavorites } from "../hooks/useFavorites";
@@ -27,6 +27,13 @@ vi.mock("../components/album/AlbumGrid", () => ({
   ),
 }));
 
+function Location() {
+  const location = useLocation();
+  return (
+    <output data-testid="location">{location.pathname + location.search}</output>
+  );
+}
+
 function renderTag(path = "/tags/%E6%97%85%E8%A1%8C") {
   return render(
     <QueryClientProvider
@@ -35,6 +42,7 @@ function renderTag(path = "/tags/%E6%97%85%E8%A1%8C") {
       }
     >
       <MemoryRouter initialEntries={[path]}>
+        <Location />
         <Routes>
           <Route path="/tags/*" element={<Tag />} />
         </Routes>
@@ -106,6 +114,12 @@ describe("Tag", () => {
     renderTag();
 
     expect(screen.getByText("正在加载标签")).toBeInTheDocument();
+    expect(screen.queryByText("未找到该标签")).not.toBeInTheDocument();
+  });
+
+  it("只到 /tags 时回到工作台首页", () => {
+    renderTag("/tags");
+    expect(screen.getByTestId("location")).toHaveTextContent("/comic");
     expect(screen.queryByText("未找到该标签")).not.toBeInTheDocument();
   });
 

@@ -3178,7 +3178,12 @@ for (const mode of ["api", "missing", "denied"] as const) {
     await page.getByRole("combobox").fill(album.name);
     const { card, dialog } = await openCardProperties(page, album.id);
     // 复制按钮跟在值后面（规格表），不再挂在标签单元格里。
-    const copy = dialog.getByRole("button", { name: "复制名称" });
+    // 它的可访问名会随状态变化（复制名称 → 正在复制… → 已复制 /
+    // 复制失败，重试），定位器必须同时认得这几种名字 —— 只写
+    // 「复制名称」的话，按钮一变名就再也定位不到，断言会误报失败。
+    const copy = dialog.getByRole("button", {
+      name: /^(复制名称|正在复制…|已复制|复制失败，重试)$/,
+    });
     await copy.click();
     if (mode === "denied") {
       await expect(copy).toHaveAccessibleName("复制失败，重试");

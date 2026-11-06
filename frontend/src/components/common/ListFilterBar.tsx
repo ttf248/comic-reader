@@ -76,32 +76,41 @@ export function ListFilterBar({
             </span>
           ) : null}
           <SortMenu value={sortBy} onChange={setSortBy} />
-          <div className="flex items-center border border-border-faint rounded-md overflow-hidden">
+          {/* 网格 / 列表：一条分段控件（跟主题切换同一套语言）。
+              早先两个 30px 的方块各自带一圈边框，激活态只是把底色改成
+              --bg-subtle，在浅色画布上几乎看不出差别 —— 两个图标悬在
+              筛选条右端像两枚散落的方块。现在轨道有一个底，选中的那一段
+              抬起来成为白底深色字。 */}
+          <div
+            role="group"
+            aria-label="视图模式"
+            className="inline-flex items-center shrink-0 rounded-md border border-border bg-bg-subtle/40 overflow-hidden"
+          >
             <button
               onClick={() => setViewMode("grid")}
               title="网格"
               aria-label="网格视图"
               aria-pressed={viewMode === "grid"}
-              className={`inline-flex items-center justify-center w-[30px] h-[30px] transition-colors ${
+              className={`inline-flex items-center justify-center w-[34px] h-[32px] transition-colors ${
                 viewMode === "grid"
-                  ? "bg-bg-subtle text-fg"
+                  ? "bg-bg-elevated text-fg shadow-xs"
                   : "text-fg-subtle hover:text-fg hover:bg-bg-subtle/60"
               }`}
             >
-              <GridIcon size={13} />
+              <GridIcon size={14} />
             </button>
             <button
               onClick={() => setViewMode("list")}
               title="列表"
               aria-label="列表视图"
               aria-pressed={viewMode === "list"}
-              className={`inline-flex items-center justify-center w-[30px] h-[30px] transition-colors ${
+              className={`inline-flex items-center justify-center w-[34px] h-[32px] transition-colors ${
                 viewMode === "list"
-                  ? "bg-bg-subtle text-fg"
+                  ? "bg-bg-elevated text-fg shadow-xs"
                   : "text-fg-subtle hover:text-fg hover:bg-bg-subtle/60"
               }`}
             >
-              <ListIcon size={13} />
+              <ListIcon size={14} />
             </button>
           </div>
         </div>
@@ -236,10 +245,10 @@ function MinImageFilter({
   }
   return (
     <div
-      className={`inline-flex items-center gap-1 h-[30px] px-2 rounded-md border transition-colors ${
+      className={`inline-flex items-center gap-1 h-[34px] px-2.5 rounded-md border transition-colors ${
         active
           ? "border-accent/40 bg-accent-soft text-accent"
-          : "border-border-faint text-fg-muted hover:bg-bg-subtle"
+          : "border-border text-fg-muted hover:bg-bg-subtle"
       }`}
       title="隐藏图数少于 N 的相册(0 = 不过滤)"
     >

@@ -187,6 +187,13 @@ export default function Album() {
       .catch(() => {});
   }, [historyAlbumId, historyAlbumName, historyImageCount, queryClient]);
 
+  // 相册页必须带资源 ID（/albums/<id>）。只到 /albums 时没有具体的东西
+  // 可打开，回到工作台首页 —— 与其摆一个「找不到此文件夹」，不如给个
+  // 能逛的地方。
+  if (!resourceID) {
+    return <Navigate to={homeRoute(mode)} replace />;
+  }
+
   if (isLoading) {
     // 骨架而不是转圈：数据到达后卡片直接落在骨架的位置上，页面不会先
     // 空一段再整块跳出来。

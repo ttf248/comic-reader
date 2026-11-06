@@ -197,6 +197,12 @@ describe("Album", () => {
     expect(screen.getAllByText("2011年")).toHaveLength(1);
   });
 
+  it("只到 /albums 时回到工作台首页", () => {
+    renderAlbum("/albums");
+    expect(screen.getByTestId("location")).toHaveTextContent("/photo");
+    expect(screen.queryByText("找不到此文件夹")).not.toBeInTheDocument();
+  });
+
   it("节点查询未完成时显示加载态", () => {
     vi.mocked(useLibraryNodes).mockReturnValue({
       data: undefined,
