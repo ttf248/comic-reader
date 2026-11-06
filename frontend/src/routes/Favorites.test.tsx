@@ -16,6 +16,7 @@ import {
   useLibraryRecentAlbums,
 } from "../hooks/useLibrary";
 import { useSearchStore } from "../store/searchStore";
+import { useAppModeStore } from "../store/appModeStore";
 import Favorites from "./Favorites";
 
 vi.mock("../api/prefs", () => ({
@@ -78,6 +79,7 @@ function renderFavorites(client = clientForTest()) {
 beforeEach(() => {
   vi.clearAllMocks();
   useSearchStore.getState().reset();
+  useAppModeStore.setState({ preference: "photo", hydrated: true });
   vi.mocked(favoritesApi.list).mockResolvedValue({ favorites: [node.id] });
   vi.mocked(historyApi.list).mockResolvedValue({ history: [] });
   vi.mocked(useLibraryNodes).mockReturnValue({
@@ -117,6 +119,18 @@ beforeEach(() => {
     isFetching: false,
     refetch: vi.fn(),
   } as never);
+});
+
+it("收藏都在另一侧时说清楚在那边，不说失效也不给清理手柄", async () => {
+  // 站在漫画侧看照片工作台的收藏：条目没坏，只是在另一侧。
+  useAppModeStore.setState({ preference: "comic", hydrated: true });
+  renderFavorites();
+  expect(await screen.findByText("收藏都在照片库那边")).toBeInTheDocument();
+  expect(screen.queryByText(/暂时找不到/)).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /清理/ })).not.toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "去照片库看看" }),
+  ).toBeInTheDocument();
 });
 
 it("收藏请求未完成时不显示没有收藏", async () => {

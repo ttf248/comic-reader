@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import type { ListRange } from "react-virtuoso";
-import { beforeEach, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import PhotoWall, { effectiveTargetHeight } from "./PhotoWall";
 
 interface MockRow {

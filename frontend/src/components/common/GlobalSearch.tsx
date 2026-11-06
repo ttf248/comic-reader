@@ -119,7 +119,9 @@ export default function GlobalSearch() {
         <div
           id="global-search-results"
           role="listbox"
-          className="absolute top-full left-0 right-0 mt-1.5 bg-bg-elevated border border-border rounded-lg shadow-lg overflow-hidden z-30 fade-up py-1"
+          /* 结果多时下拉会长到半屏，把整页盖住。限高并自己滚动，
+             搜索框下方始终留得住当前页的上下文。 */
+          className="absolute top-full left-0 right-0 mt-1.5 max-h-[min(60vh,420px)] overflow-y-auto overscroll-contain bg-bg-elevated border border-border rounded-lg shadow-lg z-30 fade-up py-1"
         >
           {hits.map((h, index) => (
             <button

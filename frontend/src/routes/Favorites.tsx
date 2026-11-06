@@ -40,8 +40,11 @@ export default function Favorites() {
   const navigate = useNavigate();
   const viewMode = useUIStore((s) => s.viewMode);
   const pushToast = useUIStore((s) => s.pushToast);
-  const { mode } = useAppMode();
+  const { mode, setMode } = useAppMode();
   const copy = workbenchCopy(mode);
+  // 收藏在另一侧时，指向那一侧的库名与切换动作。
+  const otherMode = mode === "comic" ? "photo" : "comic";
+  const otherLibraryTitle = workbenchCopy(otherMode).libraryTitle;
   const query = useSearchStore((s) => s.query);
   const sortBy = useSearchStore((s) => s.sortBy);
   const minImageCount = useSearchStore((s) => s.minImageCount);
@@ -283,13 +286,13 @@ export default function Favorites() {
           )}
         </>
       ) : cards.length === 0 ? (
-        <EmptyState
-          title={`收藏的 ${favorites.length} 项内容暂时找不到`}
-          description="相册被改名或移动之后，这一条收藏就对不上了。回到主页找到这本相册，重新点一下星标就能再收藏。"
-          icon={<StarIcon size={20} />}
-          action={
-            <div className="flex items-center gap-2.5 flex-wrap justify-center">
-              {missingCount > 0 && (
+        missingCount > 0 ? (
+          <EmptyState
+            title={`收藏的 ${favorites.length} 项内容暂时找不到`}
+            description="相册被改名或移动之后，这一条收藏就对不上了。回到主页找到这本相册，重新点一下星标就能再收藏。"
+            icon={<StarIcon size={20} />}
+            action={
+              <div className="flex items-center gap-2.5 flex-wrap justify-center">
                 <button
                   onClick={onCleanMissing}
                   disabled={cleaning}
@@ -298,13 +301,35 @@ export default function Favorites() {
                 >
                   {cleaning ? "清理中…" : `清理 ${missingCount} 项失效收藏`}
                 </button>
-              )}
-              <button onClick={() => navigate(homeRoute(mode))} className="btn btn-primary">
-                去主页看看
+                <button
+                  onClick={() => navigate(homeRoute(mode))}
+                  className="btn btn-primary"
+                >
+                  去主页看看
+                </button>
+              </div>
+            }
+          />
+        ) : (
+          /* 收藏一条都没坏，只是不在这一侧：照片工作台收藏的相册，
+             在漫画工作台里当然一条都看不到。这时候说「暂时找不到」
+             是冤枉了用户的收藏，还给出「清理失效收藏」的手柄 ——
+             点下去会把另一侧好好的一条收藏删掉。
+             正确的话是「它们都在那一侧」，并给一个切换过去的入口。 */
+          <EmptyState
+            title={`收藏都在${otherLibraryTitle}那边`}
+            description={`这一侧还没有收藏。已收藏的 ${favorites.length} 项属于${otherLibraryTitle}，切过去就能看到。`}
+            icon={<StarIcon size={20} />}
+            action={
+              <button
+                onClick={() => setMode(otherMode)}
+                className="btn btn-primary"
+              >
+                去{otherLibraryTitle}看看
               </button>
-            </div>
-          }
-        />
+            }
+          />
+        )
       ) : filtered.length === 0 ? (
         <EmptyState
           title="没有匹配的收藏"
