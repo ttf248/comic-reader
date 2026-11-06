@@ -218,11 +218,16 @@ export default function Tag() {
                 <span>{isFav ? "已收藏" : "收藏标签"}</span>
               </button>
             </div>
-            <div className="mt-7 grid grid-cols-2 md:grid-cols-4 gap-x-7 gap-y-4">
+            <div
+              className={`mt-7 grid grid-cols-2 gap-x-7 gap-y-4 ${
+                mode === "comic" ? "md:grid-cols-4" : "md:grid-cols-3"
+              }`}
+            >
               {" "}
               <Stat
                 icon={<FolderIcon size={13} />}
-                label="作品数"
+                /* 词跟着侧走：漫画侧叫「作品」，照片侧叫「相册」。 */
+                label={mode === "comic" ? "作品数" : "相册数"}
                 value={albums.length}
               />
               <Stat
@@ -270,7 +275,7 @@ export default function Tag() {
         <ListFilterBar totalCount={cards.length} showMinImageFilter={false} />
         {filtered.length === 0 ? (
           <EmptyState
-            title="没有匹配的作品"
+            title={mode === "comic" ? "没有匹配的作品" : "没有匹配的相册"}
             description="试试修改搜索或排序条件。"
           />
         ) : (

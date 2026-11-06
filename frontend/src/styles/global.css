@@ -1044,6 +1044,19 @@
     transform: rotate(3deg);
     box-shadow: var(--shadow-md);
   }
+  /* 照片侧的头图也是一件裱起来的展品：与集合页头、首屏那两处同一套
+     裱框语言（内白 + 细边 + 阴影），不倾斜。
+     倾斜的方照曾经是照片侧与漫画侧唯一的区别，但照片工作台现在自成
+     一套语言，这枚倾斜反而成了另一件不相干的东西。 */
+  :root[data-mode="photo"] .tag-feature__image {
+    height: 240px;
+    padding: 10px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-media);
+    transform: none;
+    box-shadow: var(--shadow-sm);
+  }
   /* 漫画侧的标签页头图也是一本书：竖版、装订边、有厚度，
      与集合页的页头封面、网格里的书封卡同一套语言。照片侧仍是
      摊在桌上的方照。 */
