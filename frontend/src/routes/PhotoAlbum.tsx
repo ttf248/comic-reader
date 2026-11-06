@@ -36,6 +36,7 @@ import {
 import { fileManagerErrorMessage } from "../utils/fileManager";
 import { useSafeBack } from "../utils/navigation";
 import { albumRoute, homeRoute } from "../utils/path";
+import { mediaCountParts } from "../utils/mediaCount";
 
 interface Props {
   /** 相册摘要（含内容用途与封面）。 */
@@ -262,23 +263,22 @@ export default function PhotoAlbum({ album }: Props) {
               )}
               <h1 className="album-bar__title truncate">{title}</h1>
               <div className="album-bar__meta tabular-nums">
+                {/* 计数口径与其它地方一致：纯视频相册说「2 个视频」，
+                    不再写「0 张 · 2 个视频」。 */}
                 <span>
                   <span className="text-fg font-medium">
-                    {album.imageCount ?? 0}
-                  </span>{" "}
-                  张
-                </span>
-                {(album.videoCount ?? 0) > 0 && (
-                  <>
-                    <span className="text-fg-subtle">·</span>
-                    <span>
+                    {mediaCountParts(album).lead}
+                  </span>
+                  {mediaCountParts(album).rest && (
+                    <>
+                      {" "}
+                      <span className="text-fg-subtle">·</span>{" "}
                       <span className="text-fg font-medium">
-                        {album.videoCount}
-                      </span>{" "}
-                      个视频
-                    </span>
-                  </>
-                )}
+                        {mediaCountParts(album).rest}
+                      </span>
+                    </>
+                  )}
+                </span>
                 {/* 媒体根：只有配置了多个根才值得说，否则每本都挂一句
                     同样的来源，是噪音。 */}
                 {multiRoot && album.sourceName && (

@@ -68,11 +68,13 @@ export default function Home() {
   const gridRef = useRef<HTMLDivElement>(null);
 
   const query = useSearchStore((s) => s.query);
+  const setQuery = useSearchStore((s) => s.setQuery);
   const sortBy = useSearchStore((s) => s.sortBy);
   const view = useSearchStore((s) => s.view);
   const setView = useSearchStore((s) => s.setView);
   const yearFilter = useSearchStore((s) => s.yearFilter);
   const setYearFilter = useSearchStore((s) => s.setYearFilter);
+  const setMinImageCount = useSearchStore((s) => s.setMinImageCount);
   const viewMode = useUIStore((s) => s.viewMode);
 
   // 收藏数按当前工作台算：照片工作台的「N 收藏」不该把漫画收藏算进去。
@@ -396,6 +398,20 @@ export default function Home() {
   // 年份筛选的"全部图像"section 顶部 chip
   const yearFilterLabel = yearFilter === "other" ? "其他" : String(yearFilter);
 
+  // 当前视图的名字（空结果时要说清是哪个筛选把内容筛没了）。
+  const viewLabel =
+    view === "album"
+      ? copy.albumTypeLabel
+      : view === "collection"
+        ? copy.collectionTypeLabel
+        : "标签";
+  // 真正生效的筛选有几条：空结果时每条都给一个单独的手柄。
+  const activeFilterCount =
+    (yearFilterActive ? 1 : 0) +
+    (view !== "all" ? 1 : 0) +
+    (query ? 1 : 0) +
+    (minImageCount > 0 ? 1 : 0);
+
   return (
     <div className="home-page min-h-full">
       {/* ScanProgress 已提升到 AppShell，跨路由常驻显示 */}
@@ -663,13 +679,19 @@ export default function Home() {
               description={
                 query
                   ? `没有匹配"${query}"的结果`
-                  : yearFilterActive
-                    ? "尝试切换到其他年份或清除筛选"
-                    : "当前视图下没有内容"
+                  : yearFilterActive && view !== "all"
+                    ? `当前视图是「${viewLabel}」，${yearFilterLabel} 这一年下没有${viewLabel}。换成「全部」再看看。`
+                    : yearFilterActive
+                      ? "尝试切换到其他年份或清除筛选"
+                      : "当前视图下没有内容"
               }
               icon={<ImageIcon size={20} />}
               action={
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap justify-center">
+                  {/* 每一条真正生效的筛选给一个手柄。
+                      早先只有一个笼统的「清除筛选」：用户同时用了年份与
+                      视图两个筛选时，空结果说不清是哪一个造成的，
+                      按一下还会把排序与视图一起重置。 */}
                   {yearFilterActive && (
                     <button
                       onClick={() => setYearFilter(null)}
@@ -678,12 +700,38 @@ export default function Home() {
                       清除年份筛选
                     </button>
                   )}
-                  <button
-                    onClick={() => useSearchStore.getState().reset()}
-                    className="btn btn-outline"
-                  >
-                    清除筛选
-                  </button>
+                  {view !== "all" && (
+                    <button
+                      onClick={() => setView("all")}
+                      className="btn btn-outline"
+                    >
+                      看全部
+                    </button>
+                  )}
+                  {query && (
+                    <button
+                      onClick={() => setQuery("")}
+                      className="btn btn-outline"
+                    >
+                      清除搜索
+                    </button>
+                  )}
+                  {minImageCount > 0 && (
+                    <button
+                      onClick={() => setMinImageCount(0)}
+                      className="btn btn-outline"
+                    >
+                      清除最少张数
+                    </button>
+                  )}
+                  {activeFilterCount === 0 && (
+                    <button
+                      onClick={() => useSearchStore.getState().reset()}
+                      className="btn btn-outline"
+                    >
+                      清除筛选
+                    </button>
+                  )}
                 </div>
               }
             />

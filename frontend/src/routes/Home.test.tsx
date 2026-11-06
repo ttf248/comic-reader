@@ -285,3 +285,22 @@ it("漫画工作台不显示「接着看」专区", async () => {
   await waitFor(() => expect(screen.getByTestId("album-grid")).toBeTruthy());
   expect(screen.queryByTestId("resume-hero")).toBeNull();
 });
+
+// 空结果时要说清是哪个筛选筛没了内容，并给每个生效的筛选一个手柄。
+// 早先只有一个笼统的「清除筛选」，按一下还会把排序与视图一起重置。
+it("空结果时按生效的筛选分别给手柄", async () => {
+  useSearchStore.setState({ view: "album", yearFilter: 1999 });
+  renderHome();
+  await waitFor(() =>
+    expect(screen.getByText(/没有匹配的图像/)).toBeInTheDocument(),
+  );
+  expect(
+    screen.getByRole("button", { name: "清除年份筛选" }),
+  ).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "看全部" })).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "清除筛选" }),
+  ).not.toBeInTheDocument();
+  // 说明里点明是哪个视图筛没了内容。
+  expect(screen.getByText(/当前视图是「相册」/)).toBeInTheDocument();
+});
