@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { timeAgo } from '../../utils/date'
+import { progressPercent } from '../../utils/progress'
 import { workbenchCopy } from '../../utils/workbench'
 import {
   ReaderIcon,
@@ -53,6 +54,8 @@ export default function HoverPreview({ data, anchorRect, lastSeenAt, onPointerEn
   const kind = data.contentKind ?? 'photo'
   // 阅读进度只属于漫画：照片相册没有进度可言，预览里也不该出现进度条。
   const isComic = kind === 'comic'
+  // 百分比口径与卡片、列表、首屏一致，避免同一本书在几处显示不同的进度。
+  const progressPct = progressPercent(data.progress)
   const coverH = isComic ? COVER_H_COMIC : COVER_H_PHOTO
 
   useLayoutEffect(() => {
@@ -163,36 +166,21 @@ export default function HoverPreview({ data, anchorRect, lastSeenAt, onPointerEn
             </div>
           )}
 
-          {/* 进度条：仅漫画相册且有进度时显示。照片相册没有进度可言。 */}
-          {isComic && data.variant === 'album' && data.progress && data.progress.total > 0 && (
+          {/* 进度条：仅漫画相册且真的翻过几页时显示。照片相册没有进度可言。
+              0% 时不画 —— 一条空轨道读起来是分隔线，不是进度条；「还没翻开」
+              已经由上面的未读标记承担。填充色用品牌色，与列表行、首屏续读
+              同一套。 */}
+          {isComic && data.variant === 'album' && progressPct !== null && progressPct > 0 && (
             <div>
               <div className="flex items-center justify-between text-meta text-fg-subtle mb-1">
                 <span className="inline-flex items-center gap-1">
                   <ReaderIcon size={10} />
                   <span>阅读进度</span>
                 </span>
-                <span className="tabular-nums">
-                  {Math.min(
-                    100,
-                    Math.round(
-                      (data.progress.index / Math.max(1, data.progress.total - 1)) * 100,
-                    ),
-                  )}
-                  %
-                </span>
+                <span className="tabular-nums">{progressPct}%</span>
               </div>
               <div className="h-1 bg-bg-subtle rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-accent"
-                  style={{
-                    width: `${Math.min(
-                      100,
-                      Math.round(
-                        (data.progress.index / Math.max(1, data.progress.total - 1)) * 100,
-                      ),
-                    )}%`,
-                  }}
-                />
+                <div className="h-full bg-brand" style={{ width: `${progressPct}%` }} />
               </div>
             </div>
           )}
