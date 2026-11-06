@@ -29,7 +29,7 @@ interface Props {
   ) => void;
 }
 
-const GAP = 8;
+const GAP = 10;
 
 /**
  * 照片墙：按每张图真实宽高比排布的自适应网格。
@@ -141,7 +141,9 @@ export default function PhotoWall({
                   // 键盘与读屏都会失灵）。
                   <div
                     key={tile.id}
-                    className="group relative shrink-0 overflow-hidden rounded-sm bg-bg-subtle"
+                    /* 墙上挂的是一张张照片：它们之间留一道缝、角上带一点
+                       圆，彼此分开而不是糊成一张大图。 */
+                    className="group relative shrink-0 overflow-hidden rounded-md bg-bg-subtle shadow-[0_1px_2px_rgba(0,0,0,0.18)] transition-shadow duration-200 hover:shadow-[0_6px_18px_rgba(0,0,0,0.28)]"
                     style={{ width: tile.width, height: row.tileHeight }}
                   >
                     {isVideo ? (

@@ -24,6 +24,7 @@ import { nodeSummaryToCard } from "../utils/libraryCard";
 import { decodePathTail, homeRoute } from "../utils/path";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import { compareDatesDesc } from "../utils/date";
+import { workbenchCopy } from "../utils/workbench";
 import { useViewedSort } from "../hooks/useHistory";
 import { ListFilterBar } from "../components/common/ListFilterBar";
 import ViewedSortNotice from "../components/common/ViewedSortNotice";
@@ -181,10 +182,20 @@ export default function Tag() {
           </button>
           <h1 className="page-title page-title--sm">标签：{tag}</h1>
         </div>
+        {/* 页头已经写着是哪个标签，空态再说一遍「未找到该标签」是同一句话
+            说两次。这里只说结论，并给出下一步。 */}
         <EmptyState
-          title="未找到该标签"
-          description="可能未扫描或标签名拼写有差异。"
+          title="这个标签下没有相册"
+          description="可能还没扫描到，或者标签名拼写有差异。"
           icon={<FolderSearchIcon size={20} />}
+          action={
+            <button
+              onClick={() => navigate(homeRoute(mode))}
+              className="btn btn-primary"
+            >
+              回到{workbenchCopy(mode).libraryTitle}
+            </button>
+          }
         />
       </div>
     );
