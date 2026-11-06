@@ -188,7 +188,11 @@ export default function Recents() {
         ) : (
           <EmptyState
             title={copy.recentsEmpty}
-            description="打开任意一个文件夹开始浏览，它会出现在这里。"
+            description={
+              mode === "comic"
+                ? "打开任意一本漫画开始阅读，它会出现在这里。"
+                : "打开任意一本相册开始浏览，它会出现在这里。"
+            }
             icon={<ClockIcon size={20} />}
             action={
               <button onClick={() => navigate(homeRoute(mode))} className="btn btn-primary">

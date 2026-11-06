@@ -60,7 +60,7 @@ describe("照片工作台的「接着看」专区", () => {
       />,
     );
     expect(screen.getByText("海边")).toBeInTheDocument();
-    expect(screen.getByText("2 本最近看过")).toBeInTheDocument();
+    expect(screen.getByText("2 本相册")).toBeInTheDocument();
   });
 
   it("不出现漫画侧的进度措辞", () => {

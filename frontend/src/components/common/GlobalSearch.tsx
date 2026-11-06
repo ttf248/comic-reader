@@ -8,7 +8,7 @@ import { useAppMode } from "../../hooks/useAppMode";
 import { albumsApi, type SearchHit } from "../../api/albums";
 import { thumbUrl } from "../../api/thumbs";
 import { albumRoute, tagRoute } from "../../utils/path";
-import { collectionUnit, mediaUnit } from "../../utils/workbench";
+import { collectionUnit, mediaUnit, workbenchCopy } from "../../utils/workbench";
 
 // 全局搜索框：输入时显示下拉建议（来自后端 /api/search）。
 //   - 空结果时返回静默，仅同步过滤本地视图
@@ -20,6 +20,8 @@ export default function GlobalSearch() {
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const { mode } = useAppMode();
+  // 叶级目录两侧都叫「相册」：一个词，不必按侧记两套。
+  const albumWord = workbenchCopy(mode).albumTypeLabel;
   const debounced = useDebounce(query, 200);
   const searchTerm = debounced.trim();
   const searchEnabled = searchTerm.length >= 2;
@@ -62,7 +64,7 @@ export default function GlobalSearch() {
         <SearchIcon size={15} className="text-fg-subtle shrink-0" />
         <input
           value={query}
-          aria-label="搜索文件夹或标签"
+          aria-label={`搜索${albumWord}或标签`}
           onChange={(e) => {
             setQuery(e.target.value);
             setOpen(true);
@@ -97,7 +99,7 @@ export default function GlobalSearch() {
                 break;
             }
           }}
-          placeholder="搜索文件夹 / 标签…"
+          placeholder={`搜索${albumWord} / 标签…`}
           /* h-full：输入框本身要撑满 40px 的胶囊。外壳是 h-10，输入框却
              只有内容高度（23px）—— 真正能点到的只有中间那一小条，
              低于 28px 的触控下限。 */
@@ -208,7 +210,7 @@ export default function GlobalSearch() {
       {open && searchEnabled && !searchQuery.isFetching && !searchQuery.isError && hits.length === 0 && (
         <div className="absolute top-full left-0 right-0 mt-1.5 bg-bg-elevated border border-border rounded-lg shadow-lg overflow-hidden z-30 fade-up">
           <div className="px-3 py-2.5 text-meta text-fg-muted">
-            没有匹配「{searchTerm}」的文件夹或标签
+            没有匹配「{searchTerm}」的{albumWord}或标签
           </div>
         </div>
       )}

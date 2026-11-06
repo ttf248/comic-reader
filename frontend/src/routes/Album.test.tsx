@@ -251,7 +251,7 @@ describe("Album", () => {
   it("只到 /albums 时回到工作台首页", () => {
     renderAlbum("/albums");
     expect(screen.getByTestId("location")).toHaveTextContent("/photo");
-    expect(screen.queryByText("找不到此文件夹")).not.toBeInTheDocument();
+    expect(screen.queryByText("找不到这个相册")).not.toBeInTheDocument();
   });
 
   it("节点查询未完成时显示加载态", () => {
@@ -266,8 +266,8 @@ describe("Album", () => {
 
     renderAlbum();
 
-    expect(screen.getByText("正在加载文件夹")).toBeInTheDocument();
-    expect(screen.queryByText("找不到此文件夹")).not.toBeInTheDocument();
+    expect(screen.getByText("正在加载相册")).toBeInTheDocument();
+    expect(screen.queryByText("找不到这个相册")).not.toBeInTheDocument();
   });
 
   it("照片相册直接进入照片墙，没有「开始浏览」这一步", () => {

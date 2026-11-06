@@ -117,6 +117,8 @@ export default function Album() {
   const location = useLocation();
   const navigate = useNavigate();
   const { mode } = useAppMode();
+  // 叶级目录两侧都叫「相册」：一个词，不必按侧记两套。
+  const albumWord = workbenchCopy(mode).albumTypeLabel;
   // 返回：应用内还有历史就回退，否则回主页（直接打开相册链接时
   // navigate(-1) 会一路退出应用，停在空白页）。
   const goBack = useSafeBack(homeRoute(mode));
@@ -219,13 +221,13 @@ export default function Album() {
   if (isLoading) {
     // 骨架而不是转圈：数据到达后卡片直接落在骨架的位置上，页面不会先
     // 空一段再整块跳出来。
-    return <AlbumGridSkeleton variant={viewMode} label="正在加载文件夹" />;
+    return <AlbumGridSkeleton variant={viewMode} label={`正在加载${albumWord}`} />;
   }
 
   if (!node) {
     return (
       <EmptyState
-        title="找不到此文件夹"
+        title={`找不到这个${albumWord}`}
         description="资源可能已移动，或者媒体库尚未完成扫描。"
         icon={<FolderSearchIcon size={20} />}
         action={
@@ -248,7 +250,7 @@ export default function Album() {
   if (!detail) {
     return (
       <EmptyState
-        title="找不到此文件夹"
+        title={`找不到这个${albumWord}`}
         description="资源可能已移动，或者媒体库尚未完成扫描。"
         icon={<FolderSearchIcon size={20} />}
         action={

@@ -60,6 +60,17 @@ vi.mock("../components/album/AlbumGrid", () => ({
     </ol>
   ),
 }));
+// 照片侧的「最近浏览」按时间排成一条足迹，不再走 AlbumGrid；
+// 排序用例盯的是顺序，两种形态给同一个 testid。
+vi.mock("../components/photo/FootprintTimeline", () => ({
+  default: ({ cards }: { cards: { id: string; title: string }[] }) => (
+    <ol data-testid="sort-results">
+      {cards.map((card) => (
+        <li key={card.id}>{card.title}</li>
+      ))}
+    </ol>
+  ),
+}));
 vi.mock("../hooks/useLibrary", () => {
   const manifest = {
     revision: 1,

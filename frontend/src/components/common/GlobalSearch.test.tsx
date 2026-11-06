@@ -42,7 +42,7 @@ describe("GlobalSearch", () => {
   it("搜索框有可访问名称", () => {
     renderSearch();
     expect(
-      screen.getByRole("combobox", { name: "搜索文件夹或标签" }),
+      screen.getByRole("combobox", { name: "搜索相册或标签" }),
     ).toBeInTheDocument();
   });
 

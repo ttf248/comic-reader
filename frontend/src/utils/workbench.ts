@@ -57,10 +57,12 @@ export interface WorkbenchCopy {
    */
   collectionUnit: string;
   /**
-   * 单个相册的类型词：照片「文件夹」，漫画「相册」。
+   * 单个相册的类型词：两侧都说「相册」。
    *
-   * 视图筛选的那一排 chip 用它。两侧用不同的词，是为了让两侧一眼
-   * 能分清 —— 照片侧是「文件夹 / 集合」，漫画侧是「相册 / 作品」。
+   * 视图筛选的那一排 chip 用它。两侧的集合词不同（照片「集合」、
+   * 漫画「作品」），相册这个词两侧一致 —— 一个叶级目录在照片这边
+   * 叫「文件夹」，在漫画那边叫「相册」，用户要记两套；两侧统一说
+   * 「相册」，靠集合词把两边分开。
    */
   albumTypeLabel: string;
   /** 集合的类型词：照片「集合」，漫画「作品」。 */
@@ -155,7 +157,7 @@ const PHOTO: PhotoCopy = {
   favoritesEmpty: "还没有收藏照片",
   randomLabel: "随机翻翻",
   mediaUnit: "张",
-  albumTypeLabel: "文件夹",
+  albumTypeLabel: "相册",
   collectionTypeLabel: "集合",
   lastSeenVerb: "浏览",
   neverSeenLabel: "尚未浏览",
