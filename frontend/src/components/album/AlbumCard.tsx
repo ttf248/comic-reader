@@ -373,6 +373,18 @@ function GridCard({
       onPointerUp={onPressEnd}
       onPointerCancel={onPressEnd}
       onPointerLeave={onPressEnd}
+      /* 右键菜单与悬停预览不同时出现：两者都浮在指针附近，
+         叠在一起时菜单被预览的大图压住，两边都读不清。
+         这个处理器先跑（事件向上冒泡），外层再开菜单。
+         还没到点的预览定时器也要撤掉 —— 否则它在菜单打开之后
+         才把预览放出来，菜单照样被压住。 */
+      onContextMenu={() => {
+        if (previewTimer.current !== null) {
+          window.clearTimeout(previewTimer.current);
+          previewTimer.current = null;
+        }
+        setPreviewOn(false);
+      }}
       className="album-tile relative group select-none"
       data-testid="album-card"
     >

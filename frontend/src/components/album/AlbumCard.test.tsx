@@ -66,6 +66,38 @@ describe("AlbumCard 封面语义", () => {
     vi.clearAllMocks();
   });
 
+  it("右键打开菜单时收起悬停预览", async () => {
+    vi.useFakeTimers();
+    // 悬停预览只在精确指针下出现：这里给一个细指针环境。
+    vi.spyOn(window, "matchMedia").mockImplementation(
+      (query: string) =>
+        ({
+          matches: false,
+          media: query,
+          onchange: null,
+          addListener: vi.fn(),
+          removeListener: vi.fn(),
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+          dispatchEvent: vi.fn(),
+        }) as unknown as MediaQueryList,
+    );
+    try {
+      renderCard(card());
+      const tile = screen.getByTestId("album-card");
+      fireEvent.mouseEnter(tile);
+      await act(async () => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(screen.getByTestId("hover-preview")).toBeInTheDocument();
+      // 菜单与预览都浮在指针附近：叠在一起两边都读不清。
+      fireEvent.contextMenu(tile);
+      expect(screen.queryByTestId("hover-preview")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   // 漫画侧是书架：书名印在封面上，封面下方不再重复一遍标题。
   // 照片侧是展陈墙：标题仍然是封面下方的说明牌。
   it("漫画相册把标题印在封面上，封面下方不再重复标题", () => {
