@@ -469,9 +469,26 @@
      标题区留空（无封面）时左右两列自然贴边，页头不会变形。 */
   .detail-head {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
     gap: clamp(16px, 2vw, 24px);
+  }
+  /* 标题块：眉标 · 标题 · 计数 · 动作。整块收在页面左缘，
+     动作不再被甩到屏幕最右 —— 那样它读起来像页脚的杂项，
+     而不是「收藏这一组」的动作。 */
+  .detail-head__body {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    /* 与封面竖向居中：封面高 176px，标题块按内容高度居中后，
+       眉标与封面顶、计数行与封面底大致齐平。 */
+    padding-block: 4px;
+  }
+  .page-eyebrow__source {
+    margin-left: 10px;
+    padding-left: 10px;
+    border-left: 1px solid var(--border);
+    color: var(--fg-subtle);
   }
   .detail-head__cover {
     width: 104px;
@@ -520,9 +537,8 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    /* 与眉标同一行：操作属于这一层的身份，不是垂直居中悬在半空。 */
-    align-self: start;
-    margin-top: 2px;
+    /* 动作紧跟计数行：它作用的是这一组内容，不是页面级的事。 */
+    margin-top: 14px;
   }
 
   /* --- 相册条：照片墙顶部的相册身份条 ---
@@ -912,8 +928,7 @@
     .library-grid--comic {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
-    /* 窄屏页头：封面缩到 72px，标题与操作仍然并排；
-       操作区换行到下一行，不把标题挤成一条窄柱。 */
+    /* 窄屏页头：封面缩到 72px，标题与操作仍然并排。 */
     .detail-head {
       grid-template-columns: auto minmax(0, 1fr);
       gap: 14px;
@@ -925,10 +940,6 @@
     .detail-head__cover--book {
       width: 76px;
       height: 96px;
-    }
-    .detail-head__actions {
-      grid-column: 1 / -1;
-      justify-content: flex-start;
     }
     .album-bar {
       flex-wrap: wrap;

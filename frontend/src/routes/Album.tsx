@@ -288,6 +288,8 @@ function CollectionHead({
   // 集合在照片侧叫「集合」，在漫画侧叫「作品」—— 首页的作品索引也是
   // 同一个词。两处用同一个词，用户才认得出这是同一类东西。
   const isComic = detail.contentKind === "comic";
+  // 只有多根库才需要在页头标来源：单根时顶栏已经写着同一个目录名。
+  const multiRoot = useUIStore((s) => s.multiRoot);
   return (
     <div className="page-shell page-heading">
       <button onClick={onBack} className="btn btn-sm btn-ghost mb-5 -ml-2">
@@ -309,8 +311,15 @@ function CollectionHead({
             }}
           />
         </div>
-        <div className="min-w-0">
-          <p className="page-eyebrow">{isComic ? "作品" : "集合"}</p>
+        <div className="detail-head__body min-w-0">
+          <p className="page-eyebrow">
+            {isComic ? "作品" : "集合"}
+            {/* 来源是身份的一部分，不占计数行：多根库下它告诉用户这一屏
+                来自哪个目录；单根库里它只是重复了顶栏已知的事实。 */}
+            {multiRoot && detail.sourceName && (
+              <span className="page-eyebrow__source">来自 {detail.sourceName}</span>
+            )}
+          </p>
           <h1 className="detail-head__title mt-2">{detail.name}</h1>
           <div className="detail-head__meta">
             <span>
@@ -348,29 +357,24 @@ function CollectionHead({
                 </span>
               </>
             )}
-            {detail.sourceName && (
-              <>
-                <span className="text-fg-subtle">·</span>
-                <span>来自 {detail.sourceName}</span>
-              </>
-            )}
           </div>
-        </div>
-        <div className="detail-head__actions">
-          <button
-            type="button"
-            onClick={onToggleFav}
-            className={`inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-body transition-colors ${
-              isFavorite
-                ? "bg-favorite/10 text-favorite hover:bg-favorite/15"
-                : /* 页头很宽，按钮贴着最右边会被当成页脚的杂项。
-                     给它一条实一点的描边与正文色，它才读得出是动作。 */
-                  "border border-border hover:bg-bg-subtle text-fg"
-            }`}
-          >
-            <StarIcon size={13} filled={isFavorite} />
-            <span>{isFavorite ? "已收藏" : "收藏"}</span>
-          </button>
+          {/* 动作贴在内容区里：页头横跨整屏，把按钮甩到最右会让它
+              孤零零地悬在半空，读起来像页脚的杂项。收进标题块下方，
+              动作与它作用的对象挨在一起。 */}
+          <div className="detail-head__actions">
+            <button
+              type="button"
+              onClick={onToggleFav}
+              className={`inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-body transition-colors ${
+                isFavorite
+                  ? "bg-favorite/10 text-favorite hover:bg-favorite/15"
+                  : "border border-border hover:bg-bg-subtle text-fg"
+              }`}
+            >
+              <StarIcon size={13} filled={isFavorite} />
+              <span>{isFavorite ? "已收藏" : "收藏"}</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
