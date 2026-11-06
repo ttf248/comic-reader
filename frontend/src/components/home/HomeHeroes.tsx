@@ -75,7 +75,10 @@ export function UnreadHero({
               isFavorite: favoriteIds.has(decodeFavPath(card.to)),
             }}
             showUnreadBadge={false}
-            coverRatio="4/3"
+            /* 竖版书封（4:5），与网格和整页的书架语言一致。
+               早先用 4:3 横幅：右栏因此比左栏矮一大截，两块面板
+               读起来像两个产品；竖版之后两栏高度自然接近。 */
+            coverRatio="4/5"
             overlayAction={
               <button
                 type="button"

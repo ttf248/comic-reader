@@ -231,7 +231,10 @@
   --panel-bg: var(--feature-bg);
   --panel-fg: var(--feature-fg);
   --panel-muted: var(--feature-muted);
-  --hero-cover-col: 168px;
+  /* 首屏书封给得比照片侧大：漫画侧整页是竖版书封语言，首屏那一本
+     也要像一本书；面板被邻栏拉到等高时，中间那本不能小得像一张
+     缩略图。 */
+  --hero-cover-col: 200px;
   --section-index-font: var(--font-display);
 }
 

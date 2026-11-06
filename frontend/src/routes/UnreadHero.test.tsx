@@ -68,6 +68,19 @@ describe("UnreadHero", () => {
     });
   });
 
+  it("预览卡用竖版书封，与整页的书架语言一致", () => {
+    const { container } = renderHero([
+      makeCard("/a", "第一卷"),
+      makeCard("/b", "第二卷"),
+    ]);
+    // 4:3 横幅与网格里的竖版书封不是一套语言，首屏会读成两个产品。
+    const covers = container.querySelectorAll(".album-tile__cover");
+    expect(covers.length).toBe(2);
+    for (const cover of covers) {
+      expect(cover.className).toContain("aspect-[4/5]");
+    }
+  });
+
   it("显示计数 + 随机未读按钮 + 全部链接", () => {
     const { onShuffle } = renderHero([
       makeCard("/a", "A"),
