@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { timeAgo } from '../../utils/date'
 import { progressPercent } from '../../utils/progress'
-import { workbenchCopy } from '../../utils/workbench'
+import { albumCountUnit, workbenchCopy } from '../../utils/workbench'
 import { decodeFavPath } from '../../utils/path'
 import { useAlbumMedia } from '../../hooks/useLibrary'
 import {
@@ -171,7 +171,7 @@ export default function HoverPreview({ data, anchorRect, lastSeenAt, onPointerEn
             <div className="flex items-center gap-1.5 text-white/90 text-meta tabular-nums">
               <ImageIcon size={11} />
               <span>
-                {data.count} {isCollection ? copy.collectionUnit : copy.mediaUnit}
+                {data.count} {isCollection ? albumCountUnit(kind) : copy.mediaUnit}
               </span>
             </div>
           </div>

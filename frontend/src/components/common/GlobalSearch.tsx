@@ -8,7 +8,7 @@ import { useAppMode } from "../../hooks/useAppMode";
 import { albumsApi, type SearchHit } from "../../api/albums";
 import { thumbUrl } from "../../api/thumbs";
 import { albumRoute, tagRoute } from "../../utils/path";
-import { collectionUnit, mediaUnit, workbenchCopy } from "../../utils/workbench";
+import { albumCountUnit, collectionUnit, mediaUnit, workbenchCopy } from "../../utils/workbench";
 
 // 全局搜索框：输入时显示下拉建议（来自后端 /api/search）。
 //   - 空结果时返回静默，仅同步过滤本地视图
@@ -182,7 +182,7 @@ export default function GlobalSearch() {
                     {h.count}{" "}
                     {h.kind === "album"
                       ? mediaUnit(mode)
-                      : collectionUnit(mode)}
+                      : albumCountUnit(mode)}
                   </span>
                 </div>
               </div>

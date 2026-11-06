@@ -96,7 +96,7 @@ describe("GlobalSearch", () => {
 
     // 照片工作台：相册按「张」，集合按「本」。
     expect(await screen.findByText("12 张")).toBeInTheDocument();
-    expect(screen.getByText("3 本")).toBeInTheDocument();
+    expect(screen.getByText("3 本相册")).toBeInTheDocument();
     expect(screen.queryByText(/卷/)).not.toBeInTheDocument();
   });
 

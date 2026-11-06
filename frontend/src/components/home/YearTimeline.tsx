@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useSearchStore } from "../../store/searchStore";
 import { useAppMode } from "../../hooks/useAppMode";
 import type { YearGroup } from "../../utils/albumGrouping";
-import { collectionUnit } from "../../utils/workbench";
+import { albumCountUnit } from "../../utils/workbench";
 import { FilterIcon } from "../common/Icon";
 import Timeline, { type TimelineEntry } from "./Timeline";
 
@@ -48,7 +48,7 @@ export default function YearTimeline({ groups, gridRef }: Props) {
         const count =
           total > 0
             ? `${total} ${unit}`
-            : `${group.albums.length} ${collectionUnit(mode)}`;
+            : `${group.albums.length} ${albumCountUnit(mode)}`;
         return {
           key,
           label: group.label,

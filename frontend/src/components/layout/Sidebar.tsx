@@ -26,7 +26,7 @@ import { thumbUrl } from "../../api/thumbs";
 import { nodeSummaryToCard } from "../../utils/libraryCard";
 import type { CardData } from "../album/AlbumGrid";
 import { timeAgo } from "../../utils/date";
-import { comicCopy, photoCopy, workbenchCopy } from "../../utils/workbench";
+import { albumCountUnit, comicCopy, photoCopy, workbenchCopy } from "../../utils/workbench";
 import {
   continueReadingTarget,
   readingPercent,
@@ -182,14 +182,14 @@ export default function Sidebar({
               to={entry.to}
               className={navItemClass(isActive)}
               aria-current={isActive ? "page" : undefined}
-              title={`${entry.label}${badge > 0 ? ` · 还有 ${badge} ${copy.collectionUnit}` : ""}`}
+              title={`${entry.label}${badge > 0 ? ` · 还有 ${badge} ${albumCountUnit(mode)}` : ""}`}
             >
               <entry.Icon size={16} className="shrink-0" />
               {!collapsed && <span className="truncate">{entry.label}</span>}
               {!collapsed && badge > 0 && (
                 <span
                   className="inline-flex items-center justify-center min-w-[22px] h-[20px] px-1.5 rounded-full bg-rail-hover text-rail-fg text-meta font-semibold tabular-nums"
-                  aria-label={`还有 ${badge} ${copy.collectionUnit}`}
+                  aria-label={`还有 ${badge} ${albumCountUnit(mode)}`}
                 >
                   {badge > 999 ? "999+" : badge}
                 </span>
