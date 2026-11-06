@@ -60,7 +60,7 @@ beforeEach(() => {
     missing: [],
   });
   vi.mocked(imageInfoApi.get).mockResolvedValue(image);
-  vi.mocked(activityApi.queryImages).mockResolvedValue({ activities: [] });
+  vi.mocked(activityApi.queryImages).mockResolvedValue({ activities: [], count: 0 });
 });
 
 function renderDialog(target: { kind: "node" | "image"; id: string } | null) {
@@ -143,6 +143,7 @@ it("漫画相册的属性表里带阅读进度", async () => {
     items: [{ ...node, id: "a_comic", kind: "album", contentKind: "comic" }],
   });
   vi.mocked(activityApi.queryImages).mockResolvedValueOnce({
+    count: 1,
     activities: [
       {
         albumId: "a_comic",
@@ -164,6 +165,7 @@ it("读完的漫画相册说「已读完」而不是页码", async () => {
     items: [{ ...node, id: "a_comic", kind: "album", contentKind: "comic" }],
   });
   vi.mocked(activityApi.queryImages).mockResolvedValueOnce({
+    count: 1,
     activities: [
       {
         albumId: "a_comic",

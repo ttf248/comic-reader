@@ -1,5 +1,5 @@
-import { useEffect, useMemo } from "react";
-import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { Fragment, useEffect, useMemo } from "react";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearchStore } from "../store/searchStore";
 import { useFavorites } from "../hooks/useFavorites";
@@ -30,10 +30,15 @@ import { ChevronLeftIcon, StarIcon } from "../components/common/Icon";
 import PhotoAlbum from "./PhotoAlbum";
 import {
   LibraryRevisionChangedError,
+  type AppMode,
   type ContentKind,
   type LibraryNodeSummary,
 } from "../api/library";
-import { useLibraryChildren, useLibraryNodes } from "../hooks/useLibrary";
+import {
+  useLibraryAncestors,
+  useLibraryChildren,
+  useLibraryNodes,
+} from "../hooks/useLibrary";
 import type { GalleryContextEntry } from "../utils/galleryContext";
 
 interface CollectionDetail {
@@ -54,6 +59,8 @@ interface CollectionDetail {
    * 集合继承所属目录的属性，计数单位跟着那一侧走。
    */
   contentKind: ContentKind;
+  /** 直接上级集合的资源 ID；顶层集合为空。 */
+  parentId: string;
 }
 
 function toAlbumLike(summary: LibraryNodeSummary): AlbumLike {
@@ -133,6 +140,15 @@ export default function Album() {
   const revisionChanged =
     childrenQuery.error instanceof LibraryRevisionChangedError;
 
+  // 面包屑：集合的上级集合链，从最外层到紧邻它的那一层。
+  const ancestorsQuery = useLibraryAncestors(
+    node?.kind === "collection" ? (node.parentId ?? "") : "",
+  );
+  const ancestors = useMemo(
+    () => ancestorsQuery.data ?? [],
+    [ancestorsQuery.data],
+  );
+
   useEffect(() => {
     if (revisionChanged) void refetchNode();
   }, [refetchNode, revisionChanged]);
@@ -160,6 +176,7 @@ export default function Album() {
       albums,
       collections,
       contentKind: node.contentKind,
+      parentId: node.parentId ?? "",
     };
   }, [childrenQuery.data, node]);
 
@@ -240,6 +257,8 @@ export default function Album() {
   return (
     <CollectionView
       detail={detail}
+      ancestors={ancestors}
+      mode={mode}
       query={query}
       sortBy={sortBy}
       viewMode={viewMode}
@@ -273,11 +292,15 @@ export default function Album() {
  */
 function CollectionHead({
   detail,
+  ancestors,
+  mode,
   isFavorite,
   onToggleFav,
   onBack,
 }: {
   detail: CollectionDetail;
+  ancestors: LibraryNodeSummary[];
+  mode: AppMode;
   isFavorite: boolean;
   onToggleFav: () => void;
   onBack: () => void;
@@ -292,10 +315,37 @@ function CollectionHead({
   const multiRoot = useUIStore((s) => s.multiRoot);
   return (
     <div className="page-shell page-heading">
-      <button onClick={onBack} className="btn btn-sm btn-ghost mb-5 -ml-2">
-        <ChevronLeftIcon size={13} />
-        <span>返回</span>
-      </button>
+      {/* 返回 + 面包屑同一行：「返回」只说得出「回去」，祖先链才说得出
+          「回到哪」。集合越嵌越深，这一行就越重要。 */}
+      <div className="mb-4 flex items-center gap-3 min-w-0">
+        <button onClick={onBack} className="btn btn-sm btn-ghost -ml-2 shrink-0">
+          <ChevronLeftIcon size={13} />
+          <span>返回</span>
+        </button>
+        {ancestors.length > 0 && (
+          <>
+            <span className="h-4 w-px shrink-0 bg-border" aria-hidden="true" />
+            <nav
+              aria-label="上级路径"
+              className="flex items-center gap-1 min-w-0 text-meta text-fg-muted"
+            >
+              {ancestors.map((ancestor, index) => (
+                <Fragment key={ancestor.id}>
+                  {index > 0 && (
+                    <span className="text-fg-subtle shrink-0">／</span>
+                  )}
+                  <Link
+                    to={albumRoute(mode, ancestor.id)}
+                    className="truncate hover:text-brand-ink transition-colors"
+                  >
+                    {ancestor.displayName || ancestor.name}
+                  </Link>
+                </Fragment>
+              ))}
+            </nav>
+          </>
+        )}
+      </div>
       <div className="detail-head">
         <div
           className={`detail-head__cover${
@@ -383,6 +433,8 @@ function CollectionHead({
 
 function CollectionView({
   detail,
+  ancestors,
+  mode,
   query,
   sortBy,
   viewMode,
@@ -391,6 +443,8 @@ function CollectionView({
   isFavorite,
 }: {
   detail: CollectionDetail;
+  ancestors: LibraryNodeSummary[];
+  mode: AppMode;
   query: string;
   // 复用全局 SortKey:Album 详情也支持「最近看」('viewed' 用 history 排序)
   sortBy: "name" | "count" | "recent" | "viewed";
@@ -509,6 +563,8 @@ function CollectionView({
     <div className="flex flex-col h-full min-h-0">
       <CollectionHead
         detail={detail}
+        ancestors={ancestors}
+        mode={mode}
         isFavorite={isFavorite}
         onToggleFav={onToggleFav}
         onBack={onBack}

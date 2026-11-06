@@ -139,6 +139,10 @@ type LibraryNodeSummary struct {
 	// 漫画目录里一连载多卷时，前端按它把卷分节展示。
 	// 根目录下的相册没有上级集合，为空。
 	ParentName string `json:"parentName,omitempty"`
+	// ParentID 是直接上级集合的资源 ID。它与 ParentName 是同一件事的
+	// 两种形式：名字给人看，ID 让前端能一路往上拼出面包屑
+	// （存照 / 萍乡中学 / 3班running man）。顶层集合没有上级，为空。
+	ParentID string `json:"parentId,omitempty"`
 	// ContentKind 是节点的内容属性："photo" / "comic"。
 	// 前端据此决定点击相册后进入照片墙还是漫画阅读器。
 	ContentKind string `json:"contentKind,omitempty"`
@@ -758,12 +762,22 @@ func SearchLibrary(snapshot CatalogSnapshot, query string, kind LibraryKindScope
 		if !ok {
 			continue
 		}
-		scored = append(scored, scoredSearchHit{hit: hit, rank: rank, pos: pos, order: order})
+		scored = append(scored, scoredSearchHit{
+			hit:   hit,
+			rank:  rank,
+			kind:  searchHitKindWeight(hit.Kind),
+			pos:   pos,
+			order: order,
+		})
 	}
 	sort.SliceStable(scored, func(i, j int) bool {
 		left, right := scored[i], scored[j]
 		if left.rank != right.rank {
 			return left.rank < right.rank
+		}
+		// 同档里先给具体的相册与作品，标签是聚合视图，最后再出现。
+		if left.kind != right.kind {
+			return left.kind < right.kind
 		}
 		if left.pos != right.pos {
 			return left.pos < right.pos
@@ -788,8 +802,20 @@ func SearchLibrary(snapshot CatalogSnapshot, query string, kind LibraryKindScope
 type scoredSearchHit struct {
 	hit   LibrarySearchHit
 	rank  int // 越小越靠前，见 searchHitScore
+	kind  int // 同档里的类型优先���，见 searchHitKindWeight
 	pos   int // 命中位置，越小越靠前
 	order int // 原始顺序，同分时保持稳定
+}
+
+// searchHitKindWeight 给命中类型排序：相册与作品是具体的内容，
+// 标签是聚合视图 —— 同等匹配质量下具体的排前面。
+func searchHitKindWeight(kind string) int {
+	switch kind {
+	case string(ResourceAlbum), string(ResourceCollection):
+		return 0
+	default:
+		return 1
+	}
 }
 
 // 匹配质量的档位。
@@ -809,6 +835,15 @@ const (
 // 查询没什么关系，只是恰好待在一个同名目录下 —— 那一档排在最后。
 func searchHitScore(hit LibrarySearchHit, needle string) (rank int, pos int, ok bool) {
 	name := strings.ToLower(hit.Name)
+	if hit.Kind == "smartCollection" {
+		// 标签的名字就是标签本身：它永远只是一次标签命中，不因为
+		// 名字恰好等于查询就抢在命名的相册前面。标签是聚合视图，
+		// 同等匹配质量下具体的相册与作品先出现。
+		if containsTag(hit.Tags, needle) {
+			return searchRankTag, 0, true
+		}
+		return 0, 0, false
+	}
 	if hit.Virtual {
 		segment := name
 		if i := strings.LastIndex(segment, "/"); i >= 0 {
@@ -1076,6 +1111,7 @@ func albumSummary(state *resourceCatalogState, album models.Album) LibraryNodeSu
 		HasCustomCover: state.customCovers[filepath.Clean(album.Path)],
 		Location:       album.Location,
 		ParentName:     parentNameFor(state, album),
+		ParentID:       parentCollectionID(state, album.Path, album.Virtual),
 		ContentKind:    album.ContentKind,
 	}
 }
@@ -1084,6 +1120,23 @@ func albumSummary(state *resourceCatalogState, album models.Album) LibraryNodeSu
 //
 // 相册的父目录就是它所在集合的路径；根目录下的相册没有上级集合。
 // 虚拟相册（“本目录媒体”）与所属集合同目录，不算有上级系列。
+// parentCollectionID 返回节点直接上级集合的资源 ID。
+//
+// 散图（虚拟相册）是某个目录里的散落媒体：它与同名集合同处一个目录，
+// 因此它的上级是那个集合本身，而不是集合的父目录。找不到同名集合时
+// （散图直接位于媒体根下）退回按父目录查找。
+func parentCollectionID(state *resourceCatalogState, path string, virtual bool) string {
+	if state == nil || path == "" {
+		return ""
+	}
+	if virtual {
+		if id := externalID(state, filepath.Clean(path), ResourceCollection); id != "" {
+			return id
+		}
+	}
+	return externalID(state, filepath.Dir(filepath.Clean(path)), ResourceCollection)
+}
+
 func parentNameFor(state *resourceCatalogState, album models.Album) string {
 	if state == nil || album.Virtual || album.Path == "" {
 		return ""
@@ -1135,6 +1188,7 @@ func collectionSummary(state *resourceCatalogState, collection models.Collection
 		AlbumCount:  albumCount,
 		ChildCount:  len(collection.Albums) + len(collection.Collections),
 		FolderSize:  folderSize,
+		ParentID:    parentCollectionID(state, collection.Path, false),
 		ContentKind: collection.ContentKind,
 	}
 }

@@ -8,13 +8,19 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import Album from "./Album";
-import { useAlbumMedia, useLibraryChildren, useLibraryNodes } from "../hooks/useLibrary";
+import {
+  useAlbumMedia,
+  useLibraryAncestors,
+  useLibraryChildren,
+  useLibraryNodes,
+} from "../hooks/useLibrary";
 import { useFavorites } from "../hooks/useFavorites";
 import { useSearchStore } from "../store/searchStore";
 import { historyApi } from "../api/prefs";
 
 vi.mock("../hooks/useLibrary", () => ({
   useAlbumMedia: vi.fn(),
+  useLibraryAncestors: vi.fn(),
   useLibraryChildren: vi.fn(),
   useLibraryNodes: vi.fn(),
   useTagAlbums: vi.fn(),
@@ -88,6 +94,10 @@ describe("Album", () => {
       data: undefined,
       isLoading: false,
     } as never);
+    vi.mocked(useLibraryAncestors).mockReturnValue({
+      data: [],
+      isLoading: false,
+    } as never);
   });
 
   it("通过节点摘要和直属子项渲染集合", () => {
@@ -136,6 +146,47 @@ describe("Album", () => {
     expect(useLibraryChildren).toHaveBeenCalledWith("c_year", "photo", 4);
     expect(screen.getByText("2025")).toBeInTheDocument();
     expect(screen.getByText("春游")).toBeInTheDocument();
+  });
+
+  it("集合页拼出上级路径，顶层集合没有面包屑", () => {
+    vi.mocked(useLibraryNodes).mockReturnValue({
+      data: {
+        revision: 4,
+        missing: [],
+        items: [
+          {
+            id: "c_class",
+            kind: "collection",
+            name: "3班",
+            displayName: "3班",
+            coverImage: "f_cover",
+            coverImages: ["f_cover"],
+            albumCount: 1,
+            imageCount: 8,
+            parentId: "c_school",
+          },
+        ],
+      },
+      isLoading: false,
+    } as never);
+    vi.mocked(useLibraryChildren).mockReturnValue({
+      data: { revision: 4, total: 0, items: [] },
+      isLoading: false,
+    } as never);
+    vi.mocked(useLibraryAncestors).mockReturnValue({
+      data: [{ id: "c_school", kind: "collection", name: "中学", displayName: "中学" }],
+      isLoading: false,
+    } as never);
+
+    renderAlbum("/albums/c_class");
+
+    // 上级集合是链接，当前页是标题：面包屑说的是「你在哪棵树上」。
+    expect(useLibraryAncestors).toHaveBeenCalledWith("c_school");
+    expect(screen.getByRole("link", { name: "中学" })).toHaveAttribute(
+      "href",
+      "/photo/albums/c_school",
+    );
+    expect(screen.getByText("3班")).toBeInTheDocument();
   });
 
   it("集合内的散图卡片用语义名，不与父集合重名", () => {

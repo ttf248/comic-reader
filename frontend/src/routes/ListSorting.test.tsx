@@ -95,6 +95,7 @@ vi.mock("../hooks/useLibrary", () => {
     useLibraryManifest: () => ({ data: { manifest }, isLoading: false }),
     useLibraryUnreadAlbums: () => query(mocks.items),
     useLibraryChildren: () => query(mocks.items),
+    useLibraryAncestors: () => ({ data: [], isLoading: false }),
     useTagAlbums: () => query(mocks.items),
     useLibraryTags: () => ({ data: { items: [] }, isLoading: false }),
     useLibraryRecentAlbums: () => ({

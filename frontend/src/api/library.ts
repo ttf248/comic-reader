@@ -95,6 +95,12 @@ export interface LibraryNodeSummary {
    * 所属系列是漫画侧更自然的分组依据。没有上级集合时为空。
    */
   parentName?: string;
+  /**
+   * 直接上级集合的资源 ID。
+   *
+   * 前端据此一路往上拼出面包屑：名字给人看，ID 才能继续往上找。
+   */
+  parentId?: string;
 }
 
 export interface LibraryMediaItem {

@@ -5,7 +5,11 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { LibraryRevisionChangedError, libraryApi } from "../api/library";
+import {
+  LibraryRevisionChangedError,
+  libraryApi,
+  type LibraryNodeSummary,
+} from "../api/library";
 import { ACTIVITY_CHANGED_EVENT } from "../api/activity";
 import { useUIStore } from "../store/uiStore";
 import { useAppMode } from "./useAppMode";
@@ -208,6 +212,35 @@ export function useLibraryNodes(ids: string[]) {
     queryKey: libraryQueryKeys.nodes(ids),
     queryFn: () => libraryApi.queryNodes(ids),
     enabled: ids.length > 0,
+  });
+}
+
+/**
+ * 某个节点的所有上级集合，从最外层到紧邻它的那一层。
+ *
+ * 集合页用它拼面包屑（存照 / 萍乡中学 / 3班running man）：页头里的
+ * 「返回」只说得出「回去」，说得出「回到哪」的是祖先链。
+ *
+ * 一级一级往上问：节点摘要带 parentId，拿到上级才能知道再上一级是谁。
+ * 目录层级很浅，请求数也就一两个。
+ */
+export function useLibraryAncestors(parentId: string) {
+  return useQuery({
+    queryKey: [...libraryQueryKeys.root, "ancestors", parentId],
+    queryFn: async () => {
+      const chain: LibraryNodeSummary[] = [];
+      let current = parentId;
+      while (current) {
+        const result = await libraryApi.queryNodes([current]);
+        const node = result.items[0];
+        if (!node) break;
+        chain.unshift(node);
+        current = node.parentId ?? "";
+      }
+      return chain;
+    },
+    enabled: parentId.length > 0,
+    staleTime: 60_000,
   });
 }
 
