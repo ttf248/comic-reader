@@ -61,7 +61,10 @@ function TimelineCard({ entry }: { entry: TimelineEntry }) {
   const { mode } = useAppMode();
   const isComic = mode === "comic";
   return (
-    <div className="year-index__item group">
+    <div
+      className="year-index__item group"
+      data-active={entry.active ? "true" : undefined}
+    >
       <button
         type="button"
         onClick={entry.onActivate}
