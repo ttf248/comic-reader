@@ -176,14 +176,14 @@ export default function Sidebar({
               to={entry.to}
               className={navItemClass(isActive)}
               aria-current={isActive ? "page" : undefined}
-              title={`${entry.label}${badge > 0 ? ` · 还有 ${badge} 本` : ""}`}
+              title={`${entry.label}${badge > 0 ? ` · 还有 ${badge} ${copy.collectionUnit}` : ""}`}
             >
               <entry.Icon size={16} className="shrink-0" />
               {!collapsed && <span className="truncate">{entry.label}</span>}
               {!collapsed && badge > 0 && (
                 <span
                   className="inline-flex items-center justify-center min-w-[22px] h-[20px] px-1.5 rounded-full bg-rail-hover text-rail-fg text-meta font-semibold tabular-nums"
-                  aria-label={`还有 ${badge} 本`}
+                  aria-label={`还有 ${badge} ${copy.collectionUnit}`}
                 >
                   {badge > 999 ? "999+" : badge}
                 </span>
@@ -302,7 +302,7 @@ export default function Sidebar({
               className="mt-2 flex min-h-7 items-center gap-1 px-1 text-meta text-rail-muted hover:text-rail-fg transition-colors"
             >
               <span>
-                还有 {resumeEntries.length - 1} 本
+                还有 {resumeEntries.length - 1} {copy.collectionUnit}
                 {mode === "comic"
                   ? `没${comicCopy().finishVerb}`
                   : "最近看过"}

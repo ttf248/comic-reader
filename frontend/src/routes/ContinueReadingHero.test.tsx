@@ -48,9 +48,9 @@ describe("ContinueReadingHero", () => {
     renderHero([
       makeCard("/a", "A", 5, 20), // 5/20
     ]);
-    // 标题:1 本还没读完（漫画工作台的措辞）
+    // 标题:1 卷还没读完（漫画工作台的措辞）
     const heroSection = screen.getByTestId("continue-hero");
-    expect(heroSection.textContent).toMatch(/1\s*本还没读完/);
+    expect(heroSection.textContent).toMatch(/1\s*卷还没读完/);
     // 进度文本 读到 6/20(index+1 / total)
     expect(screen.getByText(/读到\s*6\s*\/\s*20/)).toBeInTheDocument();
   });
@@ -78,7 +78,7 @@ describe("ContinueReadingHero", () => {
     );
     expect(cardButtons.length).toBe(4);
     expect(
-      screen.getByRole("link", { name: /还有 16 本在读/ }),
+      screen.getByRole("link", { name: /还有 16 卷在读/ }),
     ).toHaveAttribute("href", "/comic/recents");
   });
 

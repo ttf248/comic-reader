@@ -4,6 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useUIStore } from "../../store/uiStore";
 import { useKeyboard } from "../../hooks/useKeyboard";
 import { albumRoute, decodePathTail, favoritesRoute, homeRoute, isReaderPath, recentsRoute, unreadRoute } from "../../utils/path";
+import { workbenchCopy } from "../../utils/workbench";
 import { useFsCapabilities } from "../../hooks/useFsCapabilities";
 import { useAppMode } from "../../hooks/useAppMode";
 import { scanApi } from "../../api/scan";
@@ -73,7 +74,7 @@ export default function AppShell() {
         const raw = decodePathTail(path, "/tags/");
         base = raw || "标签";
       } else {
-        base = "文件夹";
+        base = workbenchCopy(mode).albumTypeLabel;
       }
     }
     document.title = `${base} · Local Gallery`;
@@ -123,7 +124,7 @@ export default function AppShell() {
       );
       el?.focus();
     },
-    // 随机一本：仅在非沉浸场景生效（阅读器与大图预览的 r 有别的含义）
+    // 随机一卷：仅在非沉浸场景生效（阅读器与大图预览的 r 有别的含义）
     r: () => {
       if (immersive) return;
       goShuffle();

@@ -4838,7 +4838,10 @@ test("窄屏下顶栏不横向溢出，筛选标签保持一行", async ({ page 
   // 视图标签不能被压成竖排文字（一个字一行）。
   const chips = await page.evaluate(() => {
     const matched = [...document.querySelectorAll("button")].filter((button) =>
-      /^(全部|文件夹|集合|标签)\s*\d*$/.test((button.textContent ?? "").trim()),
+      // 两侧的类型词不同：照片「文件夹 / 集合」，漫画「相册 / 作品」。
+      /^(全部|文件夹|集合|相册|作品|标签)\s*\d*$/.test(
+        (button.textContent ?? "").trim(),
+      ),
     );
     return matched.map((button) => ({
       text: (button.textContent ?? "").trim(),

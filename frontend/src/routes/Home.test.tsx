@@ -165,7 +165,8 @@ it("筛选条紧贴在「全部图像」网格上方，不被英雄区 / 时间�
   await waitFor(() => expect(screen.getByTestId("album-grid")).toBeTruthy());
 
   const heading = screen.getByText("全部漫画");
-  const chip = screen.getByRole("button", { name: /文件夹/ });
+  // 漫画侧的视图 chip 用漫画自己的类型词：相册 / 作品。
+  const chip = screen.getByRole("button", { name: /相册/ });
   const grid = screen.getByTestId("album-grid");
 
   // 1) 筛选条排在「全部图像」标题之后、网格之前。

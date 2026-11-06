@@ -137,7 +137,7 @@ describe("Unread", () => {
       const headerHasCount = screen.queryAllByText(/还有/).length > 0;
       expect(headerHasCount).toBe(true);
     });
-    expect(screen.getByText("随机一本未读")).toBeInTheDocument();
+    expect(screen.getByText("随机一卷未读")).toBeInTheDocument();
   });
 
   it("全部看完时显示「看完了」空态", async () => {

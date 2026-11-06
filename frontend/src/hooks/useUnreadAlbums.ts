@@ -28,7 +28,7 @@ export function useUnreadAlbums(): {
   );
 
   // 分母是漫画相册总数：未读是漫画工作台独有的概念，
-  // 拿全库总数会让「还有 3 本没看 / 全库 200 本」变成一句误导的话。
+  // 拿全库总数会让「还有 3 卷没看 / 全库 200 卷」变成一句误导的话。
   const statistics = manifestQuery.data?.manifest.statistics;
   const total = statistics?.comicAlbumCount ?? 0;
 

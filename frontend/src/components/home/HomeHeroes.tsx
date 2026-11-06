@@ -170,7 +170,7 @@ export function ContinueHero({
           to={recentsRoute("comic")}
           className="hero-panel__muted inline-flex items-center gap-2 self-end mt-4 min-h-7"
         >
-          还有 {cards.length - 4} 本在读 <ArrowRightLineIcon size={12} />
+          还有 {cards.length - 4} {copy.collectionUnit}在读 <ArrowRightLineIcon size={12} />
         </Link>
       )}
     </section>

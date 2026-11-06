@@ -77,9 +77,9 @@ describe("UnreadHero", () => {
 
     // 数字 2 通过 nearest 父节点 textContent 校验
     const heroSection = screen.getByTestId("unread-hero");
-    expect(heroSection.textContent).toMatch(/2\s*本等你翻开/);
+    expect(heroSection.textContent).toMatch(/2\s*卷等你翻开/);
     // 随机未读按钮
-    const shuffleBtn = screen.getByRole("button", { name: "随机一本未读" });
+    const shuffleBtn = screen.getByRole("button", { name: "随机一卷未读" });
     fireEvent.click(shuffleBtn);
     expect(onShuffle).toHaveBeenCalledTimes(1);
     // 全部 → 链接跳到 /unread
@@ -103,7 +103,7 @@ describe("UnreadHero", () => {
     // 模拟「7 张未读但只传 1 张做展示」的极端情况:display count 而非 length
     const { container } = renderHero([makeCard("/a", "A")], 7);
     const heroSection = screen.getByTestId("unread-hero");
-    expect(heroSection.textContent).toMatch(/7\s*本等你翻开/);
+    expect(heroSection.textContent).toMatch(/7\s*卷等你翻开/);
     expect(container.querySelectorAll('a[href^="/comic/albums/"]').length).toBe(1);
   });
 
@@ -112,7 +112,7 @@ describe("UnreadHero", () => {
     renderHero([], 0);
     const heroSection = screen.getByTestId("unread-hero");
     // 计数 0 仍然显示「还有 0 本没看」— 由 Home 条件 {unreadCards.length > 0} 隐藏
-    expect(heroSection.textContent).toMatch(/0\s*本等你翻开/);
+    expect(heroSection.textContent).toMatch(/0\s*卷等你翻开/);
   });
 
   it("点 X 触发 onMarkRead 且不触发 onShuffle(未冒泡到其它 handler)", () => {

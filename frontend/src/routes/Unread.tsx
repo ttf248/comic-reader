@@ -22,8 +22,8 @@ import ViewedSortNotice from "../components/common/ViewedSortNotice";
 // 未读列表:跟 Recents / Favorites 同形,但源数据是「还没翻开过的相册」。
 //
 // 设计目标:
-//  1. 一眼看到「还有 N 本没看」,鼓励往下翻
-//  2. 提供「随机一本未读」快捷按钮,直接跳进第一本 — 配合用户「随便翻翻」
+//  1. 一眼看到「还有 N 卷没看」,鼓励往下翻
+//  2. 提供「随机一卷未读」快捷按钮,直接跳进第一本 — 配合用户「随便翻翻」
 //     的核心场景
 //  3. 全部看完时给一个明确「🎉 看完了」空态,而不是灰底 placeholder
 export default function Unread() {
@@ -116,9 +116,11 @@ export default function Unread() {
               <span>正在统计未读相册…</span>
             ) : (
               <span>
-                还有 <span className="text-fg">{count}</span> 本{copy.unreadCountVerb}
+                还有 <span className="text-fg">{count}</span>{" "}
+                {copy.collectionUnit}
+                {copy.unreadCountVerb}
                 <span className="text-fg-subtle mx-1.5">·</span>
-                全库 <span className="text-fg">{total}</span> 本
+                全库 <span className="text-fg">{total}</span> {copy.collectionUnit}
               </span>
             )}
           </p>

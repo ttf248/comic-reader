@@ -18,7 +18,7 @@ export interface Shortcut {
    * 随工作台模式变化的措辞。
    *
    * 少数全局操作在照片与漫画工作台下该用不同的说法（「随机翻翻」在
-   * 漫画工作台里是「随机一本」）。缺省时用 description。
+   * 漫画工作台里是「随机一卷」）。缺省时用 description。
    */
   modeDescriptions?: Partial<Record<"photo" | "comic", string>>;
   /**
@@ -88,7 +88,7 @@ export const SHORTCUTS: Shortcut[] = [
   {
     id: "shuffle",
     label: "R",
-    description: "随机一本",
+    description: "随机一卷",
     modeDescriptions: { photo: "随机翻翻" },
     combo: "r",
     group: "global",

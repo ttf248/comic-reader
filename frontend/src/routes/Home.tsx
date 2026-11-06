@@ -439,7 +439,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* 次级入口：没有在读内容时，「随机一本」升为主操作。
+        {/* 次级入口：没有在读内容时，「随机一卷」升为主操作。
             有在读内容时它退到次级，避免和「继续阅读」抢主位。
             照片侧的对应物是「接着看」。
             这一侧一部都没有时整块不出现：那里放着一枚点不动的按钮，
@@ -626,8 +626,16 @@ export default function Home() {
             <ListFilterBar
               viewChips={[
                 { key: "all", label: "全部", count: counts.all },
-                { key: "album", label: "文件夹", count: counts.album },
-                { key: "collection", label: "集合", count: counts.collection },
+                {
+                  key: "album",
+                  label: copy.albumTypeLabel,
+                  count: counts.album,
+                },
+                {
+                  key: "collection",
+                  label: copy.collectionTypeLabel,
+                  count: counts.collection,
+                },
                 { key: "smart", label: "标签", count: counts.smart },
               ]}
               activeViewKey={view}

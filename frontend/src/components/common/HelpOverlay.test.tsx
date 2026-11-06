@@ -173,7 +173,7 @@ it("全局操作的措辞随工作台模式变化", () => {
   act(() => {
     useAppModeStore.setState({ preference: "comic", hydrated: true });
   });
-  expect(screen.getByText("随机一本")).toBeInTheDocument();
+  expect(screen.getByText("随机一卷")).toBeInTheDocument();
   expect(screen.getByText("回到漫画库")).toBeInTheDocument();
   expect(screen.getByText("最近阅读")).toBeInTheDocument();
   expect(screen.getByText("收藏漫画")).toBeInTheDocument();

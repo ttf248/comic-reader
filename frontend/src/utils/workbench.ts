@@ -56,6 +56,15 @@ export interface WorkbenchCopy {
    * 那个数字是「里面有多少本相册」，不是图片数。
    */
   collectionUnit: string;
+  /**
+   * 单个相册的类型词：照片「文件夹」，漫画「相册」。
+   *
+   * 视图筛选的那一排 chip 用它。两侧用不同的词，是为了让两侧一眼
+   * 能分清 —— 照片侧是「文件夹 / 集合」，漫画侧是「相册 / 作品」。
+   */
+  albumTypeLabel: string;
+  /** 集合的类型词：照片「集合」，漫画「作品」。 */
+  collectionTypeLabel: string;
 }
 
 /** 漫画工作台专有的文案：进度与未读都属于漫画。 */
@@ -146,6 +155,8 @@ const PHOTO: PhotoCopy = {
   favoritesEmpty: "还没有收藏照片",
   randomLabel: "随机翻翻",
   mediaUnit: "张",
+  albumTypeLabel: "文件夹",
+  collectionTypeLabel: "集合",
   lastSeenVerb: "浏览",
   neverSeenLabel: "尚未浏览",
   collectionUnit: "本",
@@ -175,7 +186,7 @@ const COMIC: ComicCopy = {
   finishedLabel: "已读完",
   finishVerb: "读完",
   markFinishedLabel: "标记为已读完",
-  unfinishedCountLabel: "本还没读完",
+  unfinishedCountLabel: "卷还没读完",
   markAllTitle: "把当前所有未读相册标记为已读完(不影响收藏 / 最近)",
   unreadTitle: "未读",
   unreadPageTitle: "未读相册",
@@ -183,8 +194,8 @@ const COMIC: ComicCopy = {
   unreadEmptyHint:
     "漫画都读完了，可以在「主页」随机翻一卷，或去「收藏」里找回老朋友。",
   unreadEyebrow: "下一本的灵感",
-  unreadCountLabel: "本等你翻开",
-  unreadButton: "随机一本未读",
+  unreadCountLabel: "卷等你翻开",
+  unreadButton: "随机一卷未读",
   unreadEmpty: "全部看完啦 🎉",
   sectionTitle: "全部漫画",
   yearSectionTitle: "该年份的漫画",
@@ -195,8 +206,10 @@ const COMIC: ComicCopy = {
   recentsAlbumsLoadError: "最近阅读的相册信息加载失败。",
   favoritesTitle: "我收藏的漫画",
   favoritesEmpty: "还没有收藏漫画",
-  randomLabel: "随机一本",
+  randomLabel: "随机一卷",
   mediaUnit: "页",
+  albumTypeLabel: "相册",
+  collectionTypeLabel: "作品",
   lastSeenVerb: "阅读",
   neverSeenLabel: "尚未阅读",
   collectionUnit: "卷",

@@ -124,8 +124,8 @@ describe("Sidebar", () => {
       { album: { ...albumNode, id: "a_3", name: "第三本", displayName: "第三本" }, pageIndex: 0, pageCount: 30 },
     ];
     renderSidebar();
-    expect(screen.getByText("3 本还没读完")).toBeInTheDocument();
-    expect(screen.getByText(/还有 2 本没读完/)).toBeInTheDocument();
+    expect(screen.getByText("3 卷还没读完")).toBeInTheDocument();
+    expect(screen.getByText(/还有 2 卷没读完/)).toBeInTheDocument();
     // 其余条目不再逐条列出。
     expect(screen.queryByText("第二本")).not.toBeInTheDocument();
     expect(screen.queryByText("第三本")).not.toBeInTheDocument();
@@ -235,6 +235,6 @@ describe("Sidebar", () => {
     renderSidebar();
     expect(screen.queryByText("随机未读")).not.toBeInTheDocument();
     // 「随机一本」保留
-    expect(screen.getByText("随机一本")).toBeInTheDocument();
+    expect(screen.getByText("随机一卷")).toBeInTheDocument();
   });
 });

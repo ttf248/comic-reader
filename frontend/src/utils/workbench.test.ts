@@ -40,6 +40,6 @@ describe("工作台词表", () => {
 
   it("两侧的随机动作名各自成套", () => {
     expect(workbenchCopy("photo").randomLabel).toBe("随机翻翻");
-    expect(workbenchCopy("comic").randomLabel).toBe("随机一本");
+    expect(workbenchCopy("comic").randomLabel).toBe("随机一卷");
   });
 });
