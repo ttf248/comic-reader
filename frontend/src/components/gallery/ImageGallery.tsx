@@ -22,7 +22,7 @@ interface Props {
 type Aspect =
   | { mode: "fit" } // contain
   | { mode: "width" } // 100% 宽，自适应高
-  | { mode: "height" } // 100vh 高，水平居中
+  | { mode: "height" } // 画布高，水平居中
   | { mode: "original" }; // 自然尺寸
 
 // 图片画廊：
@@ -263,7 +263,7 @@ export default function ImageGallery({
       return { ...base, width: "100%", height: "auto" };
     }
     if (aspect.mode === "height") {
-      return { ...base, height: "100vh", width: "auto", maxWidth: "100%" };
+      return { ...base, height: "var(--gallery-fit-height)", width: "auto", maxWidth: "100%" };
     }
     // 原始尺寸：按像素原样显示，由容器滚动查看。
     // flex 子项默认会被压缩到容器宽度；Tailwind preflight 还给 img 设了
@@ -436,18 +436,25 @@ function DoublePage({ images, index, aspect, direction, imgKey }: DoubleProps) {
       return "w-full h-auto";
     }
     if (aspect.mode === "height") {
-      return "h-screen w-auto max-w-full";
+      return "h-[var(--gallery-fit-height)] w-auto max-w-full";
     }
     return "w-auto h-auto";
   }
 
   return (
+    /* items-stretch（默认）而不是 items-center：每一页的容器要撑满行高，
+       图片的 max-h-full 才有确定的参照高度可算。
+       行高不定时 max-h-full 落空，竖版页就会按原比例高出画布 ——
+       上缘被切掉一半，读者看到的是页面中段而不是这一页的开头。 */
     <div
       key={imgKey}
-      className="flex flex-row items-center justify-center w-full h-full gap-1 p-2"
+      className="flex flex-row justify-center w-full h-full gap-1 p-2"
     >
       {ordered.map((p, i) => (
-        <div key={p.key + i} className="flex-1 min-w-0 flex justify-center">
+        <div
+          key={p.key + i}
+          className="flex-1 min-w-0 flex items-center justify-center"
+        >
           {p.src ? (
             <GalleryImage
               src={imageUrl(p.src)}
@@ -509,9 +516,9 @@ const ContinuousImage = memo(function ContinuousImage({
     // 按高：每张图占满视口高度（适合长条图）→ 高度 100vh，宽度按比例
     style = {
       ...baseStyle,
-      height: "100vh",
+      height: "var(--gallery-fit-height)",
       width: "auto",
-      maxHeight: "100vh",
+      maxHeight: "var(--gallery-fit-height)",
     };
   } else {
     // 原始：自然尺寸，超过容器宽度时缩小

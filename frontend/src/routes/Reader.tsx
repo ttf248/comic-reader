@@ -1117,8 +1117,16 @@ export default function Reader() {
         {/* 暗色画布层：让图片有「画廊」氛围 */}
         {/* flex flex-col 是关键：让 ImageGallery 内部的 `flex-1` + `min-h-0`
           容器拿到约束高度,连续模式才能在容器内纵向滚动,
-          而不是被外层 overflow-hidden 裁掉。 */}
-        <div className="absolute inset-0 flex flex-col">
+          而不是被外层 overflow-hidden 裁掉。
+          上下两条留白留给常驻的顶栏与页码条：它们不淡出，
+          压在画面上就等于永久遮住这一页的开头与结尾。 */}
+        <div
+          className="absolute inset-0 flex flex-col"
+          style={{
+            paddingTop: "var(--reader-chrome-top)",
+            paddingBottom: isVideo ? 0 : "var(--reader-chrome-bottom)",
+          }}
+        >
           {isVideo ? (
             <VideoPlayer
               src={current ?? ""}

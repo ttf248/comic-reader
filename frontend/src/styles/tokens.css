@@ -158,6 +158,23 @@
   --overlay-warning: #e0b169;
   --overlay-success: #79d3a4;
   --overlay-favorite: #e08bb4;
+  /* 「按高度适配」时图片参照的高度。照片墙整屏就是视口，
+     阅读器要给常驻控件留出两条带，因此改成 100%。 */
+  --gallery-fit-height: 100vh;
+  /* 阅读器给常驻控件留出的两条带：顶部条与底部页码条。
+     这两条带是常驻的，压在画面上就等于永久遮住页面的一头一尾 ——
+     漫画页的开头与结尾正是最不该被遮住的地方。 */
+  --reader-chrome-top: 62px; /* 顶栏 14 + 48 */
+  --reader-chrome-bottom: 44px; /* 底部页码条 */
+}
+.reader-shell {
+  --gallery-fit-height: 100%;
+}
+@media (max-width: 639px) {
+  .reader-shell {
+    /* 窄屏顶栏上移（8 + 42），留出的带也跟着变窄。 */
+    --reader-chrome-top: 56px;
+  }
 }
 
 /* === 工作台模式色调 ===
