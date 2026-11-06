@@ -8,7 +8,8 @@ import type { CardData } from "../album/AlbumGrid";
  * 封面图。
  *
  * 两个工作台的首页 hero 都要显示封面，不各写一份：
- * 图片按原比例裁切（object-cover），视频保留完整画面（object-contain），
+ * 图片按原比例裁切（object-cover），视频同样裁切 —— 保留完整画面会在
+ * 方形的裱框里上下留出两条黑边，读起来像一只空信箱，而不是一张照片。
  * 大图用预览尺寸而不是缩略图。
  */
 export default function Cover({
@@ -31,7 +32,7 @@ export default function Cover({
       loading={large ? "eager" : "lazy"}
       decoding="async"
       onError={() => setFailedSource(src)}
-      className={`w-full h-full ${card.coverKind === "video" ? "object-contain" : "object-cover object-[50%_30%]"}`}
+      className="w-full h-full object-cover object-[50%_30%]"
     />
   ) : (
     <span className="w-full h-full flex items-center justify-center text-white/70">

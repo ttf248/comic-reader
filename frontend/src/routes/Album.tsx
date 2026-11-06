@@ -356,7 +356,7 @@ function CollectionHead({
       <div className="detail-head">
         <div
           className={`detail-head__cover${
-            isComic ? " detail-head__cover--book" : ""
+            isComic ? " detail-head__cover--book" : " detail-head__cover--print"
           }`}
         >
           <CardCover
@@ -377,11 +377,31 @@ function CollectionHead({
               <span className="page-eyebrow__source">来自 {detail.sourceName}</span>
             )}
           </p>
-          <h1 className="detail-head__title mt-2">{detail.name}</h1>
+          {/* 标题与动作同一行：动作贴在标题这一行的右端。页头横跨
+              整屏，把按钮甩到屏幕最右会让它孤零零地悬在半空；压在
+              计数行下面又读起来像页脚的杂项。放在标题行末，它与
+              它作用的对象挨着，又不抢标题的位置。 */}
+          <div className="detail-head__row">
+            <h1 className="detail-head__title mt-2">{detail.name}</h1>
+            <div className="detail-head__actions">
+              <button
+                type="button"
+                onClick={onToggleFav}
+                className={`inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-body transition-colors ${
+                  isFavorite
+                    ? "bg-favorite/10 text-favorite hover:bg-favorite/15"
+                    : "border border-border hover:bg-bg-subtle text-fg"
+                }`}
+              >
+                <StarIcon size={13} filled={isFavorite} />
+                <span>{isFavorite ? "已收藏" : "收藏"}</span>
+              </button>
+            </div>
+          </div>
           <div className="detail-head__meta">
             <span>
               <span className="detail-head__value">{albumCount}</span>{" "}
-              {collectionUnit(detail.contentKind)}
+              {isComic ? collectionUnit(detail.contentKind) : "个相册"}
             </span>
             {collectionCount > 0 && (
               <>
@@ -414,23 +434,6 @@ function CollectionHead({
                 </span>
               </>
             )}
-          </div>
-          {/* 动作贴在内容区里：页头横跨整屏，把按钮甩到最右会让它
-              孤零零地悬在半空，读起来像页脚的杂项。收进标题块下方，
-              动作与它作用的对象挨在一起。 */}
-          <div className="detail-head__actions">
-            <button
-              type="button"
-              onClick={onToggleFav}
-              className={`inline-flex h-8 items-center gap-1.5 rounded-md px-2.5 text-body transition-colors ${
-                isFavorite
-                  ? "bg-favorite/10 text-favorite hover:bg-favorite/15"
-                  : "border border-border hover:bg-bg-subtle text-fg"
-              }`}
-            >
-              <StarIcon size={13} filled={isFavorite} />
-              <span>{isFavorite ? "已收藏" : "收藏"}</span>
-            </button>
           </div>
         </div>
       </div>

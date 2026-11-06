@@ -205,7 +205,7 @@
   --panel-bg: var(--bg-elevated);
   --panel-fg: var(--fg);
   --panel-muted: var(--fg-muted);
-  --hero-cover-col: 132px;
+  --hero-cover-col: 176px;
   --section-index-font: var(--font-mono);
 }
 
@@ -218,7 +218,9 @@
   --panel-bg: var(--bg-elevated);
   --panel-fg: var(--fg);
   --panel-muted: var(--fg-muted);
-  --hero-cover-col: 132px;
+  /* 照片侧的裱框与集合页头同一尺寸：176px。首屏那本「上次看过的」
+     与页头那件展品是同一种东西，尺寸也该一样。 */
+  --hero-cover-col: 176px;
   --section-index-font: var(--font-mono);
 }
 

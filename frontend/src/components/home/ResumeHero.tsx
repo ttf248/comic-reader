@@ -74,7 +74,7 @@ export default function ResumeHero({ cards }: Props) {
         </div>
       </div>
       {rest.length > 0 && (
-        <div className="hero-queue">
+        <div className="resume-queue">
           {rest.map((card) => (
             <ResumeQueueItem key={card.id} card={card} />
           ))}
@@ -95,30 +95,30 @@ export default function ResumeHero({ cards }: Props) {
 function ResumeQueueItem({ card }: { card: CardData }) {
   const copy = photoCopy();
   return (
-    <div className="hero-queue__item">
-      <Link
-        to={card.to}
-        className="hero-queue__open"
-        aria-label={`${copy.resumeButton}「${card.displayTitle ?? card.title}」`}
-      >
-        <span className="w-10 h-10 shrink-0 rounded-md overflow-hidden bg-bg-media">
-          <Cover card={card} />
+    <Link
+      to={card.to}
+      className="resume-queue__item"
+      aria-label={`${copy.resumeButton}「${card.displayTitle ?? card.title}」`}
+    >
+      {/* 队列项也是一张小照片：展陈墙上不摆邮票大小的缩略图，
+          那读起来像一排图标，不像一排看过的相册。 */}
+      <span className="resume-queue__cover">
+        <Cover card={card} />
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate text-body font-medium">
+          {card.displayTitle ?? card.title}
         </span>
-        <span className="min-w-0">
-          <span className="block truncate text-body font-medium">
-            {card.displayTitle ?? card.title}
-          </span>
-          <span className="hero-panel__muted block mt-1 tabular-nums">
-            {card.imageCount ?? 0} {copy.mediaUnit}
-            {card.lastSeenAt && (
-              <>
-                {" · "}
-                {timeAgo(card.lastSeenAt)}
-              </>
-            )}
-          </span>
+        <span className="hero-panel__muted block mt-1 tabular-nums">
+          {card.imageCount ?? 0} {copy.mediaUnit}
+          {card.lastSeenAt && (
+            <>
+              {" · "}
+              {timeAgo(card.lastSeenAt)}
+            </>
+          )}
         </span>
-      </Link>
-    </div>
+      </span>
+    </Link>
   );
 }

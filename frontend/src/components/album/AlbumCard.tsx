@@ -408,7 +408,9 @@ function GridCard({
           }`}
           data-testid="card-cover"
         >
-          <CardCover data={data} fit={showTitleOnCover ? "cover" : "contain"} />
+          {/* 视频封面同样裁切填满：方形画幅里保留 16:9 的完整画面会
+              上下留出两条黑边，读起来像一只空信箱。 */}
+          <CardCover data={data} fit="cover" />
 
           {/* 封面左上角：状态槽。阅读状态（未读 / 已读完）与视频转码角标
               都在这一列，堆叠显示，互不遮挡。

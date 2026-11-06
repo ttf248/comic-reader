@@ -98,6 +98,13 @@
   .home-overview > :only-child {
     grid-column: 1 / -1;
   }
+  /* 照片侧的两块首屏面板等宽。
+     漫画侧「继续阅读」要放下进度轨道与队列，给宽一点；照片侧的
+     「接着看」只有一本主角 + 三本队列，1.5 倍宽会让主角那一行右侧
+     空出一大片，队列也拉不满，整块读起来是半张空纸。 */
+  :root[data-mode="photo"] .home-overview {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
   /* 照片侧首屏的两栏骨架（只在分两栏的断点生效）。
      宽屏：第一行「接着看」+「随手看看」，第二行「最近加入」通栏 ——
      四张方照横贯一行更像一面展陈墙，也不用把窄栏挤成两行。
@@ -206,6 +213,15 @@
     aspect-ratio: 1 / 1;
     box-shadow: var(--shadow-sm);
   }
+  /* 首屏的照片也是一件装裱出来的展品：内白 + 一道细边，
+     把它从白色展板上托出来。漫画侧的书封不用这套 —— 书本来就有厚度。 */
+  :root[data-mode="photo"] .hero-cover--print {
+    padding: 8px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-media);
+    box-shadow: var(--shadow-md);
+  }
   .hero-queue {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -269,6 +285,39 @@
   .hero-queue__item:hover .hero-queue__remove,
   .hero-queue__remove:focus-visible {
     opacity: 1;
+  }
+  /* 照片侧「接着看」的队列：展陈墙上的小照片。
+     漫画侧的队列是一排小书脊（hero-queue__cover），照片这边换成方照，
+     缩略图给到 56px —— 40px 的邮票读起来像一排图标，
+     不像「看过的相册」。 */
+  .resume-queue {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px 16px;
+    border-top: 1px solid var(--border);
+    padding-top: 18px;
+  }
+  .resume-queue__item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+    padding: 4px;
+    margin: -4px;
+    border-radius: var(--radius-media);
+    transition: background var(--dur);
+  }
+  .resume-queue__item:hover {
+    background: var(--bg-subtle);
+  }
+  .resume-queue__cover {
+    display: block;
+    width: 56px;
+    height: 56px;
+    flex-shrink: 0;
+    overflow: hidden;
+    border-radius: var(--radius-media);
+    background: var(--bg-media);
   }
   /* 面板里的卡片墙：两列是默认，四列才像一面照片墙。 */
   .hero-grid {
@@ -550,6 +599,15 @@
        眉标与封面顶、计数行与封面底大致齐平。 */
     padding-block: 4px;
   }
+  /* 标题行：标题占主位，动作贴在它右端。标题长了就换行，
+     动作不会挤到标题的字上。 */
+  .detail-head__row {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px 16px;
+    width: 100%;
+  }
   .page-eyebrow__source {
     margin-left: 10px;
     padding-left: 10px;
@@ -563,6 +621,19 @@
     border-radius: var(--radius-media);
     background: var(--bg-subtle);
     box-shadow: var(--shadow-xs);
+  }
+  /* 照片侧的集合页头封面是一张裱起来的照片。
+     它是这一页的锚点，不能比正文里的卡片还小：网格里的卡片最小也有
+     164px 宽，104px 的拼贴只剩四个色块，看不出「里面有什么」。
+     裱框（内白 + 一道细边）让它从正文里托出来，像墙上的一件展品。 */
+  .detail-head__cover--print {
+    width: 176px;
+    height: 176px;
+    padding: 10px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-media);
+    box-shadow: var(--shadow-sm);
   }
   /* 集合页的页头封面按「一本书」处理：竖版、装订边、有厚度。
      与网格里的书封卡同一套语言，页面从页头到网格是一句话。
@@ -603,8 +674,9 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    /* 动作紧跟计数行：它作用的是这一组内容，不是页面级的事。 */
-    margin-top: 14px;
+    /* 动作紧跟标题：它作用的是这一组内容，不是页面级的事。
+       不推到屏幕最右 —— 那样它孤零零地悬在半空，与标题分属两处。 */
+    margin-top: 0;
   }
 
   /* --- 相册条：照片墙顶部的相册身份条 ---
