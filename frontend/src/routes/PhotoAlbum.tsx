@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import type { LibraryMediaItem, LibraryNodeSummary } from "../api/library";
 import { albumsApi } from "../api/albums";
@@ -10,6 +11,7 @@ import {
   usePhotoStore,
   WALL_DENSITY_HEIGHT,
   WALL_DENSITY_LABEL,
+  type WallDensity,
 } from "../store/photoStore";
 import PhotoWall from "../components/wall/PhotoWall";
 import PhotoViewer from "../components/wall/PhotoViewer";
@@ -22,6 +24,7 @@ import Popover, {
 import {
   ArrowUpRightIcon,
   ChevronLeftIcon,
+  ChevronRightIcon,
   ImageIcon,
   CopyIcon,
   FolderIcon,
@@ -37,6 +40,48 @@ import { albumRoute, homeRoute } from "../utils/path";
 interface Props {
   /** 相册摘要（含内容用途与封面）。 */
   album: LibraryNodeSummary;
+}
+
+/** 每档密度用多少个小方块示意疏密。 */
+const DENSITY_GRID: Record<WallDensity, { cols: number; rows: number }> = {
+  compact: { cols: 5, rows: 4 },
+  cozy: { cols: 4, rows: 3 },
+  large: { cols: 3, rows: 2 },
+};
+
+/**
+ * 密度示意：方块排得越密，读数就是越紧凑。
+ *
+ * 原来的 S / M / L 三个字母要求读者先建立「字母 = 档位」的对应关系，
+ * 而档位名（密集 / 标准 / 宽松）已经写在提示里；图形直接说出疏密。
+ */
+function DensityGlyph({ level }: { level: WallDensity }) {
+  const { cols, rows } = DENSITY_GRID[level];
+  const cell = 16 / cols;
+  const gap = 1.2;
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width={15}
+      height={15}
+      aria-hidden="true"
+      focusable="false"
+    >
+      {Array.from({ length: rows }).map((_, r) =>
+        Array.from({ length: cols }).map((__, c) => (
+          <rect
+            key={`${r}-${c}`}
+            x={c * cell}
+            y={r * cell}
+            width={cell - gap}
+            height={cell - gap}
+            rx={0.6}
+            fill="currentColor"
+          />
+        )),
+      )}
+    </svg>
+  );
 }
 
 /**
@@ -186,21 +231,37 @@ export default function PhotoAlbum({ album }: Props) {
               <span className="hidden sm:inline">返回</span>
             </button>
 
-            <div className="min-w-0 flex-1">
-              <h1 className="album-bar__title truncate">{title}</h1>
-              <div className="album-bar__meta tabular-nums">
-                {/* 这一本在库里的位置：所属集合。散图相册的标题本身就是
-                    归属目录，没有第二层可说，就不重复报。文件夹图标说明
-                    「这一本放在这个目录里」，比光写目录名更不容易读成年份。 */}
-                {album.parentName && (
-                  <>
-                    <span className="inline-flex items-center gap-1 truncate">
+            {/* 标题行：集合 › 相册 › 计数。
+                照片墙是浏览页，页头要薄 —— 它占的每一行都是照片的位置。
+                身份信息摊在同一行上（左）比堆成两行更省高度，
+                也让「这一本在库里的哪个位置」一眼可读。 */}
+            <div className="min-w-0 flex-1 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              {/* 这一本在库里的位置：所属集合。散图相册的标题本身就是
+                  归属目录，没有第二层可说，就不重复报。
+                  集合名是一段路径，不是一段文字：点它回到那个集合，
+                  否则从相册里找不到回去的路。 */}
+              {album.parentName && (
+                <>
+                  {album.parentId ? (
+                    <Link
+                      to={albumRoute("photo", album.parentId)}
+                      className="album-bar__crumb inline-flex items-center gap-1 truncate hover:text-brand-ink transition-colors"
+                      title={`回到集合「${album.parentName}」`}
+                    >
+                      <FolderIcon size={11} className="shrink-0" />
+                      {album.parentName}
+                    </Link>
+                  ) : (
+                    <span className="album-bar__crumb inline-flex items-center gap-1 truncate">
                       <FolderIcon size={11} className="shrink-0" />
                       {album.parentName}
                     </span>
-                    <span className="text-fg-subtle">·</span>
-                  </>
-                )}
+                  )}
+                  <ChevronRightIcon size={12} className="shrink-0 text-fg-subtle" />
+                </>
+              )}
+              <h1 className="album-bar__title truncate">{title}</h1>
+              <div className="album-bar__meta tabular-nums">
                 <span>
                   <span className="text-fg font-medium">
                     {album.imageCount ?? 0}
@@ -239,7 +300,7 @@ export default function PhotoAlbum({ album }: Props) {
                     key={key}
                     type="button"
                     onClick={() => setDensity(key)}
-                    className={`h-7 px-2.5 transition-colors ${
+                    className={`inline-flex h-7 w-8 items-center justify-center transition-colors ${
                       density === key
                         ? "bg-bg-subtle text-fg"
                         : "text-fg-muted hover:text-fg"
@@ -248,7 +309,9 @@ export default function PhotoAlbum({ album }: Props) {
                     aria-label={WALL_DENSITY_LABEL[key]}
                     aria-pressed={density === key}
                   >
-                    {key === "compact" ? "S" : key === "cozy" ? "M" : "L"}
+                    {/* 密度用排布示意，不写 S/M/L 三个字母：
+                        字母要读者先知道它对应哪一档，图形直接说「疏 / 密」。 */}
+                    <DensityGlyph level={key} />
                   </button>
                 ))}
               </div>

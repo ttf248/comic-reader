@@ -688,6 +688,12 @@
     gap: 14px;
     padding-block: 12px;
   }
+  /* 面包屑里的集合名：比标题弱一档，但仍是路径的一部分，
+     悬停时用品牌色（动作发生在照片工作台里）。 */
+  .album-bar__crumb {
+    font-size: var(--text-meta);
+    color: var(--fg-muted);
+  }
   .album-bar__title {
     font-family: var(--font-display);
     font-size: clamp(20px, 1.8vw, 25px);
@@ -705,6 +711,10 @@
     margin-top: 4px;
     font-size: var(--text-meta);
     color: var(--fg-muted);
+  }
+  /* 标题行里的计数：与标题同一行时不再另起一行。 */
+  .album-bar .album-bar__meta {
+    margin-top: 0;
   }
 
   .library-grid {
