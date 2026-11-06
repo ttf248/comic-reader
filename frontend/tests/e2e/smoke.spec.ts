@@ -1800,7 +1800,7 @@ test("设置读取失败可重试，恢复后显示阅读设置", async ({ page 
   blocked = false;
   await alert.getByRole("button", { name: "重试加载", exact: true }).click();
   await expect(
-    page.getByRole("switch", { name: "阅读到末尾自动切换下一本" }),
+    page.getByRole("switch", { name: "阅读到末尾自动切换下一卷" }),
   ).toBeVisible();
   await expect(alert).toHaveCount(0);
 });
@@ -1841,7 +1841,7 @@ for (const operation of ["prefs", "prune", "history"] as const) {
       await page.goto("/settings");
       const action =
         operation === "prefs"
-          ? page.getByRole("switch", { name: "阅读到末尾自动切换下一本" })
+          ? page.getByRole("switch", { name: "阅读到末尾自动切换下一卷" })
           : page.getByRole("button", {
               name: operation === "prune" ? /^清理(?:中…)?$/ : /^清空(?:中…)?$/,
             });
@@ -2800,7 +2800,9 @@ test("排序选项支持键盘确认取消和自然移出焦点", async ({ page 
     await page.keyboard.press("Shift+Tab");
     await expect(trigger).toBeFocused();
     await page.keyboard.press("Shift+Tab");
-    await expect(page.locator('main input[type="number"]')).toBeFocused();
+    await expect(
+      page.getByRole("button", { name: "最少页数", exact: true }),
+    ).toBeFocused();
     await expect(options).toHaveCount(0);
   });
 
