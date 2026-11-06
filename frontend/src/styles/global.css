@@ -1357,6 +1357,12 @@ button:not(:disabled):active {
 .input-focus-ring:focus-within {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 22%, transparent);
 }
+/* 阅读器的浮层是暗场的，焦点环跟着走白色系 —— 与浮层里其它焦点
+   （[data-tone="reader"] :focus-visible）保持一致。品牌色是暖橙，
+   落在暗底上会被读成「报错了」。 */
+[data-tone="reader"] .input-focus-ring:focus-within {
+  box-shadow: 0 0 0 3px rgb(255 255 255 / 0.3);
+}
 /* 焦点环画在外壳上，不画在内层 input 上。
    外壳是圆角胶囊（搜索框）或圆角小框（帮助面板），内层 input 是直角：
    让 input 自己画焦点环，就会在胶囊里出现一个直角的方框，

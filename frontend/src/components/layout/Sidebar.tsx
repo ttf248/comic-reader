@@ -388,7 +388,11 @@ function ResumeMiniCard({
       title={`${resumeLabel(card)}「${title}」`}
       className="mt-2 w-full rounded-lg bg-rail-hover hover:bg-rail-hover p-2 flex gap-2.5 items-center text-left transition-colors group/mini focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rail-accent"
     >
-      <span className="relative w-9 h-12 shrink-0 rounded overflow-hidden bg-rail-hover block">
+      <span
+        className={`relative w-9 h-12 shrink-0 overflow-hidden bg-rail-hover block ${
+          isComic ? "album-thumb--book" : "rounded"
+        }`}
+      >
         {card.coverPath ? (
           <img
             src={thumbUrl(card.coverPath)}
@@ -408,7 +412,9 @@ function ResumeMiniCard({
           {title}
         </span>
         {isComic && (
-          <span className="mt-1.5 block h-[3px] rounded-full bg-rail-hover overflow-hidden">
+          /* 轨道用半透明白：卡片底色本身就是 --rail-hover，
+             轨道再用同一个色就等于没画，空的部分根本看不见。 */
+          <span className="mt-1.5 block h-[3px] rounded-full bg-white/15 overflow-hidden">
             <span
               className="block h-full rounded-full bg-rail-accent"
               style={{ width: `${percent}%` }}

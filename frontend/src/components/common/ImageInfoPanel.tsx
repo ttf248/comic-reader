@@ -30,7 +30,7 @@ export default function ImageInfoPanel({ absPath, onClose }: Props) {
       className="
         absolute inset-x-0 bottom-0 top-[76px] z-30 flex flex-col
         border-t border-overlay-border bg-overlay-panel backdrop-blur-md
-        md:static md:inset-auto md:z-auto md:w-72 md:shrink-0 md:border-l md:border-t-0
+        md:static md:inset-auto md:z-auto md:w-[21rem] md:shrink-0 md:border-l md:border-t-0
       "
     >
       <div className="flex items-center justify-between px-4 h-11 border-b border-white/10 shrink-0">
@@ -46,7 +46,7 @@ export default function ImageInfoPanel({ absPath, onClose }: Props) {
           <CloseIcon size={13} />
         </button>
       </div>
-      <div className="flex-1 overflow-auto p-4 text-body space-y-3 scroll-thin">
+      <div className="flex-1 overflow-auto p-4 text-body scroll-thin">
         {loading && <div className="text-white/60 text-meta">加载中…</div>}
         {err !== null && (
           <div className="text-overlay-danger text-meta">
@@ -54,7 +54,9 @@ export default function ImageInfoPanel({ absPath, onClose }: Props) {
           </div>
         )}
         {info && (
-          <>
+          /* 两列的规格表：标签在左一窄列，值在右。原先标签在上、值在下，
+             一屏读不到几行，剩下半屏是空的；规格表本来就该能横向扫读。 */
+          <dl className="divide-y divide-white/10">
             <Row
               label="文件名"
               value={info.name}
@@ -86,7 +88,7 @@ export default function ImageInfoPanel({ absPath, onClose }: Props) {
               copyable
               copyValue={info.checksum}
             />
-          </>
+          </dl>
         )}
       </div>
     </aside>
@@ -103,16 +105,24 @@ interface RowProps {
 
 function Row({ label, value, mono, copyable, copyValue }: RowProps) {
   return (
-    <div>
-      <div className="text-meta text-white/60 mb-1 flex items-center gap-1.5">
-        <span>{label}</span>
-        {copyable && copyValue && <CopyButton value={copyValue} onDark />}
-      </div>
-      <div
-        className={`break-all ${mono ? "font-mono text-meta text-white/70" : "text-white/90"}`}
-      >
-        {value}
-      </div>
+    <div className="flex items-start gap-3 py-2">
+      <dt className="w-14 shrink-0 text-meta text-white/50 leading-5">
+        {label}
+      </dt>
+      <dd className="flex-1 min-w-0 flex items-start gap-1.5">
+        <span
+          className={`break-all leading-5 ${
+            mono ? "font-mono text-meta text-white/70" : "text-white/90"
+          }`}
+        >
+          {value}
+        </span>
+        {copyable && copyValue && (
+          <span className="shrink-0">
+            <CopyButton value={copyValue} onDark />
+          </span>
+        )}
+      </dd>
     </div>
   );
 }
