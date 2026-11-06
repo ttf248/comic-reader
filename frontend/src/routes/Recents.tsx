@@ -9,6 +9,7 @@ import { useAppMode } from "../hooks/useAppMode";
 import { workbenchCopy } from "../utils/workbench";
 import { useGalleryContextSync } from "../hooks/useGalleryContextSync";
 import AlbumGrid from "../components/album/AlbumGrid";
+import FootprintTimeline from "../components/photo/FootprintTimeline";
 import AlbumGridSkeleton from "../components/album/AlbumGridSkeleton";
 import { ListFilterBar } from "../components/common/ListFilterBar";
 import EmptyState from "../components/common/EmptyState";
@@ -158,7 +159,13 @@ export default function Recents() {
           </div>
         </div>
       )}
-      {cards.length > 0 && <ListFilterBar totalCount={filtered.length} />}
+      {cards.length > 0 && (
+        <ListFilterBar
+          totalCount={filtered.length}
+          /* 照片侧只有足迹这一种形态，摆一个切不动的视图开关只是噪音。 */
+          hideViewToggle={mode === "photo"}
+        />
+      )}
 
       {historyQuery.isLoading ? (
         <AlbumGridSkeleton variant={viewMode} label={`正在加载${copy.recentsTitle}…`} />
@@ -206,7 +213,13 @@ export default function Recents() {
       ) : (
         <section className="page-shell">
           <div className="pb-10">
-            <AlbumGrid items={filtered} variant={viewMode} showLastSeen />
+            {mode === "photo" ? (
+              /* 照片侧按时间排：这一页问的是「我刚才在翻什么」，
+                 网格把时间压到卡片角落的小字里，时间线才读得出来。 */
+              <FootprintTimeline cards={filtered} />
+            ) : (
+              <AlbumGrid items={filtered} variant={viewMode} showLastSeen />
+            )}
           </div>
         </section>
       )}

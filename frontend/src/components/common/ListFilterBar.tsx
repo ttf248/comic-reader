@@ -22,6 +22,9 @@ interface ListFilterBarProps {
   // 显示「最少图数」过滤(默认 true)。如果某页不希望显示(如纯 smart
   // 集合页,过滤不适用),传 false。
   showMinImageFilter?: boolean;
+  // 隐藏「网格 / 列表」切换。某些页面只有一种形态（例如照片侧的
+  // 「最近浏览」按时间排成一条足迹），摆一个切不动的开关只是噪音。
+  hideViewToggle?: boolean;
 }
 
 export function ListFilterBar({
@@ -30,6 +33,7 @@ export function ListFilterBar({
   onChangeView,
   totalCount,
   showMinImageFilter = true,
+  hideViewToggle = false,
 }: ListFilterBarProps) {
   const sortBy = useSearchStore((s) => s.sortBy);
   const setSortBy = useSearchStore((s) => s.setSortBy);
@@ -81,38 +85,40 @@ export function ListFilterBar({
               --bg-subtle，在浅色画布上几乎看不出差别 —— 两个图标悬在
               筛选条右端像两枚散落的方块。现在轨道有一个底，选中的那一段
               抬起来成为白底深色字。 */}
-          <div
-            role="group"
-            aria-label="视图模式"
-            className="inline-flex items-center shrink-0 rounded-md border border-border bg-bg-subtle/40 overflow-hidden"
-          >
-            <button
-              onClick={() => setViewMode("grid")}
-              title="网格"
-              aria-label="网格视图"
-              aria-pressed={viewMode === "grid"}
-              className={`inline-flex items-center justify-center w-[34px] h-[32px] transition-colors ${
-                viewMode === "grid"
-                  ? "bg-bg-elevated text-fg shadow-xs"
-                  : "text-fg-subtle hover:text-fg hover:bg-bg-subtle/60"
-              }`}
+          {!hideViewToggle && (
+            <div
+              role="group"
+              aria-label="视图模式"
+              className="inline-flex items-center shrink-0 rounded-md border border-border bg-bg-subtle/40 overflow-hidden"
             >
-              <GridIcon size={14} />
-            </button>
-            <button
-              onClick={() => setViewMode("list")}
-              title="列表"
-              aria-label="列表视图"
-              aria-pressed={viewMode === "list"}
-              className={`inline-flex items-center justify-center w-[34px] h-[32px] transition-colors ${
-                viewMode === "list"
-                  ? "bg-bg-elevated text-fg shadow-xs"
-                  : "text-fg-subtle hover:text-fg hover:bg-bg-subtle/60"
-              }`}
-            >
-              <ListIcon size={14} />
-            </button>
-          </div>
+              <button
+                onClick={() => setViewMode("grid")}
+                title="网格"
+                aria-label="网格视图"
+                aria-pressed={viewMode === "grid"}
+                className={`inline-flex items-center justify-center w-[34px] h-[32px] transition-colors ${
+                  viewMode === "grid"
+                    ? "bg-bg-elevated text-fg shadow-xs"
+                    : "text-fg-subtle hover:text-fg hover:bg-bg-subtle/60"
+                }`}
+              >
+                <GridIcon size={14} />
+              </button>
+              <button
+                onClick={() => setViewMode("list")}
+                title="列表"
+                aria-label="列表视图"
+                aria-pressed={viewMode === "list"}
+                className={`inline-flex items-center justify-center w-[34px] h-[32px] transition-colors ${
+                  viewMode === "list"
+                    ? "bg-bg-elevated text-fg shadow-xs"
+                    : "text-fg-subtle hover:text-fg hover:bg-bg-subtle/60"
+                }`}
+              >
+                <ListIcon size={14} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

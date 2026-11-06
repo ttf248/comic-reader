@@ -721,6 +721,86 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
   }
+  /* --- 浏览足迹（照片侧「最近浏览」）---
+     一列时刻 + 一列照片：时间线说清「什么时候看过哪一本」。
+     时刻用等宽字，宽度固定，上下才排得成一条轴。 */
+  .footprint {
+    --footprint-stamp-col: 88px;
+  }
+  .footprint__row {
+    position: relative;
+    display: grid;
+    grid-template-columns: var(--footprint-stamp-col) 18px minmax(0, 1fr);
+    align-items: center;
+    gap: 0 10px;
+    padding-block: 8px;
+  }
+  /* 连接线：穿过整列，最后一行只画到圆点为止。 */
+  .footprint__row::before {
+    content: "";
+    position: absolute;
+    left: calc(var(--footprint-stamp-col) + 10px + 8px);
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: var(--border);
+  }
+  .footprint__row:last-child::before {
+    bottom: 50%;
+  }
+  .footprint__stamp {
+    font: 500 var(--text-meta)/1.4 var(--font-mono);
+    color: var(--fg-subtle);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .footprint__node {
+    position: relative;
+    z-index: 1;
+    justify-self: center;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--bg-strong);
+    box-shadow: 0 0 0 3px var(--bg);
+  }
+  .footprint__item {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    min-width: 0;
+    padding: 8px 12px 8px 8px;
+    margin-left: -8px;
+    border-radius: var(--radius-media);
+    transition: background var(--dur);
+  }
+  .footprint__item:hover {
+    background: var(--bg-subtle);
+  }
+  .footprint__print {
+    display: block;
+    width: 88px;
+    height: 88px;
+    flex-shrink: 0;
+    overflow: hidden;
+    border-radius: var(--radius-media);
+    background: var(--bg-media);
+  }
+  .footprint__title {
+    font-size: var(--text-label);
+    font-weight: 500;
+    color: var(--fg);
+    transition: color var(--dur);
+  }
+  .footprint__item:hover .footprint__title {
+    color: var(--brand-ink);
+  }
+  .footprint__meta {
+    font-size: var(--text-meta);
+    color: var(--fg-muted);
+    white-space: nowrap;
+  }
   .library-grid--spacious {
     grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   }
