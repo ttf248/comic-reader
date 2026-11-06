@@ -456,6 +456,9 @@
     display: grid;
     width: 100%;
     height: 100%;
+    /* 四张代表图排成 2×2。容器在漫画侧是 4:5，每一格切出来也正好
+       是 4:5 —— 与下面网格里的书封卡同一副画幅，整块拼贴读起来
+       是「四本书并排站在架上」。 */
     grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-rows: repeat(2, minmax(0, 1fr));
     gap: 1px;
@@ -494,21 +497,7 @@
     grid-column: span 2;
     grid-row: auto;
   }
-  /* 四张：竖版封面读起来是一本精装书的封底 —— 左侧一张通高主图，
-     右侧三张压成一条窄带。2×2 的方格在竖版画幅里每格都成了窄条，
-     横图被裁到认不出内容，整块看着像一张照片墙而不是封面；
-     「上面一张大图 + 下面三张」更糟：主图被压成横带，一整页漫画
-     会被切掉大半。通高主图保住了竖版画幅本身。 */
-  :root[data-mode="comic"] .cover-mosaic[data-cover-layout="mosaic-4"] {
-    grid-template-columns: 2fr 1fr;
-    grid-template-rows: repeat(3, minmax(0, 1fr));
-  }
-  :root[data-mode="comic"]
-    .cover-mosaic[data-cover-layout="mosaic-4"]
-    > :first-child {
-    grid-column: 1;
-    grid-row: span 3;
-  }
+  /* 四张走基础规则：2×2，每格都是竖版。 */
   .album-tile__meta {
     padding: 12px 0 7px;
   }
@@ -577,10 +566,12 @@
   }
   /* 集合页的页头封面按「一本书」处理：竖版、装订边、有厚度。
      与网格里的书封卡同一套语言，页面从页头到网格是一句话。
-     封面给到 140px 宽：里面是四张代表图的拼贴，太小就只剩色块。 */
+     封面给到 176px 宽：里面是四张代表图的拼贴，太小就只剩色块；
+     也不能小于网格里的书封卡 —— 页头是这一页的视觉锚点，
+     比正文里的卡片还小，页面就没有主次了。 */
   .detail-head__cover--book {
-    width: 140px;
-    height: 176px;
+    width: 176px;
+    height: 220px;
     border-radius: 10px 16px 16px 10px;
     box-shadow: var(--cover-shadow);
   }
