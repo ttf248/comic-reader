@@ -1,9 +1,11 @@
 import { useEffect, useId, useRef } from "react";
 import { useImageInfo } from "../../hooks/useImageInfo";
 import { useLibraryNodes } from "../../hooks/useLibrary";
+import { useImageActivities } from "../../hooks/useImageActivity";
 import { formatSize } from "../../utils/format";
 import { formatDateTime } from "../../utils/date";
-import { collectionUnit, mediaUnit } from "../../utils/workbench";
+import { collectionUnit, comicCopy, mediaUnit } from "../../utils/workbench";
+import { isCompleted } from "../../utils/progress";
 import { CloseIcon } from "./Icon";
 import CopyButton from "./CopyButton";
 
@@ -98,6 +100,15 @@ export default function PropertiesDialog({ target, onClose }: Props) {
 function NodeProperties({ nodeId }: { nodeId: string }) {
   const query = useLibraryNodes([nodeId]);
   const node = query.data?.items.find((item) => item.id === nodeId);
+  // 漫画相册的阅读进度是这一页最该说的一件事：属性表里没有它，
+  // 用户只能自己点进去翻一遍才知道读到哪。
+  const isComicAlbum = node?.kind === "album" && node?.contentKind === "comic";
+  const activityQuery = useImageActivities(
+    isComicAlbum ? [nodeId] : [],
+    isComicAlbum,
+  );
+  const activity = activityQuery.data?.[nodeId];
+  const comic = comicCopy();
   return (
     <>
       {query.isLoading && (
@@ -153,6 +164,22 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
                   value={`${node.imageCount ?? 0} ${mediaUnit(node.contentKind)}`}
                 />
                 <Field label="视频" value={`${node.videoCount ?? 0} 个`} />
+                {/* 阅读进度：漫画相册才有。已读完与在读分别说清楚，
+                    不只给一个百分比 —— 「离结尾还有多远」不是
+                    「翻到第几页」。 */}
+                {activity && (
+                  <Field
+                    label="阅读进度"
+                    value={
+                      isCompleted({
+                        index: activity.pageIndex,
+                        total: activity.pageCount,
+                      })
+                        ? comic.finishedLabel
+                        : `${comic.positionVerb} ${activity.pageIndex + 1} / ${activity.pageCount}`
+                    }
+                  />
+                )}
               </>
             ) : (
               <>

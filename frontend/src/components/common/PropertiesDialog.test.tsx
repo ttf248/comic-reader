@@ -5,9 +5,13 @@ import type { ReactNode } from "react";
 import PropertiesDialog from "./PropertiesDialog";
 import { libraryApi, type LibraryNodeSummary } from "../../api/library";
 import { imageInfoApi } from "../../api/imageInfo";
+import { activityApi } from "../../api/activity";
 
 vi.mock("../../api/library", () => ({ libraryApi: { queryNodes: vi.fn() } }));
 vi.mock("../../api/imageInfo", () => ({ imageInfoApi: { get: vi.fn() } }));
+vi.mock("../../api/activity", () => ({
+  activityApi: { queryImages: vi.fn() },
+}));
 
 // jsdom 没有原生 dialog 方法；焦点限制、Esc 和背景交互由浏览器用例验证。
 beforeAll(() => {
@@ -56,6 +60,7 @@ beforeEach(() => {
     missing: [],
   });
   vi.mocked(imageInfoApi.get).mockResolvedValue(image);
+  vi.mocked(activityApi.queryImages).mockResolvedValue({ activities: [] });
 });
 
 function renderDialog(target: { kind: "node" | "image"; id: string } | null) {
@@ -129,6 +134,54 @@ it("漫画侧的计数单位是页与卷", async () => {
   // 漫画侧的集合叫「作品」—— 与集合页的眉标同一个词。
   expect(await screen.findByText("作品")).toBeInTheDocument();
   expect(screen.getByText("5 卷")).toBeInTheDocument();
+});
+
+it("漫画相册的属性表里带阅读进度", async () => {
+  vi.mocked(libraryApi.queryNodes).mockResolvedValueOnce({
+    revision: 1,
+    missing: [],
+    items: [{ ...node, id: "a_comic", kind: "album", contentKind: "comic" }],
+  });
+  vi.mocked(activityApi.queryImages).mockResolvedValueOnce({
+    activities: [
+      {
+        albumId: "a_comic",
+        mediaKind: "image",
+        pageIndex: 7,
+        pageCount: 24,
+      } as never,
+    ],
+  });
+  renderDialog({ kind: "node", id: "a_comic" });
+  expect(await screen.findByText("阅读进度")).toBeInTheDocument();
+  expect(screen.getByText("读到 8 / 24")).toBeInTheDocument();
+});
+
+it("读完的漫画相册说「已读完」而不是页码", async () => {
+  vi.mocked(libraryApi.queryNodes).mockResolvedValueOnce({
+    revision: 1,
+    missing: [],
+    items: [{ ...node, id: "a_comic", kind: "album", contentKind: "comic" }],
+  });
+  vi.mocked(activityApi.queryImages).mockResolvedValueOnce({
+    activities: [
+      {
+        albumId: "a_comic",
+        mediaKind: "image",
+        pageIndex: 23,
+        pageCount: 24,
+      } as never,
+    ],
+  });
+  renderDialog({ kind: "node", id: "a_comic" });
+  expect(await screen.findByText("已读完")).toBeInTheDocument();
+});
+
+it("照片相册不查阅读进度", async () => {
+  renderDialog({ kind: "node", id: "a_trip" });
+  expect(await screen.findByText("旅行记录")).toBeInTheDocument();
+  expect(activityApi.queryImages).not.toHaveBeenCalled();
+  expect(screen.queryByText("阅读进度")).toBeNull();
 });
 
 it("图片属性只请求文件元数据", async () => {
