@@ -84,7 +84,9 @@ export default function Toolbar({
       .then((response) => {
         pushToast({
           kind: "success",
-          message: `扫描完成 · 共 ${response.manifest.statistics.albumCount} 本相册`,
+          message: `扫描完成 · 共 ${response.manifest.statistics.albumCount} ${
+            mode === "comic" ? "卷" : "本相册"
+          }`,
         });
       })
       .catch(() => pushToast({ kind: "error", message: "刷新媒体库失败" }));

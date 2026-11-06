@@ -25,6 +25,7 @@ const FADE_DELAY_MS = 5000;
 import { useEffect, useState } from "react";
 import { ProgressEvent } from "../../api/scan";
 import type { ScanConnectionState } from "../../store/scanStore";
+import { useAppMode } from "../../hooks/useAppMode";
 import {
   CloseIcon,
   CheckIcon,
@@ -73,6 +74,9 @@ export default function ScanProgress({
 }: Props) {
   const [collapsed, setCollapsed] = useState(!defaultExpanded);
   const [phase, setPhase] = useState<"in" | "visible" | "out">("in");
+  // 计数单位跟着当前工作台走：照片侧说「本相册」，漫画侧说「卷」。
+  const { mode } = useAppMode();
+  const unit = mode === "comic" ? "卷" : "本相册";
 
   // 终态后短暂保留显示，再滑出
   const [showTerminal, setShowTerminal] = useState(false);
@@ -320,7 +324,7 @@ export default function ScanProgress({
                 <span className="text-fg tabular-nums">
                   {progress.albumsFound}
                 </span>{" "}
-                本相册
+                {unit}
               </span>
               {isError && progress.error && (
                 <span className="text-danger truncate max-w-[40ch]">

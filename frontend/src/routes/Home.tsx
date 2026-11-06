@@ -377,9 +377,12 @@ export default function Home() {
       : "重新扫描";
 
   // 库规模：按当前工作台算，这一侧只有多少相册、多少集合。
+  // 库规模的说法跟着侧走：漫画侧是「卷」与「作品」，照片侧是「本相册」
+  // 与「集合」—— 两侧的词不统一，用户读到「0 本漫画」会以为漫画也按
+  // 相册计数。
   const librarySize = manifest
     ? isComic
-      ? `${manifest.statistics.comicAlbumCount ?? 0} 本漫画 · ${manifest.statistics.comicCollectionCount ?? 0} 个集合`
+      ? `${manifest.statistics.comicAlbumCount ?? 0} 卷 · ${manifest.statistics.comicCollectionCount ?? 0} 个作品`
       : `${manifest.statistics.photoAlbumCount ?? 0} 本相册 · ${manifest.statistics.photoCollectionCount ?? 0} 个集合`
     : "";
 
