@@ -649,9 +649,11 @@ function ListCard({
     typeof data.durationSec === "number" &&
     Number.isFinite(data.durationSec) &&
     data.durationSec >= 0;
+  // 漫画侧的列表行也是书架：缩略图是一本书（竖版 + 装订边）。
+  const isComicContent = data.contentKind === "comic";
 
   return (
-    // 列表行：缩略图压到 56px，行高固定 86px —— 一屏能扫到更多条目。
+    // 列表行：缩略图压到 48px，行高固定 86px —— 一屏能扫到更多条目。
     // 行高必须固定：超宽屏下同一行的两张卡并排，行高不一致时下面那张
     // 卡片底部的分隔线会错位，看起来像两张卡片没对齐。
     // 行底加分隔线：整行铺满内容宽度时，没有分隔线的话标题与右侧数字之间
@@ -667,10 +669,19 @@ function ListCard({
         className="group flex flex-1 min-w-0 items-center gap-3.5 py-2 px-2.5 -mx-2.5 rounded-lg hover:bg-bg-subtle transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
       >
         <div
-          className="relative w-14 aspect-[4/5] rounded-md bg-bg-subtle overflow-hidden shrink-0 border border-border shadow-xs"
+          className={`relative w-12 aspect-[4/5] shrink-0 overflow-hidden bg-bg-subtle ${
+            isComicContent
+              ? "album-thumb--book"
+              : "rounded-md border border-border shadow-xs"
+          }`}
           data-testid="card-cover"
         >
-          <CardCover data={data} loading="eager" compact />
+          <CardCover
+            data={data}
+            loading="eager"
+            compact
+            fit={isComicContent ? "cover" : "contain"}
+          />
           {data.coverKind === "video" && (
             <div className="pointer-events-none absolute top-1 right-1 inline-flex items-center gap-1 bg-bg-elevated/90 backdrop-blur text-fg text-badge font-medium px-1.5 h-5 rounded shadow-sm">
               <PlayFilledIcon size={9} className="text-accent" />
@@ -679,10 +690,10 @@ function ListCard({
             </div>
           )}
           {/* 状态角位（未读点）在列表视图改放到标题行：
-              56px 的缩略图上塞不下标记，且标题行的文字更易扫读。 */}
+              48px 的缩略图上塞不下标记，且标题行的文字更易扫读。 */}
         </div>
 
-        <div className="flex-1 min-w-0 flex flex-col justify-center">
+        <div className="flex-1 min-w-0 flex flex-col justify-center gap-1">
           <div className="text-label font-medium text-fg truncate flex items-center gap-1.5">
             <span className="truncate" title={data.displayTitle ?? data.title}>
               {data.displayTitle ?? data.title}
@@ -692,8 +703,10 @@ function ListCard({
                 className="inline-flex items-center gap-1 text-body font-medium text-fg-muted shrink-0"
                 title={cardCopy.unreadTitle}
               >
+                {/* 未读点用品牌色：它是「这一本还没翻开」的信号，
+                    近黑的强调色在这里读起来只是一个句点。 */}
                 <span
-                  className="h-2 w-2 rounded-full bg-accent"
+                  className="h-2 w-2 rounded-full bg-brand"
                   aria-hidden="true"
                 />
                 <span>{cardCopy.unreadTitle}</span>
@@ -706,9 +719,33 @@ function ListCard({
               </span>
             )}
           </div>
-          <div className="text-body text-fg-subtle mt-1 flex items-center gap-2">
+          {/* 第二行：副标题在左，进度轨道占中间的空位，位置在右。
+              轨道对每一本漫画都在（空的轨道读作「还没翻开」），
+              行与行因此是同一副骨架；以前有进度才有这一段，
+              列表看着参差不齐。 */}
+          <div className="text-body text-fg-subtle flex items-center gap-2 min-w-0">
             <TypeChip variant={data.variant} />
-            {data.subtitle && <span className="truncate">{data.subtitle}</span>}
+            {data.subtitle && (
+              <span className="truncate max-w-[10rem] shrink">{data.subtitle}</span>
+            )}
+            {isComicAlbum && (
+              <>
+                <span className="flex-1 min-w-8 h-[3px] bg-bg-strong rounded-full overflow-hidden">
+                  <span
+                    className="block h-full bg-brand"
+                    style={{
+                      width: `${progressPct ?? 0}%`,
+                    }}
+                  />
+                </span>
+                {progressPct !== null && progressPct > 0 && (
+                  <span className="tabular-nums shrink-0 whitespace-nowrap">
+                    {cardCopy.positionVerb} {data.progress!.index + 1} /{" "}
+                    {data.progress!.total}
+                  </span>
+                )}
+              </>
+            )}
             {data.sourceName && multiRoot && (
               <span className="text-fg-subtle inline-flex items-center gap-0.5 shrink-0">
                 <FolderIcon size={11} className="shrink-0" />
@@ -716,25 +753,11 @@ function ListCard({
               </span>
             )}
           </div>
-          {isComicAlbum && progressPct !== null && progressPct > 0 && (
-            <div className="mt-2 flex items-center gap-2 max-w-md">
-              <div className="flex-1 h-1 bg-bg-strong rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-accent"
-                  style={{ width: `${progressPct}%` }}
-                />
-              </div>
-              <span className="text-body text-fg-subtle tabular-nums shrink-0">
-                {cardCopy.positionVerb} {data.progress!.index + 1} /{" "}
-                {data.progress!.total}
-              </span>
-            </div>
-          )}
         </div>
 
         {/* 右侧信息列：张数 / 最近查看固定右对齐，逐行对齐便于扫读。 */}
         <div className="shrink-0 w-24 sm:w-32 text-right flex flex-col items-end gap-1">
-          <span className="text-body text-fg-muted tabular-nums">
+          <span className="text-body text-fg tabular-nums font-medium">
             {(() => {
               const media = formatMediaCount(data);
               if (media) {

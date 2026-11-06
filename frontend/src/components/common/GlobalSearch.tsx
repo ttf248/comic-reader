@@ -127,6 +127,10 @@ export default function GlobalSearch() {
               role="option"
               aria-selected={index === activeIndex}
               className={`flex items-center gap-3 w-full px-3 py-2 text-left transition-colors ${
+                // 首末两行跟着面板的圆角走：面板 overflow-hidden，
+                // 选中的高亮是直角矩形，不修的话会在圆角处露出一个方角。
+                index === 0 ? "rounded-t-lg" : ""
+              } ${index === hits.length - 1 ? "rounded-b-lg" : ""} ${
                 index === activeIndex
                   ? "bg-bg-subtle text-fg"
                   : "hover:bg-bg-subtle"
@@ -136,21 +140,39 @@ export default function GlobalSearch() {
                 <img
                   src={thumbUrl(h.coverImage)}
                   alt=""
-                  className="w-8 h-10 object-cover rounded border border-border-faint"
+                  /* 漫画侧也是一本书（竖版 + 装订边），与网格卡同一套语言。
+                     32px 宽的缩略图上装订边只剩一条黑线，看着像划痕，
+                     因此这里只保留不对称的圆角轮廓。 */
+                  className={`w-8 h-10 object-cover ${
+                    mode === "comic"
+                      ? "rounded-[4px_7px_7px_4px]"
+                      : "rounded border border-border-faint"
+                  }`}
                 />
               ) : (
-                <div className="w-8 h-10 bg-bg-subtle rounded border border-border-faint" />
+                <div
+                  className={`w-8 h-10 bg-bg-subtle ${
+                    mode === "comic"
+                      ? "rounded-[4px_7px_7px_4px]"
+                      : "rounded border border-border-faint"
+                  }`}
+                />
               )}
               <div className="flex-1 min-w-0">
                 <div className="text-body truncate">{h.name}</div>
                 <div className="text-meta text-fg-subtle truncate">
+                  {/* 类型词跟着工作台走：集合在照片侧叫「集合」，
+                      在漫画侧叫「作品」—— 与集合页的眉标同一个词。
+                      同名的两个结果（同名相册与同名作品）靠它才分得开。 */}
                   {h.kind === "album"
                     ? h.virtual
                       ? "散图"
-                      : "文件夹"
+                      : "相册"
                     : h.kind === "smartCollection"
                       ? "标签"
-                      : "集合"}
+                      : collectionUnit(mode) === "卷"
+                        ? "作品"
+                        : "集合"}
                   {" · "}
                   {/* 计数与单位单独成节点：单位跟着当前工作台走
                       （照片「张 / 本」，漫画「页 / 卷」）。 */}

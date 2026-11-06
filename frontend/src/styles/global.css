@@ -378,6 +378,14 @@
     top: 8px;
     right: 8px;
   }
+  /* 列表行里的小封面：漫画侧也是一本书（装订边 + 竖版），
+     与网格卡的书封同一套语言；照片侧仍是方形展陈。 */
+  .album-thumb--book {
+    border-radius: 5px 9px 9px 5px;
+    box-shadow:
+      inset 6px 0 8px -5px rgb(0 0 0 / 0.6),
+      0 4px 10px -6px rgb(0 0 0 / 0.5);
+  }
   .album-tile__meta {
     padding: 12px 0 7px;
   }
@@ -1347,7 +1355,18 @@ button:not(:disabled):active {
     box-shadow var(--dur-fast) var(--ease-out);
 }
 .input-focus-ring:focus-within {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 12%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 22%, transparent);
+}
+/* 焦点环画在外壳上，不画在内层 input 上。
+   外壳是圆角胶囊（搜索框）或圆角小框（帮助面板），内层 input 是直角：
+   让 input 自己画焦点环，就会在胶囊里出现一个直角的方框，
+   看着像坏掉而不是聚焦。
+
+   这条必须不分层写：全局的 :focus-visible 是未分层声明，优先级高于
+   @layer utilities 里的 outline-none，组件上写 outline-none 压不住它。 */
+.input-focus-ring input:focus-visible,
+.input-focus-ring textarea:focus-visible {
+  outline: none;
 }
 
 /* === 主按钮（带 accent 填充）按下的微反馈 === */
