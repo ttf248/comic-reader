@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import type { ListRange } from "react-virtuoso";
 import { beforeEach, expect, it, vi } from "vitest";
-import PhotoWall from "./PhotoWall";
+import PhotoWall, { effectiveTargetHeight } from "./PhotoWall";
 
 interface MockRow {
   key: string;
@@ -160,4 +160,23 @@ it("点击图片把对应条目交给上层打开", () => {
 
   fireEvent.click(screen.getByRole("button", { name: "查看 1.jpg" }));
   expect(onOpen).toHaveBeenCalledWith(items[0], 0);
+});
+
+// 窄屏上照片墙必须排得下两张：手机相册是一屏两三张，不是一屏一张。
+describe("照片墙的目标行高", () => {
+  it("宽屏时用密度设定值，不受宽度限制", () => {
+    expect(effectiveTargetHeight(210, 1120)).toBe(210);
+  });
+
+  it("窄屏时把行高压到能排下两张", () => {
+    expect(effectiveTargetHeight(210, 350)).toBeLessThan(120);
+  });
+
+  it("极窄时不低于下限，避免缩成邮票", () => {
+    expect(effectiveTargetHeight(210, 200)).toBe(96);
+  });
+
+  it("宽度未知时先用密度设定值", () => {
+    expect(effectiveTargetHeight(290, 0)).toBe(290);
+  });
 });
