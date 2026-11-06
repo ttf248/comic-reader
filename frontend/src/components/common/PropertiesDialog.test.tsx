@@ -126,7 +126,8 @@ it("漫画侧的计数单位是页与卷", async () => {
     ],
   });
   renderDialog({ kind: "node", id: "c_comic" });
-  expect(await screen.findByText("集合")).toBeInTheDocument();
+  // 漫画侧的集合叫「作品」—— 与集合页的眉标同一个词。
+  expect(await screen.findByText("作品")).toBeInTheDocument();
   expect(screen.getByText("5 卷")).toBeInTheDocument();
 });
 

@@ -111,8 +111,14 @@ export default function HoverPreview({ data, anchorRect, lastSeenAt, onPointerEn
       <div className="bg-bg-elevated border border-border rounded-lg shadow-lg overflow-hidden scale-fade">
         {/* 封面：与网格卡走同一个渲染入口，卡片是拼贴的卡片在预览里
             也是拼贴 —— 同一本相册不能在两处是两个样子。 */}
-        <div className="relative bg-bg-subtle" style={{ width: COVER_W, height: coverH }}>
-          <CardCover data={data} loading="eager" />
+        <div
+          className={`relative bg-bg-subtle ${
+            /* 漫画侧也是一本书（装订边 + 竖版），与网格卡同一套语言。 */
+            isComic ? "album-thumb--book" : ""
+          }`}
+          style={{ width: COVER_W, height: coverH }}
+        >
+          <CardCover data={data} loading="eager" fit={isComic ? "cover" : "contain"} />
           {/* 顶部暗角：让标题更易读 */}
           <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/35 to-transparent pointer-events-none" />
           {/* 视频角标：▶ + 数量 */}

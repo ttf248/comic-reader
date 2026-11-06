@@ -117,7 +117,7 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
       )}
       {node && (
         <>
-          <dl className="space-y-3">
+          <dl className="divide-y divide-border-faint">
             <Field
               label="名称"
               value={
@@ -129,9 +129,14 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
               label="类型"
               value={
                 node.kind === "collection"
-                  ? "集合"
+                  ? // 漫画侧的集合叫「作品」—— 与集合页的眉标同一个词。
+                    node.contentKind === "comic"
+                    ? "作品"
+                    : "集合"
                   : node.virtual
-                    ? "相册（本目录媒体）"
+                    ? // 「本目录媒体」是服务端的技术叫法，界面上读不出
+                      // 这是什么；别处一律叫「散图」。
+                      "散图"
                     : "相册"
               }
             />
@@ -192,7 +197,7 @@ function ImageProperties({ fileId }: { fileId: string }) {
         />
       )}
       {info && (
-        <dl className="space-y-3">
+        <dl className="divide-y divide-border-faint">
           <Field label="文件名" value={info.name} copyable />
           <Field label="格式" value={info.format.toUpperCase()} />
           <Field label="尺寸" value={`${info.width} × ${info.height} px`} />
@@ -253,15 +258,26 @@ function Field({
   copyable?: boolean;
 }) {
   return (
-    <div>
-      <dt className="text-meta font-medium text-fg-muted mb-1 flex items-center gap-1.5">
-        <span>{label}</span>
-        {copyable && <CopyButton value={value} title={`复制${label}`} />}
+    /* 两列的规格表：标签在左一窄列，值在右。
+       原先标签在上、值在下，八个字段把弹窗撑到近 600px 高，
+       下面大半是空的；规格表本来就该横向扫读。 */
+    <div className="flex items-start gap-4 py-1.5">
+      <dt className="w-20 shrink-0 text-meta font-medium text-fg-muted leading-6">
+        {label}
       </dt>
-      <dd
-        className={`break-all text-body ${mono ? "font-mono text-meta text-fg-muted" : ""}`}
-      >
-        {value}
+      <dd className="flex-1 min-w-0 flex items-start gap-1.5">
+        <span
+          className={`break-all leading-6 ${
+            mono ? "font-mono text-meta text-fg-muted" : "text-body"
+          }`}
+        >
+          {value}
+        </span>
+        {copyable && (
+          <span className="shrink-0 mt-1">
+            <CopyButton value={value} title={`复制${label}`} />
+          </span>
+        )}
       </dd>
     </div>
   );
