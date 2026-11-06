@@ -21,7 +21,7 @@ import {
 } from "../utils/albumGrouping";
 import EmptyState from "../components/common/EmptyState";
 import { albumRoute, decodeFavPath, decodePathTail, homeRoute, readerRoute } from "../utils/path";
-import { collectionUnit, workbenchCopy } from "../utils/workbench";
+import { albumCountUnit, workbenchCopy } from "../utils/workbench";
 import CardCover from "../components/album/CardCover";
 import { useAppMode } from "../hooks/useAppMode";
 import { useSafeBack } from "../utils/navigation";
@@ -401,7 +401,7 @@ function CollectionHead({
           <div className="detail-head__meta">
             <span>
               <span className="detail-head__value">{albumCount}</span>{" "}
-              {isComic ? collectionUnit(detail.contentKind) : "个相册"}
+              {albumCountUnit(detail.contentKind)}
             </span>
             {collectionCount > 0 && (
               <>

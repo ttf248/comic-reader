@@ -21,9 +21,9 @@ export default function YearTimeline({ groups, gridRef }: Props) {
   const navigate = useNavigate();
   const yearFilter = useSearchStore((s) => s.yearFilter);
   const toggleYear = useSearchStore((s) => s.toggleYearFilter);
-  // 计数单位跟着工作台走：照片侧「本相册」，漫画侧「卷」。
+  // 计数单位跟着工作台走：照片侧「张」，漫画侧「页」。
   const { mode } = useAppMode();
-  const unit = collectionUnit(mode);
+  const unit = mode === "comic" ? "页" : "张";
 
   const entries = useMemo<TimelineEntry[]>(
     () =>
@@ -40,10 +40,19 @@ export default function YearTimeline({ groups, gridRef }: Props) {
             }),
           );
         };
+        // 年卡上的计数说的是「这一年有多少照片」，不是「这一年有几个
+        // 直属子项」：首页的年份多半对应一个同名集合，直属子项恒为 1，
+        // 「1 本」对谁都没有信息量。
+        // 只报照片数：再加一段视频数，184px 宽的卡里会折行成两行。
+        const total = group.imageTotal ?? 0;
+        const count =
+          total > 0
+            ? `${total} ${unit}`
+            : `${group.albums.length} ${collectionUnit(mode)}`;
         return {
           key,
           label: group.label,
-          count: `${group.albums.length} ${unit}`,
+          count,
           numeric: group.year !== null,
           coverPath: group.coverPreviewPaths.find(Boolean),
           active: isActive,
@@ -64,7 +73,7 @@ export default function YearTimeline({ groups, gridRef }: Props) {
           ),
         };
       }),
-    [groups, yearFilter, toggleYear, navigate, gridRef, unit],
+    [groups, yearFilter, toggleYear, navigate, gridRef, unit, mode],
   );
 
   return <Timeline entries={entries} testId="year-timeline" />;

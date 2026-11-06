@@ -882,22 +882,19 @@
       color var(--dur-fast),
       background var(--dur-fast);
   }
-  /* 漫画侧的索引卡不垫白底，卡片没有边界 —— 常驻的筛选按钮悬在
-     右上角，读起来像两本书之间夹着一个不相干的控件，货架的节奏
-     也被这几个白方块打断。指到哪一本再浮出来；正在筛选的那一年
-     一直留着（它要负责取消筛选）。 */
-  :root[data-mode="comic"] .year-index__filter {
+  /* 索引卡上的筛选按钮不常驻：一排年份卡各挂一枚白方块，索引条的
+     节奏被这些方块打断，读起来像两本书之间夹着一个不相干的控件。
+     指到哪一年再浮出来；正在筛选的那一年一直留着（它要负责取消筛选）。 */
+  .year-index__filter {
     opacity: 0;
     transition:
       color var(--dur-fast),
       background var(--dur-fast),
       opacity var(--dur-fast);
   }
-  :root[data-mode="comic"] .year-index__item:hover .year-index__filter,
-  :root[data-mode="comic"] .year-index__item:focus-within .year-index__filter,
-  :root[data-mode="comic"]
-    .year-index__item[data-active="true"]
-    .year-index__filter {
+  .year-index__item:hover .year-index__filter,
+  .year-index__item:focus-within .year-index__filter,
+  .year-index__item[data-active="true"] .year-index__filter {
     opacity: 1;
   }
   .year-index__filter:hover {

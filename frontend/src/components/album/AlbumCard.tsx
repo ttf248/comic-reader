@@ -24,7 +24,7 @@ import { formatDuration } from "../../utils/format";
 import { isCompleted, isUnread, progressPercent } from "../../utils/progress";
 import { favoriteResourceId } from "../../utils/path";
 import { useToggleFavorite } from "../../hooks/useFavorites";
-import { collectionUnit, comicCopy, mediaUnit } from "../../utils/workbench";
+import { albumCountUnit, comicCopy, mediaUnit } from "../../utils/workbench";
 import type { ContentKind } from "../../api/library";
 import CardCover from "./CardCover";
 
@@ -538,7 +538,7 @@ function GridCard({
               return (
                 <span className="shrink-0 whitespace-nowrap">
                   {data.count}{" "}
-                  {collectionUnit(data.contentKind ?? "photo")}
+                  {albumCountUnit(data.contentKind ?? "photo")}
                 </span>
               );
             })()}
@@ -782,7 +782,7 @@ function ListCard({
               return (
                 <>
                   {data.count}{" "}
-                  {collectionUnit(data.contentKind ?? "photo")}
+                  {albumCountUnit(data.contentKind ?? "photo")}
                 </>
               );
             })()}

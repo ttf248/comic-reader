@@ -72,8 +72,10 @@ function TimelineCard({ entry }: { entry: TimelineEntry }) {
         className="year-index__open"
       >
         <span
-          className={`block w-12 h-14 shrink-0 overflow-hidden bg-bg-subtle ${
-            isComic ? "timeline-cover--book" : "rounded-md"
+          className={`block shrink-0 overflow-hidden bg-bg-subtle ${
+            isComic
+              ? "timeline-cover--book w-12 h-14"
+              : "rounded-md w-12 h-12"
           }`}
         >
           {cover && cover !== failedSource ? (

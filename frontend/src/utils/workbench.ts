@@ -228,6 +228,16 @@ export function collectionUnit(mode: "photo" | "comic"): string {
 }
 
 /**
+ * 「里面有多少本相册」在句子里该怎么说。
+ *
+ * 光秃秃一个「本」看不出是什么：照片侧说「7 个相册」，漫画侧说
+ * 「7 卷」。集合页头与网格卡片共用这一个说法。
+ */
+export function albumCountUnit(mode: "photo" | "comic"): string {
+  return mode === "comic" ? collectionUnit(mode) : "个相册";
+}
+
+/**
  * 单张媒体的计数单位：照片「张」，漫画「页」。
  *
  * 漫画里一张图就是「一页」，与阅读器的「第 N 页」说法一致。
