@@ -35,6 +35,9 @@
   --brand: #a35a1e;
   --brand-soft: #f2e6d8;
   --brand-ink: #7a3f10;
+  /* 压在品牌色上的文字色。品牌色跟着主题翻明暗（浅色主题是深暖褐，
+     深色主题是浅暖褐），压在它上面的字也要跟着翻。 */
+  --brand-contrast: #ffffff;
   --rail-bg: #16181c;
   --rail-fg: #f2f4f7;
   --rail-muted: #99a0aa;
@@ -118,6 +121,7 @@
   --brand: #d9a066;
   --brand-soft: #2b2119;
   --brand-ink: #e9bb88;
+  --brand-contrast: #16181c;
   --rail-bg: #08090a;
   --rail-fg: #f2f4f7;
   --rail-muted: #8b929b;
@@ -224,6 +228,9 @@
   --brand: #a35a1e;
   --brand-soft: #f2e6d8;
   --brand-ink: #7a3f10;
+  /* 压在品牌色上的文字色。品牌色跟着主题翻明暗（浅色主题是深暖褐，
+     深色主题是浅暖褐），压在它上面的字也要跟着翻。 */
+  --brand-contrast: #ffffff;
   --feature-bg: #f1ebe4;
 }
 
@@ -238,5 +245,6 @@
   --brand: #d9a066;
   --brand-soft: #2b2119;
   --brand-ink: #e9bb88;
+  --brand-contrast: #16181c;
   --feature-bg: #1d1a17;
 }

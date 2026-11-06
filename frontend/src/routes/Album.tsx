@@ -356,7 +356,9 @@ function CollectionHead({
             className={`inline-flex h-9 items-center gap-1.5 rounded-md px-3 text-body transition-colors ${
               isFavorite
                 ? "bg-favorite/10 text-favorite hover:bg-favorite/15"
-                : "border border-border-faint hover:bg-bg-subtle text-fg-muted"
+                : /* 页头很宽，按钮贴着最右边会被当成页脚的杂项。
+                     给它一条实一点的描边与正文色，它才读得出是动作。 */
+                  "border border-border hover:bg-bg-subtle text-fg"
             }`}
           >
             <StarIcon size={13} filled={isFavorite} />

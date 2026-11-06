@@ -4,6 +4,13 @@ interface Props {
   title: string;
   eyebrow: string;
   description?: ReactNode;
+  /**
+   * 页头右侧的动作（这一页的主要操作）。
+   *
+   * 放在标题这一行的右端，而不是塞进描述句里：宽屏的页头右侧本来是
+   * 空的，动作贴在那儿既不挤正文，也不会跟一句话读成一串。
+   */
+  action?: ReactNode;
   contained?: boolean;
   /**
    * 标题尺寸。
@@ -20,15 +27,23 @@ export default function PageHeading({
   title,
   eyebrow,
   description,
+  action,
   contained = false,
   size = "sm",
 }: Props) {
   return (
     <section className={`${contained ? "" : "page-shell "}page-heading`}>
-      <p className="page-eyebrow">{eyebrow}</p>
-      <h1 className={`page-title${size === "lg" ? "" : " page-title--sm"}`}>
-        {title}
-      </h1>
+      <div className="flex items-end justify-between gap-6 flex-wrap">
+        <div className="min-w-0">
+          <p className="page-eyebrow">{eyebrow}</p>
+          <h1
+            className={`page-title${size === "lg" ? "" : " page-title--sm"}`}
+          >
+            {title}
+          </h1>
+        </div>
+        {action && <div className="shrink-0 pb-1">{action}</div>}
+      </div>
       {description && (
         <div className="text-body text-fg-muted mt-3 leading-relaxed">
           {description}

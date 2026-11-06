@@ -51,7 +51,9 @@ export default function ModeSwitch({ mode, onChange, tone = "rail" }: Props) {
               active
                 ? onRail
                   ? "bg-rail-accent text-rail-accent-fg font-medium"
-                  : "bg-accent text-accent-contrast font-medium"
+                  : /* 画布上的选中块用品牌色：焦点属于当前工作台。
+                       近黑的强调色让漫画侧的顶栏看着还是照片侧的。 */
+                    "bg-brand text-brand-contrast font-medium"
                 : onRail
                   ? "text-rail-muted hover:text-rail-fg"
                   : "text-fg-muted hover:text-fg"

@@ -97,8 +97,20 @@ export default function Unread() {
       <PageHeading
         title={copy.unreadPageTitle}
         eyebrow={copy.unreadEyebrow}
+        action={
+          count > 0 && (
+            <button
+              onClick={onShuffleUnread}
+              className="btn btn-sm btn-outline"
+              title={`从${copy.unreadTitle}里随机挑一本`}
+            >
+              <ShuffleIcon size={11} />
+              {copy.unreadButton}
+            </button>
+          )
+        }
         description={
-          <p className="text-body text-fg-muted mt-2 tabular-nums flex items-center gap-3 flex-wrap">
+          <p className="text-body text-fg-muted tabular-nums">
             {isLoading ? (
               // 加载中不要报「0 本」：那是"还没数出来"，不是"没有未读"。
               <span>正在统计未读相册…</span>
@@ -108,16 +120,6 @@ export default function Unread() {
                 <span className="text-fg-subtle mx-1.5">·</span>
                 全库 <span className="text-fg">{total}</span> 本
               </span>
-            )}
-            {count > 0 && (
-              <button
-                onClick={onShuffleUnread}
-                className="btn btn-sm btn-outline"
-                title={`从${copy.unreadTitle}里随机挑一本`}
-              >
-                <ShuffleIcon size={11} />
-                {copy.unreadButton}
-              </button>
             )}
           </p>
         }

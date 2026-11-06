@@ -436,10 +436,11 @@
     box-shadow: var(--shadow-xs);
   }
   /* 集合页的页头封面按「一本书」处理：竖版、装订边、有厚度。
-     与网格里的书封卡同一套语言，页面从页头到网格是一句话。 */
+     与网格里的书封卡同一套语言，页面从页头到网格是一句话。
+     封面给到 140px 宽：里面是四张代表图的拼贴，太小就只剩色块。 */
   .detail-head__cover--book {
-    width: 116px;
-    height: 148px;
+    width: 140px;
+    height: 176px;
     border-radius: 10px 16px 16px 10px;
     box-shadow:
       var(--spine-shadow),
