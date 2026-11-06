@@ -415,9 +415,9 @@ export default function Settings() {
               ))}
             </div>
           </Row>
-          <Row label="阅读到末尾自动切换下一本">
+          <Row label="阅读到末尾自动切换下一卷">
             <Toggle
-              label="阅读到末尾自动切换下一本"
+              label="阅读到末尾自动切换下一卷"
               checked={data.autoSwitchAlbum}
               disabled={patchPrefs.isPending}
               onChange={(v) => patchPrefs.mutate({ autoSwitchAlbum: v })}

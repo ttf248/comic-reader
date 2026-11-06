@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import {
   useParams,
   useSearchParams,
@@ -48,6 +48,43 @@ import { usePrefs } from "../hooks/usePrefs";
 import { useVideoActivity } from "../hooks/useVideoActivity";
 import { useAppMode } from "../hooks/useAppMode";
 import type { AppMode } from "../api/library";
+
+/**
+ * 在画廊上下文里找出相邻的一卷。
+ *
+ * 跳卷按钮与它悬停时显示的目标卷名用的是同一套查找 —— 两处各写一遍
+ * 的话，按钮上的名字和实际跳去的卷迟早会对不上。
+ *
+ * 找不到阅读器入口的条目一律跳过：集合没有，照片相册也没有
+ * （照片要进照片墙，把一卷照片丢进漫画阅读器是一次真实的错位）。
+ */
+function resolveAdjacentEntry(
+  ctx: ReturnType<typeof getGalleryContext>,
+  pathParam: string | undefined,
+  direction: 1 | -1,
+  options: { albumsOnly: boolean; isVideo: boolean },
+): { entry: GalleryContextEntry; index: number } | null {
+  if (!ctx || ctx.list.length <= 1 || !pathParam) return null;
+  const curIdx = ctx.list.findIndex((it) => it.key === pathParam);
+  const base = curIdx >= 0 ? curIdx : ctx.index;
+  const n = ctx.list.length;
+  for (let step = 1; step <= n; step++) {
+    const nextIdx = (((base + direction * step) % n) + n) % n;
+    const nextEntry: GalleryContextEntry | undefined = ctx.list[nextIdx];
+    if (!nextEntry) continue;
+    if (!entryReaderUrl(nextEntry)) continue;
+    if (options.albumsOnly) {
+      // 跳到没有可读媒体的相册没有意义：图片模式跳进纯视频相册只会
+      // 看到「没有图片」。数量未知（undefined）时不跳过。
+      const count = options.isVideo
+        ? nextEntry.videoCount
+        : nextEntry.imageCount;
+      if (count === 0) continue;
+    }
+    return { entry: nextEntry, index: nextIdx };
+  }
+  return null;
+}
 
 // 画廊页面：从 URL 读取 path/index/name。
 // 关闭时持久化阅读进度到后端。
@@ -102,14 +139,14 @@ export default function Reader() {
   const [showHelp, setShowHelp] = useState(false);
   // 目录：整本缩略图，按需打开，不打断连续阅读。
   const [showOverview, setShowOverview] = useState(false);
-  // 读完一本后的收尾提示（自动切下一本关闭时才出现）。
+  // 读完一卷后的收尾提示（自动切下一卷关闭时才出现）。
   const [showFinished, setShowFinished] = useState(false);
   // 右键菜单位置(阅读器内任意位置右键都触发)。
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
   } | null>(null);
-  // 「阅读到末尾自动切换下一本」「切换时显示通知」两个阅读偏好。
+  // 「阅读到末尾自动切换下一卷」「切换时显示通知」两个阅读偏好。
   // 未加载前按服务端默认值处理（都是开启）。
   const { data: prefs } = usePrefs();
   const autoSwitchAlbum = prefs?.autoSwitchAlbum ?? true;
@@ -689,7 +726,7 @@ export default function Reader() {
   // 因 user 操作 stale,但回调需要读最新 store + push 最新 toast)。
   const onReachEndRef = useRef<() => void>(() => {});
   onReachEndRef.current = () => {
-    // 「阅读到末尾自动切换下一本」：读完直接进入上下文里的下一本相册，
+    // 「阅读到末尾自动切换下一卷」：读完直接进入上下文里的下一卷，
     // 幻灯片也跟着继续（不当作异常终止）。
     if (
       autoSwitchAlbum &&
@@ -708,7 +745,7 @@ export default function Reader() {
           : "已是最后一页",
       ttl: 1500,
     });
-    // 读完一本后给一个明确的收尾入口：接着读下一本，或回到相册。
+    // 读完一卷后给一个明确的收尾入口：接着读下一卷，或回到相册。
     if (!isVideo) setShowFinished(true);
     if (useGalleryStore.getState().slideshow) {
       toggleSlideshow();
@@ -778,12 +815,12 @@ export default function Reader() {
     [isVideo, images.length, scrollContinuousTo, setIndex, goToVideo],
   );
 
-  // 跳本：上一本 / 下一本。
+  // 跳卷：上一卷 / 下一卷。
   //
   // - 相册继续在阅读器里读（不必回到相册首页再点「开始浏览」）；
   //   集合没有阅读器入口，回到它的首页。
-  // - notify=false 时不弹「下一本：xxx」提示（跟随「切换时显示通知」设置）。
-  // - albumsOnly=true 时跳过集合，只找相册（自动切换下一本用）。
+  // - notify=false 时不弹「下一卷：xxx」提示（跟随「切换时显示通知」设置）。
+  // - albumsOnly=true 时跳过集合，只找相册（自动切换下一卷用）。
   const goAdjacent = useCallback(
     (
       direction: 1 | -1,
@@ -792,69 +829,64 @@ export default function Reader() {
       const notify = options?.notify ?? true;
       const albumsOnly = options?.albumsOnly ?? false;
       const ctx = getGalleryContext();
-      if (!ctx || ctx.list.length <= 1 || !pathParam) {
+      const found = resolveAdjacentEntry(ctx, pathParam, direction, {
+        albumsOnly,
+        isVideo,
+      });
+      if (!found) {
         if (notify) {
           pushToast({
             kind: "info",
-            message: "当前无可用的「上一本 / 下一本」列表",
+            message: "当前无可用的「上一卷 / 下一卷」列表",
             ttl: 1500,
           });
         }
         return false;
       }
-      const curIdx = ctx.list.findIndex((it) => it.key === pathParam);
-      const base = curIdx >= 0 ? curIdx : ctx.index;
-      const n = ctx.list.length;
-      for (let step = 1; step <= n; step++) {
-        const nextIdx = (((base + direction * step) % n) + n) % n;
-        const nextEntry: GalleryContextEntry | undefined = ctx.list[nextIdx];
-        if (!nextEntry) continue;
-        const readerUrl = entryReaderUrl(nextEntry);
-        // 没有阅读器入口的条目一律跳过：集合没有，照片相册也没有
-        // （照片要进照片墙，把一本照片丢进漫画阅读器是一次真实的错位）。
-        if (!readerUrl) continue;
-        if (albumsOnly) {
-          // 跳到没有可读媒体的相册没有意义：图片模式跳进纯视频相册只会
-          // 看到「没有图片」。数量未知（undefined）时不跳过。
-          const count = isVideo ? nextEntry.videoCount : nextEntry.imageCount;
-          if (count === 0) continue;
-        }
-        const dirLabel = direction === 1 ? "下一本" : "上一本";
-        if (notify) {
-          pushToast({
-            kind: "info",
-            message: `${dirLabel}：${nextEntry.name}`,
-            ttl: 1200,
-          });
-        }
-        try {
-          sessionStorage.setItem(
-            "local-gallery-context",
-            JSON.stringify({
-              ...ctx,
-              index: nextIdx,
-              openedAt: Date.now(),
-            }),
-          );
-        } catch {
-          // ignore
-        }
-        setShowInfo(false);
-        setMode(useGalleryStore.getState().mode);
-        navigate(readerUrl, { replace: false });
-        return true;
-      }
+      const { entry: nextEntry, index: nextIdx } = found;
+      const readerUrl = entryReaderUrl(nextEntry);
+      if (!readerUrl) return false;
+      const dirLabel = direction === 1 ? "下一卷" : "上一卷";
       if (notify) {
         pushToast({
           kind: "info",
-          message: "当前无可用的「上一本 / 下一本」列表",
-          ttl: 1500,
+          message: `${dirLabel}：${nextEntry.name}`,
+          ttl: 1200,
         });
       }
-      return false;
+      try {
+        sessionStorage.setItem(
+          "local-gallery-context",
+          JSON.stringify({
+            ...ctx,
+            index: nextIdx,
+            openedAt: Date.now(),
+          }),
+        );
+      } catch {
+        // ignore
+      }
+      setShowInfo(false);
+      setMode(useGalleryStore.getState().mode);
+      navigate(readerUrl, { replace: false });
+      return true;
     },
     [pathParam, pushToast, navigate, setMode, isVideo],
   );
+
+  // 跨卷导航按钮上的目标卷名。
+  //
+  // 光有两枚箭头，用户不知道点下去会翻到哪一卷 —— 名称在悬停时浮出，
+  // 箭头本身仍然只是箭头，不抢画面的注意力。
+  const adjacentNames = useMemo(() => {
+    const ctx = getGalleryContext();
+    const pick = (direction: 1 | -1) =>
+      resolveAdjacentEntry(ctx, pathParam, direction, {
+        albumsOnly: false,
+        isVideo,
+      })?.entry.name ?? "";
+    return { prev: pick(-1), next: pick(1) };
+  }, [pathParam, isVideo]);
 
   const onToggleFavorite = useCallback(() => {
     if (!pathParam) return;
@@ -1239,6 +1271,8 @@ export default function Reader() {
             visible={chromeVisible}
             onPrevAlbum={() => goAdjacent(-1, { notify: showSwitchNotif })}
             onNextAlbum={() => goAdjacent(1, { notify: showSwitchNotif })}
+            prevLabel={adjacentNames.prev}
+            nextLabel={adjacentNames.next}
           />
         )}
 
@@ -1280,10 +1314,10 @@ export default function Reader() {
         >
           <div className="min-w-0 flex-1">
             <div className="text-body font-medium text-white/90">
-              这本读完了
+              这卷读完了
             </div>
             <div className="text-meta text-white/55">
-              可以接着读下一本，或回到相册继续浏览。
+              可以接着读下一卷，或回到相册继续浏览。
             </div>
           </div>
           <button
@@ -1294,7 +1328,7 @@ export default function Reader() {
             }}
             className="shrink-0 rounded border border-white/20 px-3 py-1.5 text-meta text-white/90 transition-colors hover:bg-white/10"
           >
-            下一本
+            下一卷
           </button>
           <button
             type="button"

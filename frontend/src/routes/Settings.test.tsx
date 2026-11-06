@@ -220,12 +220,12 @@ it("修改其他阅读偏好不覆盖更晚加载的历史快照", async () => {
   client.setQueryData(["history"], { history: savedHistory });
   renderSettings(client);
   fireEvent.click(
-    await screen.findByRole("switch", { name: "阅读到末尾自动切换下一本" }),
+    await screen.findByRole("switch", { name: "阅读到末尾自动切换下一卷" }),
   );
   await waitFor(() => expect(prefsApi.patch).toHaveBeenCalledTimes(1));
   await waitFor(() =>
     expect(
-      screen.getByRole("switch", { name: "阅读到末尾自动切换下一本" }),
+      screen.getByRole("switch", { name: "阅读到末尾自动切换下一卷" }),
     ).toBeEnabled(),
   );
   expect(client.getQueryData(["history"])).toEqual({ history: savedHistory });
@@ -246,7 +246,7 @@ it("读取设置失败提供重试，恢复后可操作", async () => {
   ).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "重试加载" }));
   expect(
-    await screen.findByRole("switch", { name: "阅读到末尾自动切换下一本" }),
+    await screen.findByRole("switch", { name: "阅读到末尾自动切换下一卷" }),
   ).toBeEnabled();
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
@@ -268,7 +268,7 @@ it("保存阅读设置失败保留原值并提示，随后可以再次保存", a
   vi.mocked(prefsApi.patch).mockRejectedValueOnce(new Error("offline"));
   renderSettings();
   const toggle = await screen.findByRole("switch", {
-    name: "阅读到末尾自动切换下一本",
+    name: "阅读到末尾自动切换下一卷",
   });
   fireEvent.click(toggle);
   await waitFor(() =>
@@ -290,7 +290,7 @@ it("保存阅读设置失败保留原值并提示，随后可以再次保存", a
 it("保存成功后刷新失败仍展示服务端已确认的新设置", async () => {
   renderSettings();
   const toggle = await screen.findByRole("switch", {
-    name: "阅读到末尾自动切换下一本",
+    name: "阅读到末尾自动切换下一卷",
   });
   vi.mocked(prefsApi.get).mockRejectedValue(new Error("offline"));
   fireEvent.click(toggle);
@@ -312,7 +312,7 @@ it("阅读设置保存期间禁止重复请求和交错修改", async () => {
   );
   renderSettings();
   const toggle = await screen.findByRole("switch", {
-    name: "阅读到末尾自动切换下一本",
+    name: "阅读到末尾自动切换下一卷",
   });
   fireEvent.click(toggle);
   await waitFor(() => expect(toggle).toBeDisabled());
