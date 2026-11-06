@@ -534,25 +534,19 @@
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
   }
-  /* 两张：竖着切，左边一张通高。 */
-  .cover-mosaic[data-cover-layout="mosaic-2"] > :first-child {
-    grid-row: span 2;
-  }
-  /* 三张：大的在左通高，右侧上下两块。 */
-  .cover-mosaic[data-cover-layout="mosaic-3"] > :first-child {
-    grid-row: span 2;
-  }
-  /* 竖版封面：两张改成上下切，每块都接近横图；
-     三张改成「上面一张大图 + 下面两张并排」。 */
-  :root[data-mode="comic"] .cover-mosaic[data-cover-layout="mosaic-2"] {
+  /* 两张：上下切，各占半幅。
+     早先照片侧是「左边一张通高、右边只放一张」，右下角空出一格。
+     空格里什么都没有，读起来像缺了一张图 —— 集合明明有两本相册，
+     拼贴却只摆出两张图加一个灰洞。 */
+  .cover-mosaic[data-cover-layout="mosaic-2"] {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: repeat(2, minmax(0, 1fr));
   }
-  :root[data-mode="comic"]
-    .cover-mosaic[data-cover-layout="mosaic-2"]
-    > :first-child {
-    grid-row: auto;
+  /* 三张：大的在左通高，右侧上下两块。四格都占满，不留空。 */
+  .cover-mosaic[data-cover-layout="mosaic-3"] > :first-child {
+    grid-row: span 2;
   }
+  /* 竖版封面：漫画侧的容器是 4:5，三张改成「上面一张大图 + 下面两张并排」。 */
   :root[data-mode="comic"] .cover-mosaic[data-cover-layout="mosaic-3"] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     grid-template-rows: 2fr 1fr;
@@ -752,6 +746,10 @@
      时刻用等宽字，宽度固定，上下才排得成一条轴。 */
   .footprint {
     --footprint-stamp-col: 88px;
+    /* 时间线是一份「浏览日记」，一行读到头就该停。
+       铺满一千多像素宽时，标题与计数之间隔着一片空白，
+       整页读起来像一张拉长了的表格。 */
+    max-width: 900px;
   }
   .footprint__row {
     position: relative;
