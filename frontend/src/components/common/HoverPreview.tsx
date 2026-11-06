@@ -1,8 +1,10 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { timeAgo } from '../../utils/date'
 import { progressPercent } from '../../utils/progress'
 import { workbenchCopy } from '../../utils/workbench'
+import { decodeFavPath } from '../../utils/path'
+import { useAlbumMedia } from '../../hooks/useLibrary'
 import {
   ReaderIcon,
   ImageIcon,
@@ -10,6 +12,7 @@ import {
   PlayFilledIcon,
 } from './Icon'
 import CardCover from '../album/CardCover'
+import ThumbImage from './ThumbImage'
 import type { CardData } from '../album/AlbumCard'
 
 interface Props {
@@ -76,6 +79,24 @@ export default function HoverPreview({ data, anchorRect, lastSeenAt, onPointerEn
     }
   }, [])
 
+  const isCollection = data.variant === 'collection'
+  const copy = workbenchCopy(kind)
+
+  // 照片相册的悬停预览给「里面有什么」：直接铺这一本的前几张实拍。
+  // 只放大封面等于把卡片上的那张图再放一遍 —— 照片库里真正的问题
+  // 是「这本里有什么」，答案得来自照片本身。
+  // 集合卡不参与：集合的封面本来就是多张拼贴。
+  //
+  // 这两个 hook 必须在下面的提前 return 之前：hook 的调用顺序在两次
+  // 渲染之间必须一致，早退分支跳过它们就会触发 React 的
+  // 「渲染的 hook 比上一次多」错误。
+  const albumId = !isComic && !isCollection ? decodeFavPath(data.to) : ''
+  const mediaQuery = useAlbumMedia(albumId)
+  const previewItems = useMemo(() => {
+    const items = mediaQuery.data?.pages[0]?.items ?? []
+    return items.filter((item) => item.kind === 'image').slice(0, 4)
+  }, [mediaQuery.data])
+
   if (vp.w === 0 || vp.h === 0) return null
 
   // 水平：默认在右侧；右侧放不下则放左侧
@@ -90,9 +111,6 @@ export default function HoverPreview({ data, anchorRect, lastSeenAt, onPointerEn
     MARGIN,
     Math.min(idealTop, vp.h - boxHeight - MARGIN),
   )
-
-  const isCollection = data.variant === 'collection'
-  const copy = workbenchCopy(kind)
 
   return createPortal(
     <div
@@ -121,7 +139,24 @@ export default function HoverPreview({ data, anchorRect, lastSeenAt, onPointerEn
           }`}
           style={{ width: COVER_W, height: coverH }}
         >
-          <CardCover data={data} loading="eager" fit={isComic ? "cover" : "contain"} />
+          {previewItems.length > 0 ? (
+            /* 实拍拼贴：这一本的前几张照片。2×2 正好铺满方形的预览框，
+               与照片墙的观感一致 —— 悬停一下就知道这本书里拍的是什么。 */
+            <div className="grid grid-cols-2 grid-rows-2 h-full w-full gap-0.5">
+              {previewItems.map((item) => (
+                <ThumbImage
+                  key={item.id}
+                  fileId={item.id}
+                  alt=""
+                  loading="eager"
+                  iconSize={14}
+                  className="h-full w-full object-cover"
+                />
+              ))}
+            </div>
+          ) : (
+            <CardCover data={data} loading="eager" fit="cover" />
+          )}
           {/* 顶部暗角：让标题更易读 */}
           <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/35 to-transparent pointer-events-none" />
           {/* 视频角标：▶ + 数量 */}

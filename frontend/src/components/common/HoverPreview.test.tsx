@@ -1,7 +1,20 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import HoverPreview from "./HoverPreview";
 import type { CardData } from "../album/AlbumCard";
+
+// 照片相册的预览会去取这一本的前几张实拍。这组用例只关心措辞与
+// 单位，媒体请求直接置空（取不到就退回封面）。
+const mediaState: { items: { id: string; name: string; kind: string }[] } = {
+  items: [],
+};
+vi.mock("../../hooks/useLibrary", () => ({
+  useAlbumMedia: () => ({
+    data: mediaState.items.length
+      ? { pages: [{ items: mediaState.items }] }
+      : undefined,
+  }),
+}));
 
 // 悬停预览是两侧共用的组件：它的措辞与单位必须跟着这张卡自己的
 // 内容属性走，而不是跟着当前工作台走。
@@ -70,5 +83,24 @@ describe("HoverPreview 按内容属性取词", () => {
       card({ variant: "collection", contentKind: "comic", count: 3 }),
     );
     expect(comic.getByText("3 卷")).toBeInTheDocument();
+  });
+
+  it("照片相册的预览铺这一本的真实照片，而不只是放大封面", () => {
+    mediaState.items = [
+      { id: "f_1", name: "a.jpg", kind: "image" },
+      { id: "f_2", name: "b.jpg", kind: "image" },
+      { id: "f_3", name: "c.jpg", kind: "image" },
+      { id: "f_4", name: "d.jpg", kind: "image" },
+    ];
+    const view = renderPreview(card({ contentKind: "photo" }));
+    // 缩略图按文件 ID 请求，图片 alt 为空，用 src 判定即可。
+    expect(view.container.ownerDocument.querySelectorAll("img").length).toBeGreaterThan(
+      0,
+    );
+    expect(
+      view.container.ownerDocument.querySelector('img[src*="f_1"]'),
+    ).not.toBeNull();
+    mediaState.items = [];
+    view.unmount();
   });
 });
