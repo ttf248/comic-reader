@@ -223,7 +223,10 @@ function SortMenu({
 
 // 最少图数过滤:小尺寸 inline 控件,带「≥」前缀和 Filter 图标。
 //
-// 0 = 不生效(灰色),N ≥ 1 = 激活态(accent)。点「×」一键回到 0。
+// 未启用时只留一枚漏斗按钮:一排控件里杵着个「≥ 0」读不出任何意思,
+// 0 本来就是「不过滤」。点一下才展开数字输入。
+// 启用后(≥ N)保持完整形态,旁边一个「×」一键回到不过滤。
+//
 // 用 popover 数字步进 vs 直接 inline input:本项目用户调这个值的频次
 // 极低(设一次就忘),inline 1 个 input 足够,不必为它做一个完整 popover。
 function MinImageFilter({
@@ -236,12 +239,39 @@ function MinImageFilter({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(String(value));
   const active = value > 0;
+  const { mode } = useAppMode();
+  // 计数单位跟着工作台走:照片说「张」,漫画说「页」。
+  const unit = mode === "comic" ? "页" : "张";
+  const label = `隐藏少于 N ${unit}的册`;
+  const inputRef = useRef<HTMLInputElement>(null);
+  // 漏斗按钮点开后输入框才挂上来，得主动把焦点送进去，
+  // 否则用户还得再点一次才能输数字。
+  useEffect(() => {
+    if (editing) inputRef.current?.focus();
+  }, [editing]);
   // 关闭编辑时把 draft 写回 store(允许"键入数字后点别处"这种 commit)
   function commit() {
     const n = parseInt(draft, 10);
     if (Number.isFinite(n) && n >= 0) onChange(n);
     else setDraft(String(value));
     setEditing(false);
+  }
+  // 未启用且没在编辑:只给一枚漏斗按钮。
+  if (!active && !editing) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          setEditing(true);
+          setDraft("0");
+        }}
+        className="inline-flex items-center justify-center w-[34px] h-[34px] rounded-md border border-border text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors shrink-0"
+        title={label}
+        aria-label={`最少${unit}数`}
+      >
+        <FilterIcon size={12} className="shrink-0" />
+      </button>
+    );
   }
   return (
     <div
@@ -250,11 +280,12 @@ function MinImageFilter({
           ? "border-accent/40 bg-accent-soft text-accent"
           : "border-border text-fg-muted hover:bg-bg-subtle"
       }`}
-      title="隐藏图数少于 N 的相册(0 = 不过滤)"
+      title={label}
     >
       <FilterIcon size={11} className="shrink-0" />
       <span className="text-meta whitespace-nowrap">≥</span>
       <input
+        ref={inputRef}
         type="number"
         min={0}
         max={9999}
@@ -272,10 +303,11 @@ function MinImageFilter({
           } else if (e.key === "Escape") {
             setEditing(false);
             setDraft(String(value));
+            (e.target as HTMLInputElement).blur();
           }
         }}
         className="w-9 h-7 bg-transparent border-0 outline-none text-meta tabular-nums text-right focus:outline-none"
-        aria-label="最少图数"
+        aria-label={`最少${unit}数`}
       />
       {active && (
         <button

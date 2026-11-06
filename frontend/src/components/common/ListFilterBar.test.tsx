@@ -92,3 +92,24 @@ it("刚展开就卸载时不留下待注册的监听任务", () => {
     vi.useRealTimers();
   }
 });
+
+it("未启用时最少页数只留漏斗按钮，点开后才出现输入框", () => {
+  render(<ListFilterBar totalCount={10} />);
+  // 0 本来就是「不过滤」，摆一个「≥ 0」在筛选条里读不出任何意思。
+  expect(screen.queryByRole("spinbutton")).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: /最少/ }));
+  const input = screen.getByRole("spinbutton");
+  expect(input).toHaveFocus();
+  fireEvent.change(input, { target: { value: "12" } });
+  fireEvent.blur(input);
+  expect(useSearchStore.getState().minImageCount).toBe(12);
+});
+
+it("启用后显示当前阈值并可一键清除", () => {
+  useSearchStore.getState().setMinImageCount(8);
+  render(<ListFilterBar totalCount={10} />);
+  expect(screen.getByRole("spinbutton")).toHaveValue(8);
+  fireEvent.click(screen.getByRole("button", { name: "清除最小图数" }));
+  expect(useSearchStore.getState().minImageCount).toBe(0);
+  expect(screen.queryByRole("spinbutton")).toBeNull();
+});
