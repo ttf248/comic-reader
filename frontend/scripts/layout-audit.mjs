@@ -58,12 +58,29 @@ const MIN_FONT_PX = 12.5;
 const MIN_CONTROL_PX = 28;
 
 const MEASURE = ({ minFontPx, minControlPx }) => {
+  // 祖先链上只要有一层是透明的，这个元素就等于没显示。
+  //
+  // 只看元素自己的 opacity 会漏掉「悬停才显形」的那一层：照片墙的
+  // 瓦片信息层（文件名 + 像素尺寸）整层 opacity-0，里面的文字却是 1。
+  // 审计把它当成真实内容，算出瓦片左缘 + 10px 的「内容左缘」，
+  // 报出并不存在的不对齐。
+  const effectivelyHidden = (el) => {
+    let cur = el;
+    while (cur && cur !== document.body) {
+      const cs = getComputedStyle(cur);
+      if (Number(cs.opacity) < 0.05) return true;
+      if (cs.visibility === "hidden" || cs.display === "none") return true;
+      cur = cur.parentElement;
+    }
+    return false;
+  };
   const visible = (el) => {
     const rect = el.getBoundingClientRect();
     if (rect.width < 1 || rect.height < 1) return false;
     const style = getComputedStyle(el);
     if (style.visibility === "hidden" || style.display === "none") return false;
     if (Number(style.opacity) < 0.05) return false;
+    if (effectivelyHidden(el)) return false;
     return true;
   };
 
