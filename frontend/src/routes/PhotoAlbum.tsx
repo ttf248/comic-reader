@@ -291,31 +291,37 @@ export default function PhotoAlbum({ album }: Props) {
             </div>
 
             {/* 右侧操作收成一组：密度切换、收藏、更多。
-                组内用 hairline 分隔，读起来是一个工具条而不是三个孤立按钮。 */}
-            <div className="hidden items-center gap-2 md:flex">
-              <span className="text-meta text-fg-subtle">密度</span>
-              <div className="flex items-center overflow-hidden rounded-md border border-border-faint text-meta">
-                {(["compact", "cozy", "large"] as const).map((key) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setDensity(key)}
-                    className={`inline-flex h-7 w-8 items-center justify-center transition-colors ${
-                      density === key
-                        ? "bg-bg-subtle text-fg"
-                        : "text-fg-muted hover:text-fg"
-                    }`}
-                    title={WALL_DENSITY_LABEL[key]}
-                    aria-label={WALL_DENSITY_LABEL[key]}
-                    aria-pressed={density === key}
-                  >
-                    {/* 密度用排布示意，不写 S/M/L 三个字母：
-                        字母要读者先知道它对应哪一档，图形直接说「疏 / 密」。 */}
-                    <DensityGlyph level={key} />
-                  </button>
-                ))}
+                组内用 hairline 分隔，读起来是一个工具条而不是三个孤立按钮。
+
+                收藏与「更多」在窄屏也留着：窄屏上右键菜单用不了，
+                没有这一组，这一页就再也点不到「收藏」「复制链接」
+                「设为封面」。密度切换只留宽屏 —— 窄屏的照片墙固定
+                两列，给一个改不动的控件只是噪音。 */}
+            <div className="flex items-center gap-2">
+              <div className="hidden items-center gap-2 md:flex">
+                <span className="text-meta text-fg-subtle">密度</span>
+                <div className="flex items-center overflow-hidden rounded-md border border-border-faint text-meta">
+                  {(["compact", "cozy", "large"] as const).map((key) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setDensity(key)}
+                      className={`inline-flex h-7 w-8 items-center justify-center transition-colors ${
+                        density === key
+                          ? "bg-bg-subtle text-fg"
+                          : "text-fg-muted hover:text-fg"
+                      }`}
+                      title={WALL_DENSITY_LABEL[key]}
+                      aria-label={WALL_DENSITY_LABEL[key]}
+                      aria-pressed={density === key}
+                    >
+                      {/* 密度用排布示意，不写 S/M/L 三个字母：
+                          字母要读者先知道它对应哪一档，图形直接说「疏 / 密」。 */}
+                      <DensityGlyph level={key} />
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
 
             <button
               type="button"
@@ -363,6 +369,7 @@ export default function PhotoAlbum({ album }: Props) {
                   真正可用的两个入口是查看器里的「设为封面」按钮，
                   以及照片墙上右键单张照片时的「设为封面」。 */}
             </Popover>
+            </div>
           </div>
         </div>
       </header>

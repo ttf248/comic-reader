@@ -213,8 +213,11 @@ function SortMenu({
                 triggerRef.current?.focus();
               }}
               className={`w-full text-left px-3 py-1.5 text-body transition-colors ${
+                /* 当前选中的那一项要有底色：只把字色加深的话，
+                   一列灰字里夹着一行深字，得逐行读才知道选了哪个。
+                   与全局搜索的结果列表同一套高亮。 */
                 o.value === value
-                  ? "text-fg font-medium"
+                  ? "bg-bg-subtle text-fg font-medium"
                   : "text-fg-muted hover:bg-bg-subtle hover:text-fg"
               }`}
             >
