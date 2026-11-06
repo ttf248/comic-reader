@@ -215,23 +215,25 @@ function StageInfo({
           「已读 0%」说的是「离结尾还有多远」—— 两个数并排时会互相
           打脸（读到第 1 页，已读却是 0%）。下面的进度条已经把百分比
           画出来了。 */}
-      <p className="hero-panel__muted tabular-nums">
-        {copy.positionVerb} {index + 1} / {total}
-      </p>
-      <div
-        /* 轨道不占满整列：横贯半屏的空条读作一条分隔线，
-           缩到一截才是进度条。 */
-        className="mt-3 h-1.5 max-w-[320px] rounded-full bg-accent/15 overflow-hidden"
-        role="progressbar"
-        aria-valuenow={percent}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-label={`「${card.title}」${copy.continueTitle}进度`}
-      >
+      {/* 轨道与页码并排、缩到一截：横贯整列的空条读作一条分隔线，
+          压在页码下面尤其像下划线。侧栏的续读卡也是这个写法。 */}
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <p className="hero-panel__muted tabular-nums">
+          {copy.positionVerb} {index + 1} / {total}
+        </p>
         <div
-          className="h-full bg-accent rounded-full transition-[width]"
-          style={{ width: `${percent}%` }}
-        />
+          className="h-1.5 w-40 shrink-0 rounded-full bg-brand/20 overflow-hidden"
+          role="progressbar"
+          aria-valuenow={percent}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label={`「${card.title}」${copy.continueTitle}进度`}
+        >
+          <div
+            className="h-full bg-brand rounded-full transition-[width]"
+            style={{ width: `${percent}%` }}
+          />
+        </div>
       </div>
       <div className="mt-5 flex flex-wrap items-center gap-2">
         <button type="button" onClick={onContinue} className="btn btn-primary">
