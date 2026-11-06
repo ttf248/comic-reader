@@ -164,11 +164,15 @@ export default function Sidebar({
   ) => {
     return (
       <div className="mt-5 first:mt-0">
-        <div className="px-4 pb-1 flex items-center gap-2">
-          <span className="text-meta tracking-wide transition-colors text-rail-fg">
-            {title}
-          </span>
-        </div>
+        {/* 折叠态不挂分组名：72px 的栏里「照片」两个字会竖着叠成两行，
+            像渲染事故而不是标题。折叠后每个入口都有图标与提示，够了。 */}
+        {!collapsed && (
+          <div className="px-4 pb-1 flex items-center gap-2">
+            <span className="text-meta tracking-wide transition-colors text-rail-fg">
+              {title}
+            </span>
+          </div>
+        )}
         {group.map((entry) => {
           const isActive = isEntryActive(entry);
           const badge = badgeFor(entry);
@@ -214,7 +218,7 @@ export default function Sidebar({
     >
       <div
         className={`sidebar-brand relative flex items-center ${
-          collapsed ? "justify-center" : "justify-between"
+          collapsed ? "justify-center px-2" : "justify-between"
         }`}
       >
         {
@@ -243,7 +247,7 @@ export default function Sidebar({
           title={collapsed ? "展开侧边栏 (Ctrl+B)" : "折叠侧边栏 (Ctrl+B)"}
           className={
             collapsed
-              ? "group/toggle relative z-10 inline-flex items-center gap-1 h-7 pl-2 pr-2.5 rounded-full bg-rail-accent text-rail-accent-fg shadow-md ring-1 ring-rail-accent/40 hover:ring-2 hover:ring-rail-accent/70 hover:scale-105 active:scale-95 transition-all"
+              ? "group/toggle relative z-10 inline-flex items-center gap-0.5 h-7 pl-1.5 pr-2 whitespace-nowrap rounded-full bg-rail-accent text-rail-accent-fg shadow-md ring-1 ring-rail-accent/40 hover:ring-2 hover:ring-rail-accent/70 hover:scale-105 active:scale-95 transition-all"
               : "shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-md text-rail-muted hover:text-rail-fg hover:bg-rail-hover transition-colors"
           }
         >
@@ -253,7 +257,9 @@ export default function Sidebar({
                 size={12}
                 className="transition-transform group-hover/toggle:translate-x-0.5"
               />
-              <span className="text-meta font-semibold tracking-wide">
+              {/* 折叠态只有 72px 宽：字压到 11.5px 并禁止换行，
+                  否则「展开」会折成两行、被 60px 高的品牌栏裁掉一半。 */}
+              <span className="text-badge font-semibold tracking-wide whitespace-nowrap">
                 展开
               </span>
             </>
