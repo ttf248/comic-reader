@@ -771,17 +771,42 @@
   .settings-row {
     min-height: 68px;
   }
+  /* 空态图标：架上的两本书。
+     「后面那本」用伪元素画，不能用 box-shadow —— 阴影跟着元素自己的
+     圆角走（只有轮廓没有圆角），于是一方方角从圆角方块后面支出来，
+     看着像渲染错位，不像一摞书。 */
   .empty-state__icon {
     position: relative;
+    isolation: isolate;
     width: 70px;
     height: 76px;
-    /* 书脊造型，与品牌方块同一套轮廓。 */
+    color: var(--brand-ink);
+    transform: rotate(-5deg);
+  }
+  /* 后面一本 */
+  .empty-state__icon::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: 18px 18px 18px 4px;
+    background: var(--bg-strong);
+    transform: translate(10px, 10px);
+  }
+  /* 前面一本 */
+  .empty-state__icon::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
     border-radius: 18px 18px 18px 4px;
     border: 1px solid var(--border);
     background: var(--brand-soft);
-    color: var(--brand-ink);
-    box-shadow: 9px 9px 0 var(--bg-subtle);
-    transform: rotate(-5deg);
+  }
+  /* 图标本体压在两本书之上 */
+  .empty-state__icon > * {
+    position: relative;
+    z-index: 1;
   }
   .album-summary {
     display: grid;
