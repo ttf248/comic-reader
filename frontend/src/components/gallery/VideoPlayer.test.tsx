@@ -209,3 +209,35 @@ describe("VideoPlayer 活动恢复", () => {
     expect(play).not.toHaveBeenCalled();
   });
 });
+
+// 调用方传的 className 只补充尺寸，不能把定位与居中顶掉：
+// 照片侧大图预览传 "h-full w-full" 时，视频曾贴在画布左上角，
+// 转码遮罩则跑到整块画布正中，两者对不上。
+describe("VideoPlayer 容器样式", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    playbackId.mockImplementation(() => "attempt-1");
+    vi.mocked(getTranscodeStatus).mockImplementation(
+      () => new Promise(() => {}),
+    );
+  });
+
+  it("传了 className 仍保留相对定位与居中", () => {
+    const view = render(
+      <VideoPlayer src="f_video" className="h-full w-full" />,
+    );
+    const root = view.container.firstElementChild as HTMLElement;
+    expect(root.className).toContain("relative");
+    expect(root.className).toContain("items-center");
+    expect(root.className).toContain("justify-center");
+    expect(root.className).toContain("h-full");
+    expect(root.className).toContain("w-full");
+  });
+
+  it("不传 className 时用默认的满高容器", () => {
+    const view = render(<VideoPlayer src="f_video" />);
+    const root = view.container.firstElementChild as HTMLElement;
+    expect(root.className).toContain("flex-1");
+    expect(root.className).toContain("bg-black");
+  });
+});

@@ -222,11 +222,13 @@ export default function VideoPlayer({
       transcodeStatus.status === "failed");
 
   return (
+    /* 容器样式是「合并」而不是「替换」：调用方传的 className 只该补充
+       尺寸，不该把定位与居中一起顶掉。之前这里用 className ?? 默认值，
+       照片侧大图预览传了 "h-full w-full"，结果 relative / flex / 居中
+       全部丢失 —— 视频贴在画布左上角，转码遮罩则跑到整块画布正中，
+       两者对不上。 */
     <div
-      className={
-        className ??
-        "relative flex-1 flex items-center justify-center min-h-0 bg-black"
-      }
+      className={`relative flex flex-1 items-center justify-center min-h-0 bg-black ${className ?? ""}`}
     >
       <video
         ref={videoRef}
