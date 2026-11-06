@@ -26,7 +26,12 @@ import CardCover from "../components/album/CardCover";
 import { useAppMode } from "../hooks/useAppMode";
 import { useSafeBack } from "../utils/navigation";
 import { compareDatesDesc } from "../utils/date";
-import { ChevronLeftIcon, StarIcon } from "../components/common/Icon";
+import {
+  ChevronLeftIcon,
+  StarIcon,
+  FilterIcon,
+  FolderSearchIcon,
+} from "../components/common/Icon";
 import PhotoAlbum from "./PhotoAlbum";
 import {
   LibraryRevisionChangedError,
@@ -222,6 +227,7 @@ export default function Album() {
       <EmptyState
         title="找不到此文件夹"
         description="资源可能已移动，或者媒体库尚未完成扫描。"
+        icon={<FolderSearchIcon size={20} />}
         action={
           <button onClick={() => navigate("/")} className="btn btn-outline">
             返回主页
@@ -244,6 +250,7 @@ export default function Album() {
       <EmptyState
         title="找不到此文件夹"
         description="资源可能已移动，或者媒体库尚未完成扫描。"
+        icon={<FolderSearchIcon size={20} />}
         action={
           <button onClick={() => navigate("/")} className="btn btn-outline">
             返回主页
@@ -597,6 +604,7 @@ function CollectionView({
           <EmptyState
             title="无匹配结果"
             description="试试修改搜索条件或排序。"
+            icon={<FilterIcon size={20} />}
           />
         ) : (
           /* 网格与页头共用同一条留白线：之前这里少了一层容器，

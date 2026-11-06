@@ -14,6 +14,7 @@ import {
   ReaderIcon,
   ClockIcon,
   FolderIcon,
+  FolderSearchIcon,
 } from "../components/common/Icon";
 import { thumbUrl } from "../api/thumbs";
 import type { GalleryContextEntry } from "../utils/galleryContext";
@@ -183,6 +184,7 @@ export default function Tag() {
         <EmptyState
           title="未找到该标签"
           description="可能未扫描或标签名拼写有差异。"
+          icon={<FolderSearchIcon size={20} />}
         />
       </div>
     );

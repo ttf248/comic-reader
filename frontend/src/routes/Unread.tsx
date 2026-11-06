@@ -9,7 +9,7 @@ import AlbumGrid from "../components/album/AlbumGrid";
 import AlbumGridSkeleton from "../components/album/AlbumGridSkeleton";
 import { ListFilterBar } from "../components/common/ListFilterBar";
 import EmptyState from "../components/common/EmptyState";
-import { SparkleIcon, ShuffleIcon } from "../components/common/Icon";
+import { SparkleIcon, ShuffleIcon, FilterIcon } from "../components/common/Icon";
 import type { GalleryContextEntry } from "../utils/galleryContext";
 import { albumRoute, decodeFavPath, homeRoute } from "../utils/path";
 import { compareDatesDesc } from "../utils/date";
@@ -160,6 +160,7 @@ export default function Unread() {
         <EmptyState
           title="没有匹配的未读相册"
           description={query ? `没有匹配"${query}"的结果` : ""}
+          icon={<FilterIcon size={20} />}
           action={
             <button
               onClick={() => useSearchStore.getState().reset()}
