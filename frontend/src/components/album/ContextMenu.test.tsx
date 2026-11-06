@@ -105,4 +105,43 @@ describe("ContextMenu", () => {
     rerender(view(false));
     expect(outside).toHaveFocus();
   });
+
+  it("贴着视口下缘与右缘打开时，菜单整块留在视口里", () => {
+    // jsdom 不做布局，实测尺寸恒为 0；这里按真实菜单尺寸打桩，
+    // 夹紧逻辑才能被验证。
+    const width = vi
+      .spyOn(HTMLElement.prototype, "offsetWidth", "get")
+      .mockReturnValue(200);
+    const height = vi
+      .spyOn(HTMLElement.prototype, "offsetHeight", "get")
+      .mockReturnValue(250);
+    Object.defineProperty(window, "innerWidth", {
+      value: 1024,
+      configurable: true,
+    });
+    Object.defineProperty(window, "innerHeight", {
+      value: 800,
+      configurable: true,
+    });
+
+    const { unmount } = render(
+      <ContextMenu
+        x={1000}
+        y={700}
+        items={[{ id: "properties", label: "属性" }]}
+        onSelect={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    const menu = screen.getByRole("menu");
+    // 右缘：1024 - 8 - 200
+    expect(menu.style.left).toBe("816px");
+    // 下缘：800 - 8 - 250
+    expect(menu.style.top).toBe("542px");
+
+    unmount();
+    width.mockRestore();
+    height.mockRestore();
+  });
 });

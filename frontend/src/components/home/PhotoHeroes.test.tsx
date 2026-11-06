@@ -60,7 +60,7 @@ describe("照片工作台的首屏专区", () => {
       />,
     );
     const hero = screen.getByTestId("recently-added-hero");
-    expect(hero.textContent).toMatch(/2\s*本新照片/);
+    expect(hero.textContent).toMatch(/2\s*本新相册/);
     // 照片侧的卡片必须落在 /photo/albums/…，不能串到漫画侧。
     const links = container.querySelectorAll('a[href^="/photo/albums/"]');
     expect(links.length).toBe(2);

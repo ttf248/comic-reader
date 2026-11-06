@@ -79,6 +79,11 @@ export default function Popover({
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
 
   // 绘制前计算位置：portal 到 body
+  //
+  // 菜单必须整块留在视口里：触发按钮在屏幕下缘时，直接把菜单挂在按钮
+  // 下方会有一半掉出视口，下半截的项点不到。做法是先让菜单挂在一个
+  // 屏外的位置量出真实尺寸，再按视口决定最终位置 —— 菜单的宽度随
+  // 内容变（分项文案长短不一），不实测就没法夹紧。
   useLayoutEffect(() => {
     if (!open) {
       setPos(null);
@@ -86,13 +91,37 @@ export default function Popover({
     }
     const update = () => {
       const el = triggerRef.current;
+      const menu = menuRef.current;
       if (!el) return;
       const r = el.getBoundingClientRect();
+      const w = menu?.offsetWidth ?? 0;
+      const h = menu?.offsetHeight ?? 0;
       // 默认放在 trigger 下方，右对齐
-      setPos({
-        top: r.bottom + 6,
-        left: align === "end" ? r.right : r.left,
-      });
+      let top = r.bottom + 6;
+      let left = align === "end" ? r.right : r.left;
+      if (w > 0 && h > 0) {
+        // align="end" 时 left 是菜单的右边缘（靠 translateX 收回来）。
+        const menuLeft = align === "end" ? left - w : left;
+        if (menuLeft + w > window.innerWidth - 8) {
+          left =
+            align === "end"
+              ? window.innerWidth - 8
+              : window.innerWidth - 8 - w;
+        }
+        if (menuLeft < 8) left = align === "end" ? 8 + w : 8;
+        // 下方放不下就翻到按钮上方；上方也不够就贴着视口下沿。
+        if (top + h > window.innerHeight - 8) {
+          const above = r.top - 6 - h;
+          top = above >= 8 ? above : Math.max(8, window.innerHeight - 8 - h);
+        }
+      }
+      setPos((prev) =>
+        prev &&
+        Math.abs(prev.top - top) < 0.5 &&
+        Math.abs(prev.left - left) < 0.5
+          ? prev
+          : { top, left },
+      );
     };
     update();
     window.addEventListener("resize", update);
@@ -177,7 +206,6 @@ export default function Popover({
         {enhancedTrigger}
       </div>
       {open &&
-        pos &&
         createPortal(
           <PopoverCloseContext.Provider value={() => setOpen(false)}>
             <PopoverToneContext.Provider value={tone}>
@@ -195,8 +223,11 @@ export default function Popover({
                 }}
                 style={{
                   position: "fixed",
-                  top: pos.top,
-                  left: pos.left,
+                  /* 位置量出来之前先挂在屏外：菜单始终在 DOM 里，
+                     量得到真实尺寸；布局阶段再把它挪到该在的地方，
+                     不会出现「先闪一下再跳位」。 */
+                  top: pos?.top ?? -9999,
+                  left: pos?.left ?? -9999,
                   transform: align === "end" ? "translateX(-100%)" : "none",
                   zIndex: 60,
                 }}

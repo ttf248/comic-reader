@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { handleMenuKeyDown } from "../../utils/menuKeyboard";
 
 export interface MenuItem {
@@ -92,20 +92,38 @@ export default function ContextMenu({
     };
   }, []);
 
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    let nx = x;
-    let ny = y;
-    if (rect.right > window.innerWidth) nx = window.innerWidth - rect.width - 8;
-    if (rect.bottom > window.innerHeight)
-      ny = window.innerHeight - rect.height - 8;
-    if (nx < 4) nx = 4;
-    if (ny < 4) ny = 4;
-    el.style.left = `${nx}px`;
-    el.style.top = `${ny}px`;
-  }, [x, y]);
+  // 视口夹紧：菜单必须整块落在视口里。
+  //
+  // 位置存在 state 里，而不是直接写 el.style —— 父组件重渲染时 React
+  // 会把内联 style 重新贴回 JSX 里的值，之前命令式写进去的夹紧结果
+  // 就被覆盖了：靠近屏幕下缘右键时，菜单有一半在屏幕外点不到。
+  //
+  // 尺寸用 offsetWidth/offsetHeight 实测：菜单的宽度随内容变
+  // （分项文案长短不一），猜一个值迟早会在窄屏上越界。
+  const [pos, setPos] = useState({ left: x, top: y });
+
+  useLayoutEffect(() => {
+    const clamp = () => {
+      const el = ref.current;
+      if (!el) return;
+      const w = el.offsetWidth;
+      const h = el.offsetHeight;
+      let nx = x;
+      let ny = y;
+      if (x + w > window.innerWidth - 8) nx = window.innerWidth - 8 - w;
+      if (y + h > window.innerHeight - 8) ny = window.innerHeight - 8 - h;
+      if (nx < 8) nx = 8;
+      if (ny < 8) ny = 8;
+      setPos((prev) =>
+        Math.abs(prev.left - nx) < 0.5 && Math.abs(prev.top - ny) < 0.5
+          ? prev
+          : { left: nx, top: ny },
+      );
+    };
+    clamp();
+    window.addEventListener("resize", clamp);
+    return () => window.removeEventListener("resize", clamp);
+  }, [x, y, items.length]);
 
   useEffect(() => {
     const fn = (e: MouseEvent) => {
@@ -124,7 +142,16 @@ export default function ContextMenu({
   return (
     <div
       ref={ref}
-      style={{ position: "fixed", top: y, left: x, zIndex: 1000 }}
+      style={{
+        position: "fixed",
+        top: pos.top,
+        left: pos.left,
+        zIndex: 1000,
+        /* 菜单比视口还高时（缩到很矮的窗口）自己滚动，
+           而不是把下半截留在屏幕外。 */
+        maxHeight: "calc(100vh - 16px)",
+        overflowY: "auto",
+      }}
       className={`min-w-[190px] border rounded-lg shadow-lg py-1.5 fade-up text-body ${
         dark
           ? "bg-overlay-panel border-overlay-border text-overlay-fg backdrop-blur-md"

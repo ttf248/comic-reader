@@ -96,7 +96,7 @@ export function ListFilterBar({
                 title="网格"
                 aria-label="网格视图"
                 aria-pressed={viewMode === "grid"}
-                className={`inline-flex items-center justify-center w-[34px] h-[32px] transition-colors ${
+                className={`inline-flex items-center justify-center w-[34px] h-[34px] transition-colors ${
                   viewMode === "grid"
                     ? "bg-bg-elevated text-fg shadow-xs"
                     : "text-fg-subtle hover:text-fg hover:bg-bg-subtle/60"
@@ -109,7 +109,7 @@ export function ListFilterBar({
                 title="列表"
                 aria-label="列表视图"
                 aria-pressed={viewMode === "list"}
-                className={`inline-flex items-center justify-center w-[34px] h-[32px] transition-colors ${
+                className={`inline-flex items-center justify-center w-[34px] h-[34px] transition-colors ${
                   viewMode === "list"
                     ? "bg-bg-elevated text-fg shadow-xs"
                     : "text-fg-subtle hover:text-fg hover:bg-bg-subtle/60"
@@ -248,7 +248,11 @@ function MinImageFilter({
   const { mode } = useAppMode();
   // 计数单位跟着工作台走:照片说「张」,漫画说「页」。
   const unit = mode === "comic" ? "页" : "张";
-  const label = `隐藏少于 N ${unit}的册`;
+  // 被过滤掉的东西是什么,也跟着工作台走:照片过滤掉的是"照片太少的
+  // 相册",漫画是"页数太少的卷"。早先两边都写「册」,照片这边读着像
+  // 从漫画那边漏过来的词。
+  const label =
+    mode === "comic" ? "隐藏少于 N 页的卷" : "隐藏少于 N 张的本相册";
   const inputRef = useRef<HTMLInputElement>(null);
   // 漏斗按钮点开后输入框才挂上来，得主动把焦点送进去，
   // 否则用户还得再点一次才能输数字。

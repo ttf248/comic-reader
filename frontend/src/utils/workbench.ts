@@ -163,8 +163,10 @@ const PHOTO: PhotoCopy = {
   neverSeenLabel: "尚未浏览",
   collectionUnit: "本",
   recentlyAddedTitle: "最近加入",
-  recentlyAddedEyebrow: "刚进门的照片",
-  recentlyAddedCountLabel: "本新照片",
+  recentlyAddedEyebrow: "刚进门的相册",
+  /* 这一区的卡是相册，计数也是相册数：早先写「本新照片」，
+     读起来像 105 张照片，数字的单位却对不上。 */
+  recentlyAddedCountLabel: "本新相册",
   serendipityTitle: "随手看看",
   serendipityHint: "不一定是你在找的那本",
   serendipityButton: "换一本",
