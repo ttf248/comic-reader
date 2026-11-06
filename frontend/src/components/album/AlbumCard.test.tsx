@@ -219,8 +219,8 @@ describe("AlbumCard 封面语义", () => {
         }),
         variant,
       );
-      // 照片侧说「个相册」：光秃秃一个「本」看不出是什么。
-      expect(screen.getByText("3 个相册")).toBeInTheDocument();
+      // 照片侧说「本相册」：光秃秃一个「本」看不出是什么。
+      expect(screen.getByText("3 本相册")).toBeInTheDocument();
     },
   );
 

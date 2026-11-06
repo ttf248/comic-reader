@@ -138,6 +138,8 @@ export default function Sidebar({
     mode === "comic"
       ? comicCopy().unfinishedCountLabel
       : photoCopy().resumeCountLabel;
+  // 侧栏的计数单位跟着这一侧走：漫画说「卷还没读完」，
+  // 照片说「本相册」。
 
   // 选中态：比侧栏亮一档的灰块 + 白字。
   // 侧栏是墨黑表面，选中态靠明度差而不是色相来区分，
@@ -302,10 +304,10 @@ export default function Sidebar({
               className="mt-2 flex min-h-7 items-center gap-1 px-1 text-meta text-rail-muted hover:text-rail-fg transition-colors"
             >
               <span>
-                还有 {resumeEntries.length - 1} {copy.collectionUnit}
+                还有 {resumeEntries.length - 1}{" "}
                 {mode === "comic"
-                  ? `没${comicCopy().finishVerb}`
-                  : "最近看过"}
+                  ? `${copy.collectionUnit}没${comicCopy().finishVerb}`
+                  : "本相册"}
               </span>
               <ChevronRightIcon size={11} />
             </Link>
@@ -389,8 +391,8 @@ function ResumeMiniCard({
       className="mt-2 w-full rounded-lg bg-rail-hover hover:bg-rail-hover p-2 flex gap-2.5 items-center text-left transition-colors group/mini focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rail-accent"
     >
       <span
-        className={`relative w-9 h-12 shrink-0 overflow-hidden bg-rail-hover block ${
-          isComic ? "album-thumb--book" : "rounded"
+        className={`relative shrink-0 overflow-hidden bg-rail-hover block ${
+          isComic ? "album-thumb--book w-9 h-12" : "rounded-md w-11 h-11"
         }`}
       >
         {card.coverPath ? (

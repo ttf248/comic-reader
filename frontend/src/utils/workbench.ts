@@ -173,7 +173,7 @@ const PHOTO: PhotoCopy = {
   resumeHint: "上次看过的那本",
   resumeButton: "接着看",
   resumeLastSeenLabel: "上次浏览",
-  resumeCountLabel: "本最近看过",
+  resumeCountLabel: "本相册",
 };
 
 const COMIC: ComicCopy = {
@@ -230,11 +230,11 @@ export function collectionUnit(mode: "photo" | "comic"): string {
 /**
  * 「里面有多少本相册」在句子里该怎么说。
  *
- * 光秃秃一个「本」看不出是什么：照片侧说「7 个相册」，漫画侧说
- * 「7 卷」。集合页头与网格卡片共用这一个说法。
+ * 光秃秃一个「本」看不出是什么：照片侧说「7 本相册」，漫画侧说
+ * 「7 卷」。集合页头、网格卡片与侧栏共用这一个说法。
  */
 export function albumCountUnit(mode: "photo" | "comic"): string {
-  return mode === "comic" ? collectionUnit(mode) : "个相册";
+  return mode === "comic" ? collectionUnit(mode) : "本相册";
 }
 
 /**
