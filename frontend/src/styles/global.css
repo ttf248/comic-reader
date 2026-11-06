@@ -871,6 +871,47 @@
     transform: rotate(3deg);
     box-shadow: var(--shadow-md);
   }
+  /* 漫画侧的标签页头图也是一本书：竖版、装订边、有厚度，
+     与集合页的页头封面、网格里的书封卡同一套语言。照片侧仍是
+     摊在桌上的方照。 */
+  :root[data-mode="comic"] .tag-feature {
+    grid-template-columns: minmax(0, 1fr) 220px;
+  }
+  :root[data-mode="comic"] .tag-feature__image {
+    position: relative;
+    height: 275px;
+    border-radius: 10px 16px 16px 10px;
+    transform: none;
+    box-shadow: var(--cover-shadow);
+  }
+  /* 装订边与书口：与书封卡同一套写法（见 .album-tile__cover--book）。 */
+  :root[data-mode="comic"] .tag-feature__image::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    background: linear-gradient(
+      to right,
+      rgb(0 0 0 / 0.5) 0,
+      rgb(0 0 0 / 0.18) 9px,
+      rgb(0 0 0 / 0) 26px
+    );
+  }
+  :root[data-mode="comic"] .tag-feature__image::before {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    right: 0;
+    width: 3px;
+    z-index: 1;
+    pointer-events: none;
+    background: linear-gradient(
+      to left,
+      rgb(255 255 255 / 0.34),
+      rgb(255 255 255 / 0)
+    );
+  }
   .reader-header {
     /* 顶栏拆成左右两块浮层，而不是一条通栏。
        通栏浮层会一直压住画面顶端：漫画页的上缘因此永远看不见，
@@ -970,6 +1011,17 @@
     .tag-feature__image {
       height: 160px;
       transform: none;
+    }
+    /* 漫画侧的页头图是竖版，窄屏下改成上下堆叠：两栏并排时
+       文字栏只剩几十像素，眉标与统计标签会一个字一行。
+       堆叠后头图仍是一本书：定宽定高居中，摊成横幅就不是书了。 */
+    :root[data-mode="comic"] .tag-feature {
+      grid-template-columns: 1fr;
+    }
+    :root[data-mode="comic"] .tag-feature__image {
+      width: 160px;
+      height: 200px;
+      justify-self: center;
     }
     .reader-header {
       left: 8px;
