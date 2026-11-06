@@ -98,6 +98,14 @@ interface Props {
    */
   showUnreadBadge?: boolean;
   /**
+   * 标题印在封面上（书封），而不是压在封面下面。
+   *
+   * 漫画工作台默认开启：书架上的每一本都该在封面上写着书名，
+   * 一排封面才读得出「一排书」。首页首屏面板里的卡片是紧凑陈列，
+   * 封面下方留一行标题更清楚，那里显式关掉。
+   */
+  titleOnCover?: boolean;
+  /**
    * 封面画幅比例。
    * 默认 "4/3" 用于照片卡片；也支持 "4/5"、"2/3" 和 "16/9"。
    */
@@ -136,6 +144,7 @@ export default function AlbumCard({
   onContextMenu,
   overlayAction,
   showUnreadBadge = true,
+  titleOnCover,
   coverRatio = "4/3",
   alwaysShowFavorite = false,
 }: Props) {
@@ -187,6 +196,7 @@ export default function AlbumCard({
           onToggleFavorite={onToggleFavorite}
           overlayAction={overlayAction}
           showUnreadBadge={showUnreadBadge}
+          titleOnCover={titleOnCover}
           coverRatio={coverRatio}
           alwaysShowFavorite={alwaysShowFavorite}
         />
@@ -218,7 +228,7 @@ export default function AlbumCard({
 // 漫画里一张图就是「一页」，与阅读器的「第 N 页」说法一致。
 function formatMediaCount(
   data: CardData,
-): { label: string; title: string } | null {
+): { label: string; lead: string; rest: string; title: string } | null {
   if (data.variant !== "album") return null;
   const imgs = data.imageCount ?? 0;
   const vids = data.videoCount ?? 0;
@@ -226,14 +236,22 @@ function formatMediaCount(
   if (imgs > 0 && vids > 0) {
     return {
       label: `${imgs} ${unit} · ${vids} 个视频`,
+      lead: `${imgs} ${unit}`,
+      rest: `${vids} 个视频`,
       title: `${imgs} ${unit} + ${vids} 个视频`,
     };
   }
   if (imgs === 0 && vids > 0) {
-    return { label: `${vids} 个视频`, title: `${vids} 个视频` };
+    return {
+      label: `${vids} 个视频`,
+      lead: `${vids} 个视频`,
+      rest: "",
+      title: `${vids} 个视频`,
+    };
   }
   // 纯图 / 空相册。
-  return { label: `${imgs} ${unit}`, title: `${imgs} ${unit}` };
+  const label = `${imgs} ${unit}`;
+  return { label, lead: label, rest: "", title: label };
 }
 
 function GridCard({
@@ -242,6 +260,7 @@ function GridCard({
   onToggleFavorite,
   overlayAction,
   showUnreadBadge,
+  titleOnCover,
   coverRatio,
   alwaysShowFavorite,
 }: {
@@ -250,6 +269,7 @@ function GridCard({
   onToggleFavorite: () => void;
   overlayAction?: ReactNode;
   showUnreadBadge: boolean;
+  titleOnCover?: boolean;
   coverRatio: CoverRatio;
   alwaysShowFavorite: boolean;
 }) {
@@ -267,6 +287,11 @@ function GridCard({
   const isComicAlbum =
     data.variant === "album" && data.contentKind === "comic";
   const cardCopy = comicCopy();
+  // 标题印在封面上：漫画工作台的默认形态。书架上的书在封面上写着
+  // 书名，一排封面才读得出「一排书」；照片工作台是展陈墙，标题仍然
+  // 压在封面下方（展品说明牌）。
+  const showTitleOnCover = titleOnCover ?? data.contentKind === "comic";
+  const label = data.displayTitle ?? data.title;
   // 未读标记（见文件底部 showUnreadMark）：只对漫画相册、且页面不是「整页未读」时出现。
   const unread = showUnreadMark(data, showUnreadBadge);
   // 只有配置了多个媒体根才需要标来源。
@@ -366,10 +391,12 @@ function GridCard({
         className="group block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
       >
         <div
-          className={`album-tile__cover relative ${COVER_RATIO_CLASS[coverRatio]} bg-bg-subtle overflow-hidden`}
+          className={`album-tile__cover relative ${COVER_RATIO_CLASS[coverRatio]} bg-bg-subtle overflow-hidden${
+            showTitleOnCover ? " album-tile__cover--book" : ""
+          }`}
           data-testid="card-cover"
         >
-          <CardCover data={data} />
+          <CardCover data={data} fit={showTitleOnCover ? "cover" : "contain"} />
 
           {/* 封面左上角：状态槽。阅读状态（未读 / 已读完）与视频转码角标
               都在这一列，堆叠显示，互不遮挡。
@@ -393,6 +420,27 @@ function GridCard({
           {/* 底部暗化蒙版（hover 时让进度条与徽章更清晰） */}
           <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
 
+          {/* 书名压条：标题印在封面上。书封上本来就有书名，
+              网格因此读成一排书，而不是「一堆图片 + 一堆说明」。
+              宽幅封面（首屏面板里的横版海报）用紧凑压条：两行标题
+              会把半张封面压成一块黑。 */}
+          {showTitleOnCover && (
+            <div
+              className={`cover-title${
+                coverRatio === "16/9" ? " cover-title--compact" : ""
+              }`}
+              data-testid="cover-title"
+            >
+              <div
+                className={`cover-title__text ${
+                  coverRatio === "16/9" ? "truncate" : "line-clamp-2"
+                }`}
+              >
+                {label}
+              </div>
+            </div>
+          )}
+
           {/* 集合 / 标签 这类"类型"信息不属于阅读状态，已移到标题下的元信息行，
               封面角位只留给状态（未读点 / 已读），避免角标互相打架。 */}
 
@@ -405,13 +453,17 @@ function GridCard({
               位置数字挪到元信息行。 */}
           {isComicAlbum && progressPct !== null && progressPct > 0 && (
             <>
-              {!isFinished && (
+              {/* 百分比 chip 只在标题不在封面上时出现：封面上已经有
+                  书名压条，再压一枚百分比 chip，两层深色蒙版叠在
+                  封面下缘会互相干扰。书封形态把百分比放进封面
+                  下方的说明行，与计数读在一起。 */}
+              {!isFinished && !showTitleOnCover && (
                 <div className="absolute bottom-2 left-2 inline-flex items-center gap-1 rounded-md bg-black/65 backdrop-blur-sm ring-1 ring-white/20 px-1.5 h-5 text-badge font-medium text-white shadow-sm">
                   <ReaderIcon size={11} className="shrink-0" />
                   <span className="tabular-nums">{progressPct}%</span>
                 </div>
               )}
-              <div className="absolute bottom-0 left-0 right-0 h-1 bg-black/55">
+              <div className="absolute bottom-0 left-0 right-0 h-1 z-10 bg-black/55">
                 <div
                   className="h-full bg-white/90"
                   style={{ width: `${progressPct}%` }}
@@ -422,16 +474,24 @@ function GridCard({
         </div>
 
         <div className="album-tile__meta min-w-0">
-          <div
-            className="album-tile__title text-label font-medium text-fg truncate-2 leading-snug transition-colors group-hover:text-brand-ink"
-            title={data.displayTitle ?? data.title}
-          >
-            {data.displayTitle ?? data.title}
-          </div>
+          {/* 标题印在封面上时，这里不再重复标题：同一句话在一张卡上
+              说两遍，封面的书名会被下面的说明读成回声。 */}
+          {!showTitleOnCover && (
+            <div
+              className="album-tile__title text-label font-medium text-fg truncate-2 leading-snug transition-colors group-hover:text-brand-ink"
+              title={data.displayTitle ?? data.title}
+            >
+              {data.displayTitle ?? data.title}
+            </div>
+          )}
           {/* meta 行 12.5px → 13px：全量网格一次显示几十张卡，
               12.5px 的中文在一屏里会糊成灰团，是"内容存在感不足"
               的主要来源之一。 */}
-          <div className="text-body text-fg-muted mt-1 tabular-nums flex items-center gap-1.5 min-w-0">
+          <div
+            className={`text-body tabular-nums flex items-center gap-1.5 min-w-0 ${
+              showTitleOnCover ? "text-fg-muted" : "text-fg-muted mt-1"
+            }`}
+          >
             <TypeChip variant={data.variant} />
             {(() => {
               const media = formatMediaCount(data);
@@ -444,7 +504,18 @@ function GridCard({
                     title={media.title}
                     className="shrink-0 whitespace-nowrap"
                   >
-                    {media.label}
+                    {/* 数量是书封下方唯一剩下的信息，用正文色；其余
+                        补充信息退回次要色，层级才分得开。 */}
+                    {showTitleOnCover ? (
+                      <>
+                        <span className="text-fg font-medium">{media.lead}</span>
+                        {media.rest && (
+                          <span className="text-fg-muted"> · {media.rest}</span>
+                        )}
+                      </>
+                    ) : (
+                      media.label
+                    )}
                   </span>
                 );
               }
@@ -457,6 +528,20 @@ function GridCard({
                 </span>
               );
             })()}
+            {/* 阅读进度：书封形态下百分比放进说明行，与计数读在一起，
+                封面上的书名压条不再压一枚 chip。 */}
+            {showTitleOnCover &&
+              isComicAlbum &&
+              progressPct !== null &&
+              progressPct > 0 &&
+              !isFinished && (
+                <>
+                  <span className="text-fg-subtle">·</span>
+                  <span className="text-brand-ink font-medium shrink-0 whitespace-nowrap">
+                    已读 {progressPct}%
+                  </span>
+                </>
+              )}
             {data.subtitle && (
               <>
                 <span className="text-fg-subtle">·</span>
@@ -726,7 +811,7 @@ function showUnreadMark(data: CardData, showUnreadBadge: boolean): boolean {
 function UnreadDot({ label }: { label: string }) {
   return (
     <span
-      className="inline-flex h-2.5 w-2.5 items-center justify-center rounded-full bg-white ring-2 ring-black/45 shadow-[0_1px_3px_rgba(0,0,0,0.35)]"
+      className="inline-flex h-2 w-2 items-center justify-center rounded-full bg-white ring-1 ring-black/50 shadow-[0_1px_3px_rgba(0,0,0,0.4)]"
       title={label}
     >
       <span className="sr-only">{label}</span>

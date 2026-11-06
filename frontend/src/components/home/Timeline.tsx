@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { thumbUrl } from "../../api/thumbs";
+import { useAppMode } from "../../hooks/useAppMode";
 import { FolderIcon } from "../common/Icon";
 
 export interface TimelineEntry {
@@ -47,6 +48,9 @@ export default function Timeline({
 function TimelineCard({ entry }: { entry: TimelineEntry }) {
   const [failedSource, setFailedSource] = useState<string | null>(null);
   const cover = entry.coverPath;
+  // 漫画侧的索引卡也是一本书：封面带装订边，与网格里的书封同一套语言。
+  const { mode } = useAppMode();
+  const isComic = mode === "comic";
   return (
     <div className="year-index__item group">
       <button
@@ -55,7 +59,11 @@ function TimelineCard({ entry }: { entry: TimelineEntry }) {
         aria-pressed={entry.active}
         className="year-index__open"
       >
-        <span className="block w-12 h-14 shrink-0 rounded-md overflow-hidden bg-bg-subtle">
+        <span
+          className={`block w-12 h-14 shrink-0 overflow-hidden bg-bg-subtle ${
+            isComic ? "timeline-cover--book" : "rounded-md"
+          }`}
+        >
           {cover && cover !== failedSource ? (
             <img
               src={thumbUrl(cover)}

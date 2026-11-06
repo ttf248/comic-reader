@@ -1,7 +1,9 @@
 import { useMemo, type RefObject } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSearchStore } from "../../store/searchStore";
+import { useAppMode } from "../../hooks/useAppMode";
 import type { YearGroup } from "../../utils/albumGrouping";
+import { collectionUnit } from "../../utils/workbench";
 import { FilterIcon } from "../common/Icon";
 import Timeline, { type TimelineEntry } from "./Timeline";
 
@@ -19,6 +21,9 @@ export default function YearTimeline({ groups, gridRef }: Props) {
   const navigate = useNavigate();
   const yearFilter = useSearchStore((s) => s.yearFilter);
   const toggleYear = useSearchStore((s) => s.toggleYearFilter);
+  // 计数单位跟着工作台走：照片侧「本相册」，漫画侧「卷」。
+  const { mode } = useAppMode();
+  const unit = collectionUnit(mode);
 
   const entries = useMemo<TimelineEntry[]>(
     () =>
@@ -38,7 +43,7 @@ export default function YearTimeline({ groups, gridRef }: Props) {
         return {
           key,
           label: group.label,
-          count: `${group.albums.length} 本相册`,
+          count: `${group.albums.length} ${unit}`,
           numeric: group.year !== null,
           coverPath: group.coverPreviewPaths.find(Boolean),
           active: isActive,
@@ -59,7 +64,7 @@ export default function YearTimeline({ groups, gridRef }: Props) {
           ),
         };
       }),
-    [groups, yearFilter, toggleYear, navigate, gridRef],
+    [groups, yearFilter, toggleYear, navigate, gridRef, unit],
   );
 
   return <Timeline entries={entries} testId="year-timeline" />;

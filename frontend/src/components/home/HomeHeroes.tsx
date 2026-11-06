@@ -267,7 +267,7 @@ function QueueItem({
         onClick={onOpen}
         aria-label={`${copy.continueTitle}「${card.title}」`}
       >
-        <span className="w-10 h-12 shrink-0 rounded-md overflow-hidden bg-bg-media">
+        <span className="hero-queue__cover">
           <Cover card={card} />
         </span>
         <span className="min-w-0">

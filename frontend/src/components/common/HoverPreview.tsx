@@ -33,8 +33,8 @@ interface Props {
 //     （夹紧按"封面 + 信息区"的整体高度算，只按封面算会把信息区裁到视口外）
 //   - 通过 portal 渲染到 body，避免 transform / overflow 裁剪
 const COVER_W = 240
-/** 漫画：2:3 竖版封面，与网格卡的画幅一致。 */
-const COVER_H_COMIC = 360
+/** 漫画：4:5 竖版封面，与网格卡的画幅一致。 */
+const COVER_H_COMIC = 300
 /** 照片：1:1 方形封面。 */
 const COVER_H_PHOTO = 240
 const GAP = 14

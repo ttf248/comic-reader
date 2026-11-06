@@ -66,6 +66,30 @@ describe("AlbumCard 封面语义", () => {
     vi.clearAllMocks();
   });
 
+  // 漫画侧是书架：书名印在封面上，封面下方不再重复一遍标题。
+  // 照片侧是展陈墙：标题仍然是封面下方的说明牌。
+  it("漫画相册把标题印在封面上，封面下方不再重复标题", () => {
+    const { container } = renderCard(card({ title: "2024年/上海迪士尼" }));
+
+    const band = screen.getByTestId("cover-title");
+    expect(band).toHaveTextContent("2024年/上海迪士尼");
+    expect(container.querySelector(".album-tile__cover--book")).not.toBeNull();
+    // 封面下方的说明区里没有标题块。
+    expect(container.querySelector(".album-tile__title")).toBeNull();
+  });
+
+  it("照片相册保留封面下方的标题，不压成书名压条", () => {
+    const { container } = renderCard(
+      card({ title: "周末记录", contentKind: "photo" }),
+    );
+
+    expect(screen.queryByTestId("cover-title")).not.toBeInTheDocument();
+    expect(container.querySelector(".album-tile__cover--book")).toBeNull();
+    expect(container.querySelector(".album-tile__title")).toHaveTextContent(
+      "周末记录",
+    );
+  });
+
   it("相册始终使用主封面，不把 covers 渲染成马赛克", () => {
     const { container } = renderCard(
       card({ covers: ["other-1", "other-2", "other-3"] }),
@@ -132,10 +156,12 @@ describe("AlbumCard 封面语义", () => {
 
     expect(screen.getByText("02:05")).toBeInTheDocument();
     // 默认是漫画相册：图片按「页」计数（照片侧才是「张」）。
-    expect(screen.getByText("9 页 · 2 个视频")).toHaveAttribute(
-      "title",
-      "9 页 + 2 个视频",
-    );
+    // 漫画侧标题印在封面上，封面下方的说明行只剩计数，
+    // 因此数量与视频数分成两段：数量用正文色，补充信息退回次要色。
+    const lead = screen.getByText("9 页");
+    expect(lead).toBeInTheDocument();
+    expect(screen.getByText("· 2 个视频")).toBeInTheDocument();
+    expect(lead.closest("[title]")).toHaveAttribute("title", "9 页 + 2 个视频");
     expect(
       screen.queryByRole("button", { name: "重试" }),
     ).not.toBeInTheDocument();
@@ -252,7 +278,9 @@ describe("AlbumCard 状态表达", () => {
     renderCard(card({ progress: { index: 3, total: 12 } }));
 
     expect(screen.queryByText("未读")).not.toBeInTheDocument();
-    expect(screen.getByText("27%")).toBeInTheDocument();
+    // 漫画侧标题印在封面上，封面下缘不再压百分比 chip，
+    // 百分比与计数读在同一条说明行里。
+    expect(screen.getByText("已读 27%")).toBeInTheDocument();
   });
 
   // 照片相册没有阅读进度：百分比、位置与「已读完」都属于漫画。

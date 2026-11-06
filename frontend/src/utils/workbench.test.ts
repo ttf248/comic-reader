@@ -33,7 +33,9 @@ describe("工作台词表", () => {
 
   it("封面画幅分侧：照片方形，漫画竖版", () => {
     expect(coverRatioForMode("photo")).toBe("1/1");
-    expect(coverRatioForMode("comic")).toBe("2/3");
+    // 漫画侧用 4:5 而不是 2/3：竖版仍与照片的方形分得开，
+    // 却不必把横向素材裁掉一半以上。
+    expect(coverRatioForMode("comic")).toBe("4/5");
   });
 
   it("两侧的随机动作名各自成套", () => {

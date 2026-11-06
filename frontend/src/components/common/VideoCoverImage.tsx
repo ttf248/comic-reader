@@ -13,6 +13,13 @@ interface Props {
   showExtractingHint?: boolean;
   /** 是否显示可点击的重试操作；卡片链接内应关闭，避免嵌套交互元素。 */
   showRetryAction?: boolean;
+  /**
+   * 画面怎么放进画幅。
+   *
+   * "contain" 保留完整画面（上下留边读成宽银幕）；"cover" 铺满画幅，
+   * 裁掉两侧。竖版书封里前者会留下一大片黑边，像个空信箱。
+   */
+  fit?: "contain" | "cover";
 }
 
 /**
@@ -29,6 +36,7 @@ export default function VideoCoverImage({
   onRetry,
   showExtractingHint = true,
   showRetryAction = true,
+  fit = "contain",
 }: Props) {
   const { status, url, retry, enabled } = useVideoCover(videoPath);
 
@@ -96,7 +104,9 @@ export default function VideoCoverImage({
       alt={alt}
       loading={loading}
       decoding="async"
-      className="w-full h-full object-contain scale-fade"
+      className={`w-full h-full scale-fade ${
+        fit === "cover" ? "object-cover" : "object-contain"
+      }`}
     />
   );
 }

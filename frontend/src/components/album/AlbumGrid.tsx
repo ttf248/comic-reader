@@ -104,11 +104,15 @@ export default function AlbumGrid({
   const { mode: workbench } = useAppMode();
   const ratio = coverRatio ?? coverRatioForMode(workbench);
 
-  // 当前提供标准与宽松两套照片网格，断点由语义样式统一维护。
+  // 当前提供标准、宽松与书架三套网格，断点由语义样式统一维护。
+  // 漫画侧用书架那一套：封面竖版本身就窄，按展陈墙的列宽铺开，
+  // 每张卡会撑成巨幅海报，一屏只看得到四本。
   const gridColsClass =
     cardMinWidth === 224
       ? "library-grid library-grid--spacious"
-      : "library-grid";
+      : workbench === "comic"
+        ? "library-grid library-grid--comic"
+        : "library-grid";
 
   // 列表按列数分组：一列时每组一张卡，两列时每组两张并排。
   // 分组后交给 Virtuoso 渲染，行高一致（列表行固定高度），

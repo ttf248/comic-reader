@@ -228,6 +228,19 @@
     border-radius: var(--radius-media);
     text-align: left;
   }
+  /* 队列里的小封面也是一本书：与网格里的书封同一套装订边。 */
+  .hero-queue__cover {
+    display: block;
+    width: 40px;
+    height: 56px;
+    flex-shrink: 0;
+    overflow: hidden;
+    border-radius: 5px 8px 8px 5px;
+    background: var(--bg-media);
+    box-shadow:
+      var(--spine-shadow),
+      0 5px 12px -8px rgb(0 0 0 / 0.5);
+  }
   .hero-queue__remove {
     position: absolute;
     right: -5px;
@@ -287,6 +300,84 @@
   .album-tile__cover {
     border-radius: var(--radius-media);
   }
+  /* --- 书封：漫画工作台的相册封面 ---
+     书架上的每一本都是一件独立的东西，封面不能只是「一张图片」：
+     左侧是装订边（内侧阴影），右侧圆角更大，整体有一点厚度。
+     照片工作台是展陈墙，方照不画框、不浮起，也就没有书脊。 */
+  .album-tile__cover--book {
+    border-radius: 9px 14px 14px 9px;
+    box-shadow:
+      var(--spine-shadow),
+      var(--cover-shadow);
+  }
+  /* 书名压条：标题印在封面上，而不是压在封面下面。
+     这一下同时解决两件事：网格读起来像一面书架，而不是「图片 + 说明」；
+     封面下方的说明区不必给标题留两行高度，简介与网格之间不再留一段空洞。 */
+  .cover-title {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    padding: 30px 11px 9px;
+    background-image: linear-gradient(
+      to top,
+      rgb(0 0 0 / 0.94) 0%,
+      rgb(0 0 0 / 0.9) 52%,
+      rgb(0 0 0 / 0.6) 80%,
+      rgb(0 0 0 / 0) 100%
+    );
+    pointer-events: none;
+  }
+  .cover-title__text {
+    color: var(--cover-title-ink);
+    font-size: var(--text-label);
+    font-weight: 600;
+    line-height: 1.24;
+    letter-spacing: 0.01em;
+    text-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
+  }
+  /* 宽幅封面（首屏面板里的横版海报）的紧凑压条：两行标题会把
+     半张封面压成一块黑，标题缩一档、行数减半才留得住画面。 */
+  .cover-title--compact {
+    padding: 20px 10px 8px;
+  }
+  .cover-title--compact .cover-title__text {
+    font-size: var(--text-body);
+    line-height: 1.3;
+  }
+  /* 封面下的说明区：漫画侧标题已经印在封面上，这里只剩一行计数，
+     不必再为标题预留高度。 */
+  :root[data-mode="comic"] .album-tile__meta {
+    padding: 9px 0 5px;
+  }
+  /* 漫画侧的书架材质：书本身是那件东西，卡片不再垫一层白框。
+     厚度与投影由封面自己承担（--cover-shadow），悬停时书从架上抬起
+     一点点，标签留在原位 —— 像从书架上抽出半寸。 */
+  :root[data-mode="comic"] .album-tile {
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+  }
+  :root[data-mode="comic"] .album-tile:hover {
+    box-shadow: none;
+    transform: none;
+  }
+  :root[data-mode="comic"] .album-tile__cover--book {
+    transition:
+      transform var(--dur) var(--ease-out),
+      box-shadow var(--dur) var(--ease-out);
+  }
+  :root[data-mode="comic"] .album-tile:hover .album-tile__cover--book {
+    transform: translateY(-4px);
+    box-shadow:
+      var(--spine-shadow),
+      0 18px 30px -16px rgb(0 0 0 / 0.6);
+  }
+  /* 卡片不再有内边距，角标要贴着封面走。 */
+  :root[data-mode="comic"] .album-tile > .absolute {
+    top: 8px;
+    right: 8px;
+  }
   .album-tile__meta {
     padding: 12px 0 7px;
   }
@@ -335,6 +426,16 @@
     border-radius: var(--radius-media);
     background: var(--bg-subtle);
     box-shadow: var(--shadow-xs);
+  }
+  /* 集合页的页头封面按「一本书」处理：竖版、装订边、有厚度。
+     与网格里的书封卡同一套语言，页面从页头到网格是一句话。 */
+  .detail-head__cover--book {
+    width: 116px;
+    height: 148px;
+    border-radius: 10px 16px 16px 10px;
+    box-shadow:
+      var(--spine-shadow),
+      var(--cover-shadow);
   }
   .detail-head__title {
     font-family: var(--font-display);
@@ -404,6 +505,12 @@
   .library-grid--spacious {
     grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
   }
+  /* 漫画侧的书架网格比展陈墙密：封面竖版本身就窄，再按展陈墙的列宽
+     铺开，每张卡会撑成一张巨幅海报，一屏只看得到四本。收窄列宽，
+     一排六到七本才读得出「一排书」而不是「四张海报」。 */
+  .library-grid--comic {
+    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  }
   .year-index {
     display: flex;
     gap: 12px;
@@ -432,21 +539,51 @@
   }
   .year-index__open:hover,
   .year-index__open[aria-pressed="true"] {
-    border-color: var(--accent);
-    background: var(--accent-soft);
+    border-color: var(--brand);
+    background: var(--brand-soft);
+    color: var(--brand-ink);
+  }
+  /* 漫画侧的作品 / 年份索引也是书架上的一排书：卡片本身不垫白底，
+     只有封面带装订边。悬停时才浮出底色，指哪一本。 */
+  :root[data-mode="comic"] .year-index__open {
+    background: transparent;
+    border-color: transparent;
+  }
+  :root[data-mode="comic"] .year-index__open:hover,
+  :root[data-mode="comic"] .year-index__open[aria-pressed="true"] {
+    background: var(--brand-soft);
+    border-color: var(--brand);
+  }
+  /* 索引卡里的封面：漫画侧也是一本书（装订边 + 厚度），
+     与网格里的书封同一套语言。 */
+  .timeline-cover--book {
+    border-radius: 5px 8px 8px 5px;
+    box-shadow:
+      var(--spine-shadow),
+      0 6px 14px -10px rgb(0 0 0 / 0.5);
   }
   .year-index__filter {
     position: absolute;
-    top: -3px;
-    right: -3px;
+    top: 8px;
+    right: 8px;
     display: grid;
     place-items: center;
     width: 28px;
     height: 28px;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border);
-    border-radius: 50%;
+    /* 压在卡片右上角，读成「这张卡上的一个控件」；
+       早先它骑在卡片边框上，像一枚浮在外面的圆点。 */
+    background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+    backdrop-filter: blur(6px);
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius-xs);
     color: var(--fg-muted);
+    transition:
+      color var(--dur-fast),
+      background var(--dur-fast);
+  }
+  .year-index__filter:hover {
+    color: var(--fg);
+    background: var(--bg-elevated);
   }
   .filter-strip {
     margin-bottom: 16px;
@@ -556,14 +693,44 @@
     box-shadow: var(--shadow-md);
   }
   .reader-header {
+    /* 顶栏拆成左右两块浮层，而不是一条通栏。
+       通栏浮层会一直压住画面顶端：漫画页的上缘因此永远看不见，
+       而「这一页从头到尾都在屏幕上」正是阅读时最基本的一条。
+       拆开后中间留白直接透到画面上，点空白处还能翻页。 */
+    position: absolute;
     top: 14px;
     left: 16px;
     right: 16px;
+    z-index: 20;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    pointer-events: none;
+  }
+  .reader-header__group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
     height: 48px;
+    padding-inline: 12px;
     border: 1px solid var(--overlay-border);
     border-radius: var(--radius-control);
     background: color-mix(in srgb, var(--reader-panel) 95%, transparent);
     box-shadow: 0 4px 20px rgb(0 0 0 / 12%);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    pointer-events: auto;
+  }
+  .reader-header__group--main {
+    /* 贴着内容收紧，不拉成一条长条：名字短的时候浮层就只有那么宽，
+       画面上留出来的空隙才真的空。 */
+    flex: 0 1 auto;
+    max-width: 62%;
+  }
+  .reader-header__group--actions {
+    flex: 0 0 auto;
   }
   .reader-control-panel {
     border-radius: var(--radius-tile);
@@ -630,6 +797,13 @@
       right: 8px;
       top: 8px;
     }
+    .reader-header__group {
+      height: 42px;
+      padding-inline: 8px;
+    }
+    .reader-header__group--main {
+      max-width: 70%;
+    }
     .app-toolbar {
       height: 56px;
     }
@@ -661,7 +835,8 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     .library-grid,
-    .library-grid--spacious {
+    .library-grid--spacious,
+    .library-grid--comic {
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
     /* 窄屏页头：封面缩到 72px，标题与操作仍然并排；
@@ -673,6 +848,10 @@
     .detail-head__cover {
       width: 72px;
       height: 72px;
+    }
+    .detail-head__cover--book {
+      width: 76px;
+      height: 96px;
     }
     .detail-head__actions {
       grid-column: 1 / -1;

@@ -278,6 +278,9 @@ function CollectionHead({
   const copy = workbenchCopy(detail.contentKind);
   const albumCount = detail.albums.length;
   const collectionCount = detail.collections.length;
+  // 集合在照片侧叫「集合」，在漫画侧叫「作品」—— 首页的作品索引也是
+  // 同一个词。两处用同一个词，用户才认得出这是同一类东西。
+  const isComic = detail.contentKind === "comic";
   return (
     <div className="page-shell page-heading">
       <button onClick={onBack} className="btn btn-sm btn-ghost mb-5 -ml-2">
@@ -285,7 +288,11 @@ function CollectionHead({
         <span>返回</span>
       </button>
       <div className="detail-head">
-        <div className="detail-head__cover">
+        <div
+          className={`detail-head__cover${
+            isComic ? " detail-head__cover--book" : ""
+          }`}
+        >
           <CardCover
             data={{
               variant: "collection",
@@ -296,7 +303,7 @@ function CollectionHead({
           />
         </div>
         <div className="min-w-0">
-          <p className="page-eyebrow">集合</p>
+          <p className="page-eyebrow">{isComic ? "作品" : "集合"}</p>
           <h1 className="detail-head__title mt-2">{detail.name}</h1>
           <div className="detail-head__meta">
             <span>
@@ -308,7 +315,7 @@ function CollectionHead({
                 <span className="text-fg-subtle">·</span>
                 <span>
                   <span className="detail-head__value">{collectionCount}</span>{" "}
-                  个子集合
+                  {isComic ? "个子作品" : "个子集合"}
                 </span>
               </>
             )}
@@ -410,7 +417,7 @@ function CollectionView({
         variant: "collection",
         title: sub.name,
         displayTitle: sub.displayName,
-        subtitle: "子集合",
+        subtitle: sub.contentKind === "comic" ? "子作品" : "子集合",
         count: sub.albumCount,
         coverPath: sub.coverImage ?? "",
         covers: sub.coverImages,
@@ -457,6 +464,14 @@ function CollectionView({
     return groupAlbumsAndCollectionsByYear(detail.albums, detail.collections);
   }, [detail]);
 
+  // 时间线只在「真的有年份可分」时才出现。
+  //
+  // 多数子集合(如 2024年、B站、散图)里的子相册并不带 4 位年份,
+  // 全落进「其他」桶:一张大年卡加一个「其他」独占一整行,比例失衡,
+  // 而且这一条索引筛不出任何东西——它是装饰,不是索引。
+  // 至少两个真实年份桶才说明这批内容真的按年份铺开了。
+  const realYearBuckets = yearGroups.filter((g) => g.year !== null).length;
+
   // 集合页面作为上下文源
   const collEntries = useMemo<GalleryContextEntry[]>(
     () =>
@@ -488,12 +503,12 @@ function CollectionView({
       <div className="flex-1 min-h-0 overflow-auto">
         {needsHistory && <ViewedSortNotice query={historyQuery} />}
         <ListFilterBar totalCount={cards.length} showMinImageFilter={false} />
-        {/* 时间线只在 ≥2 个年份桶时才有意义:
+        {/* 时间线只在 ≥2 个真实年份桶时才有意义:
             - 大多数子集合(如 2023年、B站、散图)子相册基本不带 4 位年份,
               全部进「其他」桶,1 张大年卡独享一整行,视觉比例严重失衡。
             - 只有用户刻意把子相册命名成「2024国庆」之类,时间线才能
               真正按年分组,这时显示时间线才有用。 */}
-        {yearGroups.length >= 2 && (
+        {realYearBuckets >= 2 && (
           <div className="py-6">
             <div className="page-shell flex items-center gap-3 mb-4">
               <h2 className="section-title">时间线</h2>

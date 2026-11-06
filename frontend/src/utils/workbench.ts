@@ -229,11 +229,16 @@ export function mediaUnit(mode: "photo" | "comic"): string {
 /**
  * 封面卡片的默认画幅。
  *
- * 照片是方的（展陈墙，1:1）；漫画是竖的（书脊，2:3）。
+ * 照片是方的（展陈墙，1:1）；漫画是竖的（书脊，4:5）。
  * 两个工作台看起来像两套产品，这条就是其中最直观的一条。
+ *
+ * 漫画侧用 4:5 而不是更瘦的 2:3：书架上的书脊确实瘦，但封面一旦
+ * 太瘦，横向的素材会被裁掉一半以上 —— 裁剩的那一条既认不出内容，
+ * 也不像一张封面。4:5 仍是竖版（与照片侧的方形分得开），却能留住
+ * 画面里真正有信息的那部分。
  */
-export function coverRatioForMode(mode: "photo" | "comic"): "1/1" | "2/3" {
-  return mode === "comic" ? "2/3" : "1/1";
+export function coverRatioForMode(mode: "photo" | "comic"): "1/1" | "4/5" {
+  return mode === "comic" ? "4/5" : "1/1";
 }
 
 /** 返回某个工作台模式对应的文案。 */

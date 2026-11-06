@@ -129,180 +129,187 @@ export default function GalleryHeader({
   const hasAlbumNav = !!(onPrevAlbum || onNextAlbum);
 
   return (
-    <header className="reader-header absolute z-20 flex items-center gap-1.5 px-3 text-white/85 backdrop-blur-xl">
-      <button
-        onClick={onBack}
-        title="返回 (Esc)"
-        className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-body transition-colors hover:bg-white/10"
-      >
-        <ChevronLeftIcon size={14} />
-        <span className="hidden sm:inline">返回</span>
-      </button>
+    /* 顶栏是两块浮层，不是一条通栏：通栏会压住画面顶端，
+       漫画页的上缘就永远看不见了。中间留白透到画面上，
+       点空白处还能翻页。 */
+    <header className="reader-header">
+      <div className="reader-header__group reader-header__group--main text-white/85">
+        <button
+          onClick={onBack}
+          title="返回 (Esc)"
+          className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-body transition-colors hover:bg-white/10"
+        >
+          <ChevronLeftIcon size={14} />
+          <span className="hidden sm:inline">返回</span>
+        </button>
 
-      <h1 className="ml-1 flex min-w-0 flex-1 items-baseline gap-2.5 sm:gap-3">
-        <span className="truncate text-body font-medium text-white">
-          {name}
-        </span>
-        <span className="shrink-0 text-meta tabular-nums text-white/70">
-          {counterText}
-        </span>
-      </h1>
+        <h1 className="flex min-w-0 flex-1 items-baseline gap-2.5 sm:gap-3">
+          <span className="truncate text-body font-medium text-white">
+            {name}
+          </span>
+          <span className="shrink-0 text-meta tabular-nums text-white/70">
+            {counterText}
+          </span>
+        </h1>
+      </div>
 
-      {/* 工作台切换：阅读器没有侧栏，这里是唯一能换工作台的地方。
+      <div className="reader-header__group reader-header__group--actions text-white/85">
+        {/* 工作台切换：阅读器没有侧栏，这里是唯一能换工作台的地方。
           切换意味着离开阅读器回到外壳，所以它是一个「打开某个库」的动作。 */}
-      {onOpenWorkbench && workbenchMode && (
+        {onOpenWorkbench && workbenchMode && (
+          <Popover
+            align="end"
+            tone="reader"
+            trigger={
+              <button
+                type="button"
+                className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-meta text-white/75 transition-colors hover:bg-white/10"
+                title="切换工作台"
+              >
+                <LibraryIcon size={13} />
+                <span className="hidden sm:inline">
+                  {workbenchMode === "comic" ? "漫画库" : "照片库"}
+                </span>
+              </button>
+            }
+          >
+            <PopoverLabel>工作台</PopoverLabel>
+            <PopoverItem onClick={() => onOpenWorkbench("photo")}>
+              <ImageIcon size={13} />
+              <span>打开照片库</span>
+            </PopoverItem>
+            <PopoverItem onClick={() => onOpenWorkbench("comic")}>
+              <ReaderIcon size={13} />
+              <span>打开漫画库</span>
+            </PopoverItem>
+          </Popover>
+        )}
+
+        {/* 视频模式没有底部工具条（<video> 自带 controls），
+          换片按钮留在顶栏；图片模式的翻页在底部工具条里。 */}
+        {isVideo && (
+          <div className="hidden md:flex items-center gap-0.5">
+            <HeaderIconButton
+              onClick={onPrev}
+              disabled={displayIndex <= 0}
+              title="上一个视频 (PageUp)"
+            >
+              <ChevronLeftIcon size={14} />
+            </HeaderIconButton>
+            <HeaderIconButton
+              onClick={onNext}
+              disabled={displayIndex >= total - 1}
+              title="下一个视频 (PageDown)"
+            >
+              <ChevronRightIcon size={14} />
+            </HeaderIconButton>
+          </div>
+        )}
+
+        <HeaderIconButton
+          onClick={onToggleFavorite}
+          active={isFavorite}
+          title={isFavorite ? "取消收藏 (S)" : "加入收藏 (S)"}
+        >
+          <StarIcon
+            size={14}
+            filled={isFavorite}
+            className={isFavorite ? "text-overlay-favorite" : ""}
+          />
+        </HeaderIconButton>
+
+        <HeaderIconButton
+          onClick={toggleFullscreen}
+          title="全屏 (F11)"
+          hideOnMobile
+        >
+          <FullscreenIcon size={14} />
+        </HeaderIconButton>
+
         <Popover
           align="end"
           tone="reader"
           trigger={
-            <button
-              type="button"
-              className="inline-flex h-8 items-center gap-1 rounded-md px-2 text-meta text-white/75 transition-colors hover:bg-white/10"
-              title="切换工作台"
-            >
-              <LibraryIcon size={13} />
-              <span className="hidden sm:inline">
-                {workbenchMode === "comic" ? "漫画库" : "照片库"}
-              </span>
-            </button>
+            <HeaderIconButton title="更多">
+              <MoreHorizontalIcon size={15} />
+            </HeaderIconButton>
           }
         >
-          <PopoverLabel>工作台</PopoverLabel>
-          <PopoverItem onClick={() => onOpenWorkbench("photo")}>
-            <ImageIcon size={13} />
-            <span>打开照片库</span>
+          <PopoverLabel>内容</PopoverLabel>
+          {!isVideo && (
+            <PopoverItem onClick={onToggleInfo}>
+              <InfoIcon size={13} />
+              <span>图片信息</span>
+              <span className="ml-auto text-meta text-white/55">I</span>
+            </PopoverItem>
+          )}
+          {!isVideo && onToggleOverview && (
+            <PopoverItem onClick={onToggleOverview}>
+              <GridIcon size={13} />
+              <span>目录</span>
+              <span className="ml-auto text-meta text-white/55">T</span>
+            </PopoverItem>
+          )}
+          <PopoverItem onClick={onToggleHelp}>
+            <KeyboardIcon size={13} />
+            <span>快捷键</span>
+            <span className="ml-auto text-meta text-white/55">?</span>
           </PopoverItem>
-          <PopoverItem onClick={() => onOpenWorkbench("comic")}>
-            <ReaderIcon size={13} />
-            <span>打开漫画库</span>
+          {onSetCover && (
+            <PopoverItem onClick={onSetCover}>
+              <ImageIcon size={13} />
+              <span>设为封面</span>
+              <span className="ml-auto text-meta text-white/55">U</span>
+            </PopoverItem>
+          )}
+          {onClearCover && hasCustomCover && (
+            <PopoverItem onClick={onClearCover}>
+              <RefreshIcon size={13} />
+              <span>清除自定义封面</span>
+              <span className="ml-auto text-meta text-white/55">⇧U</span>
+            </PopoverItem>
+          )}
+          {!isVideo && mode === "double" && (
+            <PopoverItem
+              onClick={() => setDirection(direction === "ltr" ? "rtl" : "ltr")}
+            >
+              {direction === "ltr" ? (
+                <ArrowRightLineIcon size={13} />
+              ) : (
+                <ArrowLeftLineIcon size={13} />
+              )}
+              <span>阅读方向：{direction === "ltr" ? "左→右" : "右→左"}</span>
+              <span className="ml-auto text-meta text-white/55">L</span>
+            </PopoverItem>
+          )}
+          {hasAlbumNav && <PopoverSeparator />}
+          {hasAlbumNav && <PopoverLabel>列表</PopoverLabel>}
+          {onPrevAlbum && (
+            <PopoverItem onClick={onPrevAlbum}>
+              <ArrowUpIcon size={13} />
+              <span>上一本</span>
+              <span className="ml-auto text-meta text-white/55">P</span>
+            </PopoverItem>
+          )}
+          {onNextAlbum && (
+            <PopoverItem onClick={onNextAlbum}>
+              <ArrowDownIcon size={13} />
+              <span>下一本</span>
+              <span className="ml-auto text-meta text-white/55">N</span>
+            </PopoverItem>
+          )}
+          <PopoverSeparator />
+          <PopoverLabel>跳转</PopoverLabel>
+          <PopoverItem onClick={jumpToFirst}>
+            <span>{isVideo ? "第一个视频" : "第一页"}</span>
+            <span className="ml-auto text-meta text-white/55">Home</span>
+          </PopoverItem>
+          <PopoverItem onClick={jumpToLast}>
+            <span>{isVideo ? "最后一个视频" : "最后一页"}</span>
+            <span className="ml-auto text-meta text-white/55">End</span>
           </PopoverItem>
         </Popover>
-      )}
-
-      {/* 视频模式没有底部工具条（<video> 自带 controls），
-          换片按钮留在顶栏；图片模式的翻页在底部工具条里。 */}
-      {isVideo && (
-        <div className="hidden md:flex items-center gap-0.5">
-          <HeaderIconButton
-            onClick={onPrev}
-            disabled={displayIndex <= 0}
-            title="上一个视频 (PageUp)"
-          >
-            <ChevronLeftIcon size={14} />
-          </HeaderIconButton>
-          <HeaderIconButton
-            onClick={onNext}
-            disabled={displayIndex >= total - 1}
-            title="下一个视频 (PageDown)"
-          >
-            <ChevronRightIcon size={14} />
-          </HeaderIconButton>
-        </div>
-      )}
-
-      <HeaderIconButton
-        onClick={onToggleFavorite}
-        active={isFavorite}
-        title={isFavorite ? "取消收藏 (S)" : "加入收藏 (S)"}
-      >
-        <StarIcon
-          size={14}
-          filled={isFavorite}
-          className={isFavorite ? "text-overlay-favorite" : ""}
-        />
-      </HeaderIconButton>
-
-      <HeaderIconButton
-        onClick={toggleFullscreen}
-        title="全屏 (F11)"
-        hideOnMobile
-      >
-        <FullscreenIcon size={14} />
-      </HeaderIconButton>
-
-      <Popover
-        align="end"
-        tone="reader"
-        trigger={
-          <HeaderIconButton title="更多">
-            <MoreHorizontalIcon size={15} />
-          </HeaderIconButton>
-        }
-      >
-        <PopoverLabel>内容</PopoverLabel>
-        {!isVideo && (
-          <PopoverItem onClick={onToggleInfo}>
-            <InfoIcon size={13} />
-            <span>图片信息</span>
-            <span className="ml-auto text-meta text-white/55">I</span>
-          </PopoverItem>
-        )}
-        {!isVideo && onToggleOverview && (
-          <PopoverItem onClick={onToggleOverview}>
-            <GridIcon size={13} />
-            <span>目录</span>
-            <span className="ml-auto text-meta text-white/55">T</span>
-          </PopoverItem>
-        )}
-        <PopoverItem onClick={onToggleHelp}>
-          <KeyboardIcon size={13} />
-          <span>快捷键</span>
-          <span className="ml-auto text-meta text-white/55">?</span>
-        </PopoverItem>
-        {onSetCover && (
-          <PopoverItem onClick={onSetCover}>
-            <ImageIcon size={13} />
-            <span>设为封面</span>
-            <span className="ml-auto text-meta text-white/55">U</span>
-          </PopoverItem>
-        )}
-        {onClearCover && hasCustomCover && (
-          <PopoverItem onClick={onClearCover}>
-            <RefreshIcon size={13} />
-            <span>清除自定义封面</span>
-            <span className="ml-auto text-meta text-white/55">⇧U</span>
-          </PopoverItem>
-        )}
-        {!isVideo && mode === "double" && (
-          <PopoverItem
-            onClick={() => setDirection(direction === "ltr" ? "rtl" : "ltr")}
-          >
-            {direction === "ltr" ? (
-              <ArrowRightLineIcon size={13} />
-            ) : (
-              <ArrowLeftLineIcon size={13} />
-            )}
-            <span>阅读方向：{direction === "ltr" ? "左→右" : "右→左"}</span>
-            <span className="ml-auto text-meta text-white/55">L</span>
-          </PopoverItem>
-        )}
-        {hasAlbumNav && <PopoverSeparator />}
-        {hasAlbumNav && <PopoverLabel>列表</PopoverLabel>}
-        {onPrevAlbum && (
-          <PopoverItem onClick={onPrevAlbum}>
-            <ArrowUpIcon size={13} />
-            <span>上一本</span>
-            <span className="ml-auto text-meta text-white/55">P</span>
-          </PopoverItem>
-        )}
-        {onNextAlbum && (
-          <PopoverItem onClick={onNextAlbum}>
-            <ArrowDownIcon size={13} />
-            <span>下一本</span>
-            <span className="ml-auto text-meta text-white/55">N</span>
-          </PopoverItem>
-        )}
-        <PopoverSeparator />
-        <PopoverLabel>跳转</PopoverLabel>
-        <PopoverItem onClick={jumpToFirst}>
-          <span>{isVideo ? "第一个视频" : "第一页"}</span>
-          <span className="ml-auto text-meta text-white/55">Home</span>
-        </PopoverItem>
-        <PopoverItem onClick={jumpToLast}>
-          <span>{isVideo ? "最后一个视频" : "最后一页"}</span>
-          <span className="ml-auto text-meta text-white/55">End</span>
-        </PopoverItem>
-      </Popover>
+      </div>
     </header>
   );
 }

@@ -145,11 +145,16 @@ describe("AlbumGrid", () => {
       useAppModeStore.setState({ preference: "comic", hydrated: true });
     });
     render(<AlbumGrid items={cards} variant="grid" />);
+    // 漫画侧用 4:5 竖版封面，并且走更密的书架网格（一排六到七本）。
     expect(
       albumCardMock.props.every(
-        (p) => (p as { coverRatio?: string }).coverRatio === "2/3",
+        (p) => (p as { coverRatio?: string }).coverRatio === "4/5",
       ),
     ).toBe(true);
+    const comicProps = virtuoso.grid.mock.calls[0]?.[0] as {
+      listClassName: string;
+    };
+    expect(comicProps.listClassName).toContain("library-grid--comic");
   });
 
   it("独立列表使用窗口滚动并保留稳定卡片键", () => {
