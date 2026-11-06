@@ -63,13 +63,20 @@ describe("HoverPreview 按内容属性取词", () => {
     expect(screen.getByText("阅读进度")).toBeInTheDocument();
   });
 
-  it("没看过时按侧给出不同说法", () => {
-    const photo = renderPreview(card({ contentKind: "photo" }));
+  it("确实没看过时按侧给出不同说法", () => {
+    const photo = renderPreview(card({ contentKind: "photo" }), null);
     expect(photo.getByText("尚未浏览")).toBeInTheDocument();
     photo.unmount();
 
-    const comic = renderPreview(card({ contentKind: "comic" }));
+    const comic = renderPreview(card({ contentKind: "comic" }), null);
     expect(comic.getByText("尚未阅读")).toBeInTheDocument();
+  });
+
+  it("不知道上次浏览时间时不瞎说「尚未浏览」", () => {
+    // 库里的列表（首页的最近加入、集合页…）不带浏览时间。
+    // 那一行要是写成「尚未浏览」，明明刚看过的相册会被说成没看过。
+    const view = renderPreview(card({ contentKind: "photo" }));
+    expect(view.queryByText("尚未浏览")).not.toBeInTheDocument();
   });
 
   it("封面计数单位跟着属性走：照片本相册、照片张、漫画卷", () => {

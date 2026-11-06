@@ -192,8 +192,12 @@ export default function HoverPreview({ data, anchorRect, lastSeenAt, onPointerEn
           </div>
 
           {/* 上次看过：仅在 album 类型有意义。
-              动词跟着这一侧走——照片说「浏览」，漫画说「阅读」。 */}
-          {data.variant === 'album' && (
+              动词跟着这一侧走——照片说「浏览」，漫画说「阅读」。
+
+              lastSeenAt 为 undefined 表示「不知道」：这一行来自浏览历史，
+              而库里的列表（首页的最近加入、集合页…）并不带这个字段。
+              不知道的时候不能写「尚未浏览」——那本相册明明刚看过。 */}
+          {data.variant === 'album' && lastSeenAt !== undefined && (
             <div className="flex items-center gap-1.5 text-meta text-fg-muted">
               <CalendarIcon size={11} className="text-fg-subtle shrink-0" />
               <span className="truncate">
