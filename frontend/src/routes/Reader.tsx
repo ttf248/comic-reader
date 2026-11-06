@@ -1310,7 +1310,10 @@ export default function Reader() {
       {showFinished && !isVideo && (
         <div
           data-testid="reader-finished"
-          className="absolute inset-x-0 bottom-16 z-30 mx-auto flex w-[min(560px,92vw)] items-center gap-3 rounded-lg border border-overlay-border bg-overlay-panel px-4 py-3 text-white shadow-lg backdrop-blur-md"
+          /* 抬到底部浮动工具条之上：两者都在底部居中，落在同一处时
+             收尾提示会压住工具条，工具条从提示底下露出半截，
+             像两层没对齐的浮层。 */
+          className="absolute inset-x-0 bottom-28 z-30 mx-auto flex w-[min(560px,92vw)] items-center gap-3 rounded-lg border border-overlay-border bg-overlay-panel px-4 py-3 text-white shadow-lg backdrop-blur-md"
         >
           <div className="min-w-0 flex-1">
             <div className="text-body font-medium text-white/90">
