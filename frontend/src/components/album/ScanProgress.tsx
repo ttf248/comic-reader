@@ -139,12 +139,13 @@ export default function ScanProgress({
   const fileName =
     progress.currentPath?.split(/[\\/]/).filter(Boolean).pop() ?? "";
 
-  // 状态条
+  // 状态条：进行中用品牌色（这条进度属于当前工作台），
+  // 完成用成功色、出错用危险色 —— 状态是语义，不跟工作台走。
   const barColor = isComplete
     ? "bg-success"
     : isError
       ? "bg-danger"
-      : "bg-accent";
+      : "bg-brand";
 
   // 状态文案 + 图标
   const StatusIcon = isComplete

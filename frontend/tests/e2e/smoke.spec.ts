@@ -2255,9 +2255,10 @@ test("失效收藏清理成功后刷新失败也立即更新收藏项数", async
     await expect(
       page.locator(`main a[href="/photo/albums/${album.id}"]`).first(),
     ).toBeVisible();
+    // 计数在页头的说明区里（页头的动作移到标题行右端后，
+    // 说明不再是标题的兄弟节点，改为按页头说明区定位）。
     const count = page
-      .getByRole("heading", { name: "我收藏的照片", exact: true })
-      .locator("..")
+      .getByTestId("page-heading-description")
       .getByText(/^\d+ 项$/);
     // 计数是「这一侧能看到的项数」：失效的那一条渲染不出来，
     // 另起一行说明，不混进计数里。
@@ -3176,10 +3177,8 @@ for (const mode of ["api", "missing", "denied"] as const) {
     await page.goto("/");
     await page.getByRole("combobox").fill(album.name);
     const { card, dialog } = await openCardProperties(page, album.id);
-    const copy = dialog
-      .locator("dt")
-      .filter({ hasText: /^名称$/ })
-      .getByRole("button");
+    // 复制按钮跟在值后面（规格表），不再挂在标签单元格里。
+    const copy = dialog.getByRole("button", { name: "复制名称" });
     await copy.click();
     if (mode === "denied") {
       await expect(copy).toHaveAccessibleName("复制失败，重试");

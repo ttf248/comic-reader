@@ -45,7 +45,10 @@ export default function PageHeading({
         {action && <div className="shrink-0 pb-1">{action}</div>}
       </div>
       {description && (
-        <div className="text-body text-fg-muted mt-3 leading-relaxed">
+        <div
+          className="text-body text-fg-muted mt-3 leading-relaxed"
+          data-testid="page-heading-description"
+        >
           {description}
         </div>
       )}

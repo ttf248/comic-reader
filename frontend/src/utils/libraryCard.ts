@@ -30,7 +30,11 @@ export function nodeSummaryToCard(
       ? "散图"
       : isAlbum
         ? node.tags?.join(" · ") || undefined
-        : "集合",
+        : // 类型词跟着侧走：漫画侧的集合叫「作品」—— 与集合页的眉标、
+          // 搜索结果、属性面板是同一个词。
+          node.contentKind === "comic"
+          ? "作品"
+          : "集合",
     count: isAlbum ? (node.imageCount ?? 0) : (node.albumCount ?? 0),
     imageCount: isAlbum ? (node.imageCount ?? 0) : undefined,
     videoCount: isAlbum ? (node.videoCount ?? 0) : undefined,

@@ -386,6 +386,52 @@
       inset 6px 0 8px -5px rgb(0 0 0 / 0.6),
       0 4px 10px -6px rgb(0 0 0 / 0.5);
   }
+  /* 拼贴封面：集合卡与页头封面用最多四张代表图拼出「里面有什么」。
+     切法跟着画幅走 —— 方形封面竖着切，竖版封面横着切；
+     否则同一张横图在竖版里会切成一条细长带，既认不出内容，
+     也不像一张封面。 */
+  .cover-mosaic {
+    display: grid;
+    width: 100%;
+    height: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+    gap: 1px;
+    background: var(--border);
+  }
+  .cover-mosaic[data-cover-layout="single"] {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+  /* 两张：竖着切，左边一张通高。 */
+  .cover-mosaic[data-cover-layout="mosaic-2"] > :first-child {
+    grid-row: span 2;
+  }
+  /* 三张：大的在左通高，右侧上下两块。 */
+  .cover-mosaic[data-cover-layout="mosaic-3"] > :first-child {
+    grid-row: span 2;
+  }
+  /* 竖版封面：两张改成上下切，每块都接近横图；
+     三张改成「上面一张大图 + 下面两张并排」。 */
+  :root[data-mode="comic"] .cover-mosaic[data-cover-layout="mosaic-2"] {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: repeat(2, minmax(0, 1fr));
+  }
+  :root[data-mode="comic"]
+    .cover-mosaic[data-cover-layout="mosaic-2"]
+    > :first-child {
+    grid-row: auto;
+  }
+  :root[data-mode="comic"] .cover-mosaic[data-cover-layout="mosaic-3"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: 2fr 1fr;
+  }
+  :root[data-mode="comic"]
+    .cover-mosaic[data-cover-layout="mosaic-3"]
+    > :first-child {
+    grid-column: span 2;
+    grid-row: auto;
+  }
   .album-tile__meta {
     padding: 12px 0 7px;
   }
