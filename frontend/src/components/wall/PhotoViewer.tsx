@@ -174,6 +174,14 @@ export default function PhotoViewer({
       switch (event.key) {
         case "Escape":
           event.preventDefault();
+          // 信息面板开着时，Esc 先收面板，不直接退出大图：
+          // 面板自己没有 Esc 处理，事件会落到这里的全局监听上。
+          // 一次 Esc 关掉面板，再一次才退出预览，两层浮层才分得清。
+          if (showInfo) {
+            setShowInfo(false);
+            usePhotoStore.getState().setShowInfo(false);
+            break;
+          }
           onClose();
           break;
         case "ArrowLeft":
@@ -228,7 +236,7 @@ export default function PhotoViewer({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [applyZoom, go, items.length, onClose, onIndexChange, zoom]);
+  }, [applyZoom, go, items.length, onClose, onIndexChange, showInfo, zoom]);
 
   if (!current) return null;
 
