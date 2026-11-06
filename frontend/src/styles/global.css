@@ -358,6 +358,9 @@
     box-shadow: var(--card-shadow);
     transform: translateY(var(--card-lift));
   }
+  /* 照片侧的网格卡不裱框。试过一次：白底卡片把照片挤成中间一小块，
+     说明区又留出一片空白，整面墙读起来是「一堆白卡片」。
+     裱框只留给页头与首屏那两件主角展品，网格里的照片裸挂墙上。 */
   .album-tile__cover {
     border-radius: var(--radius-media);
   }

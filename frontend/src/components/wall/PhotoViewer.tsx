@@ -292,8 +292,18 @@ export default function PhotoViewer({
       aria-modal="true"
       aria-label={`${albumName} 大图预览`}
     >
+      {/* 上下各一层渐隐：控件压在纯黑上像浮在虚空里，
+          有了渐隐才读得出「画面上方还有一段空间」。 */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-black/80 to-transparent"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/70 to-transparent"
+      />
       {/* 顶栏：返回、标题、位置与操作 */}
-      <header className="flex h-14 shrink-0 items-center gap-3 px-3 sm:px-5">
+      <header className="relative flex h-14 shrink-0 items-center gap-3 px-3 sm:px-5">
         <button
           type="button"
           onClick={onClose}
@@ -304,11 +314,13 @@ export default function PhotoViewer({
           <CloseIcon size={16} />
         </button>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-body font-medium text-white/90">
+          {/* 相册名用衬线：与照片工作台的标题同一套字体，
+              大图预览也是这个工作台的一部分。 */}
+          <div className="truncate font-display text-label font-semibold text-white/95">
             {albumName}
           </div>
           <div className="text-meta tabular-nums text-white/55">
-            {index + 1} / {items.length}
+            第 {index + 1} 张 · 共 {items.length} 张
           </div>
         </div>
         <div className="flex items-center gap-1">
@@ -381,7 +393,9 @@ export default function PhotoViewer({
               onLoad={measureFitted}
               onError={() => setFailed(true)}
               draggable={false}
-              className="max-h-full max-w-full select-none object-contain"
+              /* 照片落在暗场里要有一道柔和的投影把它托住，
+                 否则它和背景之间没有任何边界，读起来像贴上去的。 */
+              className="max-h-full max-w-full select-none object-contain shadow-[0_28px_90px_-24px_rgba(0,0,0,0.95)]"
               style={{
                 transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
                 cursor: zoom > 1 ? "grab" : "default",
@@ -398,55 +412,59 @@ export default function PhotoViewer({
         )}
       </div>
 
-      {/* 底栏：上一张 / 下一张与缩放 */}
-      <footer className="flex h-14 shrink-0 items-center justify-center gap-2 px-3 sm:px-5">
-        <button
-          type="button"
-          onClick={() => go(-1)}
-          disabled={index <= 0}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-md text-white/85 transition-colors hover:bg-white/10 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
-          title="上一张 (←)"
-          aria-label="上一张"
-        >
-          <ChevronLeftIcon size={16} />
-        </button>
-        <button
-          type="button"
-          onClick={() => go(1)}
-          disabled={index >= items.length - 1}
-          className="inline-flex h-9 w-9 items-center justify-center rounded-md text-white/85 transition-colors hover:bg-white/10 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
-          title="下一张 (→)"
-          aria-label="下一张"
-        >
-          <ChevronRightIcon size={16} />
-        </button>
-        {!isVideo && (
-          <div className="ml-2 flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => applyZoom(zoom / ZOOM_STEP)}
-              disabled={zoom <= MIN_ZOOM}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-md text-white/85 transition-colors hover:bg-white/10 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
-              title="缩小 (-)"
-              aria-label="缩小"
-            >
-              <MinusIcon size={15} />
-            </button>
-            <span className="w-12 text-center text-meta tabular-nums text-white/70">
-              {Math.round(zoom * 100)}%
-            </span>
-            <button
-              type="button"
-              onClick={() => applyZoom(zoom * ZOOM_STEP)}
-              disabled={zoom >= MAX_ZOOM}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-md text-white/85 transition-colors hover:bg-white/10 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
-              title="放大 (+)"
-              aria-label="放大"
-            >
-              <PlusIcon size={15} />
-            </button>
-          </div>
-        )}
+      {/* 底栏：上一张 / 下一张与缩放。
+          控件收进一枚半透明药丸：一排散落的图标悬在黑底上像几枚
+          掉出来的按键，药丸把它们收成一件工具。 */}
+      <footer className="relative flex h-14 shrink-0 items-center justify-center px-3 sm:px-5">
+        <div className="inline-flex items-center gap-1 rounded-full bg-white/10 p-1 backdrop-blur-sm ring-1 ring-white/10">
+          <button
+            type="button"
+            onClick={() => go(-1)}
+            disabled={index <= 0}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-white/85 transition-colors hover:bg-white/15 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+            title="上一张 (←)"
+            aria-label="上一张"
+          >
+            <ChevronLeftIcon size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={() => go(1)}
+            disabled={index >= items.length - 1}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full text-white/85 transition-colors hover:bg-white/15 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+            title="下一张 (→)"
+            aria-label="下一张"
+          >
+            <ChevronRightIcon size={16} />
+          </button>
+          {!isVideo && (
+            <div className="ml-1 flex items-center gap-1 border-l border-white/15 pl-2">
+              <button
+                type="button"
+                onClick={() => applyZoom(zoom / ZOOM_STEP)}
+                disabled={zoom <= MIN_ZOOM}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full text-white/85 transition-colors hover:bg-white/15 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                title="缩小 (-)"
+                aria-label="缩小"
+              >
+                <MinusIcon size={15} />
+              </button>
+              <span className="w-14 text-center text-meta tabular-nums text-white/75">
+                {Math.round(zoom * 100)}%
+              </span>
+              <button
+                type="button"
+                onClick={() => applyZoom(zoom * ZOOM_STEP)}
+                disabled={zoom >= MAX_ZOOM}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full text-white/85 transition-colors hover:bg-white/15 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+                title="放大 (+)"
+                aria-label="放大"
+              >
+                <PlusIcon size={15} />
+              </button>
+            </div>
+          )}
+        </div>
       </footer>
     </div>
   );
