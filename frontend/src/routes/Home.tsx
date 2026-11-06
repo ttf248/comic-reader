@@ -26,7 +26,7 @@ import { useSerendipityAlbum } from "../hooks/useSerendipityAlbum";
 import { useUIStore } from "../store/uiStore";
 import { useAppMode } from "../hooks/useAppMode";
 import { comicCopy, workbenchCopy } from "../utils/workbench";
-import { albumRoute, decodeFavPath, favoritesRoute, recentsRoute, unreadRoute } from "../utils/path";
+import { albumRoute, decodeFavPath, favoritesRoute, homeRoute, recentsRoute, unreadRoute } from "../utils/path";
 import { continueReadingTarget } from "../utils/continueReading";
 import { compareDatesDesc } from "../utils/date";
 import type { GalleryContextEntry } from "../utils/galleryContext";
@@ -350,6 +350,17 @@ export default function Home() {
     dashboardQuery.isLoading ||
     (!manifest && !!(sse.isRunning || sse.scanId));
   const hasContent = !!manifest && cards.length > 0;
+  // 「这一侧没有内容」和「整个库还没内容」是两回事：媒体根可能全被设成
+  // 漫画属性，照片工作台就一部都没有，但库本身是扫过的。
+  // 两种情况给的引导不一样：前者该把人送去设置里改属性或去另一侧看看，
+  // 后者才是「去设置媒体目录」。
+  const libraryHasContent = (manifest?.statistics.albumCount ?? 0) > 0;
+  const sideHasContent = isComic
+    ? (manifest?.statistics.comicAlbumCount ?? 0) > 0
+    : (manifest?.statistics.photoAlbumCount ?? 0) > 0;
+  const otherSideHasContent = isComic
+    ? (manifest?.statistics.photoAlbumCount ?? 0) > 0
+    : (manifest?.statistics.comicAlbumCount ?? 0) > 0;
   // 漫画侧多一条「作品」索引，章节序号因此往后挪一位。
   const hasSeriesIndex = hasContent && isComic && seriesGroups.length > 0;
 
@@ -430,8 +441,10 @@ export default function Home() {
 
         {/* 次级入口：没有在读内容时，「随机一本」升为主操作。
             有在读内容时它退到次级，避免和「继续阅读」抢主位。
-            照片侧的对应物是「接着看」。 */}
-        {!hasPrimaryEntry && (
+            照片侧的对应物是「接着看」。
+            这一侧一部都没有时整块不出现：那里放着一枚点不动的按钮，
+            读起来像坏了。 */}
+        {!hasPrimaryEntry && hasContent && (
           <div className="mt-5 flex items-center gap-2 flex-wrap">
             <button
               onClick={onShuffle}
@@ -671,28 +684,57 @@ export default function Home() {
         </section>
       )}
 
-      {/* 空状态 — 尚未扫描 */}
+      {/* 空状态 — 分两种：整个库都还没内容（首次使用），和这一侧没有内容
+          （媒体根全被设成了另一种属性）。后者的引导要是「去设置媒体目录」，
+          就把人指到了错误的地方。 */}
       {!hasContent && !isLoadingInitial && (
         <section className="page-shell">
-          <EmptyState
-            title="欢迎使用本地画廊"
-            description="首次使用请先设置媒体目录，再开始扫描。目录离线时可在设置中修复。"
-            icon={<LibraryIcon size={20} />}
-            action={
-              <div className="flex items-center gap-3">
-                <Link to="/settings" className="btn btn-outline">
-                  设置媒体目录
-                </Link>
-                <button
-                  onClick={() => startScan.mutate()}
-                  disabled={startScan.isPending}
-                  className="btn btn-primary"
-                >
-                  {startScan.isPending ? "启动中…" : "开始扫描"}
-                </button>
-              </div>
-            }
-          />
+          {libraryHasContent && !sideHasContent ? (
+            <EmptyState
+              title={`${copy.libraryTitle}这边还没有内容`}
+              description={
+                otherSideHasContent
+                  ? "媒体目录都被设成了另一种内容属性。可以在设置里改属性，或者先去另一边看看。"
+                  : "媒体目录的内容属性与这一侧对不上。可以在设置里改属性。"
+              }
+              icon={<LibraryIcon size={20} />}
+              action={
+                <div className="flex items-center gap-3">
+                  <Link to="/settings" className="btn btn-outline">
+                    去设置里改属性
+                  </Link>
+                  {otherSideHasContent && (
+                    <Link
+                      to={homeRoute(isComic ? "photo" : "comic")}
+                      className="btn btn-primary"
+                    >
+                      去{isComic ? "照片" : "漫画"}库看看
+                    </Link>
+                  )}
+                </div>
+              }
+            />
+          ) : (
+            <EmptyState
+              title="欢迎使用本地画廊"
+              description="首次使用请先设置媒体目录，再开始扫描。目录离线时可在设置中修复。"
+              icon={<LibraryIcon size={20} />}
+              action={
+                <div className="flex items-center gap-3">
+                  <Link to="/settings" className="btn btn-outline">
+                    设置媒体目录
+                  </Link>
+                  <button
+                    onClick={() => startScan.mutate()}
+                    disabled={startScan.isPending}
+                    className="btn btn-primary"
+                  >
+                    {startScan.isPending ? "启动中…" : "开始扫描"}
+                  </button>
+                </div>
+              }
+            />
+          )}
         </section>
       )}
 

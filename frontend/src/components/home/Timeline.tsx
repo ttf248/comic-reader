@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { thumbUrl } from "../../api/thumbs";
 import { useAppMode } from "../../hooks/useAppMode";
+import { useEdgeFade } from "../../hooks/useEdgeFade";
 import { FolderIcon } from "../common/Icon";
 
 export interface TimelineEntry {
@@ -35,9 +36,17 @@ export default function Timeline({
   entries: TimelineEntry[];
   testId: string;
 }) {
+  // 一排作品常常放不下，右边那张卡被硬切一刀像布局坏了；
+  // 两端渐隐明确地说「这边还有」。
+  const { ref, maskImage } = useEdgeFade<HTMLDivElement>();
   if (entries.length === 0) return null;
   return (
-    <div className="year-index" data-testid={testId}>
+    <div
+      ref={ref}
+      className="year-index"
+      style={{ maskImage }}
+      data-testid={testId}
+    >
       {entries.map((entry) => (
         <TimelineCard key={entry.key} entry={entry} />
       ))}
