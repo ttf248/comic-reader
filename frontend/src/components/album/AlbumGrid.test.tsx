@@ -58,9 +58,13 @@ vi.mock("../../hooks/useFavorites", () => ({
 }));
 vi.mock("../common/PropertiesDialog", () => ({ default: () => null }));
 
-const mediaQuery = vi.hoisted(() => ({ matches: false }));
-vi.mock("../../hooks/useMediaQuery", () => ({
-  useMediaQuery: () => mediaQuery.matches,
+// 列表视图的列数由可用宽度决定（每列至少 420px），测试里直接给宽度。
+const elementWidth = vi.hoisted(() => ({ width: 0 }));
+vi.mock("../../hooks/useElementWidth", () => ({
+  useElementWidth: () => ({
+    ref: { current: null },
+    width: elementWidth.width,
+  }),
 }));
 
 const cards: CardData[] = [
@@ -86,7 +90,7 @@ const cards: CardData[] = [
 
 describe("AlbumGrid", () => {
   beforeEach(() => {
-    mediaQuery.matches = false;
+    elementWidth.width = 0;
     virtuoso.grid.mockClear();
     virtuoso.list.mockClear();
   });
@@ -170,15 +174,15 @@ describe("AlbumGrid", () => {
     expect(props.computeItemKey(0, [cards[0]])).toBe("a_1");
   });
 
-  it("窄屏列表一行一张卡，超宽屏列表一行两张并排", () => {
-    mediaQuery.matches = false;
+  it("列表列数按可用宽度决定：窄处一行一张，够宽时并排", () => {
+    elementWidth.width = 500;
     render(<AlbumGrid items={cards} variant="list" />);
     let props = virtuoso.list.mock.calls[0]?.[0] as { data: CardData[][] };
     expect(props.data).toHaveLength(2);
     expect(props.data[0]).toHaveLength(1);
 
     virtuoso.list.mockClear();
-    mediaQuery.matches = true;
+    elementWidth.width = 1000;
     render(<AlbumGrid items={cards} variant="list" />);
     props = virtuoso.list.mock.calls[0]?.[0] as { data: CardData[][] };
     expect(props.data).toHaveLength(1);

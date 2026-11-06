@@ -9,6 +9,7 @@
 //   LG_THEME  light | dark，默认 light
 //   LG_W / LG_H 视口，默认 1440x900
 //   LG_SCALE  设备像素比，默认 2
+//   LG_STATE  追加到 local-gallery-ui 的 JSON 片段，例如 {"viewMode":"list"}
 import { chromium } from "@playwright/test";
 import path from "node:path";
 
@@ -36,12 +37,15 @@ const ctx = await browser.newContext({
 });
 const page = await ctx.newPage();
 await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
-await page.evaluate((t) => {
-  const raw = localStorage.getItem("local-gallery-ui");
-  const parsed = raw ? JSON.parse(raw) : { state: {} };
-  parsed.state = { ...(parsed.state ?? {}), theme: t };
-  localStorage.setItem("local-gallery-ui", JSON.stringify(parsed));
-}, THEME);
+await page.evaluate(
+  ({ theme, extra }) => {
+    const raw = localStorage.getItem("local-gallery-ui");
+    const parsed = raw ? JSON.parse(raw) : { state: {} };
+    parsed.state = { ...(parsed.state ?? {}), theme, ...extra };
+    localStorage.setItem("local-gallery-ui", JSON.stringify(parsed));
+  },
+  { theme: THEME, extra: JSON.parse(process.env.LG_STATE ?? "{}") },
+);
 await page.goto(BASE + ROUTE, { waitUntil: "domcontentloaded", timeout: 60000 });
 await page
   .waitForFunction(

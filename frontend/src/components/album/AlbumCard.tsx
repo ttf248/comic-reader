@@ -693,7 +693,9 @@ function ListCard({
               48px 的缩略图上塞不下标记，且标题行的文字更易扫读。 */}
         </div>
 
-        <div className="flex-1 min-w-0 flex flex-col justify-center gap-1">
+        {/* 溢出裁掉而不是压到右栏上：这一块可以缩到比内容更窄，
+            但里面的进度读数不缩，窄列时它会直接盖住右侧的页数。 */}
+        <div className="flex-1 min-w-0 overflow-hidden flex flex-col justify-center gap-1">
           <div className="text-label font-medium text-fg truncate flex items-center gap-1.5">
             <span className="truncate" title={data.displayTitle ?? data.title}>
               {data.displayTitle ?? data.title}
@@ -720,15 +722,15 @@ function ListCard({
             )}
           </div>
           {/* 第二行：副标题在左，进度轨道占中间的空位，位置在右。
-              轨道对每一本漫画都在（空的轨道读作「还没翻开」），
-              行与行因此是同一副骨架；以前有进度才有这一段，
-              列表看着参差不齐。 */}
-          <div className="text-body text-fg-subtle flex items-center gap-2 min-w-0">
+              轨道只在真有进度时出现：一条永远空着的灰条压在短标题下面，
+              读起来是标题的下划线，不是进度条。「还没翻开」这件事由
+              标题行上的未读标记承担，不必再用一个空轨道说一遍。 */}
+          <div className="text-body text-fg-subtle flex items-center gap-2 min-w-0 overflow-hidden">
             <TypeChip variant={data.variant} />
             {data.subtitle && (
               <span className="truncate max-w-[10rem] shrink">{data.subtitle}</span>
             )}
-            {isComicAlbum && (
+            {isComicAlbum && progressPct !== null && progressPct > 0 && (
               <>
                 {/* 轨道给固定宽度，不占满整行：一条横贯半屏的空条
                     读起来是分隔线，不是进度条。 */}
@@ -736,16 +738,14 @@ function ListCard({
                   <span
                     className="block h-full bg-brand"
                     style={{
-                      width: `${progressPct ?? 0}%`,
+                      width: `${progressPct}%`,
                     }}
                   />
                 </span>
-                {progressPct !== null && progressPct > 0 && (
-                  <span className="tabular-nums shrink-0 whitespace-nowrap">
-                    {cardCopy.positionVerb} {data.progress!.index + 1} /{" "}
-                    {data.progress!.total}
-                  </span>
-                )}
+                <span className="tabular-nums shrink-0 whitespace-nowrap">
+                  {cardCopy.positionVerb} {data.progress!.index + 1} /{" "}
+                  {data.progress!.total}
+                </span>
               </>
             )}
             {data.sourceName && multiRoot && (

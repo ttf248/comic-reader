@@ -11,8 +11,8 @@ import AlbumCard, { type CardData, type CoverRatio } from "./AlbumCard";
 import AlbumContextMenu from "./AlbumContextMenu";
 import PropertiesDialog from "../common/PropertiesDialog";
 import { useFavorites } from "../../hooks/useFavorites";
-import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { useAppMode } from "../../hooks/useAppMode";
+import { useElementWidth } from "../../hooks/useElementWidth";
 import { favoriteResourceId } from "../../utils/path";
 import { coverRatioForMode } from "../../utils/workbench";
 import { useUIStore, type ViewMode } from "../../store/uiStore";
@@ -38,12 +38,9 @@ interface Props {
   cardMinWidth?: 164 | 224;
 }
 
-// 当前列表在宽屏改为多列；断点与列数是可调整的布局基线。
-// 重设计时同步分组方式、条目测量与对应 E2E 的列数断言。
-const ULTRA_WIDE_QUERY = "(min-width: 1280px)";
-
-// 当前三列断点，配合现有侧栏和留白计算。
-const VERY_WIDE_QUERY = "(min-width: 1600px)";
+// 列表视图每一列的最小宽度。列数由可用宽度除以它得到 ——
+// 断点只能给「这一档几列」，行宽才是要紧的那个量。
+const LIST_COLUMN_MIN = 420;
 
 const VirtualList = forwardRef<HTMLDivElement, ListProps>(function VirtualList(
   { children, style },
@@ -94,9 +91,10 @@ export default function AlbumGrid({
   }, []);
   const viewMode = useUIStore((s) => s.viewMode);
   const mode = variant ?? viewMode;
-  // 列表视图在超宽屏切成双列。
-  const ultraWide = useMediaQuery(ULTRA_WIDE_QUERY);
-  const veryWide = useMediaQuery(VERY_WIDE_QUERY);
+  // 列表视图的列数由可用宽度决定：断点只能给出「这一档几列」，
+  // 侧栏一折叠、窗口一拖，行宽就变了。行宽才是要紧的那个量 ——
+  // 标题与右侧数字之间留出一大片空白，读起来像两张互不相干的表。
+  const { ref: widthRef, width: listWidth } = useElementWidth<HTMLDivElement>();
 
   const { favorites } = useFavorites();
 
@@ -114,19 +112,25 @@ export default function AlbumGrid({
         ? "library-grid library-grid--comic"
         : "library-grid";
 
-  // 列表按列数分组：一列时每组一张卡，两列时每组两张并排。
+  // 列表按列数分组：一列时每组一张卡，多列时每组并排。
   // 分组后交给 Virtuoso 渲染，行高一致（列表行固定高度），
   // 虚拟滚动的行高计算才不会出错。
+  const listColumns = useMemo(() => {
+    if (listWidth <= 0) return 1;
+    // 每列至少 420px：再窄，标题、进度轨道与右侧数字就挤在一起了。
+    return Math.max(1, Math.min(4, Math.floor(listWidth / LIST_COLUMN_MIN)));
+  }, [listWidth]);
+
   const listRows = useMemo(() => {
     if (mode !== "list") return [];
-    const columns = veryWide ? 3 : ultraWide ? 2 : 1;
+    const columns = listColumns;
     if (columns === 1) return items.map((item) => [item]);
     const rows: CardData[][] = [];
     for (let i = 0; i < items.length; i += columns) {
       rows.push(items.slice(i, i + columns));
     }
     return rows;
-  }, [items, mode, ultraWide, veryWide]);
+  }, [items, mode, listColumns]);
 
   if (items.length === 0) return <>{empty}</>;
 
@@ -150,29 +154,31 @@ export default function AlbumGrid({
   return (
     <div ref={bindScrollParent}>
       {mode === "list" ? (
-        <Virtuoso
-          customScrollParent={scrollParent}
-          useWindowScroll={!scrollParent}
-          data={listRows}
-          components={virtualListComponents}
-          computeItemKey={(_index, row) => row[0]?.id ?? _index}
-          increaseViewportBy={{ top: 720, bottom: 1080 }}
-          itemContent={(_index, row) => (
-            <div
-              className={`grid gap-x-10 ${
-                veryWide
-                  ? "grid-cols-3"
-                  : ultraWide
-                    ? "grid-cols-2"
-                    : "grid-cols-1"
-              }`}
-            >
-              {row.map((card) => (
-                <Fragment key={card.id}>{renderCard(card)}</Fragment>
-              ))}
-            </div>
-          )}
-        />
+        <div ref={widthRef}>
+          <Virtuoso
+            customScrollParent={scrollParent}
+            useWindowScroll={!scrollParent}
+            data={listRows}
+            components={virtualListComponents}
+            computeItemKey={(_index, row) => row[0]?.id ?? _index}
+            increaseViewportBy={{ top: 720, bottom: 1080 }}
+            itemContent={(_index, row) => (
+              <div
+                className="grid gap-x-10"
+                style={{
+                  gridTemplateColumns: `repeat(${Math.max(
+                    1,
+                    row.length,
+                  )}, minmax(0, 1fr))`,
+                }}
+              >
+                {row.map((card) => (
+                  <Fragment key={card.id}>{renderCard(card)}</Fragment>
+                ))}
+              </div>
+            )}
+          />
+        </div>
       ) : (
         <VirtuosoGrid
           customScrollParent={scrollParent}
