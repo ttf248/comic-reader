@@ -411,18 +411,23 @@ function ResumeMiniCard({
         <span className="block text-body font-medium text-rail-fg truncate leading-tight group-hover/mini:text-rail-accent transition-colors">
           {title}
         </span>
-        {isComic && (
-          /* 轨道用半透明白：卡片底色本身就是 --rail-hover，
-             轨道再用同一个色就等于没画，空的部分根本看不见。 */
-          <span className="mt-1.5 block h-[3px] rounded-full bg-white/15 overflow-hidden">
-            <span
-              className="block h-full rounded-full bg-rail-accent"
-              style={{ width: `${percent}%` }}
-            />
+        {/* 轨道与页码并排：轨道横贯整列时读作一条分隔线，
+           压在书名下面尤其像下划线。缩到一截，跟页码并排，
+           才读得出「进度条 + 读到哪里」。 */}
+        <span className="mt-1.5 flex items-center gap-2 min-w-0">
+          {isComic && (
+            /* 轨道用半透明白：卡片底色本身就是 --rail-hover，
+               轨道再用同一个色就等于没画，空的部分根本看不见。 */
+            <span className="h-[3px] w-14 shrink-0 rounded-full bg-white/15 overflow-hidden">
+              <span
+                className="block h-full rounded-full bg-rail-accent"
+                style={{ width: `${percent}%` }}
+              />
+            </span>
+          )}
+          <span className="text-meta text-rail-muted tabular-nums truncate">
+            {resumeHint(card)}
           </span>
-        )}
-        <span className="mt-1 block text-meta text-rail-muted tabular-nums">
-          {resumeHint(card)}
         </span>
       </span>
     </button>

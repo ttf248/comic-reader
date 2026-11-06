@@ -75,7 +75,7 @@ export function UnreadHero({
               isFavorite: favoriteIds.has(decodeFavPath(card.to)),
             }}
             showUnreadBadge={false}
-            coverRatio="16/9"
+            coverRatio="4/3"
             overlayAction={
               <button
                 type="button"
@@ -211,14 +211,17 @@ function StageInfo({
   const copy = comicCopy();
   return (
     <div className="mt-4">
+      {/* 只报页码，不报百分比：「读到 1 / 5」说的是「翻到第几页」，
+          「已读 0%」说的是「离结尾还有多远」—— 两个数并排时会互相
+          打脸（读到第 1 页，已读却是 0%）。下面的进度条已经把百分比
+          画出来了。 */}
       <p className="hero-panel__muted tabular-nums">
         {copy.positionVerb} {index + 1} / {total}
-        {copy.showReadingPercent && (
-          <span className="ml-3">已读 {percent}%</span>
-        )}
       </p>
       <div
-        className="mt-3 h-1.5 rounded-full bg-accent/15 overflow-hidden"
+        /* 轨道不占满整列：横贯半屏的空条读作一条分隔线，
+           缩到一截才是进度条。 */
+        className="mt-3 h-1.5 max-w-[320px] rounded-full bg-accent/15 overflow-hidden"
         role="progressbar"
         aria-valuenow={percent}
         aria-valuemin={0}

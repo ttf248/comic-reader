@@ -76,8 +76,6 @@ export interface ComicCopy extends WorkbenchCopy {
   unfinishedCountLabel: string;
   /** 批量标记完成按钮的说明。 */
   markAllTitle: string;
-  /** 是否显示阅读百分比。 */
-  showReadingPercent: boolean;
   /** 未读区的标题。 */
   unreadTitle: string;
   /** 未读列表页的标题。 */
@@ -179,7 +177,6 @@ const COMIC: ComicCopy = {
   markFinishedLabel: "标记为已读完",
   unfinishedCountLabel: "本还没读完",
   markAllTitle: "把当前所有未读相册标记为已读完(不影响收藏 / 最近)",
-  showReadingPercent: true,
   unreadTitle: "未读",
   unreadPageTitle: "未读相册",
   unreadCountVerb: "没读",
