@@ -135,7 +135,7 @@ export default function Unread() {
           title={total === 0 ? "尚未加载图像库" : copy.unreadEmpty}
           description={
             total === 0
-              ? "先去设置里指定一个媒体根目录,然后回来扫一遍就有了。"
+              ? "先去设置里指定一个媒体根目录，然后回来扫一遍就有了。"
               : copy.unreadEmptyHint
           }
           icon={<SparkleIcon size={20} />}

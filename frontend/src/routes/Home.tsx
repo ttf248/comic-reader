@@ -155,7 +155,7 @@ export default function Home() {
     const albumId = decodeFavPath(card.to);
     const total = card.progress?.total ?? 0;
     if (total <= 0) {
-      pushToast({ kind: "error", message: "该相册为空,无法标记" });
+      pushToast({ kind: "error", message: "该相册为空，无法标记" });
       return;
     }
     markReadContinue.mutate(
@@ -164,16 +164,16 @@ export default function Home() {
         onSuccess: () =>
           pushToast({
             kind: "info",
-            message: `已将「${card.title}」标记为已读`,
+            message: `已将「${card.title}」标记为已读完`,
           }),
-        onError: () => pushToast({ kind: "error", message: "标记失败,请重试" }),
+        onError: () => pushToast({ kind: "error", message: "标记失败，请重试" }),
       },
     );
   };
   const onClearContinue = () => {
     if (!inProgressAll.length) return;
     const ok = window.confirm(
-      `将 ${inProgressAll.length} 本相册全部标记为已读？\n\n操作不会删除文件,只是把阅读进度推到末尾。`,
+      `将 ${inProgressAll.length} 本相册全部标记为已读完？\n\n操作不会删除文件，只是把阅读进度推到末尾。`,
     );
     if (!ok) return;
     const items = inProgressAll.map((c) => ({
@@ -183,15 +183,15 @@ export default function Home() {
     markReadAllContinue.mutate(items, {
       onSuccess: (r) => {
         if (r.failed === 0) {
-          pushToast({ kind: "info", message: `已将 ${r.ok} 本标记为已读` });
+          pushToast({ kind: "info", message: `已将 ${r.ok} 本标记为已读完` });
         } else {
           pushToast({
             kind: "error",
-            message: `已标记 ${r.ok} 本,失败 ${r.failed} 本`,
+            message: `已标记 ${r.ok} 本，失败 ${r.failed} 本`,
           });
         }
       },
-      onError: () => pushToast({ kind: "error", message: "标记失败,请重试" }),
+      onError: () => pushToast({ kind: "error", message: "标记失败，请重试" }),
     });
   };
 
@@ -204,7 +204,7 @@ export default function Home() {
     const albumId = decodeFavPath(card.to);
     const total = card.progress?.total ?? 0;
     if (total <= 0) {
-      pushToast({ kind: "error", message: "该相册为空,无法标记" });
+      pushToast({ kind: "error", message: "该相册为空，无法标记" });
       return;
     }
     markReadOne.mutate(
@@ -213,9 +213,9 @@ export default function Home() {
         onSuccess: () =>
           pushToast({
             kind: "info",
-            message: `已将「${card.title}」标记为已读`,
+            message: `已将「${card.title}」标记为已读完`,
           }),
-        onError: () => pushToast({ kind: "error", message: "标记失败,请重试" }),
+        onError: () => pushToast({ kind: "error", message: "标记失败，请重试" }),
       },
     );
   };

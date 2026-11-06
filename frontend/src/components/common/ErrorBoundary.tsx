@@ -41,7 +41,7 @@ export default class ErrorBoundary extends Component<Props, State> {
         >
           <div className="text-page-sm font-semibold text-fg">图像库加载异常</div>
           <div className="max-w-md text-body text-fg-muted">
-            {this.state.error.message || "未知错误,详见浏览器控制台"}
+            {this.state.error.message || "未知错误，详见浏览器控制台"}
           </div>
           <button
             type="button"
