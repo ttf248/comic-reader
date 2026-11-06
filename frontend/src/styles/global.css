@@ -231,15 +231,27 @@
   /* 队列里的小封面也是一本书：与网格里的书封同一套装订边。 */
   .hero-queue__cover {
     display: block;
+    position: relative;
     width: 40px;
     height: 56px;
     flex-shrink: 0;
     overflow: hidden;
     border-radius: 5px 8px 8px 5px;
     background: var(--bg-media);
-    box-shadow:
-      var(--spine-shadow),
-      0 5px 12px -8px rgb(0 0 0 / 0.5);
+    box-shadow: 0 5px 12px -8px rgb(0 0 0 / 0.5);
+  }
+  .hero-queue__cover::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    background: linear-gradient(
+      to right,
+      rgb(0 0 0 / 0.48) 0,
+      rgb(0 0 0 / 0.14) 5px,
+      rgb(0 0 0 / 0) 13px
+    );
   }
   .hero-queue__remove {
     position: absolute;
@@ -306,9 +318,26 @@
      照片工作台是展陈墙，方照不画框、不浮起，也就没有书脊。 */
   .album-tile__cover--book {
     border-radius: 9px 14px 14px 9px;
-    box-shadow:
-      var(--spine-shadow),
-      var(--cover-shadow);
+    box-shadow: var(--cover-shadow);
+  }
+  /* 装订边（书脊）：封面左侧的一道内侧阴影。
+     它不能靠 inset box-shadow —— 内阴影画在父元素的背景层，
+     封面图一铺满就被整条盖住，装订边根本不会出现在屏幕上
+     （书架与展陈墙因此长得一模一样）。改成一层压在内容之上、
+     位于标题压条之下的渐变。 */
+  .album-tile__cover--book::after,
+  .detail-head__cover--book::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    background: linear-gradient(
+      to right,
+      rgb(0 0 0 / 0.5) 0,
+      rgb(0 0 0 / 0.18) 9px,
+      rgb(0 0 0 / 0) 26px
+    );
   }
   /* 书名压条：标题印在封面上，而不是压在封面下面。
      这一下同时解决两件事：网格读起来像一面书架，而不是「图片 + 说明」；
@@ -317,6 +346,8 @@
     position: absolute;
     inset-inline: 0;
     bottom: 0;
+    /* 高于书脊渐变：装订边只压画面，不该把书名压暗。 */
+    z-index: 2;
     padding: 30px 11px 9px;
     background-image: linear-gradient(
       to top,
@@ -369,9 +400,7 @@
   }
   :root[data-mode="comic"] .album-tile:hover .album-tile__cover--book {
     transform: translateY(-4px);
-    box-shadow:
-      var(--spine-shadow),
-      0 18px 30px -16px rgb(0 0 0 / 0.6);
+    box-shadow: 0 18px 30px -16px rgb(0 0 0 / 0.6);
   }
   /* 卡片不再有内边距，角标要贴着封面走。 */
   :root[data-mode="comic"] .album-tile > .absolute {
@@ -381,10 +410,24 @@
   /* 列表行里的小封面：漫画侧也是一本书（装订边 + 竖版），
      与网格卡的书封同一套语言；照片侧仍是方形展陈。 */
   .album-thumb--book {
+    position: relative;
     border-radius: 5px 9px 9px 5px;
-    box-shadow:
-      inset 6px 0 8px -5px rgb(0 0 0 / 0.6),
-      0 4px 10px -6px rgb(0 0 0 / 0.5);
+    box-shadow: 0 4px 10px -6px rgb(0 0 0 / 0.5);
+  }
+  /* 小尺寸的书脊：宽度按比例收窄，否则 48px 的缩略图上会糊掉半张图。 */
+  .album-thumb--book::after,
+  .timeline-cover--book::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    background: linear-gradient(
+      to right,
+      rgb(0 0 0 / 0.48) 0,
+      rgb(0 0 0 / 0.14) 5px,
+      rgb(0 0 0 / 0) 13px
+    );
   }
   /* 拼贴封面：集合卡与页头封面用最多四张代表图拼出「里面有什么」。
      切法跟着画幅走 —— 方形封面竖着切，竖版封面横着切；
@@ -431,6 +474,21 @@
     > :first-child {
     grid-column: span 2;
     grid-row: auto;
+  }
+  /* 四张：竖版封面读起来是一本精装书的封底 —— 左侧一张通高主图，
+     右侧三张压成一条窄带。2×2 的方格在竖版画幅里每格都成了窄条，
+     横图被裁到认不出内容，整块看着像一张照片墙而不是封面；
+     「上面一张大图 + 下面三张」更糟：主图被压成横带，一整页漫画
+     会被切掉大半。通高主图保住了竖版画幅本身。 */
+  :root[data-mode="comic"] .cover-mosaic[data-cover-layout="mosaic-4"] {
+    grid-template-columns: 2fr 1fr;
+    grid-template-rows: repeat(3, minmax(0, 1fr));
+  }
+  :root[data-mode="comic"]
+    .cover-mosaic[data-cover-layout="mosaic-4"]
+    > :first-child {
+    grid-column: 1;
+    grid-row: span 3;
   }
   .album-tile__meta {
     padding: 12px 0 7px;
@@ -505,9 +563,7 @@
     width: 140px;
     height: 176px;
     border-radius: 10px 16px 16px 10px;
-    box-shadow:
-      var(--spine-shadow),
-      var(--cover-shadow);
+    box-shadow: var(--cover-shadow);
   }
   .detail-head__title {
     font-family: var(--font-display);
@@ -628,10 +684,9 @@
   /* 索引卡里的封面：漫画侧也是一本书（装订边 + 厚度），
      与网格里的书封同一套语言。 */
   .timeline-cover--book {
+    position: relative;
     border-radius: 5px 8px 8px 5px;
-    box-shadow:
-      var(--spine-shadow),
-      0 6px 14px -10px rgb(0 0 0 / 0.5);
+    box-shadow: 0 6px 14px -10px rgb(0 0 0 / 0.5);
   }
   .year-index__filter {
     position: absolute;
