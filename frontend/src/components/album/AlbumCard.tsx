@@ -683,10 +683,12 @@ function ListCard({
         className="group flex flex-1 min-w-0 items-center gap-3.5 py-2 px-2.5 -mx-2.5 rounded-lg hover:bg-bg-subtle transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus"
       >
         <div
-          className={`relative w-12 aspect-[4/5] shrink-0 overflow-hidden bg-bg-subtle ${
+          className={`relative w-12 shrink-0 overflow-hidden bg-bg-subtle ${
             isComicContent
-              ? "album-thumb--book"
-              : "rounded-md border border-border shadow-xs"
+              ? "album-thumb--book aspect-[4/5]"
+              : /* 照片侧是方形：与网格里的方照同一套画幅，
+                   竖版缩略图把照片裁成一条，读不出内容。 */
+                "aspect-square rounded-md border border-border shadow-xs"
           }`}
           data-testid="card-cover"
         >
