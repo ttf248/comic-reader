@@ -415,7 +415,10 @@ function ResumeMiniCard({
            压在书名下面尤其像下划线。缩到一截，跟页码并排，
            才读得出「进度条 + 读到哪里」。 */}
         <span className="mt-1.5 flex items-center gap-2 min-w-0">
-          {isComic && (
+          {/* 轨道只在真翻过几页时出现：一条永远空着的轨道在侧栏
+              这一小块地方读起来就是一道多余的横线。「还没翻开」
+              已经由标题行的未读标记承担。 */}
+          {isComic && percent > 0 && (
             /* 轨道用半透明白：卡片底色本身就是 --rail-hover，
                轨道再用同一个色就等于没画，空的部分根本看不见。 */
             <span className="h-[3px] w-14 shrink-0 rounded-full bg-white/15 overflow-hidden">
