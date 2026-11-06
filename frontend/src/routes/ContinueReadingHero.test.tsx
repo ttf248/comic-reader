@@ -116,6 +116,20 @@ describe("ContinueReadingHero", () => {
     fireEvent.click(clearBtn);
     expect(onClearAll).toHaveBeenCalledTimes(1);
   });
+
+  // 空轨道不出现：刚翻开第一页时进度是 0%，一条全灰的横条压在页码
+  // 右边读起来像下划线，而不是进度条。
+  it("刚翻开第一页时不画空进度轨道", () => {
+    renderHero([makeCard("/a", "A", 0, 20)]);
+    expect(screen.getByText(/读到\s*1\s*\/\s*20/)).toBeInTheDocument();
+    expect(screen.queryByRole("progressbar")).toBeNull();
+  });
+
+  it("真有进度时画进度轨道", () => {
+    renderHero([makeCard("/a", "A", 5, 20)]);
+    const bar = screen.getByRole("progressbar");
+    expect(bar).toHaveAttribute("aria-valuenow", "26");
+  });
 });
 
 it("主封面使用清晰预览，加载失败后仍可继续阅读", () => {

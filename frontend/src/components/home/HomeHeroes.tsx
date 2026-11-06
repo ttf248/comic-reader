@@ -224,21 +224,26 @@ function StageInfo({
         <p className="hero-panel__muted tabular-nums">
           {copy.positionVerb} {index + 1} / {total}
         </p>
-        <div
-          /* 窄屏下轨道缩到一截：与页码并排才读得出「进度条 + 读到哪里」。
-             独占一行时它就是一条分隔线。 */
-          className="h-1.5 w-24 sm:w-40 shrink-0 rounded-full bg-brand/20 overflow-hidden"
-          role="progressbar"
-          aria-valuenow={percent}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-label={`「${card.title}」${copy.continueTitle}进度`}
-        >
+        {/* 空轨道不出现：刚翻开第一页时进度是 0%，一条全灰的横条
+            压在页码右边读起来像下划线，而不是进度条。「还没翻开」
+            由页码本身说清楚了。侧栏、列表行与悬停预览都是同一规则。 */}
+        {percent > 0 && (
           <div
-            className="h-full bg-brand rounded-full transition-[width]"
-            style={{ width: `${percent}%` }}
-          />
-        </div>
+            /* 窄屏下轨道缩到一截：与页码并排才读得出「进度条 + 读到哪里」。
+               独占一行时它就是一条分隔线。 */
+            className="h-1.5 w-24 sm:w-40 shrink-0 rounded-full bg-brand/20 overflow-hidden"
+            role="progressbar"
+            aria-valuenow={percent}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label={`「${card.title}」${copy.continueTitle}进度`}
+          >
+            <div
+              className="h-full bg-brand rounded-full transition-[width]"
+              style={{ width: `${percent}%` }}
+            />
+          </div>
+        )}
       </div>
       <div className="mt-5 flex flex-wrap items-center gap-2">
         <button type="button" onClick={onContinue} className="btn btn-primary">
