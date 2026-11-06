@@ -17,6 +17,7 @@
     "audit:layout": "node scripts/layout-audit.mjs",
     "audit:crash": "node scripts/album-crash-probe.mjs",
     "shot": "node scripts/screenshot.mjs",
+    "shot:el": "node scripts/shot-el.mjs",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\""
   },
   "dependencies": {

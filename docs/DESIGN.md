@@ -276,6 +276,12 @@ npm run audit:crash
 npm run shot -- --out .smoke/review
 ```
 
+整页截图看不清某一处时，用元素截图单独拍一块（`--route` 是要打开的路由，`--sel` 是 CSS 选择器）：
+
+```powershell
+npm run shot:el -- --route /comic --sel ".hero-panel__feature" --out .smoke/hero
+```
+
 也可在仓库根目录使用独立临时媒体库，脚本构建并启动服务，E2E 后追加审计或探针：
 
 ```powershell
@@ -295,6 +301,9 @@ pwsh -NoProfile -File scripts/test-e2e.ps1 -Crash
 | `LG_CRASH_ALBUM`       | 崩溃探针；指定相册名，默认选媒体最多的相册                                                            |
 | `LG_CRASH_VIEWPORT`    | 崩溃探针；默认 `1280x720`                                                                             |
 | `LG_CRASH_MOCK_THUMBS` | 崩溃探针；`1` 使用假缩略图，默认真实缩略图                                                            |
+| `LG_W` / `LG_H`        | 元素截图；视口宽高，默认 1440×900                                                                    |
+| `LG_SCALE`             | 元素截图；像素倍率，默认 2                                                                          |
+| `LG_STATE`             | 元素截图；追加到 `local-gallery-ui` 的偏好片段，如 `{"viewMode":"list"}`                             |
 
 PowerShell 示例：`$env:LG_VIEWMODE = "list"` 后执行审计，结束用 `Remove-Item Env:LG_VIEWMODE` 恢复。上述变量只控制验证工具，不覆盖应用 YAML 配置。
 
