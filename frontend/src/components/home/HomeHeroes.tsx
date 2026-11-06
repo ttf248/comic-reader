@@ -222,7 +222,9 @@ function StageInfo({
           {copy.positionVerb} {index + 1} / {total}
         </p>
         <div
-          className="h-1.5 w-40 shrink-0 rounded-full bg-brand/20 overflow-hidden"
+          /* 窄屏下轨道缩到一截：与页码并排才读得出「进度条 + 读到哪里」。
+             独占一行时它就是一条分隔线。 */
+          className="h-1.5 w-24 sm:w-40 shrink-0 rounded-full bg-brand/20 overflow-hidden"
           role="progressbar"
           aria-valuenow={percent}
           aria-valuemin={0}
