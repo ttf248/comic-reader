@@ -339,21 +339,40 @@
       rgb(0 0 0 / 0) 26px
     );
   }
+  /* 书口：封面右侧的一道极淡亮边。它是纸页叠起来的边，
+     与左侧的装订边一起，封面才从「一张图」变成「一本书」。 */
+  .album-tile__cover--book::before,
+  .detail-head__cover--book::before {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    right: 0;
+    width: 3px;
+    z-index: 1;
+    pointer-events: none;
+    background: linear-gradient(
+      to left,
+      rgb(255 255 255 / 0.34),
+      rgb(255 255 255 / 0)
+    );
+  }
   /* 书名压条：标题印在封面上，而不是压在封面下面。
      这一下同时解决两件事：网格读起来像一面书架，而不是「图片 + 说明」；
-     封面下方的说明区不必给标题留两行高度，简介与网格之间不再留一段空洞。 */
+     封面下方的说明区不必给标题留两行高度，简介与网格之间不再留一段空洞。
+     压条贴着文字收紧：满屏的封面各压一条半高的黑带，画面就被吃掉
+     一大半，书架读成一排黑条。 */
   .cover-title {
     position: absolute;
     inset-inline: 0;
     bottom: 0;
     /* 高于书脊渐变：装订边只压画面，不该把书名压暗。 */
     z-index: 2;
-    padding: 30px 11px 9px;
+    padding: 22px 11px 9px;
     background-image: linear-gradient(
       to top,
-      rgb(0 0 0 / 0.94) 0%,
-      rgb(0 0 0 / 0.9) 52%,
-      rgb(0 0 0 / 0.6) 80%,
+      rgb(0 0 0 / 0.92) 0%,
+      rgb(0 0 0 / 0.9) 42%,
+      rgb(0 0 0 / 0.55) 72%,
       rgb(0 0 0 / 0) 100%
     );
     pointer-events: none;
