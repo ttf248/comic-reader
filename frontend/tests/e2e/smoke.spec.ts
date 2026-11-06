@@ -4824,7 +4824,7 @@ test("窄屏下顶栏不横向溢出，筛选标签保持一行", async ({ page 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   await expect(
-    page.getByRole("combobox", { name: "搜索文件夹或标签" }),
+    page.getByRole("combobox", { name: "搜索相册或标签" }),
   ).toBeVisible();
 
   // 顶栏控件不能把整页撑宽，否则窄屏下会出现横向滚动。
@@ -4840,7 +4840,8 @@ test("窄屏下顶栏不横向溢出，筛选标签保持一行", async ({ page 
   // 视图标签不能被压成竖排文字（一个字一行）。
   const chips = await page.evaluate(() => {
     const matched = [...document.querySelectorAll("button")].filter((button) =>
-      // 两侧的类型词不同：照片「文件夹 / 集合」，漫画「相册 / 作品」。
+      // 两侧的类型词：叶级目录都叫「相册」，集合词分侧
+      // （照片「集合」/ 漫画「作品」）。
       /^(全部|文件夹|集合|相册|作品|标签)\s*\d*$/.test(
         (button.textContent ?? "").trim(),
       ),
@@ -4985,7 +4986,8 @@ test("浏览器解不了的图片给出明确提示而不是破图", async ({ pa
 
 test("主页的视图筛选条紧贴在「全部照片」网格上方", async ({ page }) => {
   await page.goto("/");
-  const chip = page.getByRole("button", { name: /^文件夹/ });
+  // 叶级目录两侧都叫「相册」：视图 chip 的名字用它。
+  const chip = page.getByRole("button", { name: /^相册/ });
   await expect(chip).toBeVisible();
   await chip.scrollIntoViewIfNeeded();
 
@@ -4997,7 +4999,7 @@ test("主页的视图筛选条紧贴在「全部照片」网格上方", async ({
       (el) => (el.textContent ?? "").trim() === "全部照片",
     );
     const chipButton = [...document.querySelectorAll("button")].find((el) =>
-      (el.textContent ?? "").trim().startsWith("文件夹"),
+      (el.textContent ?? "").trim().startsWith("相册"),
     );
     const section = heading?.closest("section");
     const card = section?.querySelector('[data-testid="card-cover"]');
