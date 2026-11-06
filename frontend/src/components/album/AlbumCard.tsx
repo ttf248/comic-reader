@@ -24,7 +24,8 @@ import { formatDuration } from "../../utils/format";
 import { isCompleted, isUnread, progressPercent } from "../../utils/progress";
 import { favoriteResourceId } from "../../utils/path";
 import { useToggleFavorite } from "../../hooks/useFavorites";
-import { albumCountUnit, comicCopy, mediaUnit } from "../../utils/workbench";
+import { albumCountUnit, comicCopy } from "../../utils/workbench";
+import { mediaCountParts } from "../../utils/mediaCount";
 import type { ContentKind } from "../../api/library";
 import CardCover from "./CardCover";
 
@@ -226,33 +227,6 @@ export default function AlbumCard({
 //
 // 计数单位跟着这一张卡自己的属性走：照片说「张」，漫画说「页」——
 // 漫画里一张图就是「一页」，与阅读器的「第 N 页」说法一致。
-function formatMediaCount(
-  data: CardData,
-): { label: string; lead: string; rest: string; title: string } | null {
-  if (data.variant !== "album") return null;
-  const imgs = data.imageCount ?? 0;
-  const vids = data.videoCount ?? 0;
-  const unit = mediaUnit(data.contentKind ?? "photo");
-  if (imgs > 0 && vids > 0) {
-    return {
-      label: `${imgs} ${unit} · ${vids} 个视频`,
-      lead: `${imgs} ${unit}`,
-      rest: `${vids} 个视频`,
-      title: `${imgs} ${unit} + ${vids} 个视频`,
-    };
-  }
-  if (imgs === 0 && vids > 0) {
-    return {
-      label: `${vids} 个视频`,
-      lead: `${vids} 个视频`,
-      rest: "",
-      title: `${vids} 个视频`,
-    };
-  }
-  // 纯图 / 空相册。
-  const label = `${imgs} ${unit}`;
-  return { label, lead: label, rest: "", title: label };
-}
 
 function GridCard({
   data,
@@ -508,7 +482,8 @@ function GridCard({
           >
             <TypeChip variant={data.variant} />
             {(() => {
-              const media = formatMediaCount(data);
+              const media =
+                data.variant === "album" ? mediaCountParts(data) : null;
               if (media) {
                 // album 变体：按图/视频分别展示。
                 // 不允许换行 —— 「384 张 · 19 个视 频」这种断字很难看，
@@ -777,7 +752,8 @@ function ListCard({
         <div className="shrink-0 w-24 sm:w-32 text-right flex flex-col items-end gap-1">
           <span className="text-body text-fg tabular-nums font-medium">
             {(() => {
-              const media = formatMediaCount(data);
+              const media =
+                data.variant === "album" ? mediaCountParts(data) : null;
               if (media) {
                 return <span title={media.title}>{media.label}</span>;
               }

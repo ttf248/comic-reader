@@ -4,6 +4,7 @@ import type { CardData } from "../album/AlbumGrid";
 import Cover from "./Cover";
 import { ArrowRightLineIcon } from "../common/Icon";
 import { photoCopy } from "../../utils/workbench";
+import { mediaCountCompact, mediaCountLabel } from "../../utils/mediaCount";
 import { recentsRoute } from "../../utils/path";
 import { timeAgo } from "../../utils/date";
 
@@ -58,7 +59,7 @@ export default function ResumeHero({ cards }: Props) {
             {featured.displayTitle ?? featured.title}
           </h3>
           <p className="hero-panel__muted mt-3 tabular-nums">
-            {featured.imageCount ?? 0} {copy.mediaUnit}
+            {mediaCountLabel(featured)}
             {featured.lastSeenAt && (
               <>
                 {" · "}
@@ -109,8 +110,8 @@ function ResumeQueueItem({ card }: { card: CardData }) {
         <span className="block truncate text-body font-medium">
           {card.displayTitle ?? card.title}
         </span>
-        <span className="hero-panel__muted block mt-1 tabular-nums">
-          {card.imageCount ?? 0} {copy.mediaUnit}
+        <span className="hero-panel__muted block mt-1 tabular-nums truncate">
+          {mediaCountCompact(card)}
           {card.lastSeenAt && (
             <>
               {" · "}

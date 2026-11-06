@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import type { CardData } from "../album/AlbumGrid";
 import Cover from "../home/Cover";
 import { ChevronRightIcon } from "../common/Icon";
-import { mediaUnit } from "../../utils/workbench";
+import { mediaCountLabel } from "../../utils/mediaCount";
 
 /**
  * 浏览足迹：把最近看过的相册排成一条时间线。
@@ -35,8 +35,7 @@ export default function FootprintTimeline({ cards }: { cards: CardData[] }) {
             {/* 数量单独一列，右对齐：整列上下对齐，扫读时一眼看到
                 「看过的量」；压在名字下面就成了随手的一行小字。 */}
             <span className="footprint__meta tabular-nums shrink-0">
-              {card.imageCount ?? 0} {mediaUnit(card.contentKind ?? "photo")}
-              {(card.videoCount ?? 0) > 0 && ` · ${card.videoCount} 个视频`}
+              {mediaCountLabel(card)}
             </span>
             <ChevronRightIcon
               size={14}

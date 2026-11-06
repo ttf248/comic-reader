@@ -357,10 +357,11 @@ export default function PhotoAlbum({ album }: Props) {
                 <CopyIcon size={13} />
                 <span>复制相册链接</span>
               </PopoverItem>
-              <PopoverItem onClick={() => void setCover()}>
-                <GridIcon size={13} />
-                <span>用当前查看的图片设为封面</span>
-              </PopoverItem>
+              {/* 「用当前查看的图片设为封面」原先在这里，但它是个死动作：
+                  查看器是一层全屏浮层，打开时根本够不到这个菜单；
+                  关掉查看器后 viewerIndex 已经清空，点了也不会有任何反应。
+                  真正可用的两个入口是查看器里的「设为封面」按钮，
+                  以及照片墙上右键单张照片时的「设为封面」。 */}
             </Popover>
           </div>
         </div>

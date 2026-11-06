@@ -316,8 +316,11 @@
   }
   .resume-queue__cover {
     display: block;
-    width: 56px;
-    height: 56px;
+    /* 48px 而不是 56px：三列并排时每列只剩一百来像素，
+       56px 的缩略图把计数挤到放不下「10 个视频 · 刚刚」，
+       时刻被截成「刚…」。缩两像素，一行就完整了。 */
+    width: 48px;
+    height: 48px;
     flex-shrink: 0;
     overflow: hidden;
     border-radius: var(--radius-media);

@@ -3,6 +3,7 @@ import type { LibraryNodeSummary } from "../../api/library";
 import { useFavorites } from "../../hooks/useFavorites";
 import { recentsRoute } from "../../utils/path";
 import { photoCopy } from "../../utils/workbench";
+import { mediaCountLabel } from "../../utils/mediaCount";
 import { nodeSummaryToCard } from "../../utils/libraryCard";
 import AlbumCard from "../album/AlbumCard";
 import type { CardData } from "../album/AlbumGrid";
@@ -128,8 +129,7 @@ export function SerendipityHero({
             {card.displayTitle ?? card.title}
           </h3>
           <p className="hero-panel__muted mt-3 tabular-nums">
-            {card.imageCount ?? 0} {copy.mediaUnit}
-            {(card.videoCount ?? 0) > 0 && ` · ${card.videoCount} 个视频`}
+            {mediaCountLabel(card)}
           </p>
           <div className="mt-5">
             <Link to={card.to} className="btn btn-primary">
