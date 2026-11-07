@@ -251,6 +251,13 @@ export default function Reader() {
     albumSummary?.name ||
     params.get("name") ||
     "画廊";
+  // 顶栏里的名字：漫画的卷名只写「第1卷」，这一卷属于哪部作品
+  // 看不出来。作品名补在前面，与书封上的写法一致 —— 翻开一本时
+  // 顶栏该说的是「星海漫步 · 第1卷」。
+  const headerName =
+    albumSummary?.parentName && albumSummary.parentName !== name
+      ? `${albumSummary.parentName} · ${name}`
+      : name;
 
   // 返回：优先回到应用内的上一页；没有可回退历史时回到当前相册页。
   // 直接打开阅读器链接（刷新、复制链接到新标签页）时，navigate(-1) 会
@@ -1057,7 +1064,7 @@ export default function Reader() {
           >
             ←
           </button>
-          <span className="font-medium text-white/85 truncate">{name}</span>
+          <span className="font-medium text-white/85 truncate">{headerName}</span>
         </div>
         <div className="flex-1 flex items-center justify-center px-6">
           {!pathParam ? (
@@ -1222,7 +1229,7 @@ export default function Reader() {
           </div>
         )}
         <GalleryHeader
-          name={name}
+          name={headerName}
           index={index}
           itemIndex={isVideo ? itemIndex : undefined}
           total={total}
