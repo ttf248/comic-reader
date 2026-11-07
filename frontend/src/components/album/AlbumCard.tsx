@@ -658,6 +658,17 @@ function ListCard({
     data.durationSec >= 0;
   // 漫画侧的列表行也是书架：缩略图是一本书（竖版 + 装订边）。
   const isComicContent = data.contentKind === "comic";
+  // 作品名补在卷名前面：列表行写「第1卷」时，这一卷属于哪部作品
+  // 看不出来 —— 与网格的书封、阅读器顶栏同一套写法。
+  const label = data.displayTitle ?? data.title;
+  const series =
+    data.variant === "album" &&
+    data.contentKind === "comic" &&
+    data.parentName &&
+    data.parentName !== label
+      ? data.parentName
+      : undefined;
+  const rowTitle = series ? `${series} · ${label}` : label;
 
   return (
     // 列表行：缩略图压到 48px，行高固定 86px —— 一屏能扫到更多条目。
@@ -706,8 +717,8 @@ function ListCard({
             但里面的进度读数不缩，窄列时它会直接盖住右侧的页数。 */}
         <div className="flex-1 min-w-0 overflow-hidden flex flex-col justify-center gap-1">
           <div className="text-label font-medium text-fg truncate flex items-center gap-1.5">
-            <span className="truncate" title={data.displayTitle ?? data.title}>
-              {data.displayTitle ?? data.title}
+            <span className="truncate" title={rowTitle}>
+              {rowTitle}
             </span>
             {unread && (
               <span

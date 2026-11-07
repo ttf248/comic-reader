@@ -142,6 +142,22 @@ describe("AlbumCard 封面语义", () => {
     expect(container.querySelector(".cover-title__series")).toBeNull();
   });
 
+  // 列表行没有封面压条可借位置，作品名补在卷名前面。
+  it("列表行的漫画卷在卷名前面补上所属作品", () => {
+    renderCard(card({ title: "第1卷", parentName: "星海漫步" }), "list");
+
+    expect(screen.getByText("星海漫步 · 第1卷")).toBeInTheDocument();
+  });
+
+  it("列表行的照片相册不补作品名", () => {
+    renderCard(
+      card({ title: "周末记录", contentKind: "photo", parentName: "某个相册" }),
+      "list",
+    );
+
+    expect(screen.queryByText(/某个相册/)).not.toBeInTheDocument();
+  });
+
   it("照片相册不印作品名", () => {
     const { container } = renderCard(
       card({ title: "周末记录", contentKind: "photo", parentName: "某个相册" }),
