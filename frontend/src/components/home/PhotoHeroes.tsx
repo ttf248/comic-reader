@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import type { LibraryNodeSummary } from "../../api/library";
 import { useFavorites } from "../../hooks/useFavorites";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 import { photoCopy } from "../../utils/workbench";
 import { mediaCountCompact, mediaCountLabel } from "../../utils/mediaCount";
 import { nodeSummaryToCard } from "../../utils/libraryCard";
@@ -16,6 +17,14 @@ import { ArrowRightLineIcon, ShuffleIcon } from "../common/Icon";
  * 一块值得停留的地方：最近加入的照片与随手看看的一本。两块专区共用
  * 首页既有的 hero 骨架，视觉上与漫画侧对齐，语义上完全属于照片。
  */
+
+/**
+ * 宽屏的照片墙：墙面够宽就多摆几本。
+ *
+ * 四张一排时，1600px 以上每张被拉到三百多像素见方，读起来像四张巨幅
+ * 海报，不像一面展陈墙；六张一排才回到「墙」的密度。
+ */
+const WIDE_WALL_QUERY = "(min-width: 1600px)";
 
 interface RecentlyAddedProps {
   items: LibraryNodeSummary[];
@@ -37,6 +46,7 @@ export function RecentlyAddedHero({
     ...nodeSummaryToCard(album),
     isFavorite: favoriteIds.has(album.id),
   }));
+  const isWideWall = useMediaQuery(WIDE_WALL_QUERY);
   if (cards.length === 0) return null;
   return (
     <section
@@ -69,7 +79,7 @@ export function RecentlyAddedHero({
         </div>
       </div>
       <div className="hero-grid hero-grid--wall">
-        {cards.slice(0, 4).map((card) => (
+        {cards.slice(0, isWideWall ? 6 : 4).map((card) => (
           <AlbumCard
             key={card.id}
             data={card}

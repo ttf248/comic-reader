@@ -116,7 +116,7 @@ describe("AlbumGrid", () => {
         items={cards}
         variant="grid"
         coverRatio="2/3"
-        cardMinWidth={224}
+        density="spacious"
       />,
     );
     let props = virtuoso.grid.mock.calls[0]?.[0] as { listClassName: string };

@@ -444,8 +444,8 @@ export default function Home() {
   // 「全库 116 本」与下面的「38 项」就不再打架。
   const librarySize = manifest
     ? isComic
-      ? `全库 ${manifest.statistics.comicAlbumCount ?? 0} 卷 · ${manifest.statistics.comicCollectionCount ?? 0} 个作品`
-      : `全库 ${manifest.statistics.photoAlbumCount ?? 0} 本相册 · ${manifest.statistics.photoCollectionCount ?? 0} 个集合`
+      ? `全库 ${manifest.statistics.comicAlbumCount ?? 0} 卷、${manifest.statistics.comicCollectionCount ?? 0} 个作品`
+      : `全库 ${manifest.statistics.photoAlbumCount ?? 0} 本相册、${manifest.statistics.photoCollectionCount ?? 0} 个集合`
     : "";
 
   // 「继续上次」直跳画廊：进首页最大的目的是「接着看」，
@@ -485,15 +485,19 @@ export default function Home() {
             <p className="text-body text-fg-muted mt-2">
               {manifest ? (
                 <>
+                  {/* 分隔用中文标点，不用「·」：西文间隔号在换行时不受
+                      行首禁则约束，窄屏上会孤零零地站在行头。中文的
+                      「，」「、」由浏览器按行首禁则处理，不会被甩到
+                      下一行行首。 */}
                   <span>{copy.libraryDescription}</span>
-                  <span className="mx-2 text-fg-subtle">·</span>
+                  <span className="text-fg-subtle">，</span>
                   {/* 库规模属于当前工作台：这一侧只有多少相册、多少集合。
                       它原来常驻顶栏，与这里、以及状态栏的「上次扫描」
                       是同一组上下文散在三处 —— 收进页头，只说一次。 */}
                   <span className="tabular-nums">{librarySize}</span>
                   {manifest.scannedAt && (
                     <>
-                      <span className="mx-2 text-fg-subtle">·</span>
+                      <span className="text-fg-subtle">，</span>
                       <span className="text-fg-subtle">
                         上次更新 {formatTime(manifest.scannedAt)}
                       </span>
@@ -511,9 +515,12 @@ export default function Home() {
               disabled={startScan.isPending || sse.isRunning}
               className="btn btn-sm btn-outline"
               title="扫描 (Ctrl+S)"
+              aria-label={scanLabel}
             >
               <RefreshIcon size={13} />
-              <span>{scanLabel}</span>
+              {/* 窄屏上按钮独占一行、与标题分开，字数多反而更占地方：
+                  收成一枚图标，靠 title 与无障碍名称说清它是什么。 */}
+              <span className="hidden sm:inline">{scanLabel}</span>
             </button>
           </div>
         </div>

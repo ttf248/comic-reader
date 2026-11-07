@@ -34,8 +34,14 @@ interface Props {
    * 调用方显式传值时以此为准（如收藏页的密集陈列）。
    */
   coverRatio?: CoverRatio;
-  /** 网格列宽下限。越大越疏朗。 */
-  cardMinWidth?: 164 | 224;
+  /**
+   * 网格密度：越疏朗，一行放的相册越少。
+   *
+   * 真正的列宽由 CSS 的 `.library-grid` 家族决定（列宽下限 210px /
+   * 250px / 168px），这里只选哪一套 —— 名字里带具体像素会让读代码的
+   * 人以为列宽在这里定，改宽度时改错地方。
+   */
+  density?: "default" | "spacious";
 }
 
 // 列表视图每一列的最小宽度。列数由可用宽度除以它得到 ——
@@ -67,7 +73,7 @@ export default function AlbumGrid({
   showLastSeen,
   showUnreadBadge = true,
   coverRatio,
-  cardMinWidth = 164,
+  density = "default",
 }: Props) {
   const [menu, setMenu] = useState<{
     x: number;
@@ -106,7 +112,7 @@ export default function AlbumGrid({
   // 漫画侧用书架那一套：封面竖版本身就窄，按展陈墙的列宽铺开，
   // 每张卡会撑成巨幅海报，一屏只看得到四本。
   const gridColsClass =
-    cardMinWidth === 224
+    density === "spacious"
       ? "library-grid library-grid--spacious"
       : workbench === "comic"
         ? "library-grid library-grid--comic"
