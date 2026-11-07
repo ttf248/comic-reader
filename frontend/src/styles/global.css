@@ -163,9 +163,10 @@
     display: grid;
     grid-template-columns: var(--hero-cover-col) minmax(0, 1fr);
     align-items: center;
-    /* 面板被拉到与相邻面板等高时，内容居中在剩余空间里，而不是
-       全部堆在顶部、底下留一大块空白。 */
-    align-content: center;
+    /* 面板被拉到与相邻面板等高时，内容贴着标题开始，而不是悬在
+       面板中间。居中会在「继续阅读」与它下面的主角之间留出一大片
+       空档 —— 标题与内容之间断开，比面板底部留白更伤读法。 */
+    align-content: start;
     gap: clamp(16px, 2vw, 24px);
     flex: 1;
     padding-block: 20px;

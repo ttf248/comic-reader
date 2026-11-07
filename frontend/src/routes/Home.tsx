@@ -26,7 +26,14 @@ import { useSerendipityAlbum } from "../hooks/useSerendipityAlbum";
 import { useUIStore } from "../store/uiStore";
 import { useAppMode } from "../hooks/useAppMode";
 import { comicCopy, workbenchCopy } from "../utils/workbench";
-import { albumRoute, decodeFavPath, favoritesRoute, homeRoute, recentsRoute, unreadRoute } from "../utils/path";
+import {
+  albumRoute,
+  decodeFavPath,
+  favoritesRoute,
+  homeRoute,
+  recentsRoute,
+  unreadRoute,
+} from "../utils/path";
 import { continueReadingTarget } from "../utils/continueReading";
 import { compareDatesDesc } from "../utils/date";
 import type { GalleryContextEntry } from "../utils/galleryContext";
@@ -36,7 +43,11 @@ import {
   type SeriesGroup,
   type YearGroup,
 } from "../utils/albumGrouping";
-import { useLibraryDashboard, useLibraryOverview, useLibraryRecentAlbums } from "../hooks/useLibrary";
+import {
+  useLibraryDashboard,
+  useLibraryOverview,
+  useLibraryRecentAlbums,
+} from "../hooks/useLibrary";
 import {
   libraryOverviewCards,
   nodeSummaryToCard,
@@ -168,7 +179,8 @@ export default function Home() {
             kind: "info",
             message: `已将「${card.title}」标记为已读完`,
           }),
-        onError: () => pushToast({ kind: "error", message: "标记失败，请重试" }),
+        onError: () =>
+          pushToast({ kind: "error", message: "标记失败，请重试" }),
       },
     );
   };
@@ -217,7 +229,8 @@ export default function Home() {
             kind: "info",
             message: `已将「${card.title}」标记为已读完`,
           }),
-        onError: () => pushToast({ kind: "error", message: "标记失败，请重试" }),
+        onError: () =>
+          pushToast({ kind: "error", message: "标记失败，请重试" }),
       },
     );
   };
@@ -382,10 +395,15 @@ export default function Home() {
   // 库规模的说法跟着侧走：漫画侧是「卷」与「作品」，照片侧是「本相册」
   // 与「集合」—— 两侧的词不统一，用户读到「0 本漫画」会以为漫画也按
   // 相册计数。
+  //
+  // 前缀「全库」是必要的：下面的网格只列媒体根的直属子项（顶层相册、
+  // 集合与标签），页头这个数却把各层集合里的相册都算上了。两个数摆在
+  // 同一屏却各说各话时，用户只会以为其中一个是错的 —— 说清口径，
+  // 「全库 116 本」与下面的「38 项」就不再打架。
   const librarySize = manifest
     ? isComic
-      ? `${manifest.statistics.comicAlbumCount ?? 0} 卷 · ${manifest.statistics.comicCollectionCount ?? 0} 个作品`
-      : `${manifest.statistics.photoAlbumCount ?? 0} 本相册 · ${manifest.statistics.photoCollectionCount ?? 0} 个集合`
+      ? `全库 ${manifest.statistics.comicAlbumCount ?? 0} 卷 · ${manifest.statistics.comicCollectionCount ?? 0} 个作品`
+      : `全库 ${manifest.statistics.photoAlbumCount ?? 0} 本相册 · ${manifest.statistics.photoCollectionCount ?? 0} 个集合`
     : "";
 
   // 「继续上次」直跳画廊：进首页最大的目的是「接着看」，
@@ -499,28 +517,30 @@ export default function Home() {
         )}
       </section>
 
-      {hasContent && isComic && (inProgressAll.length > 0 || unreadCards.length > 0) && (
-        <div className="page-shell">
-          <div className="home-overview">
-            {inProgressAll.length > 0 && (
-              <ContinueHero
-                cards={inProgressAll}
-                onContinue={onContinue}
-                onRemove={onRemoveContinue}
-                onClearAll={onClearContinue}
-              />
-            )}
-            {unreadCards.length > 0 && (
-              <UnreadHero
-                cards={unreadCards}
-                count={unreadCount}
-                onShuffle={onShuffleUnread}
-                onMarkRead={onMarkReadUnread}
-              />
-            )}
+      {hasContent &&
+        isComic &&
+        (inProgressAll.length > 0 || unreadCards.length > 0) && (
+          <div className="page-shell">
+            <div className="home-overview">
+              {inProgressAll.length > 0 && (
+                <ContinueHero
+                  cards={inProgressAll}
+                  onContinue={onContinue}
+                  onRemove={onRemoveContinue}
+                  onClearAll={onClearContinue}
+                />
+              )}
+              {unreadCards.length > 0 && (
+                <UnreadHero
+                  cards={unreadCards}
+                  count={unreadCount}
+                  onShuffle={onShuffleUnread}
+                  onMarkRead={onMarkReadUnread}
+                />
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
       {/* 照片侧的首屏专区：与漫画侧的「继续阅读 / 未读」位置对齐，
           内容却是照片自己的 —— 接着看、最近加入与随手看看。
@@ -607,15 +627,12 @@ export default function Home() {
       {(hasContent || isLoadingInitial) && (
         <section ref={gridRef} className="page-shell pt-10 pb-4 scroll-mt-6">
           <div className="section-heading">
-            <span className="section-index">{hasSeriesIndex ? "03" : "02"}</span>
+            <span className="section-index">
+              {hasSeriesIndex ? "03" : "02"}
+            </span>
             <h2 className="section-title">
               {yearFilterActive ? copy.yearSectionTitle : copy.sectionTitle}
             </h2>
-            {!isLoadingInitial && (
-              <span className="section-meta tabular-nums">
-                {filtered.length}
-              </span>
-            )}
             {yearFilterActive && (
               <button
                 onClick={() => setYearFilter(null)}
@@ -627,7 +644,10 @@ export default function Home() {
               </button>
             )}
             {favCount > 0 && !yearFilterActive && (
-              <button onClick={() => navigate(favoritesRoute(mode))} className="chip">
+              <button
+                onClick={() => navigate(favoritesRoute(mode))}
+                className="chip"
+              >
                 <StarIcon size={11} filled className="text-favorite" />
                 <span>{favCount} 收藏</span>
               </button>

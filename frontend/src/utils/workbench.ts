@@ -146,7 +146,9 @@ const PHOTO: PhotoCopy = {
   libraryTitle: "照片库",
   libraryEyebrow: "你的照片",
   libraryDescription: "照片、故事与每一次重逢",
-  sectionTitle: "全部照片",
+  /* 这一段列的是媒体根的直属子项（顶层相册 / 集合 / 标签），
+     不是库里全部照片 —— 原来叫「全部照片」，名不副实。 */
+  sectionTitle: "库内一览",
   yearSectionTitle: "该年份的照片",
   recentsTitle: "最近浏览",
   recentsEyebrow: "浏览足迹",
@@ -201,7 +203,7 @@ const COMIC: ComicCopy = {
   unreadCountLabel: "卷等你翻开",
   unreadButton: "随机一卷未读",
   unreadEmpty: "全部看完啦 🎉",
-  sectionTitle: "全部漫画",
+  sectionTitle: "库内一览",
   yearSectionTitle: "该年份的漫画",
   recentsTitle: "最近阅读",
   recentsEyebrow: "阅读足迹",

@@ -155,7 +155,12 @@ export default function GalleryToolbar({
         >
           <span className="inline-flex items-center gap-1">
             <RotateIcon size={15} />
-            <span className="text-meta tabular-nums">{rotation}°</span>
+            {/* 角度读数只在真的转过之后出现：平时一枚「0°」占着位置，
+                读起来像一个待填的空读数。同一页的进度条也是这个规矩
+                —— 空轨道不出现。 */}
+            {rotation !== 0 && (
+              <span className="text-meta tabular-nums">{rotation}°</span>
+            )}
           </span>
         </ToolButton>
 

@@ -159,12 +159,12 @@ function renderHome() {
   return client;
 }
 
-it("筛选条紧贴在「全部图像」网格上方，不被英雄区 / 时间线隔开", async () => {
+it("筛选条紧贴在「库内一览」网格上方，不被英雄区 / 时间线隔开", async () => {
   renderHome();
 
   await waitFor(() => expect(screen.getByTestId("album-grid")).toBeTruthy());
 
-  const heading = screen.getByText("全部漫画");
+  const heading = screen.getByText("库内一览");
   // 漫画侧的视图 chip 用漫画自己的类型词：相册 / 作品。
   const chip = screen.getByRole("button", { name: /相册/ });
   const grid = screen.getByTestId("album-grid");
@@ -247,7 +247,7 @@ it("照片工作台不显示继续阅读与未读区", async () => {
   await waitFor(() => expect(screen.getByTestId("album-grid")).toBeTruthy());
   expect(screen.queryByTestId("continue-hero")).toBeNull();
   expect(screen.queryByTestId("unread-hero")).toBeNull();
-  expect(screen.getByText("全部照片")).toBeTruthy();
+  expect(screen.getByText("库内一览")).toBeTruthy();
 });
 
 // 照片侧的对称物：漫画有「继续阅读」，照片有「接着看」。

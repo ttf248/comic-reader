@@ -74,7 +74,8 @@ export function ListFilterBar({
           {showMinImageFilter && (
             <MinImageFilter value={minImageCount} onChange={setMinImageCount} />
           )}
-          {viewChips?.length ? (
+          {viewChips?.length &&
+          totalCount !== viewChips.find((c) => c.key === "all")?.count ? (
             <span className="text-meta text-fg-muted tabular-nums">
               共 {totalCount} 项
             </span>
