@@ -10,6 +10,7 @@ import (
 
 	"github.com/tianlongxiang/local-gallery/internal/config"
 	"github.com/tianlongxiang/local-gallery/internal/middleware"
+	"github.com/tianlongxiang/local-gallery/internal/services"
 )
 
 const testHandlerAccessToken = "0123456789abcdef0123456789abcdef"
@@ -23,7 +24,7 @@ func TestHealthLANHidesDiagnosticsUntilAuthenticated(t *testing.T) {
 	app := fiber.New()
 	api := app.Group("/api")
 	api.Use(gate.Middleware())
-	api.Get("/health", HealthHandler(mgr))
+	api.Get("/health", HealthHandler(mgr, services.NewResourceCatalog()))
 
 	publicRequest := httptest.NewRequest(http.MethodGet, "http://127.0.0.1/api/health", nil)
 	publicResponse, err := app.Test(publicRequest)

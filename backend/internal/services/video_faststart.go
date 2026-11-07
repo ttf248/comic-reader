@@ -274,27 +274,6 @@ func (s *VideoFaststartService) Resolve(absPath string, info os.FileInfo) (serve
 	return v.(string), StatusRemuxed
 }
 
-// LastStatus 返回最近一次 Resolve 的状态(线程安全)。
-//
-// 设计意图:给 handler / 日志 / 调试用,例如"这次响应到底是发的缓存还是
-// 原文件";不想为此引入锁。零竞争窗口可接受(读到旧值不影响正确性)。
-func (s *VideoFaststartService) LastStatus() FaststartStatus {
-	if s == nil {
-		return StatusUnknown
-	}
-	// 找最新 Add 过的那个(近似,不严格)
-	var best FaststartStatus = StatusUnknown
-	var bestVal int64
-	for i := range s.statusCounters {
-		v := s.statusCounters[i].Load()
-		if v >= bestVal {
-			bestVal = v
-			best = FaststartStatus(i)
-		}
-	}
-	return best
-}
-
 // Stats 返回各状态累计计数(测试 / 监控用)。
 func (s *VideoFaststartService) Stats() (skipped, fast, remuxed, fallback int64) {
 	if s == nil {

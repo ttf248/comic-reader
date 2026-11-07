@@ -24,8 +24,7 @@ import (
 //
 // 行为：写入 cover_overrides.json，更新内存 ScanResult，标记 dirty 异步落盘。
 // 返回新的 CoverImage + CoverKind，前端立即拿来刷缩略图。
-func AlbumSetCoverHandler(cache *services.ScanResultCache, store *services.CoverOverrideStore, catalogs ...*services.ResourceCatalog) fiber.Handler {
-	catalog := optionalCatalog(catalogs)
+func AlbumSetCoverHandler(cache *services.ScanResultCache, store *services.CoverOverrideStore, catalog *services.ResourceCatalog) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		albumPath := middleware.SafePath(c)
 		if albumPath == "" {
@@ -45,19 +44,15 @@ func AlbumSetCoverHandler(cache *services.ScanResultCache, store *services.Cover
 		if fi, err := os.Stat(file); err != nil || fi.IsDir() {
 			return writeError(c, fiber.StatusBadRequest, "invalid_cover_file", "file does not exist or is a directory")
 		}
-		kind := coverKindFromExt(file)
+		kind := models.FileMediaKind(file)
 		if kind == "" {
 			return writeError(c, fiber.StatusBadRequest, "unsupported_cover_format", "file extension not supported (need image or video)")
 		}
 		if err := store.Set(albumPath, file); err != nil {
 			return writeError(c, fiber.StatusInternalServerError, "cover_override_save_failed", "save cover override")
 		}
-		if catalog != nil {
-			if _, _, ok := catalog.RefreshCovers(cache, store); !ok {
-				return writeError(c, fiber.StatusConflict, "library_not_ready", "library not ready")
-			}
-		} else {
-			cache.SetWithOverrideApplied(albumPath, file, kind)
+		if _, _, ok := catalog.RefreshCovers(cache, store); !ok {
+			return writeError(c, fiber.StatusConflict, "library_not_ready", "library not ready")
 		}
 		return c.JSON(fiber.Map{
 			"ok":         true,
@@ -76,8 +71,7 @@ func AlbumSetCoverHandler(cache *services.ScanResultCache, store *services.Cover
 // CoverImage / CoverKind 重置为 images[0] / videos[0]（图片优先）。
 // 不触发全库扫描 — 单条 album 的封面回退是确定的（来自同一份
 // ScanResult 内的 ImageFiles / VideoFiles）。
-func AlbumClearCoverHandler(cache *services.ScanResultCache, store *services.CoverOverrideStore, catalogs ...*services.ResourceCatalog) fiber.Handler {
-	catalog := optionalCatalog(catalogs)
+func AlbumClearCoverHandler(cache *services.ScanResultCache, store *services.CoverOverrideStore, catalog *services.ResourceCatalog) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		albumPath := middleware.SafePath(c)
 		if albumPath == "" {
@@ -86,12 +80,8 @@ func AlbumClearCoverHandler(cache *services.ScanResultCache, store *services.Cov
 		if err := store.Clear(albumPath); err != nil {
 			return writeError(c, fiber.StatusInternalServerError, "cover_override_clear_failed", "clear cover override")
 		}
-		if catalog != nil {
-			if _, _, ok := catalog.RefreshCovers(cache, store); !ok {
-				return writeError(c, fiber.StatusConflict, "library_not_ready", "library not ready")
-			}
-		} else {
-			cache.RebuildCoverForAlbum(albumPath)
+		if _, _, ok := catalog.RefreshCovers(cache, store); !ok {
+			return writeError(c, fiber.StatusConflict, "library_not_ready", "library not ready")
 		}
 		return c.JSON(fiber.Map{
 			"ok":        true,
@@ -121,13 +111,6 @@ func isFileInsideAlbum(file, albumPath string) bool {
 		return false
 	}
 	return true
-}
-
-// coverKindFromExt 按文件扩展名推断 "image" / "video"。
-//
-// 直接用 models.FileMediaKind：扩展名白名单只有一份，避免各处复制后漂移。
-func coverKindFromExt(p string) string {
-	return models.FileMediaKind(p)
 }
 
 //	GET /api/search?q=<keyword>&limit=<n>&kind=<photo|comic>

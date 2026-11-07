@@ -8,13 +8,6 @@ import (
 	"github.com/tianlongxiang/local-gallery/internal/services"
 )
 
-func optionalCatalog(catalogs []*services.ResourceCatalog) *services.ResourceCatalog {
-	if len(catalogs) == 0 {
-		return nil
-	}
-	return catalogs[0]
-}
-
 func requestCatalogSnapshot(c *fiber.Ctx, catalog *services.ResourceCatalog) services.CatalogSnapshot {
 	if pinned, ok := middleware.ResourceSnapshot(c).(services.CatalogSnapshot); ok {
 		return pinned
@@ -26,16 +19,10 @@ func requestCatalogSnapshot(c *fiber.Ctx, catalog *services.ResourceCatalog) ser
 }
 
 func publicID(catalog *services.ResourceCatalog, path string, kind services.ResourceKind) string {
-	if catalog == nil {
-		return path
-	}
 	return catalog.ExternalID(path, kind)
 }
 
 func resolveResource(c *fiber.Ctx, catalog *services.ResourceCatalog, id string, kind services.ResourceKind) (string, bool) {
-	if catalog == nil {
-		return id, id != ""
-	}
 	ref, ok := catalog.Lookup(id)
 	if !ok || ref.Kind != kind {
 		_ = httputil.BadRequest(c, "invalid_resource_id", "resource id is invalid or has the wrong type")

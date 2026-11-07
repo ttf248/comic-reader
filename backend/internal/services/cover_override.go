@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 
 	"github.com/tianlongxiang/local-gallery/internal/models"
@@ -141,20 +140,6 @@ func (s *CoverOverrideStore) Snapshot() map[string]CoverOverride {
 	return out
 }
 
-// HasFile 简单判断 file 路径是否被某条 cover override 引用（用于
-// 删除/重命名文件时清理相关 override；目前未直接调用，预留接口）。
-func (s *CoverOverrideStore) HasFile(file string) bool {
-	target := filepath.Clean(file)
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	for _, v := range s.data {
-		if strings.EqualFold(v.File, target) {
-			return true
-		}
-	}
-	return false
-}
-
 // ApplyCoverOverridesToResult 将持久化的封面覆盖应用到一次新扫描结果。
 // 只接受仍存在且已被该相册媒体列表收录的文件，旧记录不会把任意路径
 // 带回资源索引。返回值是独立快照，可直接交给 catalog/cache 发布。
@@ -175,7 +160,7 @@ func ApplyCoverOverridesToResult(result *models.ScanResult, overrides map[string
 		if err != nil || info.IsDir() {
 			return
 		}
-		kind := coverKindFromExt(override.File)
+		kind := models.FileMediaKind(override.File)
 		if kind == "" {
 			return
 		}

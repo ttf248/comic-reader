@@ -25,8 +25,7 @@ type HealthResponse struct {
 }
 
 // HealthHandler 返回 /api/health 处理函数。
-func HealthHandler(mgr *config.Manager, catalogs ...*services.ResourceCatalog) fiber.Handler {
-	catalog := optionalCatalog(catalogs)
+func HealthHandler(mgr *config.Manager, catalog *services.ResourceCatalog) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		cfg := mgr.Get()
 		if cfg.AccessMode == config.AccessModeLAN && !middleware.AccessAuthenticated(c) {
@@ -36,17 +35,16 @@ func HealthHandler(mgr *config.Manager, catalogs ...*services.ResourceCatalog) f
 			})
 		}
 
+		// 媒体根只对外给资源 ID，绝不回显绝对路径。
 		roots := mgr.Roots()
-		if catalog != nil {
-			snapshot := catalog.Acquire()
-			publicRoots := make([]string, 0, len(roots))
-			for _, root := range roots {
-				if id := snapshot.ExternalID(root, services.ResourceRoot); id != "" {
-					publicRoots = append(publicRoots, id)
-				}
+		snapshot := catalog.Acquire()
+		publicRoots := make([]string, 0, len(roots))
+		for _, root := range roots {
+			if id := snapshot.ExternalID(root, services.ResourceRoot); id != "" {
+				publicRoots = append(publicRoots, id)
 			}
-			roots = publicRoots
 		}
+		roots = publicRoots
 		return c.JSON(HealthResponse{
 			Status:      "ok",
 			MediaRoots:  roots,
