@@ -128,9 +128,15 @@ type Album struct {
 	ModTime     time.Time `json:"modTime"`
 	// Date 是相册在时间轴上的统一业务时间；DateSource 说明该时间的
 	// 来源，前端不再根据文件夹名自行猜测。优先级固定为
-	// captured > folder > modified。
+	// filename > folder > modified。
 	Date       time.Time `json:"date"`
-	DateSource string    `json:"dateSource"` // captured / folder / modified
+	DateSource string    `json:"dateSource"` // filename / folder / modified
+	// CaptureDates 是这本相册里出现过的拍摄日期（"YYYYMMDD"，去重升序）。
+	//
+	// 它来自文件名推断（IMG_20240101_105902.jpg 这类写法），不读 EXIF ——
+	// 逐个文件读 EXIF 会把扫描拖成随机 I/O。用途是「那年今日」：按
+	// 月-日找出往年同一天拍过的相册。
+	CaptureDates []string `json:"captureDates,omitempty"`
 	// CoverKind 标识封面来源："image" / "video" / ""（未指定时按是否有视频推断）。
 	// 前端据此决定卡片样式（图卡 vs 视频▶卡）和点击进入的播放器类型。
 	CoverKind string `json:"coverKind,omitempty"`
@@ -187,6 +193,14 @@ type Collection struct {
 	Albums      []Album      `json:"albums"`
 	Collections []Collection `json:"collections,omitempty"` // 嵌套子集合
 	AlbumCount  int          `json:"albumCount"`            // 直属于本层的相册数（不含嵌套集合）
+	// ModTime 是集合目录的修改时间；Date 是后代相册拍摄时间的代表值
+	// （按媒体数加权取众数，没有拍摄时间时退回目录名日期或修改时间）。
+	//
+	// 集合不是「拍于某天」的东西，但排序与「最近更新」需要它有时间：
+	// 早先集合不带任何时间戳，按时间排序时它们会永远排在最后。
+	ModTime    time.Time `json:"modTime,omitempty"`
+	Date       time.Time `json:"date,omitempty"`
+	DateSource string    `json:"dateSource,omitempty"` // filename / folder / modified
 	// ContentKind 是集合的内容属性："photo" 或 "comic"。
 	// 集合只出现在一个媒体根下，因此继承该根的属性。
 	ContentKind string `json:"contentKind,omitempty"`

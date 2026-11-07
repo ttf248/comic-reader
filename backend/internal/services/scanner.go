@@ -347,6 +347,9 @@ type fileEntry struct {
 	path    string
 	size    int64
 	modTime time.Time
+	// captured 是从文件名推断的拍摄时间；推不出来时是零值。
+	// 它不读 EXIF：逐个文件读 EXIF 会把扫描拖成随机 I/O。
+	captured time.Time
 }
 
 type directoryTask struct {
@@ -524,7 +527,12 @@ func (s *Scanner) inspectDirectory(
 				Code: "metadata_unavailable", Path: scanWarningPath(root.path, fullPath), Message: "无法读取媒体元数据",
 			})
 		}
-		file := fileEntry{path: fullPath, size: size, modTime: modTime}
+		file := fileEntry{
+			path:     fullPath,
+			size:     size,
+			modTime:  modTime,
+			captured: captureFromFileName(entry.Name()),
+		}
 		if kind == "image" {
 			result.record.images = append(result.record.images, file)
 		} else {
@@ -601,7 +609,7 @@ func buildDirectoryResult(path string, records map[string]directoryRecord) (*mod
 		childAlbums = append([]models.Album{*loose}, childAlbums...)
 	}
 	sortLibraryNodes(childAlbums, childCollections)
-	return nil, &models.Collection{
+	collection := &models.Collection{
 		Type:        "collection",
 		Path:        path,
 		Name:        filepath.Base(path),
@@ -610,6 +618,74 @@ func buildDirectoryResult(path string, records map[string]directoryRecord) (*mod
 		Collections: childCollections,
 		AlbumCount:  descendantAlbumCount(childAlbums, childCollections),
 	}
+	applyCollectionDate(collection, path)
+	return nil, collection
+}
+
+// applyCollectionDate 给集合补上时间：目录的修改时间，以及后代相册
+// 拍摄时间的代表值（按媒体数加权取众数）。
+//
+// 集合本身不是「拍于某天」的东西，但排序、「最近更新」与时间线都需要
+// 它有时间 —— 早先集合不带任何时间戳，按时间排序时它们会永远排在最后。
+func applyCollectionDate(collection *models.Collection, path string) {
+	if fi, err := os.Stat(path); err == nil {
+		collection.ModTime = fi.ModTime()
+	}
+	if date, ok := collectionCaptureDate(collection.Albums, collection.Collections); ok {
+		collection.Date = date
+		collection.DateSource = "filename"
+		return
+	}
+	if folderDate, ok := strictDateFromPath(path); ok {
+		collection.Date = folderDate
+		collection.DateSource = "folder"
+		return
+	}
+	collection.Date = collection.ModTime
+	collection.DateSource = "modified"
+}
+
+// collectionCaptureDate 汇总后代相册的拍摄时间。
+//
+// 按媒体数加权：一本 1200 张的相册比一本 3 张的更能代表这个集合的
+// 年代。众数并列时取较早的一天。
+func collectionCaptureDate(albums []models.Album, collections []models.Collection) (time.Time, bool) {
+	counts := make(map[string]int)
+	collect := func(list []models.Album) {
+		for _, album := range list {
+			if album.DateSource != "filename" || album.Date.IsZero() {
+				continue
+			}
+			weight := album.ImageCount + album.VideoCount
+			if weight <= 0 {
+				weight = 1
+			}
+			counts[album.Date.Format("20060102")] += weight
+		}
+	}
+	collect(albums)
+	for _, child := range collections {
+		collect(child.Albums)
+	}
+	if len(counts) == 0 {
+		return time.Time{}, false
+	}
+	keys := make([]string, 0, len(counts))
+	for key := range counts {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	best := keys[0]
+	for _, key := range keys[1:] {
+		if counts[key] > counts[best] {
+			best = key
+		}
+	}
+	stamp, err := time.ParseInLocation("20060102", best, time.UTC)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return stamp, true
 }
 
 func sortLibraryNodes(albums []models.Album, collections []models.Collection) {
@@ -678,7 +754,10 @@ func buildAlbum(dir string, images, videos []fileEntry) *models.Album {
 	allFiles := make([]fileEntry, 0, len(images)+len(videos))
 	allFiles = append(allFiles, images...)
 	allFiles = append(allFiles, videos...)
-	date, dateSource := resolveAlbumDate(dir, time.Time{}, allFiles, modTime)
+	// 文件名里推断出的拍摄日期：这本相册出现过的所有日期，以及其中
+	// 最有代表性的一天（按媒体数加权取众数）。
+	captureDates, captureDate := aggregateCaptureDates(allFiles)
+	date, dateSource := resolveAlbumDate(dir, captureDate, allFiles, modTime)
 	name := filepath.Base(dir)
 	// 封面选择：图片优先
 	var cover, coverKind string
@@ -689,31 +768,177 @@ func buildAlbum(dir string, images, videos []fileEntry) *models.Album {
 		cover, coverKind = videoPaths[0], "video"
 	}
 	return &models.Album{
-		Type:       "album",
-		Path:       dir,
-		Name:       name,
-		ImageFiles: imagePaths,
-		VideoFiles: videoPaths,
-		CoverImage: cover,
-		CoverKind:  coverKind,
-		ImageCount: len(imagePaths),
-		VideoCount: len(videoPaths),
-		FolderSize: totalSize,
-		Tags:       ExtractTags(name),
-		ModTime:    modTime,
-		Date:       date,
-		DateSource: dateSource,
+		Type:         "album",
+		Path:         dir,
+		Name:         name,
+		ImageFiles:   imagePaths,
+		VideoFiles:   videoPaths,
+		CoverImage:   cover,
+		CoverKind:    coverKind,
+		ImageCount:   len(imagePaths),
+		VideoCount:   len(videoPaths),
+		FolderSize:   totalSize,
+		Tags:         ExtractTags(name),
+		ModTime:      modTime,
+		Date:         date,
+		DateSource:   dateSource,
+		CaptureDates: captureDates,
 	}
+}
+
+// aggregateCaptureDates 汇总一本相册里从文件名推断出的拍摄日期。
+//
+// 返回去重升序的日期列表（"YYYYMMDD"）与最有代表性的那一天。
+// 「代表性」按媒体数加权取众数：一年里拍了三天的相册，众数那一天
+// 比「最新那一天」更能代表这本相册 —— 一张后来存进来的截图不该
+// 把整本相册的年份拽走。众数并列时取较早的一天。
+func aggregateCaptureDates(files []fileEntry) ([]string, time.Time) {
+	if len(files) == 0 {
+		return nil, time.Time{}
+	}
+	counts := make(map[string]int, len(files))
+	for _, file := range files {
+		if file.captured.IsZero() {
+			continue
+		}
+		counts[file.captured.Format("20060102")]++
+	}
+	if len(counts) == 0 {
+		return nil, time.Time{}
+	}
+	keys := make([]string, 0, len(counts))
+	for key := range counts {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	best := keys[0]
+	for _, key := range keys[1:] {
+		if counts[key] > counts[best] {
+			best = key
+		}
+	}
+	stamp, err := time.ParseInLocation("20060102", best, time.UTC)
+	if err != nil {
+		return keys, time.Time{}
+	}
+	return keys, stamp
 }
 
 var strictFolderDate = regexp.MustCompile(`^(\d{4})(?:[-_.](\d{2})(?:[-_.](\d{2}))?)?$|^(\d{4})(\d{2})(\d{2})$`)
 
+// 文件名里的拍摄时间。
+//
+// 相机与手机普遍把时间写进文件名：IMG_20240101_105902.jpg、
+// 2024-01-01 22-10.jpg、微信图片_20240629212933.jpg、
+// 咸鱼之王 bug 推塔 2023-3-4.mp4。照片库最有价值的时间维度就在
+// 这些名字里，读一次文件名就够了 —— 不必为它去读 EXIF。
+//
+// 三种写法各一条正则：分隔数字、中文年月日、紧凑八位。RE2 不支持
+// 前后瞻，所以「不能落在数字串中间」这类边界由代码判断。
+type captureNamePattern struct {
+	re *regexp.Regexp
+	// strictTail 表示匹配后面不能紧跟数字：分隔写法里
+	// 「2024-01-011」这种多一位的写法宁可判掉，也不要猜。
+	strictTail bool
+}
+
+var captureNamePatterns = []captureNamePattern{
+	{regexp.MustCompile(`(20\d{2})[-_.](\d{1,2})[-_.](\d{1,2})`), true},
+	{regexp.MustCompile(`(20\d{2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?`), false},
+	{regexp.MustCompile(`(20\d{2})(\d{2})(\d{2})`), false},
+}
+
+// captureFromFileName 从文件名里推断拍摄时间。
+//
+// 只认「日」这一级：文件名里的时间常常只精确到时刻（105902），
+// 而日期才是时间轴与「那年今日」要的粒度。推不出来时返回零值。
+//
+// 时间部分（若文件名里有 HHMMSS / HH-MM-SS）会被采用，让相册的
+// 时间尽量接近真实拍摄时刻；没有就用当天正午 —— 与目录名日期的
+// 口径一致，避免同一相册里的时间因为随机时刻而乱序。
+func captureFromFileName(name string) time.Time {
+	base := filepath.Base(name)
+	for _, pattern := range captureNamePatterns {
+		for _, loc := range pattern.re.FindAllStringSubmatchIndex(base, -1) {
+			// 数字串中间不当作日期：「120240101」里的「20240101」
+			// 是一串数字的一部分，不是日期。
+			if loc[0] > 0 && isDigitByte(base[loc[0]-1]) {
+				continue
+			}
+			if pattern.strictTail && loc[1] < len(base) && isDigitByte(base[loc[1]]) {
+				continue
+			}
+			year := atoiOrZero(base[loc[2]:loc[3]])
+			month := atoiOrZero(base[loc[4]:loc[5]])
+			day := atoiOrZero(base[loc[6]:loc[7]])
+			if year < 1900 || year > 2199 || month < 1 || month > 12 || day < 1 || day > 31 {
+				continue
+			}
+			hour, minute, second := 12, 0, 0
+			if clock := captureClockFromTail(base[loc[1]:]); !clock.IsZero() {
+				hour, minute, second = clock.Clock()
+			}
+			stamp := time.Date(year, time.Month(month), day, hour, minute, second, 0, time.UTC)
+			// Date 会把 2 月 30 日进位到 3 月；比对回去才能判掉这种假日期。
+			if stamp.Year() != year || int(stamp.Month()) != month || stamp.Day() != day {
+				continue
+			}
+			return stamp
+		}
+	}
+	return time.Time{}
+}
+
+// captureClockFromTail 从日期之后的文件名尾巴里找时刻（105902 / 22-10）。
+// 找不到时返回零值。
+func captureClockFromTail(tail string) time.Time {
+	buf := make([]byte, 0, 6)
+	for i := 0; i < len(tail) && len(buf) < 6; i++ {
+		c := tail[i]
+		if c >= '0' && c <= '9' {
+			buf = append(buf, c)
+			continue
+		}
+		// 分隔符跳过，别的字符停下：文件名里跟日期无关的部分不该
+		// 被当成时刻。
+		if c == '-' || c == '_' || c == '.' {
+			continue
+		}
+		break
+	}
+	if len(buf) < 4 {
+		return time.Time{}
+	}
+	if len(buf) == 4 {
+		buf = append(buf, '0', '0')
+	}
+	hour := atoiOrZero(string(buf[0:2]))
+	minute := atoiOrZero(string(buf[2:4]))
+	second := atoiOrZero(string(buf[4:6]))
+	if hour > 23 || minute > 59 || second > 59 {
+		return time.Time{}
+	}
+	return time.Date(2000, time.January, 1, hour, minute, second, 0, time.UTC)
+}
+
+func isDigitByte(c byte) bool {
+	return c >= '0' && c <= '9'
+}
+
+func atoiOrZero(s string) int {
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
 // resolveAlbumDate 将时间语义收口在扫描层，避免不同页面以各自的正则
-// 重复推断。captured 由后续的懒元数据富化传入；当前扫描主链路不读取
-// 每个文件的 EXIF，避免百万媒体库被随机 I/O 拖慢。
-func resolveAlbumDate(dir string, captured time.Time, files []fileEntry, dirModified time.Time) (time.Time, string) {
-	if !captured.IsZero() {
-		return captured, "captured"
+// 重复推断。filenameDate 来自文件名推断（见 captureFromFileName）——
+// 当前扫描主链路不读取每个文件的 EXIF，避免百万媒体库被随机 I/O 拖慢。
+func resolveAlbumDate(dir string, filenameDate time.Time, files []fileEntry, dirModified time.Time) (time.Time, string) {
+	if !filenameDate.IsZero() {
+		return filenameDate, "filename"
 	}
 	if folderDate, ok := strictDateFromPath(dir); ok {
 		return folderDate, "folder"

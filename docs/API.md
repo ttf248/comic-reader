@@ -118,7 +118,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 扫描收录的媒体格式由服务端扩展名白名单决定（图片：jpg / jpeg / jfif / png / gif / bmp / webp / tiff / tif / heic / heif；视频：mp4 / m4v / webm / mov / mkv / avi / 3gp）。目录里只要有受支持的媒体就会生成相册；此前 3GP 不在白名单里，整目录都是 3GP 的文件夹（例如「萍乡中学/录像」）在应用里完全看不到。浏览器放不了的容器（mkv / avi / 3gp）一律走服务端转码，不按码流判断。
 
-相册同时返回 `date` 与 `dateSource`。`dateSource` 取值为 `captured` / `folder` / `modified`，服务端按该顺序降级；目录日期只接受 `YYYY`、`YYYY-MM`、`YYYY-MM-DD`、`YYYYMMDD` 或严格的 `YYYY/MM/DD` 路径分段，不会从任意名称子串中猜测。
+相册同时返回 `date` 与 `dateSource`。`dateSource` 取值为 `filename` / `folder` / `modified`，服务端按该顺序降级。`filename` 是从文件名推断的拍摄时间（`IMG_20240101_105902.jpg`、`2024-01-01`、`2024年10月1日` 这类写法），不读 EXIF；一本相册取其中出现次数最多的那一天（并列取较早的）。`folder` 只接受 `YYYY`、`YYYY-MM`、`YYYY-MM-DD`、`YYYYMMDD` 或严格的 `YYYY/MM/DD` 路径分段，不会从任意名称子串中猜测。集合与相册一样带 `date` / `dateSource` / `modTime`：集合的日期是后代相册拍摄时间的代表值（按媒体数加权取众数），没有拍摄时间时退回目录日期或目录修改时间。
 
 媒体库浏览只使用下列 revision 分页接口。除 `/api/library/manifest`、
 `/api/library/nodes/query`、`/api/tags/query` 与 `/api/albums/:albumId/media` 外，

@@ -239,15 +239,15 @@ func NormalizeLibraryPageLimit(limit int) int {
 // libraryPageIndex 随 ResourceCatalog 一次性发布。请求只做游标校验和切片，
 // 不再按页遍历目录树、复制完整相册或重复自然排序。
 type libraryPageIndex struct {
-	manifest  LibraryManifest
-	children  map[string][]LibraryNodeSummary
-	media     map[string][]LibraryMediaItem
-	albums    []LibraryNodeSummary
-	nodes     map[string]LibraryNodeSummary
-	tags      []LibraryTagSummary
+	manifest   LibraryManifest
+	children   map[string][]LibraryNodeSummary
+	media      map[string][]LibraryMediaItem
+	albums     []LibraryNodeSummary
+	nodes      map[string]LibraryNodeSummary
+	tags       []LibraryTagSummary
 	tagsByName map[string]LibraryTagSummary
-	tagAlbums map[string][]LibraryNodeSummary
-	search    []LibrarySearchHit
+	tagAlbums  map[string][]LibraryNodeSummary
+	search     []LibrarySearchHit
 	// albumIndexesByKind 是全库相册按用途分桶的下标表（存下标不存摘要副本）。
 	// 用途过滤只需要在已物化的切片上做一次稳定筛选，不必另存一份摘要。
 	albumIndexesByKind map[models.ContentKind][]int
@@ -256,22 +256,22 @@ type libraryPageIndex struct {
 	// 它在索引构建期按业务日期排好一次，请求期只切片，
 	// 不再每请求重排全库。
 	recentAlbumIndexesByKind map[models.ContentKind][]int
-	kindCollectionCounts      map[models.ContentKind]int
+	kindCollectionCounts     map[models.ContentKind]int
 }
 
 func buildLibraryPageIndex(state *resourceCatalogState) *libraryPageIndex {
 	index := &libraryPageIndex{
-		children:                make(map[string][]LibraryNodeSummary),
-		media:                   make(map[string][]LibraryMediaItem),
-		albums:                  []LibraryNodeSummary{},
-		nodes:                   make(map[string]LibraryNodeSummary),
-		tags:                    []LibraryTagSummary{},
-		tagsByName:              make(map[string]LibraryTagSummary),
-		tagAlbums:               make(map[string][]LibraryNodeSummary),
-		albumIndexesByKind:      make(map[models.ContentKind][]int),
-		kindAlbumCounts:         make(map[models.ContentKind]int),
+		children:                 make(map[string][]LibraryNodeSummary),
+		media:                    make(map[string][]LibraryMediaItem),
+		albums:                   []LibraryNodeSummary{},
+		nodes:                    make(map[string]LibraryNodeSummary),
+		tags:                     []LibraryTagSummary{},
+		tagsByName:               make(map[string]LibraryTagSummary),
+		tagAlbums:                make(map[string][]LibraryNodeSummary),
+		albumIndexesByKind:       make(map[models.ContentKind][]int),
+		kindAlbumCounts:          make(map[models.ContentKind]int),
 		recentAlbumIndexesByKind: make(map[models.ContentKind][]int),
-		kindCollectionCounts:      make(map[models.ContentKind]int),
+		kindCollectionCounts:     make(map[models.ContentKind]int),
 	}
 	if state == nil || state.result == nil {
 		return index
@@ -1220,6 +1220,9 @@ func collectionSummary(state *resourceCatalogState, collection models.Collection
 		FolderSize:  folderSize,
 		ParentID:    parentCollectionID(state, collection.Path, false),
 		ContentKind: collection.ContentKind,
+		ModTime:     collection.ModTime,
+		Date:        collection.Date,
+		DateSource:  collection.DateSource,
 	}
 }
 

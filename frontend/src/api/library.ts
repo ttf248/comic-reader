@@ -71,7 +71,7 @@ export interface LibraryNodeSummary {
   tags?: string[];
   modTime?: string;
   date?: string;
-  dateSource?: "captured" | "folder" | "modified";
+  dateSource?: "filename" | "folder" | "modified";
   virtual?: boolean;
   hasCustomCover?: boolean;
   /**

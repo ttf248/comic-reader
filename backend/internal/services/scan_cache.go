@@ -56,7 +56,7 @@ const (
 	// scanCacheSchemaVersion 随 models.Album 等落盘结构变化递增。
 	// 6：Album 新增 Location（虚拟相册归属目录相对路径），旧缓存缺该
 	// 字段会导致散图重新退回“本目录媒体”，需要重扫。
-	scanCacheSchemaVersion = 6
+	scanCacheSchemaVersion = 7
 )
 
 type scanCacheEnvelope struct {
