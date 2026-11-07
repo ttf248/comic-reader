@@ -94,6 +94,7 @@ export default function Recents() {
         key: decodeFavPath(c.to),
         to: c.to,
         name: c.title,
+        parentName: c.parentName,
         imageCount: c.imageCount,
         videoCount: c.videoCount,
         contentKind: c.contentKind,

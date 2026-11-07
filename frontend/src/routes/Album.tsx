@@ -573,6 +573,7 @@ function CollectionView({
         key: c.to,
         to: c.to,
         name: c.title,
+        parentName: c.parentName,
         // 集合下是子相册，不能直接翻页：跳本时要跳过它。
         kind: c.variant === "collection" ? "collection" : "album",
         imageCount: c.imageCount,

@@ -43,6 +43,7 @@ import {
   getGalleryContext,
   entryReaderUrl,
   type GalleryContextEntry,
+  entryDisplayName,
 } from "../utils/galleryContext";
 import { usePrefs } from "../hooks/usePrefs";
 import { useVideoActivity } from "../hooks/useVideoActivity";
@@ -857,7 +858,7 @@ export default function Reader() {
       if (notify) {
         pushToast({
           kind: "info",
-          message: `${dirLabel}：${nextEntry.name}`,
+          message: `${dirLabel}：${entryDisplayName(nextEntry)}`,
           ttl: 1200,
         });
       }
@@ -891,8 +892,10 @@ export default function Reader() {
       resolveAdjacentEntry(ctx, pathParam, direction, {
         albumsOnly: false,
         isVideo,
-      })?.entry.name ?? "";
-    return { prev: pick(-1), next: pick(1) };
+      })?.entry;
+    const nameOf = (entry: GalleryContextEntry | undefined) =>
+      entry ? entryDisplayName(entry) : "";
+    return { prev: nameOf(pick(-1)), next: nameOf(pick(1)) };
   }, [pathParam, isVideo]);
 
   const onToggleFavorite = useCallback(() => {

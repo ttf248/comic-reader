@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { entryReaderUrl, type GalleryContextEntry } from "./galleryContext";
+import {
+  entryDisplayName,
+  entryReaderUrl,
+  type GalleryContextEntry,
+} from "./galleryContext";
 
 function entry(overrides: Partial<GalleryContextEntry> = {}): GalleryContextEntry {
   return {
@@ -24,5 +28,24 @@ describe("entryReaderUrl", () => {
     expect(
       entryReaderUrl(entry({ kind: "collection", contentKind: "comic" })),
     ).toBeNull();
+  });
+});
+
+// 漫画的卷名只写「第1卷」：跳本提示与跨卷箭头要说得清这一卷属于哪部。
+describe("entryDisplayName", () => {
+  it("有所属作品时把作品名补在卷名前面", () => {
+    expect(
+      entryDisplayName(entry({ name: "第1卷", parentName: "星海漫步" })),
+    ).toBe("星海漫步 · 第1卷");
+  });
+
+  it("没有所属作品时只写卷名", () => {
+    expect(entryDisplayName(entry({ name: "第1卷" }))).toBe("第1卷");
+  });
+
+  it("作品名与卷名相同时不重复", () => {
+    expect(
+      entryDisplayName(entry({ name: "星海漫步", parentName: "星海漫步" })),
+    ).toBe("星海漫步");
   });
 });

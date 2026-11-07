@@ -30,6 +30,11 @@ export interface GalleryContextEntry {
   /** 显示用名称（列表页上展示的标题）。 */
   name: string;
   /**
+   * 所属作品（漫画侧的「作品」）：卷名只写「第1卷」时，跳本提示与
+   * 跨卷箭头要说得清这一卷属于哪部。
+   */
+  parentName?: string;
+  /**
    * 条目类型：集合没有阅读器入口（集合下是子相册，不能直接翻页）。
    * 缺省按相册处理 —— 列表页给相册写上下文时无需重复标注。
    */
@@ -63,6 +68,16 @@ export function entryReaderUrl(entry: GalleryContextEntry): string | null {
   const params = new URLSearchParams({ index: "0" });
   if (entry.name) params.set("name", entry.name);
   return `${readerRoute(id)}?${params.toString()}`;
+}
+
+/**
+ * 条目的显示名：漫画的卷名只写「第1卷」，跳本提示与跨卷箭头要说得清
+ * 这一卷属于哪部作品 —— 与书封、列表行同一套写法。
+ */
+export function entryDisplayName(entry: GalleryContextEntry): string {
+  return entry.parentName && entry.parentName !== entry.name
+    ? `${entry.parentName} · ${entry.name}`
+    : entry.name;
 }
 
 export interface GalleryContext {
