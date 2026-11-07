@@ -134,14 +134,7 @@ export default function Favorites() {
       default:
         return list.sort((a, b) => a.title.localeCompare(b.title));
     }
-  }, [
-    cards,
-    query,
-    sortBy,
-    progressMap,
-    compareViewed,
-    minImageCount,
-  ]);
+  }, [cards, query, sortBy, progressMap, compareViewed, minImageCount]);
 
   // 收藏页的上下文：只让真正的相册参与上一本/下一本（智能合集不是「可翻页」对象）
   const favEntries = useMemo<GalleryContextEntry[]>(
@@ -184,8 +177,7 @@ export default function Favorites() {
     }
   };
   const retrying =
-    favoritesQuery.isFetching ||
-    (needsHistory && historyQuery.isFetching);
+    favoritesQuery.isFetching || (needsHistory && historyQuery.isFetching);
   const retryLoad = () => {
     retryFavorites();
     if (historyFailed) void historyQuery.refetch();
@@ -197,21 +189,25 @@ export default function Favorites() {
         title={copy.favoritesTitle}
         eyebrow="值得反复翻看的"
         description={
-          // 一条收藏都没有时，页头不再报「0 项」：下面的空态已经把
-          // 「还没有收藏」说清楚了，两处各说一遍反而把空页面说得更空。
-          // 有内容、有失效项或在加载/出错时，页头照旧给概览。
-          favoritesCount > 0 ||
-          missingCount > 0 ||
-          favoritesQuery.isLoading ||
-          favoritesFailed ? (
+          // 页头只在筛选条不出现时（这一侧看不到任何收藏）报条数：
+          // 有内容时筛选条上那行「共 N 项」说的就是它，两处各写一遍
+          // 同一个数，读起来像两处不同的统计。
+          // 剩下的情况只留筛选条给不出的信息 —— 失效条目与加载状态。
+          missingCount > 0 || favoritesQuery.isLoading || favoritesFailed ? (
             <div className="flex items-baseline gap-2.5 mt-2 flex-wrap">
-              <p className="text-body text-fg-muted tabular-nums">
-                {favoritesQuery.isLoading
-                  ? "正在加载收藏…"
-                  : favoritesFailed && favorites.length === 0
-                    ? "收藏暂不可用"
-                    : `${favoritesCount} 项`}
-              </p>
+              {favoritesQuery.isLoading ? (
+                <p className="text-body text-fg-muted tabular-nums">
+                  正在加载收藏…
+                </p>
+              ) : favoritesFailed && favorites.length === 0 ? (
+                <p className="text-body text-fg-muted tabular-nums">
+                  收藏暂不可用
+                </p>
+              ) : cards.length === 0 ? (
+                <p className="text-body text-fg-muted tabular-nums">
+                  {favoritesCount} 项
+                </p>
+              ) : null}
               {missingCount > 0 && (
                 <span className="text-meta text-fg-subtle">
                   其中 {missingCount} 项暂时找不到
@@ -260,7 +256,10 @@ export default function Favorites() {
             description="收藏是给相册打星标：点封面右上角的星标，这一本就会出现在这里。下面这几本可以直接点星标试试。"
             icon={<StarIcon size={20} />}
             action={
-              <button onClick={() => navigate(homeRoute(mode))} className="btn btn-primary">
+              <button
+                onClick={() => navigate(homeRoute(mode))}
+                className="btn btn-primary"
+              >
                 去主页看看
               </button>
             }
@@ -356,11 +355,7 @@ export default function Favorites() {
           <div className="pb-10">
             {/* 收藏是"精选陈列"，不是"全量浏览"：用更疏的网格，
             与未读 / 最近 / 全部图像的密集清单区分开。 */}
-            <AlbumGrid
-              items={filtered}
-              variant={viewMode}
-              cardMinWidth={224}
-            />
+            <AlbumGrid items={filtered} variant={viewMode} cardMinWidth={224} />
           </div>
         </section>
       )}

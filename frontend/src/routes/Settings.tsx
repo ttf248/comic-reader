@@ -267,7 +267,7 @@ export default function Settings() {
               {/* 与「主题」「默认视图」同一套分段控件：外观这一节里的
                   三个选择长得一样，一眼能看出它们是同一类操作。
                   原来是一个描边几乎看不见的按钮，读起来像一行说明文字。 */}
-              <div className="flex items-center border border-border-faint rounded-md overflow-hidden">
+              <div className="flex items-center border border-border rounded-md overflow-hidden bg-bg-subtle/40">
                 {(
                   [
                     [false, "展开"],
@@ -281,8 +281,8 @@ export default function Settings() {
                     }}
                     className={`h-8 px-3 text-meta transition-colors ${
                       sidebarCollapsed === collapsed
-                        ? "bg-bg-subtle text-fg"
-                        : "text-fg-muted hover:text-fg"
+                        ? "bg-bg-elevated text-fg shadow-xs"
+                        : "text-fg-muted hover:text-fg hover:bg-bg-subtle/60"
                     }`}
                   >
                     {label}
@@ -292,15 +292,15 @@ export default function Settings() {
             </Row>
           </div>
           <Row label="默认视图">
-            <div className="flex items-center border border-border-faint rounded-md overflow-hidden">
+            <div className="flex items-center border border-border rounded-md overflow-hidden bg-bg-subtle/40">
               {(["grid", "list"] as const).map((k) => (
                 <button
                   key={k}
                   onClick={() => setViewMode(k)}
                   className={`h-8 px-3 text-meta transition-colors ${
                     viewMode === k
-                      ? "bg-bg-subtle text-fg"
-                      : "text-fg-muted hover:text-fg"
+                      ? "bg-bg-elevated text-fg shadow-xs"
+                      : "text-fg-muted hover:text-fg hover:bg-bg-subtle/60"
                   }`}
                 >
                   {k === "grid" ? "网格" : "列表"}
@@ -314,7 +314,7 @@ export default function Settings() {
             页面用什么措辞；两类目录的属性在「服务端 › 媒体根目录」里设定。 */}
         <Section title="工作台" icon={<LibraryIcon size={13} />}>
           <Row label="默认工作台">
-            <div className="flex items-center border border-border-faint rounded-md overflow-hidden">
+            <div className="flex items-center border border-border rounded-md overflow-hidden bg-bg-subtle/40">
               {(
                 [
                   ["photo", "照片"],
@@ -326,8 +326,8 @@ export default function Settings() {
                   onClick={() => setWorkbenchMode(key)}
                   className={`h-8 px-3 text-meta transition-colors ${
                     workbenchMode === key
-                      ? "bg-bg-subtle text-fg"
-                      : "text-fg-muted hover:text-fg"
+                      ? "bg-bg-elevated text-fg shadow-xs"
+                      : "text-fg-muted hover:text-fg hover:bg-bg-subtle/60"
                   }`}
                 >
                   {label}
@@ -340,15 +340,15 @@ export default function Settings() {
         {/* 照片模式的偏好：与漫画模式的偏好分开放，互不污染。 */}
         <Section title="照片" icon={<ImageIcon size={13} />}>
           <Row label="照片墙密度">
-            <div className="flex items-center border border-border-faint rounded-md overflow-hidden">
+            <div className="flex items-center border border-border rounded-md overflow-hidden bg-bg-subtle/40">
               {(["compact", "cozy", "large"] as const).map((key) => (
                 <button
                   key={key}
                   onClick={() => setDensity(key)}
                   className={`h-8 px-3 text-meta transition-colors ${
                     density === key
-                      ? "bg-bg-subtle text-fg"
-                      : "text-fg-muted hover:text-fg"
+                      ? "bg-bg-elevated text-fg shadow-xs"
+                      : "text-fg-muted hover:text-fg hover:bg-bg-subtle/60"
                   }`}
                 >
                   {WALL_DENSITY_LABEL[key]}
@@ -371,7 +371,7 @@ export default function Settings() {
         {/* 漫画模式的偏好：阅读器专属的读法与翻页方式。 */}
         <Section title="漫画" icon={<ReaderIcon size={13} />}>
           <Row label="默认显示模式">
-            <div className="flex items-center border border-border-faint rounded-md overflow-hidden">
+            <div className="flex items-center border border-border rounded-md overflow-hidden bg-bg-subtle/40">
               {(
                 [
                   ["single", "单页"],
@@ -384,8 +384,8 @@ export default function Settings() {
                   onClick={() => setReaderMode(key)}
                   className={`h-8 px-3 text-meta transition-colors ${
                     readerMode === key
-                      ? "bg-bg-subtle text-fg"
-                      : "text-fg-muted hover:text-fg"
+                      ? "bg-bg-elevated text-fg shadow-xs"
+                      : "text-fg-muted hover:text-fg hover:bg-bg-subtle/60"
                   }`}
                 >
                   {label}
@@ -394,7 +394,7 @@ export default function Settings() {
             </div>
           </Row>
           <Row label="默认图片适配">
-            <div className="flex items-center border border-border-faint rounded-md overflow-hidden">
+            <div className="flex items-center border border-border rounded-md overflow-hidden bg-bg-subtle/40">
               {(
                 [
                   ["fit", "适应"],
@@ -408,8 +408,8 @@ export default function Settings() {
                   onClick={() => setFit(key)}
                   className={`h-8 px-3 text-meta transition-colors ${
                     fit === key
-                      ? "bg-bg-subtle text-fg"
-                      : "text-fg-muted hover:text-fg"
+                      ? "bg-bg-elevated text-fg shadow-xs"
+                      : "text-fg-muted hover:text-fg hover:bg-bg-subtle/60"
                   }`}
                 >
                   {label}
@@ -418,7 +418,7 @@ export default function Settings() {
             </div>
           </Row>
           <Row label="双页翻页方向">
-            <div className="flex items-center border border-border-faint rounded-md overflow-hidden">
+            <div className="flex items-center border border-border rounded-md overflow-hidden bg-bg-subtle/40">
               {(
                 [
                   ["ltr", "左→右"],
@@ -430,8 +430,8 @@ export default function Settings() {
                   onClick={() => setDirection(key)}
                   className={`h-8 px-3 text-meta transition-colors ${
                     direction === key
-                      ? "bg-bg-subtle text-fg"
-                      : "text-fg-muted hover:text-fg"
+                      ? "bg-bg-elevated text-fg shadow-xs"
+                      : "text-fg-muted hover:text-fg hover:bg-bg-subtle/60"
                   }`}
                 >
                   {label}

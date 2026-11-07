@@ -146,17 +146,14 @@ export default function PhotoAlbum({ album }: Props) {
     void mediaQuery.fetchNextPage({ cancelRefetch: false });
   }, [mediaQuery]);
 
-  const onOpen = useCallback(
-    (item: LibraryMediaItem, index: number) => {
-      if (item.kind === "video") {
-        // 视频在大图预览里播放，位置与图片共用同一套切换逻辑。
-        setViewerIndex(index);
-        return;
-      }
+  const onOpen = useCallback((item: LibraryMediaItem, index: number) => {
+    if (item.kind === "video") {
+      // 视频在大图预览里播放，位置与图片共用同一套切换逻辑。
       setViewerIndex(index);
-    },
-    [],
-  );
+      return;
+    }
+    setViewerIndex(index);
+  }, []);
 
   const setCover = useCallback(async () => {
     const item = viewerIndex === null ? undefined : mediaItems[viewerIndex];
@@ -258,7 +255,10 @@ export default function PhotoAlbum({ album }: Props) {
                       {album.parentName}
                     </span>
                   )}
-                  <ChevronRightIcon size={12} className="shrink-0 text-fg-subtle" />
+                  <ChevronRightIcon
+                    size={12}
+                    className="shrink-0 text-fg-subtle"
+                  />
                 </>
               )}
               <h1 className="album-bar__title truncate">{title}</h1>
@@ -300,15 +300,19 @@ export default function PhotoAlbum({ album }: Props) {
             <div className="flex items-center gap-2">
               <div className="hidden items-center gap-2 md:flex">
                 <span className="text-meta text-fg-subtle">密度</span>
-                <div className="flex items-center overflow-hidden rounded-md border border-border-faint text-meta">
+                <div className="flex items-center overflow-hidden rounded-md border border-border bg-bg-subtle/40 text-meta">
                   {(["compact", "cozy", "large"] as const).map((key) => (
                     <button
                       key={key}
                       type="button"
                       onClick={() => setDensity(key)}
+                      /* 选中的一段抬起来成为白底深色字：与筛选条上的
+                         网格 / 列表分段控件、主题切换同一套语言。原来
+                         选中态只是底色深一档，在浅色画布上几乎看不出
+                         差别 —— 三枚方块悬在那儿，读不出选中了哪一档。 */
                       className={`inline-flex h-7 w-8 items-center justify-center transition-colors ${
                         density === key
-                          ? "bg-bg-subtle text-fg"
+                          ? "bg-bg-elevated text-fg shadow-xs"
                           : "text-fg-muted hover:text-fg"
                       }`}
                       title={WALL_DENSITY_LABEL[key]}
@@ -323,52 +327,52 @@ export default function PhotoAlbum({ album }: Props) {
                 </div>
               </div>
 
-            <button
-              type="button"
-              onClick={toggleFavorite}
-              className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors ${
-                isFavorite
-                  ? "text-favorite hover:bg-favorite/10"
-                  : "text-fg-muted hover:bg-bg-subtle hover:text-fg"
-              }`}
-              title={isFavorite ? "取消收藏" : "收藏"}
-              aria-label={isFavorite ? "取消收藏" : "收藏"}
-            >
-              <StarIcon size={15} filled={isFavorite} />
-            </button>
-
-            <Popover
-              align="end"
-              aria-label="相册更多操作"
-              trigger={
-                <button
-                  type="button"
-                  className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-bg-subtle hover:text-fg"
-                  title="更多"
-                  aria-label="更多操作"
-                >
-                  <MoreHorizontalIcon size={15} />
-                </button>
-              }
-            >
-              <PopoverLabel>相册</PopoverLabel>
-              <PopoverItem
-                onClick={() => void openInExplorer()}
-                disabled={!actions.canOpenInExplorer}
+              <button
+                type="button"
+                onClick={toggleFavorite}
+                className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors ${
+                  isFavorite
+                    ? "text-favorite hover:bg-favorite/10"
+                    : "text-fg-muted hover:bg-bg-subtle hover:text-fg"
+                }`}
+                title={isFavorite ? "取消收藏" : "收藏"}
+                aria-label={isFavorite ? "取消收藏" : "收藏"}
               >
-                <FolderIcon size={13} />
-                <span>在资源管理器中打开</span>
-              </PopoverItem>
-              <PopoverItem onClick={() => void copyLink()}>
-                <CopyIcon size={13} />
-                <span>复制相册链接</span>
-              </PopoverItem>
-              {/* 「用当前查看的图片设为封面」原先在这里，但它是个死动作：
+                <StarIcon size={15} filled={isFavorite} />
+              </button>
+
+              <Popover
+                align="end"
+                aria-label="相册更多操作"
+                trigger={
+                  <button
+                    type="button"
+                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-bg-subtle hover:text-fg"
+                    title="更多"
+                    aria-label="更多操作"
+                  >
+                    <MoreHorizontalIcon size={15} />
+                  </button>
+                }
+              >
+                <PopoverLabel>相册</PopoverLabel>
+                <PopoverItem
+                  onClick={() => void openInExplorer()}
+                  disabled={!actions.canOpenInExplorer}
+                >
+                  <FolderIcon size={13} />
+                  <span>在资源管理器中打开</span>
+                </PopoverItem>
+                <PopoverItem onClick={() => void copyLink()}>
+                  <CopyIcon size={13} />
+                  <span>复制相册链接</span>
+                </PopoverItem>
+                {/* 「用当前查看的图片设为封面」原先在这里，但它是个死动作：
                   查看器是一层全屏浮层，打开时根本够不到这个菜单；
                   关掉查看器后 viewerIndex 已经清空，点了也不会有任何反应。
                   真正可用的两个入口是查看器里的「设为封面」按钮，
                   以及照片墙上右键单张照片时的「设为封面」。 */}
-            </Popover>
+              </Popover>
             </div>
           </div>
         </div>

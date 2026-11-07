@@ -114,15 +114,16 @@ export default function Recents() {
         description={
           // 这一页一条记录都没有时，页头不再写「还没有记录」：
           // 下面的空态已经把同一句话说了一遍，两处都说等于没说什么。
+          // 有记录时也不报条数：筛选条上那行「共 N 项」说的就是它。
+          // 页头只留它给不出的信息 —— 最近一次打开的时间。
           // 加载中与出错这两句仍然留着——那是状态，不是空态。
-          cards.length > 0 || historyQuery.isLoading ||
+          cards.length > 0 ||
+          historyQuery.isLoading ||
           (history.length > 0 && nodesQuery.isLoading) ||
           historyFailed ? (
             <p className="text-body text-fg-muted mt-2 tabular-nums">
               {cards.length > 0 ? (
                 <>
-                  <span className="text-fg font-medium">{cards.length}</span> 个
-                  <span className="text-fg-subtle mx-1.5">·</span>
                   最近打开{" "}
                   <span className="text-fg">
                     {formatRelative(cards[0]?.lastSeenAt)}
@@ -173,9 +174,15 @@ export default function Recents() {
       )}
 
       {historyQuery.isLoading ? (
-        <AlbumGridSkeleton variant={viewMode} label={`正在加载${copy.recentsTitle}…`} />
+        <AlbumGridSkeleton
+          variant={viewMode}
+          label={`正在加载${copy.recentsTitle}…`}
+        />
       ) : history.length > 0 && nodesQuery.isLoading && cards.length === 0 ? (
-        <AlbumGridSkeleton variant={viewMode} label={`正在加载${copy.recentsTitle}…`} />
+        <AlbumGridSkeleton
+          variant={viewMode}
+          label={`正在加载${copy.recentsTitle}…`}
+        />
       ) : loadFailed && cards.length === 0 ? null : cards.length === 0 ? (
         // 这一侧没有记录。两种成因给两种说法：访问过的相册全被移出
         // 媒体库了，说「可能已移动」；这些记录全都属于另一侧，就只说
@@ -185,7 +192,10 @@ export default function Recents() {
             title="最近访问的相册暂不可用"
             description="相册可能已移动，或媒体库尚未完成扫描。"
             action={
-              <button onClick={() => navigate(homeRoute(mode))} className="btn btn-outline">
+              <button
+                onClick={() => navigate(homeRoute(mode))}
+                className="btn btn-outline"
+              >
                 去主页看看
               </button>
             }
@@ -200,7 +210,10 @@ export default function Recents() {
             }
             icon={<ClockIcon size={20} />}
             action={
-              <button onClick={() => navigate(homeRoute(mode))} className="btn btn-primary">
+              <button
+                onClick={() => navigate(homeRoute(mode))}
+                className="btn btn-primary"
+              >
                 去主页看看
               </button>
             }
