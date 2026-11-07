@@ -341,6 +341,8 @@ export default function Favorites() {
         <EmptyState
           title="没有匹配的收藏"
           description={query ? `没有匹配"${query}"的结果` : ""}
+          /* 筛选条就在上面，空态紧跟着它说清楚即可。 */
+          dense
           action={
             <button
               onClick={() => useSearchStore.getState().reset()}

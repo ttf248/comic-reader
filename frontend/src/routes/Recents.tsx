@@ -223,6 +223,8 @@ export default function Recents() {
         <EmptyState
           title="没有匹配的最近访问"
           description={query ? `没有匹配"${query}"的结果` : ""}
+          /* 筛选条就在上面，空态紧跟着它说清楚即可。 */
+          dense
           action={
             <button
               onClick={() => useSearchStore.getState().reset()}

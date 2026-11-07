@@ -625,6 +625,9 @@ function CollectionView({
             title="无匹配结果"
             description="试试修改搜索条件或排序。"
             icon={<FilterIcon size={20} />}
+            /* 筛选条就在上面：空态不必再撑满半屏，紧跟着它说清楚
+               「是筛选筛没了」就行。 */
+            dense
           />
         ) : (
           /* 网格与页头共用同一条留白线：之前这里少了一层容器，

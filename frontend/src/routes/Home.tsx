@@ -722,6 +722,8 @@ export default function Home() {
                       : "当前视图下没有内容"
               }
               icon={<ImageIcon size={20} />}
+              /* 筛选条就在上面：空态不必再撑满半屏。 */
+              dense
               action={
                 <div className="flex items-center gap-2 flex-wrap justify-center">
                   {/* 每一条真正生效的筛选给一个手柄。

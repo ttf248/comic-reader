@@ -180,7 +180,13 @@ export default function Tag() {
             <ChevronLeftIcon size={13} />
             <span>返回</span>
           </button>
-          <h1 className="page-title page-title--sm">标签：{tag}</h1>
+          {/* 页头与有内容时同一套：眉标说这是什么，标题就是标签名。
+              原来写成「标签：xxx」——冒号加前缀像是表单字段，
+              与有内容时的页头也不是一套。 */}
+          <p className="page-eyebrow">由标签串起的故事</p>
+          <h1 className="page-title page-title--sm break-words mt-1">
+            {tag}
+          </h1>
         </div>
         {/* 页头已经写着是哪个标签，空态再说一遍「未找到该标签」是同一句话
             说两次。这里只说结论，并给出下一步。 */}
@@ -290,6 +296,8 @@ export default function Tag() {
           <EmptyState
             title={mode === "comic" ? "没有匹配的作品" : "没有匹配的相册"}
             description="试试修改搜索或排序条件。"
+            /* 筛选条就在上面，空态紧跟着它说清楚即可。 */
+            dense
           />
         ) : (
           <AlbumGrid items={cards} variant={viewMode} />
