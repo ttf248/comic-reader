@@ -86,7 +86,7 @@ describe("照片工作台的首屏专区", () => {
     );
     // 这一区讲的是「最近加入」：入口必须是排序，不是另一页的浏览记录。
     const all = screen.getByRole("button", {
-      name: "按加入时间排序，查看全部相册",
+      name: "按拍摄时间排序，查看全部相册",
     });
     expect(all).toBeInTheDocument();
     fireEvent.click(all);

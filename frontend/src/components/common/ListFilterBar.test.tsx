@@ -1,9 +1,20 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { ListFilterBar } from "./ListFilterBar";
 import { useSearchStore } from "../../store/searchStore";
+import { useAppModeStore } from "../../store/appModeStore";
 
-beforeEach(() => useSearchStore.getState().reset());
+beforeEach(() => {
+  useSearchStore.getState().reset();
+  useAppModeStore.setState({ preference: "photo" });
+});
 
 it("选择排序后恢复按钮焦点并更新排序", () => {
   render(<ListFilterBar totalCount={10} />);
@@ -75,10 +86,33 @@ it("公开展开状态及当前选中的排序项", () => {
   expect(
     within(options).getByRole("button", { name: "按名称", pressed: true }),
   ).toBeInTheDocument();
-  // 排序项：按名称 / 按张数 / 按最近改 / 按加入时间 / 按最近看。
+  // 排序项：按名称 / 按张数 / 按最近改 / 按拍摄时间 / 按最近看。
   expect(
     within(options).getAllByRole("button", { pressed: false }),
   ).toHaveLength(4);
+});
+
+it("日期排序项跟着工作台说话：照片侧按拍摄时间，漫画侧按加入时间", () => {
+  render(<ListFilterBar totalCount={10} />);
+  fireEvent.click(screen.getByRole("button", { name: "排序" }));
+  const photo = within(screen.getByRole("group", { name: "排序选项" }));
+  expect(photo.getByRole("button", { name: "按拍摄时间" })).toHaveAttribute(
+    "title",
+    "按拍摄时间排序，没有拍摄时间的相册按文件修改时间",
+  );
+  expect(photo.queryByRole("button", { name: "按加入时间" })).toBeNull();
+
+  // 换到漫画侧再摆一次：两次渲染各自独立，避免焦点跨实例漂移。
+  cleanup();
+  useAppModeStore.setState({ preference: "comic" });
+  render(<ListFilterBar totalCount={10} />);
+  fireEvent.click(screen.getByRole("button", { name: "排序" }));
+  const comic = within(screen.getByRole("group", { name: "排序选项" }));
+  expect(comic.getByRole("button", { name: "按加入时间" })).toHaveAttribute(
+    "title",
+    "按目录日期排序，没有目录日期时按文件修改时间",
+  );
+  expect(comic.queryByRole("button", { name: "按拍摄时间" })).toBeNull();
 });
 
 it("刚展开就卸载时不留下待注册的监听任务", () => {

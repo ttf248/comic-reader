@@ -145,14 +145,28 @@ export function ListFilterBar({
 }
 
 // 排序项：按数量的说法跟着工作台走 —— 照片数「张」，漫画数「页」。
-function sortOptions(mode: AppMode): { value: SortKey; label: string }[] {
+//
+// 「按拍摄时间 / 按加入时间」说的也是同一件事的两面：照片侧的日期是
+// 拍摄时间（从文件名推断），漫画侧没有拍摄时间，只有目录日期与修改
+// 时间。两侧各说各的，别让照片侧也叫「加入」。
+function sortOptions(
+  mode: AppMode,
+): { value: SortKey; label: string; title?: string }[] {
   return [
     { value: "name", label: "按名称" },
     { value: "count", label: mode === "comic" ? "按页数" : "按张数" },
     { value: "recent", label: "按最近改" },
-    // 「按加入时间」用业务日期（拍摄时间 > 文件夹名日期 > 修改时间），
-    // 与首页「最近加入」专区同一口径。
-    { value: "added", label: "按加入时间" },
+    mode === "comic"
+      ? {
+          value: "added",
+          label: "按加入时间",
+          title: "按目录日期排序，没有目录日期时按文件修改时间",
+        }
+      : {
+          value: "added",
+          label: "按拍摄时间",
+          title: "按拍摄时间排序，没有拍摄时间的相册按文件修改时间",
+        },
     { value: "viewed", label: "按最近看" },
   ];
 }
@@ -229,6 +243,7 @@ function SortMenu({
               key={o.value}
               type="button"
               aria-pressed={o.value === value}
+              title={o.title}
               onClick={() => {
                 onChange(o.value);
                 setOpen(false);

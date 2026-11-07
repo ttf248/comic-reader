@@ -65,14 +65,14 @@ export function RecentlyAddedHero({
           </h2>
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          {/* 这一区讲的是「最近加入」，所以「全部」指的是全部按加入
+          {/* 这一区按业务日期排开，所以「全部」指的是全部按拍摄
               时间排开，而不是跳到「最近看」那一页。 */}
           <button
             type="button"
             onClick={onShowAll}
             className="btn btn-sm btn-ghost"
-            aria-label="按加入时间排序，查看全部相册"
-            title="按加入时间排序，查看全部相册"
+            aria-label="按拍摄时间排序，查看全部相册"
+            title="按拍摄时间排序，查看全部相册"
           >
             全部 <ArrowRightLineIcon size={14} />
           </button>

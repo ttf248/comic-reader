@@ -2330,6 +2330,47 @@ test("中文和特殊字符标签通过编码链接正常打开", async ({ page 
   }
 });
 
+test("那年今日按月日找出往年同一天拍过照的相册", async ({ request }) => {
+  // 素材是 zz-capture-date：文件名里带 2024-01-15，拍摄时间只认文件名。
+  await scannedNodes(request, "photo");
+
+  const hits = (await (
+    await request.get("/api/library/on-this-day?kind=photo&month=1&day=15")
+  ).json()) as {
+    ok: boolean;
+    page: {
+      total: number;
+      items: Array<{ name: string; matchedDate: string }>;
+    };
+  };
+  expect(hits.ok).toBe(true);
+  const hit = hits.page.items.find((item) => item.name === "zz-capture-date");
+  expect(hit, "带拍摄日期的相册没被命中").toBeDefined();
+  // 命中的那一天单独给出：相册自己的代表日期未必是这一天。
+  expect(hit!.matchedDate).toBe("2024-01-15");
+
+  // 今年的同一天不算「往年」：命中项的年份必须都早于今年。
+  const now = new Date();
+  const today = (await (
+    await request.get(
+      `/api/library/on-this-day?kind=photo&month=${now.getMonth() + 1}&day=${now.getDate()}`,
+    )
+  ).json()) as {
+    page: { items: Array<{ matchedDate: string }> };
+  };
+  for (const item of today.page.items) {
+    expect(Number(item.matchedDate.slice(0, 4))).toBeLessThan(
+      now.getFullYear(),
+    );
+  }
+
+  // 非法月日报错，而不是悄悄返回空列表。
+  const invalid = await request.get(
+    "/api/library/on-this-day?kind=photo&month=13&day=1",
+  );
+  expect(invalid.status()).toBe(400);
+});
+
 test("六个列表的最近改排序使用真实修改时间", async ({ page }) => {
   // 列表里含未读页，未读属于漫画工作台：素材取漫画根，整条用例在漫画模式下跑。
   await setWorkbenchMode(page.request, "comic");

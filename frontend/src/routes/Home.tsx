@@ -36,10 +36,11 @@ import {
   unreadRoute,
 } from "../utils/path";
 import { continueReadingTarget } from "../utils/continueReading";
-import { compareDatesDesc } from "../utils/date";
+import { compareDatesDesc, formatRelative } from "../utils/date";
 import { compareByAdded } from "../utils/cardSorting";
 import type { GalleryContextEntry } from "../utils/galleryContext";
 import {
+  extractYear,
   groupLibraryNodesBySeries,
   groupLibraryNodesByYear,
   type SeriesGroup,
@@ -131,9 +132,9 @@ export default function Home() {
     [recentAlbums.data],
   );
   const recentTotal = recentAlbums.data?.page.total ?? recentItems.length;
-  // 「最近加入」的「全部」：把首页网格按加入时间排好并滚过去。
+  // 「最近加入」的「全部」：把首页网格按业务日期排好并滚过去。
   // 这一区讲的是「最近加入」，点进去却是「最近看」，说的与做的不一致；
-  // 现在它落到同一个口径的排序上 —— 排序条上也会显示「按加入时间」。
+  // 现在它落到同一个口径的排序上 —— 照片侧的排序条上写「按拍摄时间」。
   const showAllRecent = useCallback(() => {
     setSortBy("added");
     requestAnimationFrame(() =>
@@ -319,9 +320,9 @@ export default function Home() {
       // 避免把"萍乡中学"这种没年份的 collection 因为不是 album 就被误删。
       if (yearFilterActive) {
         if (yearFilter === "other") {
-          if (extractYearOrNull(it.title) !== null) return false;
+          if (extractYear(it.title) !== null) return false;
         } else if (typeof yearFilter === "number") {
-          if (extractYearOrNull(it.title) !== yearFilter) return false;
+          if (extractYear(it.title) !== yearFilter) return false;
         }
       }
       if (query) {
@@ -516,7 +517,7 @@ export default function Home() {
                     <>
                       <span className="text-fg-subtle">，</span>
                       <span className="text-fg-subtle">
-                        上次更新 {formatTime(manifest.scannedAt)}
+                        上次更新 {formatRelative(manifest.scannedAt)}
                       </span>
                     </>
                   )}
@@ -899,26 +900,6 @@ export default function Home() {
 }
 
 // ===== helpers =====
-
-function formatTime(iso: string): string {
-  const d = new Date(iso);
-  const now = new Date();
-  const diff = (now.getTime() - d.getTime()) / 1000;
-  if (diff < 60) return "刚刚";
-  if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`;
-  if (diff < 86400 * 7) return `${Math.floor(diff / 86400)} 天前`;
-  return d.toLocaleDateString("zh-CN", { month: "short", day: "numeric" });
-}
-
-// 同 albumGrouping.extractYear 但本组件独立调用，避免循环依赖
-function extractYearOrNull(name: string): number | null {
-  const m = name.match(/(\d{4})/);
-  if (!m) return null;
-  const y = parseInt(m[1], 10);
-  if (y < 1900 || y > 2100) return null;
-  return y;
-}
 
 // ===== 复用组件 =====
 

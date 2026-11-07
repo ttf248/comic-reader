@@ -75,6 +75,16 @@ try {
     }
   }
 
+  # 一本带拍摄日期文件名的相册：验证「那年今日」按月日找出往年同一天
+  # 拍过照的相册。拍摄时间只认文件名，与文件修改时间无关 —— 这里把
+  # mtime 压到很早，免得打乱「最近改」排序那批回归素材。
+  $captureDir = Join-Path (Join-Path $testRoot "media") "zz-capture-date"
+  New-Item -ItemType Directory -Path $captureDir -Force | Out-Null
+  $captureImage = Join-Path $captureDir "IMG_20240115_120000.png"
+  [System.IO.File]::WriteAllBytes($captureImage, $pngBytes)
+  [System.IO.File]::SetLastWriteTimeUtc($captureImage, [DateTimeOffset]::Parse("2019-05-05T00:00:00Z").UtcDateTime)
+  [System.IO.Directory]::SetLastWriteTimeUtc($captureDir, [DateTimeOffset]::Parse("2019-05-05T00:00:00Z").UtcDateTime)
+
   # 漫画根下再放一本多页漫画：继续阅读、未读与「标记为已读完」都靠它。
   $comicAlbumDir = Join-Path (Join-Path $testRoot "media-comic") "sample-comic"
   New-Item -ItemType Directory -Path $comicAlbumDir -Force | Out-Null
