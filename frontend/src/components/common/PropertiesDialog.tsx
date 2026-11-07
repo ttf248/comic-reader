@@ -151,6 +151,17 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
                     : "相册"
               }
             />
+            {/* 所属作品：漫画卷的名字只写「第2卷」，属性表里没有所属
+                作品时，这一条记录讲不清是哪一部的哪一卷。照片侧同一格
+                写所属集合。 */}
+            {node.parentName && node.parentName !== node.name && (
+              <Field
+                label={
+                  node.contentKind === "comic" ? "所属作品" : "所属集合"
+                }
+                value={node.parentName}
+              />
+            )}
             <Field
               label="来源"
               value={node.sourceName || "—"}
@@ -158,9 +169,11 @@ function NodeProperties({ nodeId }: { nodeId: string }) {
             />
             {node.kind === "album" ? (
               <>
-                {/* 图片计数单位跟着内容属性走：照片「张」，漫画「页」。 */}
+                {/* 计数单位跟着内容属性走：照片「张」，漫画「页」。
+                   标签也跟着侧走 —— 漫画侧写「图片」再配「10 页」，
+                   读起来是自相矛盾的（那边的一张图就是一页）。 */}
                 <Field
-                  label="图片"
+                  label={node.contentKind === "comic" ? "页面" : "图片"}
                   value={`${node.imageCount ?? 0} ${mediaUnit(node.contentKind)}`}
                 />
                 <Field label="视频" value={`${node.videoCount ?? 0} 个`} />

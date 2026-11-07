@@ -179,6 +179,49 @@ it("读完的漫画相册说「已读完」而不是页码", async () => {
   expect(await screen.findByText("已读完")).toBeInTheDocument();
 });
 
+// 漫画卷的名字只写「第2卷」：属性表里没有所属作品时，这条记录讲不清
+// 是哪一部的哪一卷。
+it("漫画相册的属性表里带所属作品", async () => {
+  vi.mocked(libraryApi.queryNodes).mockResolvedValueOnce({
+    revision: 1,
+    missing: [],
+    items: [
+      {
+        ...node,
+        id: "a_comic",
+        kind: "album",
+        contentKind: "comic",
+        name: "第2卷",
+        parentName: "星海漫步",
+      },
+    ],
+  });
+  renderDialog({ kind: "node", id: "a_comic" });
+  expect(await screen.findByText("所属作品")).toBeInTheDocument();
+  expect(screen.getByText("星海漫步")).toBeInTheDocument();
+});
+
+// 漫画侧写「图片 10 页」是自相矛盾的：那边的一张图就是一页。
+it("漫画侧的媒体标签说页面，不说图片", async () => {
+  vi.mocked(libraryApi.queryNodes).mockResolvedValueOnce({
+    revision: 1,
+    missing: [],
+    items: [
+      {
+        ...node,
+        id: "a_comic",
+        kind: "album",
+        contentKind: "comic",
+        name: "第2卷",
+        imageCount: 10,
+      },
+    ],
+  });
+  renderDialog({ kind: "node", id: "a_comic" });
+  expect(await screen.findByText("页面")).toBeInTheDocument();
+  expect(screen.queryByText("图片")).toBeNull();
+});
+
 it("照片相册不查阅读进度", async () => {
   renderDialog({ kind: "node", id: "a_trip" });
   expect(await screen.findByText("旅行记录")).toBeInTheDocument();
