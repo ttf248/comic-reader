@@ -107,7 +107,7 @@ export const FolderIcon = (p: IconProps) => (
   </svg>
 )
 
-// 「打开文件夹」图标：FolderIcon + 右下箭头,表示"在资源管理器中打开"
+// 「打开文件夹」图标：FolderIcon + 右下箭头,表示"在文件管理器中打开"
 export const FolderOpenIcon = (p: IconProps) => (
   <svg {...base(p)}>
     <path d="M6 14l1.5-5h11l-1.5 5H6z" />

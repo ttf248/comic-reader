@@ -876,7 +876,7 @@ function MediaRootsField({
               value={root.path}
               placeholder="E:\照片 或 /home/user/pics"
               label={`媒体根目录 ${i + 1}`}
-              // 只在已存在的根上提供"打开资源管理器"(空槽位不算)
+              // 只在已存在的根上提供"打开文件管理器"(空槽位不算)
               onOpenInExplorer={
                 i < roots.length && root.path && allowOsOpen
                   ? () => onOpenInExplorer(root.path)
@@ -1202,7 +1202,7 @@ interface PathFieldProps {
   /** 撤销当前配置字段未提交的草稿；媒体根以整组数组为单位 */
   onCancel: () => void;
   onCompositionChange: (active: boolean) => void;
-  /** 点击「在资源管理器中打开」时调用(undefined 时按钮隐藏) */
+  /** 点击「在文件管理器中打开」时调用(undefined 时按钮隐藏) */
   onOpenInExplorer?: () => void;
   /** 用户确认服务端返回的完整目录路径后回调 */
   onPick: (picked: string) => void;
@@ -1291,7 +1291,7 @@ function PathField({
       >
         <FolderSearchIcon size={iconSize} />
       </button>
-      {/* 「在资源管理器中打开」 */}
+      {/* 「在文件管理器中打开」 */}
       {onOpenInExplorer && (
         <button
           type="button"

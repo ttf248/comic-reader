@@ -864,7 +864,7 @@ function SubUsageBadge({
       <button
         onClick={onOpen}
         className={cls}
-        title={`在资源管理器中打开 ${sub.path}`}
+        title={`在文件管理器中打开 ${sub.path}`}
       >
         {inner}
       </button>

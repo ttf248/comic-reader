@@ -284,7 +284,7 @@ export function PopoverItem({
         }
       }}
       /* 菜单项不折行：h-9 是固定高度，文字一旦折行就会溢出按钮，
-         「在资源管理器中打开」在 180px 宽的菜单里正好折成两行，
+         「在文件管理器中打开」在 180px 宽的菜单里正好折成两行，
          第二行压在下一项上。宁可让菜单变宽，也不折行。 */
       className={`w-full text-left flex items-center gap-2.5 px-2.5 min-h-9 whitespace-nowrap rounded-md text-body transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${stateCls}`}
     >

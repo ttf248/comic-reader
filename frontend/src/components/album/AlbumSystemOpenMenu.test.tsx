@@ -90,7 +90,7 @@ it("菜单已打开时响应权限变化", async () => {
     }),
   );
   const { client } = openMenu();
-  const item = screen.getByRole("menuitem", { name: "在资源管理器中打开" });
+  const item = screen.getByRole("menuitem", { name: "在文件管理器中打开" });
   expect(item).toBeDisabled();
   await act(async () => finish({ allowOsOpen: true }));
   await waitFor(() => expect(item).toBeEnabled());
@@ -107,7 +107,7 @@ it("关闭菜单后仍反馈打开失败，重新打开可重试", async () => {
     }),
   );
   const { source } = openMenu();
-  const item = screen.getByRole("menuitem", { name: "在资源管理器中打开" });
+  const item = screen.getByRole("menuitem", { name: "在文件管理器中打开" });
   await waitFor(() => expect(item).toBeEnabled());
   fireEvent.click(item);
   expect(screen.queryByRole("menu")).toBeNull();
@@ -117,7 +117,7 @@ it("关闭菜单后仍反馈打开失败，重新打开可重试", async () => {
   );
   await screen.findByText("系统文件管理器未能打开，请确认目录仍可用后重试");
   fireEvent.click(source);
-  fireEvent.click(screen.getByRole("menuitem", { name: "在资源管理器中打开" }));
+  fireEvent.click(screen.getByRole("menuitem", { name: "在文件管理器中打开" }));
   await screen.findByText("已请求打开目录");
   expect(fsApi.openInExplorer).toHaveBeenCalledTimes(2);
   expect(fsApi.openInExplorer).toHaveBeenLastCalledWith("a_sample");
@@ -131,7 +131,7 @@ it("智能视图没有本地目录，即使允许也不开放系统操作", asyn
     }),
   );
   expect(
-    screen.getByRole("menuitem", { name: "在资源管理器中打开" }),
+    screen.getByRole("menuitem", { name: "在文件管理器中打开" }),
   ).toBeDisabled();
   expect(fsApi.openInExplorer).not.toHaveBeenCalled();
 });
@@ -141,7 +141,7 @@ it("未知失败不把原始错误和绝对路径写入通知", async () => {
     new Error("private: C:\\private\\file"),
   );
   openMenu();
-  const item = screen.getByRole("menuitem", { name: "在资源管理器中打开" });
+  const item = screen.getByRole("menuitem", { name: "在文件管理器中打开" });
   await waitFor(() => expect(item).toBeEnabled());
   fireEvent.click(item);
   await screen.findByText("打开失败，请稍后重试");

@@ -59,7 +59,7 @@ const virtualListComponents = { List: VirtualList };
 // 网格 / 列表容器。
 // 跟随最近的滚动区域虚拟化：筛选结果可以很大，但只挂载视口附近的卡片。
 // 列表视图下，悬停时显示右侧 chevron。
-// 右键菜单统一：打开 / 收藏 / 阅读标记 / 资源管理器 / 复制链接 / 属性。
+// 右键菜单统一：打开 / 收藏 / 阅读标记 / 文件管理器 / 复制链接 / 属性。
 export default function AlbumGrid({
   items,
   empty,

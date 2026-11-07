@@ -1399,7 +1399,7 @@ export default function Reader() {
               { id: "separator", separator: true },
               {
                 id: "explorer",
-                label: "在资源管理器中打开",
+                label: "在文件管理器中打开",
                 icon: <ArrowUpRightIcon />,
                 disabled: !allowOsOpen,
               },

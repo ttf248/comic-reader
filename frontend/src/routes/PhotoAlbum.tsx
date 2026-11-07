@@ -111,7 +111,7 @@ export default function PhotoAlbum({ album }: Props) {
   const total = mediaQuery.data?.pages[0]?.total ?? mediaItems.length;
 
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
-  // 右键菜单：照片墙上的图片同样能查看属性、在资源管理器中定位。
+  // 右键菜单：照片墙上的图片同样能查看属性、在文件管理器中定位。
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -361,7 +361,7 @@ export default function PhotoAlbum({ album }: Props) {
                   disabled={!actions.canOpenInExplorer}
                 >
                   <FolderIcon size={13} />
-                  <span>在资源管理器中打开</span>
+                  <span>在文件管理器中打开</span>
                 </PopoverItem>
                 <PopoverItem onClick={() => void copyLink()}>
                   <CopyIcon size={13} />
@@ -426,7 +426,7 @@ export default function PhotoAlbum({ album }: Props) {
             },
             {
               id: "explorer",
-              label: "在资源管理器中打开",
+              label: "在文件管理器中打开",
               icon: <ArrowUpRightIcon size={12} />,
               disabled: !actions.canOpenInExplorer,
             },

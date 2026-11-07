@@ -3448,7 +3448,7 @@ for (const view of ["grid", "list"] as const) {
     );
     await card.click({ button: "right" });
     const open = page.getByRole("menuitem", {
-      name: "在资源管理器中打开",
+      name: "在文件管理器中打开",
       exact: true,
     });
     await expect(open).toBeDisabled();
@@ -3517,7 +3517,7 @@ test("相册系统打开权限更新更多及图片菜单，并说明本机限�
     const more = page.getByRole("button", { name: "更多操作", exact: true });
     await more.click();
     const open = page.getByRole("menuitem", {
-      name: "在资源管理器中打开",
+      name: "在文件管理器中打开",
       exact: true,
     });
     await expect(open).toBeDisabled();
@@ -3658,7 +3658,7 @@ for (const health of ["late", "error"] as const) {
       );
       await card.click({ button: "right" });
       await expect(
-        page.getByRole("menuitem", { name: "在资源管理器中打开", exact: true }),
+        page.getByRole("menuitem", { name: "在文件管理器中打开", exact: true }),
       ).toBeEnabled();
     } finally {
       release();

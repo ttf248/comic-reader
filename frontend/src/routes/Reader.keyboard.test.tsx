@@ -290,7 +290,7 @@ describe("Reader 按媒体类型隔离快捷键", () => {
     });
     await act(async () => {
       fireEvent.click(
-        screen.getByRole("menuitem", { name: "在资源管理器中打开" }),
+        screen.getByRole("menuitem", { name: "在文件管理器中打开" }),
       );
     });
     expect(mocks.openInExplorer).toHaveBeenCalledWith("f_image_1");
