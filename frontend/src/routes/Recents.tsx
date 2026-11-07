@@ -112,27 +112,32 @@ export default function Recents() {
         title={copy.recentsTitle}
         eyebrow={copy.recentsEyebrow}
         description={
-          <p className="text-body text-fg-muted mt-2 tabular-nums">
-            {cards.length > 0 ? (
-              <>
-                <span className="text-fg font-medium">{cards.length}</span> 个
-                <span className="text-fg-subtle mx-1.5">·</span>
-                最近打开{" "}
-                <span className="text-fg">
-                  {formatRelative(cards[0]?.lastSeenAt)}
-                </span>
-              </>
-            ) : historyQuery.isLoading ||
-            (history.length > 0 && nodesQuery.isLoading) ? (
-              // 记录已经在手、只是相册摘要还没到：这时说「还没有记录」
-              // 是把「还没加载完」说成了「没有」。
-              "正在加载记录…"
-            ) : historyFailed ? (
-              "记录暂不可用"
-            ) : (
-              "还没有记录"
-            )}
-          </p>
+          // 这一页一条记录都没有时，页头不再写「还没有记录」：
+          // 下面的空态已经把同一句话说了一遍，两处都说等于没说什么。
+          // 加载中与出错这两句仍然留着——那是状态，不是空态。
+          cards.length > 0 || historyQuery.isLoading ||
+          (history.length > 0 && nodesQuery.isLoading) ||
+          historyFailed ? (
+            <p className="text-body text-fg-muted mt-2 tabular-nums">
+              {cards.length > 0 ? (
+                <>
+                  <span className="text-fg font-medium">{cards.length}</span> 个
+                  <span className="text-fg-subtle mx-1.5">·</span>
+                  最近打开{" "}
+                  <span className="text-fg">
+                    {formatRelative(cards[0]?.lastSeenAt)}
+                  </span>
+                </>
+              ) : historyQuery.isLoading ||
+                (history.length > 0 && nodesQuery.isLoading) ? (
+                // 记录已经在手、只是相册摘要还没到：这时说「还没有记录」
+                // 是把「还没加载完」说成了「没有」。
+                "正在加载记录…"
+              ) : (
+                "记录暂不可用"
+              )}
+            </p>
+          ) : null
         }
       />
 

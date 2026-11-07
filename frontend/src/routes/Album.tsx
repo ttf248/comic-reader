@@ -239,6 +239,21 @@ export default function Album() {
     );
   }
 
+  // 工作台隔离：相册与集合属于哪一侧由所在目录的内容属性决定。
+  // 深链打到另一侧时（/comic/albums/<照片相册>）把用户送回那一侧，
+  // 而不是让漫画外壳里摆一张照片墙——外壳的措辞、菜单与内容属性
+  // 都不属于这一侧，读起来像另一个产品漏进来了。
+  //
+  // 属性未知时不重定向：没有内容属性就没有「属于哪一侧」可依据，
+  // 按当前这一侧渲染更稳。
+  if (node.contentKind && node.contentKind !== mode) {
+    const target =
+      node.kind === "album" && node.contentKind === "comic"
+        ? readerRoute(node.id)
+        : albumRoute(node.contentKind, node.id);
+    return <Navigate to={target} replace />;
+  }
+
   if (node.kind === "album") {
     // 漫画相册直接进入阅读器；照片相册直接进入照片墙。
     if (node.contentKind === "comic") {

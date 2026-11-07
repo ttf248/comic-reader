@@ -579,6 +579,13 @@
     -webkit-line-clamp: 1;
     line-clamp: 1;
   }
+  /* 货架里的卡片与网格里的卡片是同一批相册：网格里标题单行截断，
+     货架里却折成两行，一排卡的说明行于是高低不齐，读起来像没对齐。
+     照片侧跟着网格走同一条规则。 */
+  :root[data-mode="photo"] .shelf .album-tile__title {
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+  }
   .album-tile > .absolute {
     top: 16px;
     right: 16px;

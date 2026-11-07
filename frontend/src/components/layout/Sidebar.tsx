@@ -77,7 +77,7 @@ const secondaryItems = [
 // - 导航项统一 36px 高 / 13.5px 文字，选中态 = 亮一档的灰块 + 白字
 // - 「随机」类操作沉到底部一组，与主导航分开，避免平铺抢注意力
 export default function Sidebar({
-  collapsed,
+  collapsed: collapsedProp,
   onToggle,
   mobileOpen = false,
 }: Props) {
@@ -88,6 +88,9 @@ export default function Sidebar({
   const copy = workbenchCopy(mode);
   // 宽屏时模式切换在顶栏；窄屏侧栏就是抽屉，切模式留在抽屉里。
   const isWide = useMediaQuery(WIDE_LAYOUT_QUERY);
+  // 折叠态（72px 的窄栏）只属于宽屏：窄屏侧栏是抽屉，宽度不由折叠决定。
+  // 若把宽屏折叠过的状态带进抽屉，抽屉会既没有品牌名又没有展开按钮。
+  const collapsed = isWide && collapsedProp;
   // 未读只属于漫画工作台：照片侧栏没有未读入口，也就没有它的徽标。
   const unreadCount = useLibraryActivitySummary().data?.summary.unreadCount ?? 0;
   const navRef = useRef<HTMLElement>(null);
@@ -240,33 +243,38 @@ export default function Sidebar({
             侧栏是墨黑表面,应用级 --accent 在浅色主题下也是近黑,
             压上去看不见 —— 这里用侧栏专用的 --rail-accent。
             展开态时侧边栏本来就在视野里,按钮保持低调(灰图标 + hover 背景)
-            即可,避免和品牌名挤。 */}
-        <button
-          onClick={onToggle}
-          aria-label={collapsed ? "展开侧边栏" : "折叠侧边栏"}
-          title={collapsed ? "展开侧边栏 (Ctrl+B)" : "折叠侧边栏 (Ctrl+B)"}
-          className={
-            collapsed
-              ? "group/toggle relative z-10 inline-flex items-center gap-0.5 h-7 pl-1.5 pr-2 whitespace-nowrap rounded-full bg-rail-accent text-rail-accent-fg shadow-md ring-1 ring-rail-accent/40 hover:ring-2 hover:ring-rail-accent/70 hover:scale-105 active:scale-95 transition-all"
-              : "shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-md text-rail-muted hover:text-rail-fg hover:bg-rail-hover transition-colors"
-          }
-        >
-          {collapsed ? (
-            <>
-              <ChevronRightIcon
-                size={12}
-                className="transition-transform group-hover/toggle:translate-x-0.5"
-              />
-              {/* 折叠态只有 72px 宽：字压到 11.5px 并禁止换行，
-                  否则「展开」会折成两行、被 60px 高的品牌栏裁掉一半。 */}
-              <span className="text-badge font-semibold tracking-wide whitespace-nowrap">
-                展开
-              </span>
-            </>
-          ) : (
-            <ChevronLeftIcon size={14} />
-          )}
-        </button>
+            即可,避免和品牌名挤。
+
+            窄屏不渲染这一枚:那时侧栏是抽屉,宽度不由「折叠」决定 ——
+            摆一个点不动的按钮,只会让人以为点完菜单会消失。 */}
+        {isWide && (
+          <button
+            onClick={onToggle}
+            aria-label={collapsed ? "展开侧边栏" : "折叠侧边栏"}
+            title={collapsed ? "展开侧边栏 (Ctrl+B)" : "折叠侧边栏 (Ctrl+B)"}
+            className={
+              collapsed
+                ? "group/toggle relative z-10 inline-flex items-center gap-0.5 h-7 pl-1.5 pr-2 whitespace-nowrap rounded-full bg-rail-accent text-rail-accent-fg shadow-md ring-1 ring-rail-accent/40 hover:ring-2 hover:ring-rail-accent/70 hover:scale-105 active:scale-95 transition-all"
+                : "shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-md text-rail-muted hover:text-rail-fg hover:bg-rail-hover transition-colors"
+            }
+          >
+            {collapsed ? (
+              <>
+                <ChevronRightIcon
+                  size={12}
+                  className="transition-transform group-hover/toggle:translate-x-0.5"
+                />
+                {/* 折叠态只有 72px 宽：字压到 11.5px 并禁止换行，
+                    否则「展开」会折成两行、被 60px 高的品牌栏裁掉一半。 */}
+                <span className="text-badge font-semibold tracking-wide whitespace-nowrap">
+                  展开
+                </span>
+              </>
+            ) : (
+              <ChevronLeftIcon size={14} />
+            )}
+          </button>
+        )}
       </div>
 
       {/* 工作台模式切换：宽屏时它在顶栏左槽（与全局动作同层），

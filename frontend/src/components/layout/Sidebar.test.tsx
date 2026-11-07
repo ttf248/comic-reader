@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, beforeAll } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -58,6 +58,22 @@ const albumNode = {
   contentKind: "comic" as const,
 };
 
+// 侧栏的形态跟视口宽度有关：折叠态（72px 窄栏）只属于宽屏，窄屏侧栏
+// 是抽屉。组件用 matchMedia 判断当前宽度，所以单测要给出这个信号。
+let wideViewport = true;
+beforeAll(() => {
+  window.matchMedia = ((query: string) => ({
+    matches: query.includes("1024") ? wideViewport : !wideViewport,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  })) as unknown as typeof window.matchMedia;
+});
+
 function renderSidebar(collapsed = false) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -68,7 +84,6 @@ function renderSidebar(collapsed = false) {
     </QueryClientProvider>,
   );
 }
-
 describe("Sidebar", () => {
   beforeEach(() => {
     dashboard.dashboard.inProgress = [];
@@ -113,6 +128,21 @@ describe("Sidebar", () => {
     ];
     renderSidebar(true);
     expect(screen.queryByText("继续阅读")).not.toBeInTheDocument();
+  });
+
+  // 窄屏时侧栏是抽屉：抽屉宽度不由「折叠」决定，抽屉里再摆一枚
+  // 「折叠侧边栏」既点不动，也会让人以为点完菜单会消失。
+  it("窄屏抽屉不显示折叠按钮，并保留品牌名", () => {
+    wideViewport = false;
+    try {
+      renderSidebar(true);
+      expect(
+        screen.queryByRole("button", { name: /折叠侧边栏|展开侧边栏/ }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByText("Local Gallery")).toBeInTheDocument();
+    } finally {
+      wideViewport = true;
+    }
   });
 
   // 侧栏只留当前这一本，其余的交给首页专区与「最近阅读」页：

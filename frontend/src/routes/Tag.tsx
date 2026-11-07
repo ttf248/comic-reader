@@ -230,7 +230,9 @@ export default function Tag() {
               </button>
             </div>
             <div
-              className={`mt-7 grid grid-cols-2 gap-x-7 gap-y-4 ${
+              /* 统计三项收成一组：铺满整行时三列各自隔着一两百像素，
+                 读起来像三处互不相干的数字，而不是这一页的三项事实。 */
+              className={`mt-7 grid grid-cols-2 gap-x-7 gap-y-4 max-w-[560px] ${
                 mode === "comic" ? "md:grid-cols-4" : "md:grid-cols-3"
               }`}
             >

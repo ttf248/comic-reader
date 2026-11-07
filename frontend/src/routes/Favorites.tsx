@@ -197,20 +197,28 @@ export default function Favorites() {
         title={copy.favoritesTitle}
         eyebrow="值得反复翻看的"
         description={
-          <div className="flex items-baseline gap-2.5 mt-2 flex-wrap">
-            <p className="text-body text-fg-muted tabular-nums">
-              {favoritesQuery.isLoading
-                ? "正在加载收藏…"
-                : favoritesFailed && favorites.length === 0
-                  ? "收藏暂不可用"
-                  : `${favoritesCount} 项`}
-            </p>
-            {missingCount > 0 && (
-              <span className="text-meta text-fg-subtle">
-                其中 {missingCount} 项暂时找不到
-              </span>
-            )}
-          </div>
+          // 一条收藏都没有时，页头不再报「0 项」：下面的空态已经把
+          // 「还没有收藏」说清楚了，两处各说一遍反而把空页面说得更空。
+          // 有内容、有失效项或在加载/出错时，页头照旧给概览。
+          favoritesCount > 0 ||
+          missingCount > 0 ||
+          favoritesQuery.isLoading ||
+          favoritesFailed ? (
+            <div className="flex items-baseline gap-2.5 mt-2 flex-wrap">
+              <p className="text-body text-fg-muted tabular-nums">
+                {favoritesQuery.isLoading
+                  ? "正在加载收藏…"
+                  : favoritesFailed && favorites.length === 0
+                    ? "收藏暂不可用"
+                    : `${favoritesCount} 项`}
+              </p>
+              {missingCount > 0 && (
+                <span className="text-meta text-fg-subtle">
+                  其中 {missingCount} 项暂时找不到
+                </span>
+              )}
+            </div>
+          ) : null
         }
       />
 

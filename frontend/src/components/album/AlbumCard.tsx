@@ -571,9 +571,20 @@ function GridCard({
         </div>
       </Link>
 
-      {/* 封面右上角浮层：视频角标 + 收藏星标。
-          放在 Link 之外：在 <a> 里嵌按钮既不合法，也会让 Enter 冒泡触发跳转。 */}
+      {/* 封面右上角浮层：收藏星标 + 视频角标。
+          放在 Link 之外：在 <a> 里嵌按钮既不合法，也会让 Enter 冒泡触发跳转。
+
+          星标压在最上面（真正的角落）：收藏页空态教用户「点封面右上角的
+          星标」，视频相册的角标若占住角落，星标就被挤到角标下面，
+          文案指的地方与实际能点到的地方对不上。 */}
       <div className="absolute top-2 right-2 z-10 flex flex-col items-end gap-1">
+        <FavoriteStar
+          fav={Boolean(data.isFavorite)}
+          label={data.displayTitle ?? data.title}
+          onToggle={onToggleFavorite}
+          alwaysVisible={alwaysShowFavorite}
+        />
+        {overlayAction}
         {data.coverKind === "video" && (
           <div className="pointer-events-none inline-flex items-center gap-1 bg-bg-elevated/90 backdrop-blur text-fg text-badge font-medium px-1.5 h-5 rounded shadow-sm">
             <PlayFilledIcon size={9} className="text-accent" />
@@ -582,13 +593,6 @@ function GridCard({
             {hasDuration && <span>{formatDuration(data.durationSec)}</span>}
           </div>
         )}
-        {overlayAction}
-        <FavoriteStar
-          fav={Boolean(data.isFavorite)}
-          label={data.displayTitle ?? data.title}
-          onToggle={onToggleFavorite}
-          alwaysVisible={alwaysShowFavorite}
-        />
       </div>
 
       {/* 悬停预览（仅相册/合集；触摸设备不启用） */}
