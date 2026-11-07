@@ -300,13 +300,7 @@ export default function Home() {
       }
       return true;
     });
-  }, [
-    cards,
-    query,
-    yearFilter,
-    yearFilterActive,
-    minImageCount,
-  ]);
+  }, [cards, query, yearFilter, yearFilterActive, minImageCount]);
   const filtered = useMemo(() => {
     const list = filteredByScope.filter((it) => {
       if (view !== "all" && it.variant !== view) return false;
@@ -340,13 +334,7 @@ export default function Home() {
       default:
         return withProgress.sort((a, b) => a.title.localeCompare(b.title));
     }
-  }, [
-    filteredByScope,
-    sortBy,
-    view,
-    dashboardProgressByID,
-    compareViewed,
-  ]);
+  }, [filteredByScope, sortBy, view, dashboardProgressByID, compareViewed]);
 
   const homeEntries = useMemo<GalleryContextEntry[]>(
     () =>
@@ -368,7 +356,12 @@ export default function Home() {
     // 视图 chip 上的数字要跟着当前筛选走：年份筛选生效时，「相册 14」
     // 与屏幕上剩下的两件对不上号。数字按「除视图以外的所有筛选」来算，
     // 于是每一枚 chip 报的都是「点它会得到几件」。
-    const c = { all: filteredByScope.length, album: 0, collection: 0, smart: 0 };
+    const c = {
+      all: filteredByScope.length,
+      album: 0,
+      collection: 0,
+      smart: 0,
+    };
     for (const it of filteredByScope) c[it.variant]++;
     return c;
   }, [filteredByScope]);
@@ -391,6 +384,18 @@ export default function Home() {
     : (manifest?.statistics.comicAlbumCount ?? 0) > 0;
   // 漫画侧多一条「作品」索引，章节序号因此往后挪一位。
   const hasSeriesIndex = hasContent && isComic && seriesGroups.length > 0;
+  // 时间线只在真的按年份铺开时才出现。整屏只有「其他」一桶时，
+  // 这一条索引筛不出任何东西 —— 它是装饰，不是索引（漫画侧常常
+  // 就是这样：卷不以年份命名，全落进「其他」）。
+  const realYearBuckets = yearGroups.filter((g) => g.year !== null).length;
+  const hasYearIndex = hasContent && realYearBuckets >= 2;
+  // 章节序号跟着实际出现的索引走：少一段，后面的序号要往前挪。
+  const sectionNo = {
+    series: hasSeriesIndex ? 1 : 0,
+    year: hasSeriesIndex ? 2 : 1,
+    library: (hasSeriesIndex ? 1 : 0) + (hasYearIndex ? 1 : 0) + 1,
+  };
+  const pad = (n: number) => String(n).padStart(2, "0");
 
   // 主 CTA：有进度 → 继续上次；否则 → 随机翻翻
   //
@@ -615,17 +620,17 @@ export default function Home() {
       {hasContent && isComic && seriesGroups.length > 0 && (
         <section className="page-shell pt-9">
           <div className="section-heading">
-            <span className="section-index">01</span>
+            <span className="section-index">{pad(sectionNo.series)}</span>
             <h2 className="section-title">作品</h2>
             <span className="section-meta">按作品浏览</span>
           </div>
           <SeriesTimeline groups={seriesGroups} />
         </section>
       )}
-      {hasContent && yearGroups.length > 0 && (
+      {hasYearIndex && (
         <section className="page-shell pt-9">
           <div className="section-heading">
-            <span className="section-index">{isComic ? "02" : "01"}</span>
+            <span className="section-index">{pad(sectionNo.year)}</span>
             <h2 className="section-title">时间线</h2>
             <span className="section-meta">按年份浏览</span>
           </div>
@@ -640,9 +645,7 @@ export default function Home() {
       {(hasContent || isLoadingInitial) && (
         <section ref={gridRef} className="page-shell pt-10 pb-4 scroll-mt-6">
           <div className="section-heading">
-            <span className="section-index">
-              {hasSeriesIndex ? "03" : "02"}
-            </span>
+            <span className="section-index">{pad(sectionNo.library)}</span>
             <h2 className="section-title">
               {yearFilterActive ? copy.yearSectionTitle : copy.sectionTitle}
             </h2>

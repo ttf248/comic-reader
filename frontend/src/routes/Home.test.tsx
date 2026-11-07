@@ -140,6 +140,19 @@ beforeEach(() => {
       modTime: "2024-01-01T00:00:00Z",
       date: "2024-01-01T00:00:00Z",
     },
+    {
+      // 第二个年份：时间线只在有两个真实年份桶时才出现（一条装饰性的
+      // 索引筛不出东西），位置断言需要它真的渲染出来。
+      id: "a_2",
+      kind: "album",
+      contentKind: "photo",
+      name: "2024年测试相册",
+      displayName: "2024年测试相册",
+      imageCount: 4,
+      coverImages: [],
+      modTime: "2024-02-01T00:00:00Z",
+      date: "2024-02-01T00:00:00Z",
+    },
   ];
 });
 
@@ -338,4 +351,23 @@ it("视图 chip 的计数跟着年份筛选走", async () => {
   useSearchStore.getState().setYearFilter(2023);
   await waitFor(() => expect(allChip().textContent).toContain("1"));
   expect(albumChip().textContent).toContain("1");
+});
+
+// 时间线只在真的按年份铺开时才出现。漫画侧的卷常不以年份命名，
+// 全落进「其他」桶 —— 那一段索引筛不出任何东西，是装饰不是索引。
+it("只有「其他」一桶时不摆时间线", async () => {
+  mocks.items = [
+    {
+      id: "a_1",
+      kind: "album",
+      contentKind: "comic",
+      name: "第1卷",
+      displayName: "第1卷",
+      imageCount: 10,
+      coverImages: [],
+    },
+  ];
+  renderHome();
+  await waitFor(() => expect(screen.getByTestId("album-grid")).toBeTruthy());
+  expect(screen.queryByTestId("year-timeline")).toBeNull();
 });
