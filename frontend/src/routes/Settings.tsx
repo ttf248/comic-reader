@@ -393,7 +393,8 @@ export default function Settings() {
               ))}
             </div>
           </Row>
-          <Row label="默认图片适配">
+          {/* 漫画侧的媒体是页：写「图片适配」会与整册的用词冲突。 */}
+          <Row label="默认页面适配">
             <div className="flex items-center border border-border rounded-md overflow-hidden bg-bg-subtle/40">
               {(
                 [

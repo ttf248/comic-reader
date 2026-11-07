@@ -47,7 +47,7 @@ describe("continueReadingTarget", () => {
     expect(url.searchParams.get("type")).toBe("image");
   });
 
-  it("纯视频相册走 video 类型（否则阅读器会显示「这个文件夹没有图片」）", () => {
+  it("纯视频相册走 video 类型（否则阅读器会显示「这个相册没有图片」）", () => {
     const url = new URL(
       continueReadingTarget(card({ imageCount: 0, videoCount: 3 })),
       "http://localhost",

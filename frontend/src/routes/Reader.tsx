@@ -1084,15 +1084,15 @@ export default function Reader() {
               <div className="font-display text-section font-semibold text-white/90 mb-2">
                 {loadError === "EMPTY"
                   ? isVideo
-                    ? "这个文件夹没有视频"
-                    : "这个文件夹没有图片"
+                    ? "这个相册没有视频"
+                    : "这个相册没有图片"
                   : "加载失败"}
               </div>
               <div className="text-body leading-relaxed text-white/60 mb-6">
                 {loadError === "EMPTY"
                   ? isVideo
-                    ? "可以换个文件夹，或检查视频是否已被移动/删除。"
-                    : "可以换个文件夹，或检查文件是否已被移动/删除。"
+                    ? "可以换个相册，或检查视频是否已被移动/删除。"
+                    : "可以换个相册，或检查文件是否已被移动/删除。"
                   : loadError}
               </div>
               <div className="flex items-center justify-center gap-2">
