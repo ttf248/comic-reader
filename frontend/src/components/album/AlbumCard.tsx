@@ -266,6 +266,17 @@ function GridCard({
   // 压在封面下方（展品说明牌）。
   const showTitleOnCover = titleOnCover ?? data.contentKind === "comic";
   const label = data.displayTitle ?? data.title;
+  // 作品名印在书名上方：漫画侧的卷名只写「第1卷」，一屏里两本「第1卷」
+  // 分属不同作品，光看封面分不出谁是谁。真实书封就是这么排的 ——
+  // 作品名在上，卷名在下。
+  const coverSeries =
+    showTitleOnCover &&
+    data.variant === "album" &&
+    data.contentKind === "comic" &&
+    data.parentName &&
+    data.parentName !== label
+      ? data.parentName
+      : undefined;
   // 未读标记（见文件底部 showUnreadMark）：只对漫画相册、且页面不是「整页未读」时出现。
   const unread = showUnreadMark(data, showUnreadBadge);
   // 只有配置了多个媒体根才需要标来源。
@@ -416,9 +427,12 @@ function GridCard({
             <div
               className={`cover-title${
                 coverRatio === "16/9" ? " cover-title--compact" : ""
-              }`}
+              }${coverSeries ? " cover-title--series" : ""}`}
               data-testid="cover-title"
             >
+              {coverSeries && (
+                <div className="cover-title__series truncate">{coverSeries}</div>
+              )}
               <div
                 className={`cover-title__text ${
                   coverRatio === "16/9" ? "truncate" : "line-clamp-2"

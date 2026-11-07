@@ -122,6 +122,34 @@ describe("AlbumCard 封面语义", () => {
     );
   });
 
+  // 漫画侧的卷名只写「第1卷」：一屏里两本「第1卷」分属不同作品，
+  // 光看封面分不出谁是谁。作品名因此压在书名上方。
+  it("漫画卷在书名上方印出所属作品", () => {
+    const { container } = renderCard(
+      card({ title: "第1卷", parentName: "星海漫步" }),
+    );
+
+    const series = container.querySelector(".cover-title__series");
+    expect(series).toHaveTextContent("星海漫步");
+    expect(screen.getByTestId("cover-title")).toHaveTextContent("第1卷");
+  });
+
+  it("作品名与卷名相同时不重复印两遍", () => {
+    const { container } = renderCard(
+      card({ title: "星海漫步", parentName: "星海漫步" }),
+    );
+
+    expect(container.querySelector(".cover-title__series")).toBeNull();
+  });
+
+  it("照片相册不印作品名", () => {
+    const { container } = renderCard(
+      card({ title: "周末记录", contentKind: "photo", parentName: "某个相册" }),
+    );
+
+    expect(container.querySelector(".cover-title__series")).toBeNull();
+  });
+
   it("相册始终使用主封面，不把 covers 渲染成马赛克", () => {
     const { container } = renderCard(
       card({ covers: ["other-1", "other-2", "other-3"] }),

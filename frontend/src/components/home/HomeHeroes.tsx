@@ -31,6 +31,10 @@ export function UnreadHero({
   const { favorites } = useFavorites();
   const favoriteIds = useMemo(() => new Set(favorites), [favorites]);
   const copy = comicCopy();
+  // 面板只摆四本预览，标题上写的却是未读的总数。差额写出来，
+  // 两个数字才对得上 —— 否则读者会以为少渲染了两本。
+  const shownCards = useMemo(() => cards.slice(0, 4), [cards]);
+  const remaining = Math.max(0, count - shownCards.length);
   return (
     <section
       className="hero-panel"
@@ -67,7 +71,7 @@ export function UnreadHero({
         </div>
       </div>
       <div className="hero-grid">
-        {cards.slice(0, 4).map((card) => (
+        {shownCards.map((card) => (
           <AlbumCard
             key={card.id}
             data={{
@@ -97,6 +101,14 @@ export function UnreadHero({
           />
         ))}
       </div>
+      {/* 还剩几本没摆出来。写法与「继续阅读」面板的「还有 N 卷在读」
+          同一套：总数与摆出来的数必须能对上。 */}
+      {remaining > 0 && (
+        <p className="hero-panel__muted self-end mt-4">
+          还有 {remaining} {copy.collectionUnit}
+          {copy.unreadCountVerb}
+        </p>
+      )}
     </section>
   );
 }

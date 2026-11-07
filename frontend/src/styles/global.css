@@ -452,6 +452,29 @@
     letter-spacing: 0.01em;
     text-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
   }
+  /* 作品名压在书名上方：卷名只写「第1卷」时，一屏里两本「第1卷」
+     分属不同作品，光看封面分不出谁是谁。书封本来就是这么排的。
+     压条因此高出一行，渐变也随之上抬 —— 否则作品名落在渐变最淡的
+     那一段，浅色封面上读不出来。 */
+  .cover-title--series {
+    padding-top: 30px;
+    background-image: linear-gradient(
+      to top,
+      rgb(0 0 0 / 0.92) 0%,
+      rgb(0 0 0 / 0.9) 50%,
+      rgb(0 0 0 / 0.74) 82%,
+      rgb(0 0 0 / 0.48) 100%
+    );
+  }
+  .cover-title__series {
+    color: rgb(255 255 255 / 0.78);
+    font-size: var(--text-badge);
+    font-weight: 500;
+    line-height: 1.2;
+    letter-spacing: 0.06em;
+    margin-bottom: 3px;
+    text-shadow: 0 1px 3px rgb(0 0 0 / 0.55);
+  }
   /* 宽幅封面（首屏面板里的横版海报）的紧凑压条：两行标题会把
      半张封面压成一块黑，标题缩一档、行数减半才留得住画面。 */
   .cover-title--compact {
