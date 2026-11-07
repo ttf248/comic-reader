@@ -271,9 +271,11 @@ export default function Home() {
   const yearFilterActive =
     yearFilter !== null && (view === "all" || view === "album");
   const minImageCount = useSearchStore((s) => s.minImageCount);
-  const filtered = useMemo(() => {
-    const list = cards.filter((it) => {
-      if (view !== "all" && it.variant !== view) return false;
+  // 除「视图」以外的所有筛选（搜索 / 年份 / 最少图数）。
+  // 视图 chip 上的计数按这一层算：年份筛选生效时，chip 上的「相册 14」
+  // 与屏幕上剩下的两件对不上号 —— 数字要回答「点它会得到几件」。
+  const filteredByScope = useMemo(() => {
+    return cards.filter((it) => {
       // 最小图数过滤:仅对 album 变体生效;collection / smart 走 albumCount 概念,
       // 不参与图数过滤(它们的「张数」语义不同)。
       if (
@@ -296,6 +298,18 @@ export default function Home() {
       if (query) {
         if (!cardMatchesQuery(it, query)) return false;
       }
+      return true;
+    });
+  }, [
+    cards,
+    query,
+    yearFilter,
+    yearFilterActive,
+    minImageCount,
+  ]);
+  const filtered = useMemo(() => {
+    const list = filteredByScope.filter((it) => {
+      if (view !== "all" && it.variant !== view) return false;
       return true;
     });
     const withProgress = list.map((c) => {
@@ -327,15 +341,11 @@ export default function Home() {
         return withProgress.sort((a, b) => a.title.localeCompare(b.title));
     }
   }, [
-    cards,
-    query,
+    filteredByScope,
     sortBy,
     view,
-    yearFilter,
-    yearFilterActive,
     dashboardProgressByID,
     compareViewed,
-    minImageCount,
   ]);
 
   const homeEntries = useMemo<GalleryContextEntry[]>(
@@ -355,10 +365,13 @@ export default function Home() {
   useGalleryContextSync({ type: "home" }, homeEntries);
 
   const counts = useMemo(() => {
-    const c = { all: cards.length, album: 0, collection: 0, smart: 0 };
-    for (const it of cards) c[it.variant]++;
+    // 视图 chip 上的数字要跟着当前筛选走：年份筛选生效时，「相册 14」
+    // 与屏幕上剩下的两件对不上号。数字按「除视图以外的所有筛选」来算，
+    // 于是每一枚 chip 报的都是「点它会得到几件」。
+    const c = { all: filteredByScope.length, album: 0, collection: 0, smart: 0 };
+    for (const it of filteredByScope) c[it.variant]++;
     return c;
-  }, [cards]);
+  }, [filteredByScope]);
 
   const isLoadingInitial =
     overview.isLoading ||

@@ -304,3 +304,38 @@ it("空结果时按生效的筛选分别给手柄", async () => {
   // 说明里点明是哪个视图筛没了内容。
   expect(screen.getByText(/当前视图是「相册」/)).toBeInTheDocument();
 });
+
+// 视图 chip 上的数字要跟着筛选走：年份筛选生效时，chip 还报着筛选前的
+// 总数，屏幕上剩下的那两件与「相册 14」对不上号。
+it("视图 chip 的计数跟着年份筛选走", async () => {
+  mocks.items = [
+    {
+      id: "a_1",
+      kind: "album",
+      contentKind: "photo",
+      name: "2023年相册",
+      displayName: "2023年相册",
+      imageCount: 3,
+      coverImages: [],
+    },
+    {
+      id: "a_2",
+      kind: "album",
+      contentKind: "photo",
+      name: "2024年相册",
+      displayName: "2024年相册",
+      imageCount: 5,
+      coverImages: [],
+    },
+  ];
+  renderHome();
+  await waitFor(() => expect(screen.getByTestId("album-grid")).toBeTruthy());
+  const allChip = () => screen.getByRole("button", { name: /^全部/ });
+  const albumChip = () => screen.getByRole("button", { name: /^相册/ });
+  expect(allChip().textContent).toContain("2");
+  expect(albumChip().textContent).toContain("2");
+
+  useSearchStore.getState().setYearFilter(2023);
+  await waitFor(() => expect(allChip().textContent).toContain("1"));
+  expect(albumChip().textContent).toContain("1");
+});
