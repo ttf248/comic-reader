@@ -105,6 +105,15 @@ describe("Sidebar", () => {
     expect(screen.getByText("读到 6 / 20")).toBeInTheDocument();
   });
 
+  // 侧栏这一小块只写「第1卷」时，这一卷属于哪部作品看不出来。
+  it("迷你卡在卷名前面补上所属作品", () => {
+    dashboard.dashboard.inProgress = [
+      { album: { ...albumNode, parentName: "星海漫步" }, pageIndex: 5, pageCount: 20 },
+    ];
+    renderSidebar();
+    expect(screen.getByText("星海漫步 · 某本漫画")).toBeInTheDocument();
+  });
+
   it("迷你卡点击后跳到阅读器的上次位置", () => {
     dashboard.dashboard.inProgress = [
       { album: albumNode, pageIndex: 5, pageCount: 20 },

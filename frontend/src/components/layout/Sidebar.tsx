@@ -393,6 +393,12 @@ function ResumeMiniCard({
 }) {
   const isComic = card.contentKind === "comic";
   const title = card.displayTitle ?? card.title;
+  // 作品名补在卷名前面：侧栏这一小块只写「第1卷」，这一卷属于哪部
+  // 作品看不出来 —— 与书封、列表行、阅读器顶栏同一套写法。
+  const rowTitle =
+    isComic && card.parentName && card.parentName !== title
+      ? `${card.parentName} · ${title}`
+      : title;
   const percent = readingPercent({
     index: card.progress?.index ?? 0,
     total: card.progress?.total ?? 0,
@@ -425,7 +431,7 @@ function ResumeMiniCard({
             用 --fg-muted 而不是 --fg-subtle：卡片底色是 bg-rail-hover，
             fg-subtle 在这个底上只有 4.4:1（AA 要求 4.5:1）。 */}
         <span className="block text-body font-medium text-rail-fg truncate leading-tight group-hover/mini:text-rail-accent transition-colors">
-          {title}
+          {rowTitle}
         </span>
         {/* 轨道与页码并排：轨道横贯整列时读作一条分隔线，
            压在书名下面尤其像下划线。缩到一截，跟页码并排，

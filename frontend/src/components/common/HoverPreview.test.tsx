@@ -92,6 +92,26 @@ describe("HoverPreview 按内容属性取词", () => {
     expect(comic.getByText("3 卷")).toBeInTheDocument();
   });
 
+  // 漫画卷的名字只写「第1卷」：预览里要说得清这一卷属于哪部作品。
+  it("漫画卷的预览在卷名上方标出所属作品", () => {
+    renderPreview(
+      card({
+        title: "第1卷",
+        contentKind: "comic",
+        parentName: "星海漫步",
+      }),
+    );
+
+    expect(screen.getByText("星海漫步")).toBeInTheDocument();
+    expect(screen.getByText("第1卷")).toBeInTheDocument();
+  });
+
+  it("照片相册的预览不标作品名", () => {
+    renderPreview(card({ parentName: "某个相册" }));
+
+    expect(screen.queryByText("某个相册")).not.toBeInTheDocument();
+  });
+
   it("照片相册的预览铺这一本的真实照片，而不只是放大封面", () => {
     mediaState.items = [
       { id: "f_1", name: "a.jpg", kind: "image" },

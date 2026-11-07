@@ -81,6 +81,14 @@ export default function HoverPreview({ data, anchorRect, lastSeenAt, onPointerEn
   }, [])
 
   const isCollection = data.variant === 'collection'
+  // 所属作品：漫画卷的名字只写「第1卷」，预览里要说得清是哪一部。
+  const series =
+    data.variant === 'album' &&
+    data.contentKind === 'comic' &&
+    data.parentName &&
+    data.parentName !== data.title
+      ? data.parentName
+      : undefined
   const copy = workbenchCopy(kind)
 
   // 照片相册的悬停预览给「里面有什么」：直接铺这一本的前几张实拍。
@@ -183,6 +191,11 @@ export default function HoverPreview({ data, anchorRect, lastSeenAt, onPointerEn
         {/* 信息 */}
         <div className="p-3.5 space-y-2.5">
           <div>
+            {/* 作品名压在卷名上方：漫画的卷名只写「第1卷」，这一卷
+                属于哪部作品看不出来 —— 与书封压条同一套写法。 */}
+            {series && (
+              <div className="text-meta text-fg-muted truncate">{series}</div>
+            )}
             <div className="text-label font-medium text-fg leading-snug line-clamp-2">
               {data.title}
             </div>
