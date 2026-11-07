@@ -119,7 +119,7 @@ describe("照片工作台的首屏专区", () => {
     expect(
       screen.getByRole("link", { name: "打开相册「还有一本」" }),
     ).toHaveAttribute("href", "/photo/albums/a_11");
-    fireEvent.click(screen.getByRole("button", { name: "换一本" }));
+    fireEvent.click(screen.getByRole("button", { name: "换一批" }));
     expect(onReshuffle).toHaveBeenCalledTimes(1);
   });
 

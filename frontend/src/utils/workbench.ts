@@ -122,9 +122,9 @@ export interface PhotoCopy extends WorkbenchCopy {
   serendipityTitle: string;
   /** 该专区的提示语。 */
   serendipityHint: string;
-  /** 换一本的按钮文案。 */
+  /** 换一批的按钮文案。 */
   serendipityButton: string;
-  /** 换一本进行中的文案。 */
+  /** 换一批进行中的文案。 */
   serendipityLoading: string;
   /** 打开这本的按钮文案。 */
   serendipityOpenButton: string;
@@ -171,8 +171,8 @@ const PHOTO: PhotoCopy = {
   recentlyAddedCountLabel: "本新相册",
   serendipityTitle: "随手看看",
   serendipityHint: "不一定是你在找的那本",
-  serendipityButton: "换一本",
-  serendipityLoading: "找一本…",
+  serendipityButton: "换一批",
+  serendipityLoading: "找几本…",
   serendipityOpenButton: "打开看看",
   resumeTitle: "接着看",
   resumeEyebrow: "回到刚才那本",
