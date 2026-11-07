@@ -4984,19 +4984,19 @@ test("浏览器解不了的图片给出明确提示而不是破图", async ({ pa
   await expect(page.getByText("这张图片无法显示")).toBeVisible();
 });
 
-test("主页的视图筛选条紧贴在「全部照片」网格上方", async ({ page }) => {
+test("主页的视图筛选条紧贴在「库内一览」网格上方", async ({ page }) => {
   await page.goto("/");
   // 叶级目录两侧都叫「相册」：视图 chip 的名字用它。
   const chip = page.getByRole("button", { name: /^相册/ });
   await expect(chip).toBeVisible();
   await chip.scrollIntoViewIfNeeded();
 
-  // 筛选条只作用于「全部照片」网格，必须和网格同处一个 section。
+  // 筛选条只作用于「库内一览」网格，必须和网格同处一个 section。
   // 之前它排在未读 / 继续浏览 / 时间线之前，离网格两千多像素，
   // 用户滚到网格时控件已经不在视野里。
   const order = await page.evaluate(() => {
     const heading = [...document.querySelectorAll("h2")].find(
-      (el) => (el.textContent ?? "").trim() === "全部照片",
+      (el) => (el.textContent ?? "").trim() === "库内一览",
     );
     const chipButton = [...document.querySelectorAll("button")].find((el) =>
       (el.textContent ?? "").trim().startsWith("相册"),
@@ -5159,7 +5159,7 @@ test("年份索引可用空格筛选，并保留首页上下文", async ({ page 
   ).toBeVisible();
   await page.getByTitle("清除年份筛选", { exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "全部照片", exact: true }),
+    page.getByRole("heading", { name: "库内一览", exact: true }),
   ).toBeVisible();
 });
 

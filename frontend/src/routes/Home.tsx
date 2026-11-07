@@ -384,11 +384,13 @@ export default function Home() {
     : (manifest?.statistics.comicAlbumCount ?? 0) > 0;
   // 漫画侧多一条「作品」索引，章节序号因此往后挪一位。
   const hasSeriesIndex = hasContent && isComic && seriesGroups.length > 0;
-  // 时间线只在真的按年份铺开时才出现。整屏只有「其他」一桶时，
-  // 这一条索引筛不出任何东西 —— 它是装饰，不是索引（漫画侧常常
-  // 就是这样：卷不以年份命名，全落进「其他」）。
+  // 年份时间线：照片侧是这一侧的主索引（按年份浏览），有内容就摆；
+  // 漫画侧的主索引是「作品」，年份只是一条附带的筛选 —— 只剩「其他」
+  // 一桶时它筛不出任何东西，是装饰不是索引（漫画的卷常常不以年份
+  // 命名，全落进「其他」）。
   const realYearBuckets = yearGroups.filter((g) => g.year !== null).length;
-  const hasYearIndex = hasContent && realYearBuckets >= 2;
+  const hasYearIndex =
+    hasContent && (isComic ? realYearBuckets >= 2 : yearGroups.length > 0);
   // 章节序号跟着实际出现的索引走：少一段，后面的序号要往前挪。
   const sectionNo = {
     series: hasSeriesIndex ? 1 : 0,
