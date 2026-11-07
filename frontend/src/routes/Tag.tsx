@@ -20,6 +20,7 @@ import { thumbUrl } from "../api/thumbs";
 import type { GalleryContextEntry } from "../utils/galleryContext";
 import { useTagAlbums } from "../hooks/useLibrary";
 import { useAppMode } from "../hooks/useAppMode";
+import { mediaCountParts } from "../utils/mediaCount";
 import { nodeSummaryToCard } from "../utils/libraryCard";
 import { decodePathTail, homeRoute } from "../utils/path";
 import { useReducedMotion } from "../hooks/useReducedMotion";
@@ -245,15 +246,23 @@ export default function Tag() {
               {" "}
               <Stat
                 icon={<FolderIcon size={13} />}
-                /* 词跟着侧走：漫画侧叫「作品」，照片侧叫「相册」。 */
-                label={mode === "comic" ? "作品数" : "相册数"}
+                /* 词跟着侧走：标签下挂的是叶级相册，漫画侧的一叶是一卷，
+                   计数单位说「卷」；照片侧说「相册」。 */
+                label={mode === "comic" ? "卷数" : "相册数"}
                 value={albums.length}
               />
               <Stat
                 icon={<ReaderIcon size={13} />}
                 label="总媒体"
                 value={totalMedia}
-                detail={`图片 ${totalImages} · 视频 ${totalVideos}`}
+                /* 拆分跟着侧走：照片说「张」，漫画说「页」——
+                   漫画的媒体就是页，写「图片 13」既用错了词，也没有单位。
+                   写法与卡片上的「19 张 · 1 个视频」同一套。 */
+                detail={mediaCountParts({
+                  imageCount: totalImages,
+                  videoCount: totalVideos,
+                  contentKind: mode,
+                }).label}
               />
               {/* 阅读进度只属于漫画工作台：照片目录下的相册没有
                   「读完」这个状态，这一格在照片模式下不出现。 */}
@@ -288,13 +297,15 @@ export default function Tag() {
         </div>
       </section>
 
-      {/* 作品列表 */}
-      <section aria-label="作品列表" className="page-shell pt-8 pb-10">
+      {/* 标签下的相册列表 */}
+      <section aria-label="相册列表" className="page-shell pt-8 pb-10">
         {needsHistory && <ViewedSortNotice query={historyQuery} />}
         <ListFilterBar totalCount={cards.length} showMinImageFilter={false} />
         {filtered.length === 0 ? (
           <EmptyState
-            title={mode === "comic" ? "没有匹配的作品" : "没有匹配的相册"}
+            /* 标签下挂的是叶级相册，两侧都叫「相册」——
+               漫画侧写成「作品」会指向另一类东西。 */
+            title="没有匹配的相册"
             description="试试修改搜索或排序条件。"
             /* 筛选条就在上面，空态紧跟着它说清楚即可。 */
             dense

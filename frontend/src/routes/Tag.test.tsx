@@ -101,7 +101,8 @@ describe("Tag", () => {
     expect(useTagAlbums).toHaveBeenCalledWith("旅行");
     expect(screen.getByText("旅行册")).toBeInTheDocument();
     expect(screen.getByText("13")).toBeInTheDocument();
-    expect(screen.getByText("图片 12 · 视频 1")).toBeInTheDocument();
+    // 拆分跟着侧走：这一页是漫画侧，媒体是页不是「图片」。
+    expect(screen.getByText("12 页 · 1 个视频")).toBeInTheDocument();
     expect(screen.getByText("0/1")).toBeInTheDocument();
   });
 
