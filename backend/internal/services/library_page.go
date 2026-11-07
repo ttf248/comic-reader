@@ -25,6 +25,7 @@ var (
 	ErrLibraryResourceWrongKind = errors.New("library resource has wrong kind")
 	ErrLibraryTagNotFound       = errors.New("library tag not found")
 	ErrLibraryNoMatchingAlbum   = errors.New("library has no matching album")
+	ErrInvalidOnThisDay         = errors.New("invalid on-this-day date")
 )
 
 // LibraryKindScope 是一次列表请求覆盖的内容属性。
@@ -257,6 +258,18 @@ type libraryPageIndex struct {
 	// 不再每请求重排全库。
 	recentAlbumIndexesByKind map[models.ContentKind][]int
 	kindCollectionCounts     map[models.ContentKind]int
+	// onThisDay 是「月-日 → 那一天拍过的相册」的下标表，键是 "MMDD"。
+	// 来源是各相册从文件名推断出的拍摄日期（models.Album.CaptureDates），
+	// 构建期一次建好，请求期只按属性与年份过滤。
+	onThisDay map[string][]onThisDayEntry
+}
+
+// onThisDayEntry 是一本相册在某一天（"MMDD"）拍过照的记录。
+type onThisDayEntry struct {
+	// index 是相册在 libraryPageIndex.albums 里的下标。
+	index int
+	// date 是命中的那一天，"YYYYMMDD"。
+	date string
 }
 
 func buildLibraryPageIndex(state *resourceCatalogState) *libraryPageIndex {
@@ -272,6 +285,7 @@ func buildLibraryPageIndex(state *resourceCatalogState) *libraryPageIndex {
 		kindAlbumCounts:          make(map[models.ContentKind]int),
 		recentAlbumIndexesByKind: make(map[models.ContentKind][]int),
 		kindCollectionCounts:     make(map[models.ContentKind]int),
+		onThisDay:                make(map[string][]onThisDayEntry),
 	}
 	if state == nil || state.result == nil {
 		return index
@@ -355,6 +369,37 @@ func buildLibraryPageIndex(state *resourceCatalogState) *libraryPageIndex {
 			return albumMoreRecent(index.albums[recent[i]], index.albums[recent[j]])
 		})
 		index.recentAlbumIndexesByKind[kind] = recent
+	}
+	// 「那年今日」的下标表：把每本相册出现过的拍摄日期按月-日归桶。
+	// 拍摄日期来自文件名推断，扫描时已算好，这里只做一次归桶。
+	positionByID := make(map[string]int, len(index.albums))
+	for i, album := range index.albums {
+		positionByID[album.ID] = i
+	}
+	for id, album := range state.albums {
+		position, ok := positionByID[id]
+		if !ok {
+			continue
+		}
+		for _, capture := range album.CaptureDates {
+			if len(capture) != 8 {
+				continue
+			}
+			index.onThisDay[capture[4:]] = append(index.onThisDay[capture[4:]], onThisDayEntry{
+				index: position,
+				date:  capture,
+			})
+		}
+	}
+	for key := range index.onThisDay {
+		entries := index.onThisDay[key]
+		sort.SliceStable(entries, func(i, j int) bool {
+			if entries[i].date != entries[j].date {
+				return entries[i].date > entries[j].date
+			}
+			return entries[i].index < entries[j].index
+		})
+		index.onThisDay[key] = entries
 	}
 	// 集合也按属性计数：工作台分两侧，库规模也要跟着那一侧走。
 	// state.collections 含各层嵌套的集合，与扫描结果的集合总数一致。
@@ -673,6 +718,69 @@ func PageLibraryRecent(snapshot CatalogSnapshot, kind LibraryKindScope, limit in
 		Revision: snapshot.Revision(),
 		Items:    items,
 		Total:    len(indexes),
+	}, nil
+}
+
+// LibraryOnThisDayItem 是一本「那年今日」命中相册：相册摘要 + 命中的那一天。
+//
+// 相册自己的 date 是「最有代表性的那一天」，不等于命中的那一天 ——
+// 一本跨了三年的相册，代表日期与今天的月日未必对得上。
+type LibraryOnThisDayItem struct {
+	LibraryNodeSummary
+	// MatchedDate 是命中的那一天，"YYYY-MM-DD"。
+	MatchedDate string `json:"matchedDate"`
+}
+
+// PageOnThisDay 返回往年同一天（同一个月-日）拍过照的相册。
+//
+// month/day 缺省时取服务端当天。它只认拍摄日期（来自文件名推断），
+// 没有拍摄时间的相册不进这个列表 —— 「那天拍过」这句话必须是
+// 真的，猜出来的日子不算。
+//
+// 同一年里同一本相册只出现一次，取它最近的一次命中；结果按命中的
+// 日期倒序（新的在前）。
+func PageOnThisDay(snapshot CatalogSnapshot, kind LibraryKindScope, month, day int, limit int) (LibraryPage[LibraryOnThisDayItem], error) {
+	if !snapshot.Ready() || snapshot.state == nil || snapshot.state.library == nil {
+		return LibraryPage[LibraryOnThisDayItem]{}, ErrLibraryNotReady
+	}
+	if month < 1 || month > 12 || day < 1 || day > 31 {
+		return LibraryPage[LibraryOnThisDayItem]{}, ErrInvalidOnThisDay
+	}
+	if limit <= 0 || limit > MaxLibraryPageLimit {
+		limit = DefaultLibraryPageLimit
+	}
+	thisYear := time.Now().Year()
+	key := fmt.Sprintf("%02d%02d", month, day)
+	entries := snapshot.state.library.onThisDay[key]
+	items := make([]LibraryOnThisDayItem, 0, len(entries))
+	seen := make(map[string]bool, len(entries))
+	for _, entry := range entries {
+		album := snapshot.state.library.albums[entry.index]
+		if models.NormalizeContentKind(album.ContentKind) != models.ContentKind(kind) {
+			continue
+		}
+		year := atoiOrZero(entry.date[:4])
+		if year <= 0 || year >= thisYear {
+			// 「那年今日」说的是往年：今年的照片在「最近加入」里。
+			continue
+		}
+		if seen[album.ID] {
+			continue
+		}
+		seen[album.ID] = true
+		items = append(items, LibraryOnThisDayItem{
+			LibraryNodeSummary: cloneNodeSummary(album),
+			MatchedDate:        entry.date[:4] + "-" + entry.date[4:6] + "-" + entry.date[6:8],
+		})
+	}
+	total := len(items)
+	if len(items) > limit {
+		items = items[:limit]
+	}
+	return LibraryPage[LibraryOnThisDayItem]{
+		Revision: snapshot.Revision(),
+		Items:    items,
+		Total:    total,
 	}, nil
 }
 

@@ -113,6 +113,12 @@ vi.mock("../hooks/useLibrary", () => {
       isError: false,
       refetch: vi.fn(),
     }),
+    useOnThisDayAlbums: () => ({
+      data: { page: { revision: 1, items: [], total: 0 } },
+      isLoading: false,
+      isError: false,
+      refetch: vi.fn(),
+    }),
     useTagAlbums: () => query(mocks.items),
     useLibraryTags: () => ({ data: { items: [] }, isLoading: false }),
     useLibraryNodes: () => query(mocks.items),

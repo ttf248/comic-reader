@@ -198,6 +198,28 @@ export function useLibraryRecentAlbums(
   });
 }
 
+/**
+ * 「那年今日」：往年同一天（同月同日）拍过照的相册。
+ *
+ * 只在照片侧有意义 —— 漫画没有拍摄时间。查询键带上当天的月与日，
+ * 过了午夜自动换成新的一天。
+ */
+export function useOnThisDayAlbums(
+  kind: AppMode,
+  month: number,
+  day: number,
+  limit = 12,
+  enabled = true,
+) {
+  const { ready } = useAppMode();
+  return useQuery({
+    queryKey: [...libraryQueryKeys.mode(kind), "on-this-day", month, day, limit],
+    queryFn: () => libraryApi.onThisDay(kind, month, day, limit),
+    enabled: ready && enabled,
+    staleTime: 60 * 60 * 1000,
+  });
+}
+
 export function useTagAlbums(tag: string) {
   const { mode, ready } = useAppMode();
   return useQuery({

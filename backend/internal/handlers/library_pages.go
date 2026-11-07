@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -314,6 +315,46 @@ func LibraryRecentHandler(catalog *services.ResourceCatalog) fiber.Handler {
 	}
 }
 
+// LibraryOnThisDayHandler 返回往年同一天拍过照的相册。
+//
+// month 与 day 缺省时取服务端当天；它只认拍摄日期（来自文件名推断），
+// 没有拍摄时间的相册不进这个列表。
+func LibraryOnThisDayHandler(catalog *services.ResourceCatalog) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		limit, ok := parseLibraryPageLimit(c)
+		if !ok {
+			return nil
+		}
+		kind, ok := parseLibraryKind(c)
+		if !ok {
+			return nil
+		}
+		now := time.Now()
+		month, day := int(now.Month()), now.Day()
+		if raw := strings.TrimSpace(c.Query("month")); raw != "" {
+			parsed, err := strconv.Atoi(raw)
+			if err != nil || parsed < 1 || parsed > 12 {
+				return httputil.BadRequest(c, "invalid_on_this_day", "month must be between 1 and 12")
+			}
+			month = parsed
+		}
+		if raw := strings.TrimSpace(c.Query("day")); raw != "" {
+			parsed, err := strconv.Atoi(raw)
+			if err != nil || parsed < 1 || parsed > 31 {
+				return httputil.BadRequest(c, "invalid_on_this_day", "day must be between 1 and 31")
+			}
+			day = parsed
+		}
+		snapshot := catalog.Acquire()
+		page, err := services.PageOnThisDay(snapshot, kind, month, day, limit)
+		if err != nil {
+			return writeLibraryPageError(c, err, snapshot.Revision())
+		}
+		setLibraryRevisionETag(c, snapshot.Revision())
+		return c.JSON(fiber.Map{"ok": true, "page": page})
+	}
+}
+
 // LibraryTagsPageHandler 分页返回标签摘要，不携带标签下的完整相册数组。
 func LibraryTagsPageHandler(catalog *services.ResourceCatalog) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -412,6 +453,8 @@ func writeLibraryPageError(c *fiber.Ctx, err error, revision uint64) error {
 		return httputil.NotFound(c, "tag_not_found", "tag was not found")
 	case errors.Is(err, services.ErrLibraryNoMatchingAlbum):
 		return httputil.NotFound(c, "no_matching_album", "no album matches this request")
+	case errors.Is(err, services.ErrInvalidOnThisDay):
+		return httputil.BadRequest(c, "invalid_on_this_day", "month and day must be a valid calendar date")
 	default:
 		return httputil.Internal(c, "library_page_failed", "unable to build library page")
 	}

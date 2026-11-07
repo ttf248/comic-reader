@@ -118,6 +118,13 @@ interface Props {
    */
   coverRatio?: CoverRatio;
   /**
+   * 计数行下面补一行说明（「那年今日」用它写命中的那一天）。
+   *
+   * 计数行是 nowrap 的：数量一长就把它挤到省略号后面。日期这种
+   * 「这一张卡为什么在这儿」的信息得另起一行，才读得到。
+   */
+  note?: ReactNode;
+  /**
    * 收藏星标常驻显示。
    *
    * 默认桌面端要 hover 才露出星标（界面退到背景）。但收藏页空态的
@@ -154,6 +161,7 @@ export default function AlbumCard({
   titleOnCover,
   coverRatio = "4/3",
   alwaysShowFavorite = false,
+  note,
 }: Props) {
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [propertiesId, setPropertiesId] = useState<string | null>(null);
@@ -206,6 +214,7 @@ export default function AlbumCard({
           titleOnCover={titleOnCover}
           coverRatio={coverRatio}
           alwaysShowFavorite={alwaysShowFavorite}
+          note={note}
         />
       )}
       {menu && (
@@ -243,6 +252,7 @@ function GridCard({
   titleOnCover,
   coverRatio,
   alwaysShowFavorite,
+  note,
 }: {
   data: CardData;
   showLastSeen?: boolean;
@@ -252,6 +262,7 @@ function GridCard({
   titleOnCover?: boolean;
   coverRatio: CoverRatio;
   alwaysShowFavorite: boolean;
+  note?: ReactNode;
 }) {
   // 直接渲染 <img loading="lazy">：浏览器原生懒加载比我们自写的 IO 简单且更可靠
   // （自写 IO 在 React 18 StrictMode dev mount-twice + 卡片树整体重渲染时容易
@@ -566,6 +577,9 @@ function GridCard({
               <FolderIcon size={10} className="shrink-0" />
               <span className="truncate">来自 {data.sourceName}</span>
             </div>
+          )}
+          {note && (
+            <div className="text-meta text-fg-muted mt-0.5 truncate">{note}</div>
           )}
           {showLastSeen && data.lastSeenAt && (
             <div

@@ -52,6 +52,12 @@ export interface LibraryManifest {
   warnings?: ScanWarning[];
 }
 
+/** 「那年今日」命中的一本相册：摘要 + 命中的那一天。 */
+export interface LibraryOnThisDayItem extends LibraryNodeSummary {
+  /** 命中的那一天，"YYYY-MM-DD"。 */
+  matchedDate: string;
+}
+
 export interface LibraryNodeSummary {
   id: string;
   kind: "album" | "collection";
@@ -285,6 +291,16 @@ export const libraryApi = {
       `/api/albums/${encodeURIComponent(albumId)}/media`,
       { params: { cursor, limit } },
     ),
+  /**
+   * 往年同一天拍过照的相册。
+   *
+   * month/day 缺省时服务端取当天。只认拍摄日期（从文件名推断），
+   * 没有拍摄时间的相册不在其中。
+   */
+  onThisDay: (kind: AppMode, month?: number, day?: number, limit = 20) =>
+    api<PageResponse<LibraryOnThisDayItem>>("/api/library/on-this-day", {
+      params: { kind, month, day, limit },
+    }),
   tagPage: (kind: AppMode, cursor?: string, limit = LIBRARY_PAGE_LIMIT) =>
     api<PageResponse<LibraryTagSummary>>("/api/tags", {
       params: { cursor, limit, kind },

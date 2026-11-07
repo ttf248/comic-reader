@@ -113,6 +113,10 @@ vi.mock("../hooks/useLibrary", () => {
       data: { page: { revision: 1, items: [], total: 0 } },
       isLoading: false,
     }),
+    useOnThisDayAlbums: () => ({
+      data: { page: { revision: 1, items: [], total: 0 } },
+      isLoading: false,
+    }),
     useLibraryNodes: (ids: string[]) =>
       query(
         ids.includes("c_root")

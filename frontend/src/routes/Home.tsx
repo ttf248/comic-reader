@@ -23,6 +23,7 @@ import {
 } from "../components/home/PhotoHeroes";
 import ResumeHero from "../components/home/ResumeHero";
 import { useSerendipityAlbum } from "../hooks/useSerendipityAlbum";
+import OnThisDaySection from "../components/home/OnThisDaySection";
 import { useUIStore } from "../store/uiStore";
 import { useAppMode } from "../hooks/useAppMode";
 import { comicCopy, workbenchCopy } from "../utils/workbench";
@@ -47,6 +48,7 @@ import {
 import {
   useLibraryDashboard,
   useLibraryOverview,
+  useOnThisDayAlbums,
   useLibraryRecentAlbums,
 } from "../hooks/useLibrary";
 import {
@@ -110,6 +112,16 @@ export default function Home() {
   // 「继续阅读 / 未读」一一对应，但内容完全不同：漫画有进度与已读，
   // 照片只有「上次打开过哪本」。
   const recentAlbums = useLibraryRecentAlbums(mode, 8, !isComic);
+  // 「那年今日」只在照片侧成立：漫画没有拍摄时间。
+  const today = new Date();
+  const onThisDay = useOnThisDayAlbums(
+    mode,
+    today.getMonth() + 1,
+    today.getDate(),
+    6,
+    !isComic,
+  );
+  const onThisDayItems = onThisDay.data?.page.items ?? [];
   const serendipity = useSerendipityAlbum(!isComic);
   // 「接着看」的数据是访问历史：照片相册其实一直在记，只是原先只有
   // 「最近浏览」页在用。
@@ -413,11 +425,16 @@ export default function Home() {
   const realYearBuckets = yearGroups.filter((g) => g.year !== null).length;
   const hasYearIndex =
     hasContent && (isComic ? realYearBuckets >= 2 : yearGroups.length > 0);
+  // 「那年今日」：往年同一天拍过照的那几本。有命中才摆 —— 没有就是
+  // 没有，不占一个章节号。
+  const hasOnThisDay = hasContent && !isComic && onThisDayItems.length > 0;
   // 章节序号跟着实际出现的索引走：少一段，后面的序号要往前挪。
   const sectionNo = {
     series: hasSeriesIndex ? 1 : 0,
-    year: hasSeriesIndex ? 2 : 1,
-    library: (hasSeriesIndex ? 1 : 0) + (hasYearIndex ? 1 : 0) + 1,
+    onThisDay: (hasSeriesIndex ? 1 : 0) + 1,
+    year: (hasSeriesIndex ? 1 : 0) + (hasOnThisDay ? 1 : 0) + 1,
+    library:
+      (hasSeriesIndex ? 1 : 0) + (hasOnThisDay ? 1 : 0) + (hasYearIndex ? 1 : 0) + 1,
   };
   const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -659,6 +676,14 @@ export default function Home() {
           </div>
           <SeriesTimeline groups={seriesGroups} />
         </section>
+      )}
+      {hasOnThisDay && (
+        <OnThisDaySection
+          items={onThisDayItems}
+          month={today.getMonth() + 1}
+          day={today.getDate()}
+          sectionIndex={pad(sectionNo.onThisDay)}
+        />
       )}
       {hasYearIndex && (
         <section className="page-shell pt-9">

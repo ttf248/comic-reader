@@ -135,6 +135,7 @@ SIGINT/SIGTERM 触发停止接收连接、取消扫描/转码并强制刷新扫�
 - 首页首屏专区按侧各成一套：漫画是「继续阅读 / 未读」，照片是「接着看 / 最近加入 / 随手看看」。照片侧的数据源是 `GET /api/library/recent?kind=photo`（按业务日期倒序的最近相册）与 `GET /api/albums/random?kind=photo&count=3`（随手三本候选，服务端保证互不相同），组件在 `components/home/PhotoHeroes.tsx`，随机结果由 `hooks/useSerendipityAlbum.ts` 用「种子」做查询键换取。
 - 照片侧的「接着看」与漫画侧的「继续阅读」对称，数据源不同：漫画读的是阅读进度，照片读的是访问历史。`hooks/useHistory.ts` 的 `useHistoryCards` 把 `GET /api/history` 与 `POST /api/library/nodes/query` 合成按侧收敛的卡片列表，组件 `components/home/ResumeHero.tsx`（首页首屏专区）、侧栏的「继续」区与「最近浏览」页共用它。它额外返回 `resolvedCount`（仍存在于媒体库里的访问记录条数），用来区分「这一侧没有记录」与「访问过的相册全被移出媒体库」——两者的提示语不同，后者才提「相册可能已移动」。
 - 措辞与计数单位的唯一真相源是 `utils/workbench.ts` 的词表（`workbenchCopy(mode)`），两侧共用组件从**卡片自身的** `contentKind` 取词，而不是从当前工作台取：一张卡永远知道自己属于照片还是漫画，取不到时按照片兜底。照片说「张 / 本 / 浏览」，漫画说「页 / 卷 / 阅读」。
+- 「那年今日」的下标表在发布期建好：把各相册从文件名推断出的拍摄日期按月-日归桶（`library_page.go` 的 `onThisDay`），请求期只按属性与年份过滤。它靠拍摄时间成立，因此只在照片侧有意义 —— 漫画侧不出现这一段。
 - 索引维度按侧分：照片按年份（`components/home/YearTimeline.tsx`），漫画按作品（`components/home/SeriesTimeline.tsx`，集合即作品）。两者共用 `components/home/Timeline.tsx` 的视觉骨架。
 
 ### 查询、导航与网格

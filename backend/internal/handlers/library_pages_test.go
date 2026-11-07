@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http/httptest"
 	"path/filepath"
@@ -292,4 +293,73 @@ func assertHandlerBodyHasNoAbsolutePath(t *testing.T, body io.ReadCloser) {
 		}
 	}
 	visit(decoded)
+}
+
+func TestLibraryOnThisDayHandlerMatchesEarlierYearsOnly(t *testing.T) {
+	root := t.TempDir()
+	albumPath := filepath.Join(root, "album")
+	file := filepath.Join(albumPath, "1.jpg")
+	result := &models.ScanResult{
+		Roots: []string{root}, AlbumCount: 1,
+		Albums: []models.Album{{
+			Type: "album", Path: albumPath, Name: "album", SourceRoot: root,
+			ImageFiles: []string{file}, ImageCount: 1, CoverImage: file, CoverKind: "image",
+			// 这本相册在 11 月 7 日拍过照：今年与前两年各一次。
+			CaptureDates: []string{
+				fmt.Sprintf("%d1107", time.Now().Year()),
+				fmt.Sprintf("%d1107", time.Now().Year()-1),
+				fmt.Sprintf("%d1107", time.Now().Year()-3),
+			},
+		}},
+	}
+	catalog := services.NewResourceCatalog()
+	catalog.SetContentKindPolicy(services.NewContentKindPolicy([]services.RootKind{
+		{Path: root, Kind: models.ContentKindPhoto},
+	}))
+	catalog.Publish(result, []string{root})
+
+	app := fiber.New()
+	app.Get("/api/library/on-this-day", LibraryOnThisDayHandler(catalog))
+
+	resp, err := app.Test(httptest.NewRequest("GET", "/api/library/on-this-day?kind=photo&month=11&day=7", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status=%d body=%s", resp.StatusCode, body)
+	}
+	var payload struct {
+		Page struct {
+			Total int `json:"total"`
+			Items []struct {
+				ID          string `json:"id"`
+				Name        string `json:"name"`
+				MatchedDate string `json:"matchedDate"`
+			} `json:"items"`
+		} `json:"page"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	// 今年的那次不算「往年」；同一本相册只出现一次，取最近的一次命中。
+	if payload.Page.Total != 1 || len(payload.Page.Items) != 1 {
+		t.Fatalf("page=%+v, want one item", payload.Page)
+	}
+	wantMatched := fmt.Sprintf("%d-11-07", time.Now().Year()-1)
+	if payload.Page.Items[0].MatchedDate != wantMatched {
+		t.Fatalf("matchedDate=%q, want %s", payload.Page.Items[0].MatchedDate, wantMatched)
+	}
+	if payload.Page.Items[0].Name != "album" {
+		t.Fatalf("name=%q, want album", payload.Page.Items[0].Name)
+	}
+
+	// 非法月日要报错，而不是悄悄给一个空列表。
+	bad, err := app.Test(httptest.NewRequest("GET", "/api/library/on-this-day?kind=photo&month=13&day=1", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bad.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("month=13 status=%d, want 400", bad.StatusCode)
+	}
 }
