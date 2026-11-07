@@ -917,7 +917,7 @@
       border-color var(--dur);
   }
   .year-index__open:hover,
-  .year-index__open[aria-pressed="true"] {
+  .year-index__item[data-active="true"] .year-index__open {
     border-color: var(--brand);
     background: var(--brand-soft);
     color: var(--brand-ink);
@@ -929,7 +929,9 @@
     border-color: transparent;
   }
   :root[data-mode="comic"] .year-index__open:hover,
-  :root[data-mode="comic"] .year-index__open[aria-pressed="true"] {
+  :root[data-mode="comic"]
+    .year-index__item[data-active="true"]
+    .year-index__open {
     background: var(--brand-soft);
     border-color: var(--brand);
   }
@@ -973,6 +975,13 @@
   .year-index__item:focus-within .year-index__filter,
   .year-index__item[data-active="true"] .year-index__filter {
     opacity: 1;
+  }
+  /* 触屏没有悬停：漏斗要是常驻的，否则它就是一个永远看不见、
+     也永远点不到的控件。桌面仍保持「指到哪一年再浮出来」。 */
+  @media (hover: none) {
+    .year-index__filter {
+      opacity: 1;
+    }
   }
   .year-index__filter:hover {
     color: var(--fg);

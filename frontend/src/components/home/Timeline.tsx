@@ -17,7 +17,7 @@ export interface TimelineEntry {
   onActivate: () => void;
   /** 右上角的次级操作；没有就不渲染那一枚按钮。 */
   action?: ReactNode;
-  /** 主区域是否处于选中态。 */
+  /** 主区域是否处于选中态（正在被筛选的那一年）。 */
   active?: boolean;
   /** 标签是数字（年份）：用等宽数字对齐，避免各年卡宽度跳来跳去。 */
   numeric?: boolean;
@@ -68,7 +68,6 @@ function TimelineCard({ entry }: { entry: TimelineEntry }) {
       <button
         type="button"
         onClick={entry.onActivate}
-        aria-pressed={entry.active}
         className="year-index__open"
       >
         <span

@@ -15,7 +15,8 @@ interface Props {
 /**
  * 年份索引。
  *
- * 点年份卡：只有一个相册时直接进去，多个则切换年份筛选并滚到网格。
+ * 点年份卡：进入那一年（通常是一个同名集合，其次是文件最多的那一本）。
+ * 卡片右上角的漏斗才是「只筛这一年」—— 它筛的是下方网格。
  */
 export default function YearTimeline({ groups, gridRef }: Props) {
   const navigate = useNavigate();
@@ -40,6 +41,13 @@ export default function YearTimeline({ groups, gridRef }: Props) {
             }),
           );
         };
+        // 年卡的主操作恒是「进入那一年」。年份多半对应一个同名集合
+        // （首页上一年一个入口），没有集合时进文件最多的那一本。
+        // 早先这里是两义的：一个节点时进入、多个节点时变成筛选器 ——
+        // 同一张卡换个年份行为就不同，读起来像坏了。
+        const enterTarget =
+          group.albums.find((a) => a.variant === "collection") ??
+          group.albums[0];
         // 年卡上的计数说的是「这一年有多少照片」，不是「这一年有几个
         // 直属子项」：首页的年份多半对应一个同名集合，直属子项恒为 1，
         // 「1 本」对谁都没有信息量。
@@ -56,10 +64,10 @@ export default function YearTimeline({ groups, gridRef }: Props) {
           numeric: group.year !== null,
           coverPath: group.coverPreviewPaths.find(Boolean),
           active: isActive,
-          onActivate: () =>
-            group.albums.length === 1
-              ? navigate(group.albums[0].to)
-              : triggerFilter(),
+          onActivate: () => {
+            if (enterTarget) navigate(enterTarget.to);
+            else triggerFilter();
+          },
           action: (
             <button
               type="button"

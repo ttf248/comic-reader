@@ -28,6 +28,16 @@ function makeCard(id: string): CardData {
   };
 }
 
+function makeCollectionCard(id: string): CardData {
+  return {
+    ...makeCard(id),
+    variant: "collection",
+    title: id,
+    subtitle: "集合",
+    to: `/albums/${id}`,
+  };
+}
+
 function makeGroup(year: number, albumCount = 1): YearGroup {
   return {
     year,
@@ -112,13 +122,21 @@ describe("YearTimeline", () => {
     expect(navigate).toHaveBeenCalledWith("/albums/a0");
   });
 
-  it("多相册年份按钮执行筛选而不是跳转", () => {
+  it("一年里有多个节点时仍然进入那一年，而不是变成筛选", () => {
     renderTimeline([makeGroup(2024, 3)]);
     const card = screen.getByRole("button", { name: /2024/ });
 
-    expect(card.tagName).toBe("BUTTON");
     fireEvent.click(card);
-    expect(navigate).not.toHaveBeenCalled();
-    expect(useSearchStore.getState().yearFilter).toBe(2024);
+    expect(navigate).toHaveBeenCalledWith("/albums/a0");
+    expect(useSearchStore.getState().yearFilter).toBeNull();
+  });
+
+  it("年份里有集合时进入集合（那一年通常就是一个同名集合）", () => {
+    const group = makeGroup(2024, 2);
+    group.albums = [makeCard("a0"), makeCollectionCard("c0")];
+    renderTimeline([group]);
+
+    fireEvent.click(screen.getByRole("button", { name: /2024/ }));
+    expect(navigate).toHaveBeenCalledWith("/albums/c0");
   });
 });
