@@ -11,7 +11,17 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-export type SortKey = 'name' | 'count' | 'recent' | 'viewed'
+/**
+ * 排序口径。
+ *
+ * - name   按名称
+ * - count  按张数（漫画侧按页数）
+ * - recent 按最近改（文件修改时间）
+ * - added  按加入时间（业务日期：拍摄时间 > 文件夹名日期 > 修改时间，
+ *          与后端「最近加入」同一口径）
+ * - viewed 按最近看（访问记录）
+ */
+export type SortKey = 'name' | 'count' | 'recent' | 'added' | 'viewed'
 export type ViewKey = 'all' | 'album' | 'collection' | 'smart'
 
 interface SearchState {

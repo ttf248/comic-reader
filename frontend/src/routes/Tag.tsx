@@ -25,6 +25,7 @@ import { nodeSummaryToCard } from "../utils/libraryCard";
 import { decodePathTail, homeRoute } from "../utils/path";
 import { useReducedMotion } from "../hooks/useReducedMotion";
 import { compareDatesDesc } from "../utils/date";
+import { compareByAdded } from "../utils/cardSorting";
 import { workbenchCopy } from "../utils/workbench";
 import { useViewedSort } from "../hooks/useHistory";
 import { ListFilterBar } from "../components/common/ListFilterBar";
@@ -99,6 +100,10 @@ export default function Tag() {
       case "count":
         return [...list].sort(
           (a, b) => (b.imageCount ?? 0) - (a.imageCount ?? 0),
+        );
+      case "added":
+        return [...list].sort(
+          (a, b) => compareByAdded(a, b) || a.name.localeCompare(b.name),
         );
       case "recent":
         return [...list].sort(

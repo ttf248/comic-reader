@@ -13,6 +13,7 @@ import { SparkleIcon, ShuffleIcon, FilterIcon } from "../components/common/Icon"
 import type { GalleryContextEntry } from "../utils/galleryContext";
 import { albumRoute, decodeFavPath, homeRoute } from "../utils/path";
 import { compareDatesDesc } from "../utils/date";
+import { compareByAdded } from "../utils/cardSorting";
 import { useViewedSort } from "../hooks/useHistory";
 import { comicCopy } from "../utils/workbench";
 
@@ -49,6 +50,10 @@ export default function Unread() {
     switch (sortBy) {
       case "count":
         return list.sort((a, b) => b.count - a.count);
+      case "added":
+        return list.sort(
+          (a, b) => compareByAdded(a, b) || a.title.localeCompare(b.title),
+        );
       case "name":
         return list.sort((a, b) => a.title.localeCompare(b.title));
       case "recent":

@@ -57,6 +57,7 @@ describe("照片工作台的首屏专区", () => {
       <RecentlyAddedHero
         items={[makeAlbum("a_1", "海边"), makeAlbum("a_2", "山里")]}
         total={2}
+        onShowAll={vi.fn()}
       />,
     );
     const hero = screen.getByTestId("recently-added-hero");
@@ -70,8 +71,26 @@ describe("照片工作台的首屏专区", () => {
   });
 
   it("没有最近加入的相册时不渲染该区块", () => {
-    renderHero(<RecentlyAddedHero items={[]} total={0} />);
+    renderHero(<RecentlyAddedHero items={[]} total={0} onShowAll={vi.fn()} />);
     expect(screen.queryByTestId("recently-added-hero")).toBeNull();
+  });
+
+  it("「全部」不跳到最近看，而是把网格按加入时间排开", () => {
+    const onShowAll = vi.fn();
+    renderHero(
+      <RecentlyAddedHero
+        items={[makeAlbum("a_1", "海边")]}
+        total={1}
+        onShowAll={onShowAll}
+      />,
+    );
+    // 这一区讲的是「最近加入」：入口必须是排序，不是另一页的浏览记录。
+    const all = screen.getByRole("button", {
+      name: "按加入时间排序，查看全部相册",
+    });
+    expect(all).toBeInTheDocument();
+    fireEvent.click(all);
+    expect(onShowAll).toHaveBeenCalledTimes(1);
   });
 
   it("随手看看展示一本照片相册，换一本会回调", () => {

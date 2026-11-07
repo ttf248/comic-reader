@@ -150,6 +150,9 @@ function sortOptions(mode: AppMode): { value: SortKey; label: string }[] {
     { value: "name", label: "按名称" },
     { value: "count", label: mode === "comic" ? "按页数" : "按张数" },
     { value: "recent", label: "按最近改" },
+    // 「按加入时间」用业务日期（拍摄时间 > 文件夹名日期 > 修改时间），
+    // 与首页「最近加入」专区同一口径。
+    { value: "added", label: "按加入时间" },
     { value: "viewed", label: "按最近看" },
   ];
 }

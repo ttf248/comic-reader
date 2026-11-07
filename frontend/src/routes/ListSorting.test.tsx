@@ -264,6 +264,19 @@ const order = () =>
     .getAllByRole("listitem")
     .map((item) => item.textContent);
 
+// 业务日期与修改时间刻意相反：按加入时间排出来的顺序与「最近改」
+// 完全不同，才说明两者真的不是一回事。
+const addedExpected = ["Z旧相册", "A中相册", "M新相册"];
+
+it.each(pages)(
+  "%s 按加入时间按业务日期倒序，不按修改时间",
+  async (_name, path) => {
+    useSearchStore.getState().setSortBy("added");
+    renderPage(path);
+    await waitFor(() => expect(order()).toEqual(addedExpected));
+  },
+);
+
 it.each(sortablePages)(
   "%s 最近看按访问时间倒序，未访问相册置后",
   async (_name, path) => {

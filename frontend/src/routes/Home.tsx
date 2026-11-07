@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { useSearchStore } from "../store/searchStore";
@@ -36,6 +36,7 @@ import {
 } from "../utils/path";
 import { continueReadingTarget } from "../utils/continueReading";
 import { compareDatesDesc } from "../utils/date";
+import { compareByAdded } from "../utils/cardSorting";
 import type { GalleryContextEntry } from "../utils/galleryContext";
 import {
   groupLibraryNodesBySeries,
@@ -86,6 +87,7 @@ export default function Home() {
   const yearFilter = useSearchStore((s) => s.yearFilter);
   const setYearFilter = useSearchStore((s) => s.setYearFilter);
   const setMinImageCount = useSearchStore((s) => s.setMinImageCount);
+  const setSortBy = useSearchStore((s) => s.setSortBy);
   const viewMode = useUIStore((s) => s.viewMode);
 
   // 收藏数按当前工作台算：照片工作台的「N 收藏」不该把漫画收藏算进去。
@@ -117,6 +119,18 @@ export default function Home() {
     [recentAlbums.data],
   );
   const recentTotal = recentAlbums.data?.page.total ?? recentItems.length;
+  // 「最近加入」的「全部」：把首页网格按加入时间排好并滚过去。
+  // 这一区讲的是「最近加入」，点进去却是「最近看」，说的与做的不一致；
+  // 现在它落到同一个口径的排序上 —— 排序条上也会显示「按加入时间」。
+  const showAllRecent = useCallback(() => {
+    setSortBy("added");
+    requestAnimationFrame(() =>
+      gridRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      }),
+    );
+  }, [setSortBy]);
   const dashboardProgressByID = useMemo(
     () =>
       new Map(
@@ -319,6 +333,10 @@ export default function Home() {
     switch (sortBy) {
       case "count":
         return withProgress.sort((a, b) => b.count - a.count);
+      case "added":
+        return withProgress.sort(
+          (a, b) => compareByAdded(a, b) || a.title.localeCompare(b.title),
+        );
       case "recent":
         return withProgress.sort(
           (a, b) =>
@@ -594,6 +612,7 @@ export default function Home() {
                     <RecentlyAddedHero
                       items={recentItems}
                       total={recentTotal}
+                      onShowAll={showAllRecent}
                     />
                   )}
                 </>
@@ -603,6 +622,7 @@ export default function Home() {
                     <RecentlyAddedHero
                       items={recentItems}
                       total={recentTotal}
+                      onShowAll={showAllRecent}
                     />
                   )}
                   <SerendipityHero

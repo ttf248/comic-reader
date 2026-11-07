@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { useSearchStore } from "../store/searchStore";
+import { useSearchStore, type SortKey } from "../store/searchStore";
 import { useFavorites } from "../hooks/useFavorites";
 import { useGalleryContextSync } from "../hooks/useGalleryContextSync";
 import { historyApi } from "../api/prefs";
@@ -26,6 +26,7 @@ import CardCover from "../components/album/CardCover";
 import { useAppMode } from "../hooks/useAppMode";
 import { useSafeBack } from "../utils/navigation";
 import { compareDatesDesc } from "../utils/date";
+import { compareByAdded } from "../utils/cardSorting";
 import {
   ChevronLeftIcon,
   StarIcon,
@@ -82,6 +83,7 @@ function toAlbumLike(summary: LibraryNodeSummary): AlbumLike {
     sourceName: summary.sourceName,
     virtual: summary.virtual,
     modTime: summary.modTime,
+    date: summary.date,
     contentKind: summary.contentKind,
   };
 }
@@ -96,6 +98,7 @@ function toCollectionLike(summary: LibraryNodeSummary): CollectionLike {
     videoCount: summary.videoCount,
     coverImage: summary.coverImage,
     coverImages: summary.coverImages,
+    date: summary.date,
     sourceRoot: summary.sourceRoot,
     sourceName: summary.sourceName,
     contentKind: summary.contentKind,
@@ -474,7 +477,7 @@ function CollectionView({
   mode: AppMode;
   query: string;
   // 复用全局 SortKey:Album 详情也支持「最近看」('viewed' 用 history 排序)
-  sortBy: "name" | "count" | "recent" | "viewed";
+  sortBy: SortKey;
   viewMode: "grid" | "list";
   onBack: () => void;
   onToggleFav: () => void;
@@ -497,6 +500,7 @@ function CollectionView({
       imageCount: a.imageCount,
       videoCount: a.videoCount ?? 0,
       modTime: a.modTime,
+      date: a.date,
       coverPath: a.coverImage,
       coverKind: a.coverKind,
       to: albumRoute(a.contentKind, a.path),
@@ -519,6 +523,7 @@ function CollectionView({
         sourceRoot: sub.sourceRoot,
         sourceName: sub.sourceName,
         modTime: detail.modTime,
+        date: sub.date,
         contentKind: sub.contentKind,
       };
     });
@@ -534,6 +539,10 @@ function CollectionView({
     switch (sortBy) {
       case "count":
         return items.sort((a, b) => b.count - a.count);
+      case "added":
+        return items.sort(
+          (a, b) => compareByAdded(a, b) || a.title.localeCompare(b.title),
+        );
       case "recent":
         return items.sort(
           (a, b) =>

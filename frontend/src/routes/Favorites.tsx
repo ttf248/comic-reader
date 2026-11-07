@@ -16,6 +16,7 @@ import EmptyState from "../components/common/EmptyState";
 import { StarIcon } from "../components/common/Icon";
 import { decodeFavPath, homeRoute } from "../utils/path";
 import { compareDatesDesc } from "../utils/date";
+import { compareByAdded } from "../utils/cardSorting";
 import type { GalleryContextEntry } from "../utils/galleryContext";
 import { useViewedSort } from "../hooks/useHistory";
 import {
@@ -119,6 +120,10 @@ export default function Favorites() {
     switch (sortBy) {
       case "count":
         return list.sort((a, b) => b.count - a.count);
+      case "added":
+        return list.sort(
+          (a, b) => compareByAdded(a, b) || a.title.localeCompare(b.title),
+        );
       case "viewed":
         return list.sort(
           (a, b) =>

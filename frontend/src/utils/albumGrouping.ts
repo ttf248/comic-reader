@@ -58,6 +58,8 @@ export type AlbumLike = {
   sourceName?: string;
   virtual?: boolean;
   modTime?: string;
+  /** 业务日期（拍摄时间 > 文件夹名日期 > 修改时间）：「按加入时间」排序用它。 */
+  date?: string;
   /** 内容属性：决定卡片链接落在哪一侧，也决定要不要显示阅读进度。 */
   contentKind: ContentKind;
 };
@@ -75,6 +77,8 @@ export type CollectionLike = {
   displayName?: string;
   sourceRoot?: string;
   sourceName?: string;
+  /** 业务日期：「按加入时间」排序用它，缺省时退回集合的修改时间。 */
+  date?: string;
   /** 内容属性：集合继承所属目录的属性。 */
   contentKind: ContentKind;
 };
@@ -99,6 +103,7 @@ function cardForAlbumLike(a: AlbumLike): {
       to: albumRoute(a.contentKind, a.path),
       sourceRoot: a.sourceRoot,
       sourceName: a.sourceName,
+      date: a.date,
       contentKind: a.contentKind,
     },
     images: a.imageCount,
@@ -141,6 +146,7 @@ function cardForCollection(c: CollectionLike): {
       count: c.albumCount,
       coverPath: c.coverImage ?? c.albums?.[0]?.coverImage ?? "",
       covers: c.coverImages,
+      date: c.date,
       to: albumRoute(c.contentKind, c.path),
       sourceRoot: c.sourceRoot,
       sourceName: c.sourceName,
@@ -240,6 +246,7 @@ export function groupLibraryNodesByYear(
         sourceRoot: node.sourceRoot,
         sourceName: node.sourceName,
         virtual: node.virtual,
+        date: node.date,
         contentKind: node.contentKind,
       });
       continue;
@@ -255,6 +262,7 @@ export function groupLibraryNodesByYear(
       displayName: node.displayName,
       sourceRoot: node.sourceRoot,
       sourceName: node.sourceName,
+      date: node.date,
       contentKind: node.contentKind,
     });
   }

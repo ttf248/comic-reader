@@ -75,9 +75,10 @@ it("公开展开状态及当前选中的排序项", () => {
   expect(
     within(options).getByRole("button", { name: "按名称", pressed: true }),
   ).toBeInTheDocument();
+  // 排序项：按名称 / 按张数 / 按最近改 / 按加入时间 / 按最近看。
   expect(
     within(options).getAllByRole("button", { pressed: false }),
-  ).toHaveLength(3);
+  ).toHaveLength(4);
 });
 
 it("刚展开就卸载时不留下待注册的监听任务", () => {

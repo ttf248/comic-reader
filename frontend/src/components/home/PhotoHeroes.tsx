@@ -1,7 +1,6 @@
 import { Link } from "react-router-dom";
 import type { LibraryNodeSummary } from "../../api/library";
 import { useFavorites } from "../../hooks/useFavorites";
-import { recentsRoute } from "../../utils/path";
 import { photoCopy } from "../../utils/workbench";
 import { mediaCountLabel } from "../../utils/mediaCount";
 import { nodeSummaryToCard } from "../../utils/libraryCard";
@@ -21,10 +20,16 @@ import { ArrowRightLineIcon, ShuffleIcon } from "../common/Icon";
 interface RecentlyAddedProps {
   items: LibraryNodeSummary[];
   total: number;
+  /** 「全部」：把首页网格按加入时间排好并滚过去。 */
+  onShowAll: () => void;
 }
 
 /** 最近加入：按业务日期倒序的最近照片相册。 */
-export function RecentlyAddedHero({ items, total }: RecentlyAddedProps) {
+export function RecentlyAddedHero({
+  items,
+  total,
+  onShowAll,
+}: RecentlyAddedProps) {
   const copy = photoCopy();
   const { favorites } = useFavorites();
   const favoriteIds = new Set(favorites);
@@ -50,13 +55,17 @@ export function RecentlyAddedHero({ items, total }: RecentlyAddedProps) {
           </h2>
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <Link
-            to={recentsRoute("photo")}
+          {/* 这一区讲的是「最近加入」，所以「全部」指的是全部按加入
+              时间排开，而不是跳到「最近看」那一页。 */}
+          <button
+            type="button"
+            onClick={onShowAll}
             className="btn btn-sm btn-ghost"
-            aria-label={`查看${copy.recentlyAddedTitle}`}
+            aria-label="按加入时间排序，查看全部相册"
+            title="按加入时间排序，查看全部相册"
           >
             全部 <ArrowRightLineIcon size={14} />
-          </Link>
+          </button>
         </div>
       </div>
       <div className="hero-grid hero-grid--wall">

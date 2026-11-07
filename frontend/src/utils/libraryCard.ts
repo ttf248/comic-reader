@@ -39,6 +39,9 @@ export function nodeSummaryToCard(
     imageCount: isAlbum ? (node.imageCount ?? 0) : undefined,
     videoCount: isAlbum ? (node.videoCount ?? 0) : undefined,
     modTime: node.modTime,
+    // 业务日期：拍摄时间 > 文件夹名日期 > 修改时间（后端给出的口径）。
+    // 「按加入时间」排序用它，缺省时退回修改时间。
+    date: node.date,
     coverPath: node.coverImage ?? "",
     covers: node.coverImages,
     coverKind: node.coverKind,

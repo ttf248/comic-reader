@@ -48,6 +48,12 @@ export interface CardData {
   imageCount?: number;
   /** 后端摘要中的修改时间，供列表的「最近改」排序使用。 */
   modTime?: string;
+  /**
+   * 业务日期（ISO）：拍摄时间 > 文件夹名日期 > 修改时间。
+   * 「按加入时间」排序用它，缺省时退回 modTime —— 与后端「最近加入」
+   * 是同一口径，不然首页专区与列表排序会对不上。
+   */
+  date?: string;
   coverPath: string;
   /** 集合 / 智能视图的代表封面，按顺序最多展示四张；为空时回退到 coverPath。 */
   covers?: string[];

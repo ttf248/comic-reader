@@ -16,6 +16,7 @@ import EmptyState from "../components/common/EmptyState";
 import { ClockIcon } from "../components/common/Icon";
 import { decodeFavPath, homeRoute } from "../utils/path";
 import { compareDatesDesc, formatRelative } from "../utils/date";
+import { compareByAdded } from "../utils/cardSorting";
 import type { GalleryContextEntry } from "../utils/galleryContext";
 import { cardMatchesQuery } from "../utils/libraryCard";
 
@@ -73,6 +74,10 @@ export default function Recents() {
     switch (effectiveSort) {
       case "count":
         return list.sort((a, b) => b.count - a.count);
+      case "added":
+        return list.sort(
+          (a, b) => compareByAdded(a, b) || a.title.localeCompare(b.title),
+        );
       case "name":
         return list.sort((a, b) => a.title.localeCompare(b.title));
       case "recent":
