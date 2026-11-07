@@ -82,9 +82,9 @@ export default function CopyButton({ value, title, onDark }: Props) {
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex items-center justify-center w-4 h-4 rounded transition-colors ${
+      className={`inline-flex items-center justify-center w-6 h-6 -m-1 rounded transition-colors ${
         onDark
-          ? "text-white/45 hover:text-white hover:bg-white/10"
+          ? "text-white/60 hover:text-white hover:bg-white/10"
           : "text-fg-subtle hover:text-fg hover:bg-bg-subtle"
       }`}
       title={label}

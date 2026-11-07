@@ -25,12 +25,15 @@ export default function ImageInfoPanel({ absPath, onClose }: Props) {
   if (!absPath) return null;
 
   return (
+    /* 面板按内容高度收住（self-start）：一整屏高的面板里只有八行规格，
+     下面大半是空的，读起来像没加载完。 */
     <aside
       data-testid="image-info-panel"
       className="
         absolute inset-x-0 bottom-0 top-[76px] z-30 flex flex-col
         border-t border-overlay-border bg-overlay-panel backdrop-blur-md
-        md:static md:inset-auto md:z-auto md:w-[21rem] md:shrink-0 md:border-l md:border-t-0
+        md:static md:inset-auto md:z-auto md:w-[21rem] md:shrink-0 md:self-start
+        md:border-l md:border-t-0
       "
     >
       <div className="flex items-center justify-between px-4 h-11 border-b border-white/10 shrink-0">
