@@ -75,7 +75,7 @@ export default function ResumeHero({ cards }: Props) {
         </div>
       </div>
       {rest.length > 0 && (
-        <div className="resume-queue">
+        <div className="resume-queue mini-queue">
           {rest.map((card) => (
             <ResumeQueueItem key={card.id} card={card} />
           ))}
