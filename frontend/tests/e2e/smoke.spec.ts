@@ -2786,7 +2786,12 @@ test("排序选项支持键盘确认取消和自然移出焦点", async ({ page 
 
   await test.step("Tab 从最后一项移出时关闭选项并保留下一控件焦点", async () => {
     await trigger.press("Enter");
-    for (let index = 0; index < 5; index++) await page.keyboard.press("Tab");
+    // 一路 Tab 到选项之外：排序项会增减，不写死次数 ——
+    // 写死了就等于把「选项有几项」抄进测试里，加一项就得改这里。
+    for (let index = 0; index < 10; index++) {
+      await page.keyboard.press("Tab");
+      if ((await options.count()) === 0) break;
+    }
     await expect(grid).toBeFocused();
     await expect(options).toHaveCount(0);
   });
