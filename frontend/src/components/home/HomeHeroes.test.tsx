@@ -112,3 +112,13 @@ it("没有所属作品时只写卷名", () => {
 
   expect(screen.getByText("第1卷")).toBeInTheDocument();
 });
+
+// 队列里只写「第2卷」时，这一卷属于哪部作品看不出来。
+it("继续阅读的队列项补上所属作品", () => {
+  renderContinue([
+    card(1),
+    { ...card(2), parentName: "夏日纪事" },
+  ]);
+
+  expect(screen.getByText("夏日纪事 · 第2卷")).toBeInTheDocument();
+});

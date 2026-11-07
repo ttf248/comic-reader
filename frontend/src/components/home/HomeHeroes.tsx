@@ -299,20 +299,26 @@ function QueueItem({
   onRemove: () => void;
 }) {
   const copy = comicCopy();
+  // 作品名补在卷名前面：队列里只写「第2卷」时，这一卷属于哪部作品
+  // 看不出来 —— 与书封、列表行、侧栏同一套写法。
+  const label = card.displayTitle ?? card.title;
+  const series =
+    card.parentName && card.parentName !== label ? card.parentName : undefined;
+  const queueTitle = series ? `${series} · ${label}` : label;
   return (
     <div className="hero-queue__item group">
       <button
         type="button"
         className="hero-queue__open"
         onClick={onOpen}
-        aria-label={`${copy.continueTitle}「${card.title}」`}
+        aria-label={`${copy.continueTitle}「${queueTitle}」`}
       >
         <span className="hero-queue__cover">
           <Cover card={card} />
         </span>
         <span className="min-w-0">
           <span className="block truncate text-body font-medium">
-            {card.displayTitle ?? card.title}
+            {queueTitle}
           </span>
           <span className="hero-panel__muted block mt-1 tabular-nums">
             {copy.positionVerb} {(card.progress?.index ?? 0) + 1} /{" "}
