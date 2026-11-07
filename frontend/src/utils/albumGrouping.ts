@@ -11,6 +11,7 @@
 //
 // 返回结果按年份倒序，每年组内按文件数倒序；这样视觉上「今年 → 去年 → 更早」自然排序。
 import type { CardData } from "../components/album/AlbumCard";
+import { usableDate } from "./date";
 import type { ContentKind, LibraryNodeSummary } from "../api/library";
 import { albumRoute } from "./path";
 
@@ -103,7 +104,7 @@ function cardForAlbumLike(a: AlbumLike): {
       to: albumRoute(a.contentKind, a.path),
       sourceRoot: a.sourceRoot,
       sourceName: a.sourceName,
-      date: a.date,
+      date: usableDate(a.date),
       contentKind: a.contentKind,
     },
     images: a.imageCount,
@@ -146,7 +147,7 @@ function cardForCollection(c: CollectionLike): {
       count: c.albumCount,
       coverPath: c.coverImage ?? c.albums?.[0]?.coverImage ?? "",
       covers: c.coverImages,
-      date: c.date,
+      date: usableDate(c.date),
       to: albumRoute(c.contentKind, c.path),
       sourceRoot: c.sourceRoot,
       sourceName: c.sourceName,
@@ -246,7 +247,7 @@ export function groupLibraryNodesByYear(
         sourceRoot: node.sourceRoot,
         sourceName: node.sourceName,
         virtual: node.virtual,
-        date: node.date,
+        date: usableDate(node.date),
         contentKind: node.contentKind,
       });
       continue;
@@ -262,7 +263,7 @@ export function groupLibraryNodesByYear(
       displayName: node.displayName,
       sourceRoot: node.sourceRoot,
       sourceName: node.sourceName,
-      date: node.date,
+      date: usableDate(node.date),
       contentKind: node.contentKind,
     });
   }

@@ -1,6 +1,7 @@
 import type { AppMode, LibraryNodeSummary, LibraryTagSummary } from "../api/library";
 import type { CardData } from "../components/album/AlbumCard";
 import { albumRoute, tagRoute } from "./path";
+import { usableDate } from "./date";
 
 export function nodeSummaryToCard(
   node: LibraryNodeSummary,
@@ -38,10 +39,10 @@ export function nodeSummaryToCard(
     count: isAlbum ? (node.imageCount ?? 0) : (node.albumCount ?? 0),
     imageCount: isAlbum ? (node.imageCount ?? 0) : undefined,
     videoCount: isAlbum ? (node.videoCount ?? 0) : undefined,
-    modTime: node.modTime,
+    modTime: usableDate(node.modTime),
     // 业务日期：拍摄时间 > 文件夹名日期 > 修改时间（后端给出的口径）。
-    // 「按加入时间」排序用它，缺省时退回修改时间。
-    date: node.date,
+    // 「按拍摄时间」排序用它，缺省时退回修改时间。
+    date: usableDate(node.date),
     coverPath: node.coverImage ?? "",
     covers: node.coverImages,
     coverKind: node.coverKind,

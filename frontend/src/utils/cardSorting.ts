@@ -5,7 +5,7 @@
 // 列表里的「按加入时间」如果按修改时间排，两处对不上，读者会以为
 // 排序坏了。
 
-import { compareDatesDesc } from "./date";
+import { compareDatesDesc, usableDate } from "./date";
 
 /** 带日期的条目：卡片与后端摘要都满足。 */
 export interface DatedEntry {
@@ -22,7 +22,7 @@ export interface DatedEntry {
  */
 export function compareByAdded(first: DatedEntry, second: DatedEntry): number {
   return compareDatesDesc(
-    first.date ?? first.modTime,
-    second.date ?? second.modTime,
+    usableDate(first.date) ?? usableDate(first.modTime),
+    usableDate(second.date) ?? usableDate(second.modTime),
   );
 }

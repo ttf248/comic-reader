@@ -25,7 +25,7 @@ import { albumCountUnit, workbenchCopy } from "../utils/workbench";
 import CardCover from "../components/album/CardCover";
 import { useAppMode } from "../hooks/useAppMode";
 import { useSafeBack } from "../utils/navigation";
-import { compareDatesDesc } from "../utils/date";
+import { compareDatesDesc, usableDate } from "../utils/date";
 import { compareByAdded } from "../utils/cardSorting";
 import {
   ChevronLeftIcon,
@@ -82,8 +82,8 @@ function toAlbumLike(summary: LibraryNodeSummary): AlbumLike {
     sourceRoot: summary.sourceRoot,
     sourceName: summary.sourceName,
     virtual: summary.virtual,
-    modTime: summary.modTime,
-    date: summary.date,
+    modTime: usableDate(summary.modTime),
+    date: usableDate(summary.date),
     contentKind: summary.contentKind,
   };
 }
@@ -178,7 +178,7 @@ export default function Album() {
       displayName: node.displayName,
       sourceRoot: node.sourceRoot,
       sourceName: node.sourceName,
-      modTime: node.modTime,
+      modTime: usableDate(node.modTime),
       coverImage: node.coverImage ?? "",
       coverImages: node.coverImages,
       imageCount: node.imageCount ?? 0,
@@ -499,8 +499,8 @@ function CollectionView({
       count: a.imageCount,
       imageCount: a.imageCount,
       videoCount: a.videoCount ?? 0,
-      modTime: a.modTime,
-      date: a.date,
+      modTime: usableDate(a.modTime),
+      date: usableDate(a.date),
       coverPath: a.coverImage,
       coverKind: a.coverKind,
       to: albumRoute(a.contentKind, a.path),
@@ -522,8 +522,8 @@ function CollectionView({
         to: albumRoute(sub.contentKind, sub.path),
         sourceRoot: sub.sourceRoot,
         sourceName: sub.sourceName,
-        modTime: detail.modTime,
-        date: sub.date,
+        modTime: usableDate(detail.modTime),
+        date: usableDate(sub.date),
         contentKind: sub.contentKind,
       };
     });

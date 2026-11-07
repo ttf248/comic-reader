@@ -1,5 +1,23 @@
 // 日期相关的轻量工具，避免引入 dayjs / date-fns。
 
+// 照片库里的时间不可能早于 1970 年：早于它的多半是「没有时间」。
+const EARLIEST_PLAUSIBLE = Date.UTC(1970, 0, 1);
+
+/**
+ * 把「没有时间」的几种写法归一成 undefined。
+ *
+ * Go 的零值时间序列化成 "0001-01-01T00:00:00Z"，Date.parse 会把它
+ * 当成公元 1 年的合法日期 —— 按时间排序时它永远垫底，看起来像
+ * 「最旧的那本」，而不是「没有时间」。这里的集合摘要早先就是这样：
+ * 它们不带任何时间戳，于是被排到了最后一位。
+ */
+export function usableDate(iso?: string | null): string | undefined {
+  if (!iso) return undefined;
+  const parsed = Date.parse(iso);
+  if (!Number.isFinite(parsed) || parsed < EARLIEST_PLAUSIBLE) return undefined;
+  return iso;
+}
+
 // 时间倒序；缺失或无效时间排在有效时间之后，供调用方继续按名称兜底。
 export function compareDatesDesc(first?: string, second?: string): number {
   const firstTime = Date.parse(first ?? "");
