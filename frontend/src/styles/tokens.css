@@ -235,8 +235,9 @@
   --panel-muted: var(--feature-muted);
   /* 首屏书封给得比照片侧大：漫画侧整页是竖版书封语言，首屏那一本
      也要像一本书；面板被邻栏拉到等高时，中间那本不能小得像一张
-     缩略图。 */
-  --hero-cover-col: 200px;
+     缩略图。260px 时这一栏与右边的「未读」预览大致齐平 —— 200px
+     时左栏底下会空出一大片纸。 */
+  --hero-cover-col: 260px;
   --section-index-font: var(--font-display);
 }
 

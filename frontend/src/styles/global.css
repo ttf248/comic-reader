@@ -1316,6 +1316,13 @@
       gap: 18px;
       padding-block: 22px;
     }
+    /* 漫画侧这条要单写一遍：上面那条按侧覆盖（:root[data-mode="comic"]
+       比 .hero-panel__feature 更具体），手机的 108px 规则压不住它 ——
+       260px 的封面列在 390px 的屏上只剩三十几像素给文字，「上次，看到
+       这里」被挤成一列单字，按钮还溢出到屏幕外。 */
+    :root[data-mode="comic"] .hero-panel__feature {
+      grid-template-columns: 108px minmax(0, 1fr);
+    }
     .hero-queue {
       grid-template-columns: 1fr;
       gap: 14px;

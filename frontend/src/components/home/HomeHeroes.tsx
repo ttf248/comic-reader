@@ -131,6 +131,12 @@ export function ContinueHero({
   if (!featured) return null;
   const rest = cards.slice(1, 4);
   const copy = comicCopy();
+  // 所属作品：卷名只写「第1卷」时，主角这一栏要说得清是哪一部。
+  const series =
+    featured.parentName &&
+    featured.parentName !== (featured.displayTitle ?? featured.title)
+      ? featured.parentName
+      : undefined;
   return (
     <section
       className="hero-panel"
@@ -158,6 +164,13 @@ export function ContinueHero({
         <StagePoster card={featured} onClick={() => onContinue(featured)} />
         <div className="min-w-0">
           <p className="hero-panel__muted">上次，看到这里</p>
+          {/* 作品名压在卷名上方：卷名只写「第1卷」时，这一卷属于哪部
+              作品看不出来 —— 与书封、阅读器顶栏同一套写法。 */}
+          {series && (
+            <p className="hero-panel__muted mt-1 text-badge tracking-[0.06em]">
+              {series}
+            </p>
+          )}
           <h3 className="hero-panel__title line-clamp-2">
             {featured.displayTitle ?? featured.title}
           </h3>

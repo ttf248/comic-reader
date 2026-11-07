@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
-import { UnreadHero } from "./HomeHeroes";
+import { ContinueHero, UnreadHero } from "./HomeHeroes";
 import type { CardData } from "../album/AlbumGrid";
 
 vi.mock("../../hooks/useFavorites", () => ({
@@ -36,6 +36,24 @@ function card(index: number): CardData {
     to: `/comic/albums/a_${index}`,
     contentKind: "comic",
   };
+}
+
+function renderContinue(cards: CardData[]) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <ContinueHero
+          cards={cards}
+          onContinue={vi.fn()}
+          onRemove={vi.fn()}
+          onClearAll={vi.fn()}
+        />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
 }
 
 function renderHero(count: number, cards: CardData[]) {
@@ -78,4 +96,19 @@ it("只摆得下四本时按实际摆出来的数算差额", () => {
   renderHero(3, [card(1), card(2)]);
 
   expect(screen.getByText(/还有 1 卷没读/)).toBeInTheDocument();
+});
+
+// 主角那一栏写的是「第1卷」：不补上所属作品，这一卷属于哪部作品
+// 看不出来 —— 与书封、阅读器顶栏同一套写法。
+it("继续阅读的主角补上所属作品", () => {
+  renderContinue([{ ...card(1), parentName: "星海漫步" }]);
+
+  expect(screen.getByText("星海漫步")).toBeInTheDocument();
+  expect(screen.getByText("第1卷")).toBeInTheDocument();
+});
+
+it("没有所属作品时只写卷名", () => {
+  renderContinue([card(1)]);
+
+  expect(screen.getByText("第1卷")).toBeInTheDocument();
 });
