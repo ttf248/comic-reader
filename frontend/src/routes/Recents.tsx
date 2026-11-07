@@ -25,10 +25,15 @@ export default function Recents() {
   const viewMode = useUIStore((s) => s.viewMode);
   const query = useSearchStore((s) => s.query);
   const sortBy = useSearchStore((s) => s.sortBy);
+  const sortTouched = useSearchStore((s) => s.sortTouched);
   const minImageCount = useSearchStore((s) => s.minImageCount);
 
   const { mode } = useAppMode();
   const copy = workbenchCopy(mode);
+  // 这一页的天然顺序是「按最近看」：它问的是「我刚才在翻什么」，
+  // 按名称排会把时刻打乱，左边那一列时间就不再是一条轴。
+  // 用户亲手选过排序时，沿用他挑的那个。
+  const effectiveSort = sortTouched ? sortBy : "viewed";
 
   // 访问历史按当前工作台收敛：照片侧只列照片相册。
   const { history, cards, resolvedCount, historyQuery, nodesQuery } =
@@ -65,7 +70,7 @@ export default function Recents() {
           progress: { index: p.pageIndex, total: c.imageCount ?? 0 },
         };
       });
-    switch (sortBy) {
+    switch (effectiveSort) {
       case "count":
         return list.sort((a, b) => b.count - a.count);
       case "name":
@@ -81,7 +86,7 @@ export default function Recents() {
         // 最近看沿用服务端按 openedAt 倒序的访问记录。
         return list;
     }
-  }, [cards, query, sortBy, imageProgressMap, minImageCount]);
+  }, [cards, query, effectiveSort, imageProgressMap, minImageCount]);
 
   const recentsEntries = useMemo<GalleryContextEntry[]>(
     () =>
@@ -170,6 +175,8 @@ export default function Recents() {
           totalCount={filtered.length}
           /* 照片侧只有足迹这一种形态，摆一个切不动的视图开关只是噪音。 */
           hideViewToggle={mode === "photo"}
+          /* 这一页按时间排：浏览足迹是一份日记，时刻要能排成一条轴。 */
+          defaultSort="viewed"
         />
       )}
 

@@ -17,6 +17,13 @@ export type ViewKey = 'all' | 'album' | 'collection' | 'smart'
 interface SearchState {
   query: string
   sortBy: SortKey
+  /**
+   * 用户是否亲手选过排序。
+   *
+   * 没选过时，各页用各自的天然顺序（首页按名称、浏览足迹按时间）。
+   * 选过一次之后，他挑的那个顺序对所有页面生效。
+   */
+  sortTouched: boolean
   view: ViewKey
   /**
    * 年份筛选：null = 不筛选；number = 精确年份；'other' = "其他"桶。
@@ -45,12 +52,13 @@ export const useSearchStore = create<SearchState>()(
     (set, get) => ({
       query: '',
       sortBy: 'name',
+      sortTouched: false,
       // 默认 'all'，但用户最常看的是文件夹；提供 reset 入口可一键回到默认
       view: 'all',
       yearFilter: null,
       minImageCount: 0,
       setQuery: (q) => set({ query: q }),
-      setSortBy: (s) => set({ sortBy: s }),
+      setSortBy: (s) => set({ sortBy: s, sortTouched: true }),
       setView: (v) => set({ view: v }),
       setYearFilter: (y) => set({ yearFilter: y }),
       toggleYearFilter: (y) =>
@@ -60,6 +68,7 @@ export const useSearchStore = create<SearchState>()(
         set({
           query: '',
           sortBy: 'name',
+          sortTouched: false,
           view: 'all',
           yearFilter: null,
           minImageCount: 0,
@@ -67,6 +76,16 @@ export const useSearchStore = create<SearchState>()(
     }),
     {
       name: 'local-gallery-search',
+      // 旧数据里没有 sortTouched：排序不是默认的「按名称」时，
+      // 说明用户亲手选过，那一次选择继续生效。
+      migrate: (persisted) => {
+        const state = persisted as Partial<SearchState> | undefined
+        if (!state) return state as unknown as SearchState
+        if (typeof state.sortTouched !== 'boolean') {
+          state.sortTouched = state.sortBy !== undefined && state.sortBy !== 'name'
+        }
+        return state as SearchState
+      },
     },
   ),
 )

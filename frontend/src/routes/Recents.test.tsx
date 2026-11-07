@@ -161,3 +161,47 @@ it("已加载记录确实被筛选掉时仍可清除筛选", async () => {
   fireEvent.click(screen.getByRole("button", { name: "清除筛选" }));
   expect(await screen.findByText("春游相册")).toBeInTheDocument();
 });
+
+// 这一页的天然顺序是「按最近看」：浏览足迹是一份日记，时刻要能排成一条轴。
+// 用户没动过排序时按访问记录排；动过之后沿用他挑的那个。
+it("默认按最近打开的顺序排，而不是按名称", async () => {
+  vi.mocked(historyApi.list).mockResolvedValue({
+    history: [
+      {
+        albumId: "a_b",
+        name: "B 相册",
+        imageCount: 2,
+        openedAt: "2026-10-31T02:00:00Z",
+      },
+      {
+        albumId: "a_a",
+        name: "A 相册",
+        imageCount: 2,
+        openedAt: "2026-10-31T01:00:00Z",
+      },
+    ],
+  });
+  vi.mocked(useLibraryNodes).mockReturnValue({
+    data: {
+      items: [
+        { ...node, id: "a_b", name: "B 相册", displayName: "B 相册" },
+        { ...node, id: "a_a", name: "A 相册", displayName: "A 相册" },
+      ],
+      missing: [],
+    },
+    isLoading: false,
+    isError: false,
+    isFetching: false,
+    refetch: vi.fn(),
+  } as never);
+  renderRecents();
+  await waitFor(() => expect(screen.getByText("B 相册")).toBeInTheDocument());
+  const titles = screen
+    .getAllByText(/相册$/)
+    .map((el) => el.textContent);
+  expect(titles).toEqual(["B 相册", "A 相册"]);
+  // 排序菜单也要说这一页正在按什么排。
+  expect(screen.getByRole("button", { name: "排序" })).toHaveTextContent(
+    "按最近看",
+  );
+});

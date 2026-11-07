@@ -25,6 +25,13 @@ interface ListFilterBarProps {
   // 隐藏「网格 / 列表」切换。某些页面只有一种形态（例如照片侧的
   // 「最近浏览」按时间排成一条足迹），摆一个切不动的开关只是噪音。
   hideViewToggle?: boolean;
+  /**
+   * 这一页的天然排序（用户没有亲手选过排序时用它）。
+   *
+   * 浏览足迹页用它「按最近看」：那一页问的是「我刚才在翻什么」，
+   * 按名称排会把时刻打乱，左边那一列时间就不再是一条轴。
+   */
+  defaultSort?: SortKey;
 }
 
 export function ListFilterBar({
@@ -34,8 +41,10 @@ export function ListFilterBar({
   totalCount,
   showMinImageFilter = true,
   hideViewToggle = false,
+  defaultSort = "name",
 }: ListFilterBarProps) {
   const sortBy = useSearchStore((s) => s.sortBy);
+  const sortTouched = useSearchStore((s) => s.sortTouched);
   const setSortBy = useSearchStore((s) => s.setSortBy);
   const viewMode = useUIStore((s) => s.viewMode);
   const setViewMode = useUIStore((s) => s.setViewMode);
@@ -80,7 +89,10 @@ export function ListFilterBar({
               共 {totalCount} 项
             </span>
           ) : null}
-          <SortMenu value={sortBy} onChange={setSortBy} />
+          <SortMenu
+            value={sortTouched ? sortBy : defaultSort}
+            onChange={setSortBy}
+          />
           {/* 网格 / 列表：一条分段控件（跟主题切换同一套语言）。
               早先两个 30px 的方块各自带一圈边框，激活态只是把底色改成
               --bg-subtle，在浅色画布上几乎看不出差别 —— 两个图标悬在
