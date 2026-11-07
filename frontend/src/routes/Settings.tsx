@@ -259,33 +259,38 @@ export default function Settings() {
           <Row label="主题">
             <ThemeSwitcher />
           </Row>
-          <Row label="侧边栏">
-            {/* 与「主题」「默认视图」同一套分段控件：外观这一节里的
-                三个选择长得一样，一眼能看出它们是同一类操作。
-                原来是一个描边几乎看不见的按钮，读起来像一行说明文字。 */}
-            <div className="flex items-center border border-border-faint rounded-md overflow-hidden">
-              {(
-                [
-                  [false, "展开"],
-                  [true, "折叠"],
-                ] as const
-              ).map(([collapsed, label]) => (
-                <button
-                  key={label}
-                  onClick={() => {
-                    if (collapsed !== sidebarCollapsed) toggleSidebar();
-                  }}
-                  className={`h-8 px-3 text-meta transition-colors ${
-                    sidebarCollapsed === collapsed
-                      ? "bg-bg-subtle text-fg"
-                      : "text-fg-muted hover:text-fg"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </Row>
+          {/* 侧栏的折叠只属于宽屏：窄屏侧栏是抽屉，宽度不由折叠决定，
+              设置里也就不再摆这一行 —— 让人改一个当前看不见的东西，
+              等于把设置页变成第二本说明。 */}
+          <div className="hidden lg:block">
+            <Row label="侧边栏">
+              {/* 与「主题」「默认视图」同一套分段控件：外观这一节里的
+                  三个选择长得一样，一眼能看出它们是同一类操作。
+                  原来是一个描边几乎看不见的按钮，读起来像一行说明文字。 */}
+              <div className="flex items-center border border-border-faint rounded-md overflow-hidden">
+                {(
+                  [
+                    [false, "展开"],
+                    [true, "折叠"],
+                  ] as const
+                ).map(([collapsed, label]) => (
+                  <button
+                    key={label}
+                    onClick={() => {
+                      if (collapsed !== sidebarCollapsed) toggleSidebar();
+                    }}
+                    className={`h-8 px-3 text-meta transition-colors ${
+                      sidebarCollapsed === collapsed
+                        ? "bg-bg-subtle text-fg"
+                        : "text-fg-muted hover:text-fg"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </Row>
+          </div>
           <Row label="默认视图">
             <div className="flex items-center border border-border-faint rounded-md overflow-hidden">
               {(["grid", "list"] as const).map((k) => (

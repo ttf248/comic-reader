@@ -1200,6 +1200,16 @@
     .hero-grid {
       grid-template-columns: repeat(4, minmax(0, 1fr));
     }
+    /* 单列时面板横贯整行，主角封面若还按宽屏的 176px，右侧空出
+       一大片纸 —— 一块面板只占左边三分之一，剩下都是空白。
+       把这一列放大，主角才是这一屏的主角（≤639px 由下面的规则
+       收回到 108px，手机上不需要这么大的封面）。 */
+    .hero-panel__feature {
+      grid-template-columns: 240px minmax(0, 1fr);
+    }
+    :root[data-mode="comic"] .hero-panel__feature {
+      grid-template-columns: 260px minmax(0, 1fr);
+    }
   }
   /* 640–767px：展陈墙横贯整行也只有不到 200px 一张，四张并排会把
      封面压成看不清的小方块。两张更合适。 */
