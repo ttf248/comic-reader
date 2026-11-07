@@ -256,13 +256,40 @@ func TestRandomLibraryAlbumRespectsKind(t *testing.T) {
 	snapshot := fixture.catalog.Acquire()
 
 	for i := 0; i < 20; i++ {
-		album, err := RandomLibraryAlbum(snapshot, LibraryKindComic)
+		albums, err := RandomLibraryAlbums(snapshot, LibraryKindComic, 1)
 		if err != nil {
 			t.Fatal(err)
 		}
+		if len(albums) != 1 {
+			t.Fatalf("random comic albums=%+v", albums)
+		}
+		if albums[0].ContentKind != string(models.ContentKindComic) {
+			t.Fatalf("random comic album=%+v", albums[0])
+		}
+	}
+}
+
+// 一次抽多本时不能抽出重复的相册，也不能混进别的内容属性。
+func TestRandomLibraryAlbumsAreDistinctAndKindScoped(t *testing.T) {
+	fixture := newKindFixture(t)
+	snapshot := fixture.catalog.Acquire()
+
+	albums, err := RandomLibraryAlbums(snapshot, LibraryKindComic, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(albums) != 3 {
+		t.Fatalf("random comic albums=%d, want 3", len(albums))
+	}
+	seen := map[string]bool{}
+	for _, album := range albums {
 		if album.ContentKind != string(models.ContentKindComic) {
 			t.Fatalf("random comic album=%+v", album)
 		}
+		if seen[album.ID] {
+			t.Fatalf("duplicate random album=%s", album.ID)
+		}
+		seen[album.ID] = true
 	}
 }
 

@@ -44,7 +44,9 @@ vi.mock("../../hooks/useAppMode", () => ({
 }));
 
 vi.mock("../../api/library", () => ({
-  libraryApi: { randomAlbum: vi.fn().mockResolvedValue({ album: { id: "x" } }) },
+  libraryApi: {
+    randomAlbums: vi.fn().mockResolvedValue({ albums: [{ id: "x" }] }),
+  },
 }));
 
 const albumNode = {

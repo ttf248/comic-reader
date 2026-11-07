@@ -291,18 +291,24 @@
   .hero-queue__remove:focus-visible {
     opacity: 1;
   }
-  /* 照片侧「接着看」的队列：展陈墙上的小照片。
-     漫画侧的队列是一排小书脊（hero-queue__cover），照片这边换成方照，
-     缩略图给到 56px —— 40px 的邮票读起来像一排图标，
+  /* 首屏面板下方的一排小图：展陈墙上的小照片。
+     「接着看」的队列与「随手看看」的候选共用这一套语言 ——
+     漫画侧的队列是一排小书脊（hero-queue__cover），照片这边换成方照。
+     48px 而不是 40px：邮票大小的缩略图读起来像一排图标，
      不像「看过的相册」。 */
-  .resume-queue {
+  .mini-queue {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 8px 16px;
     border-top: 1px solid var(--border);
     padding-top: 18px;
   }
-  .resume-queue__item {
+  .resume-queue {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+  .serendipity-candidates {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .mini-queue__item {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -312,10 +318,10 @@
     border-radius: var(--radius-media);
     transition: background var(--dur);
   }
-  .resume-queue__item:hover {
+  .mini-queue__item:hover {
     background: var(--bg-subtle);
   }
-  .resume-queue__cover {
+  .mini-queue__cover {
     display: block;
     /* 48px 而不是 56px：三列并排时每列只剩一百来像素，
        56px 的缩略图把计数挤到放不下「10 个视频 · 刚刚」，
@@ -330,7 +336,8 @@
   /* 窄屏：队列改成一列。三列并排时每列只剩一百来像素，
      标题被截成「存…」，计数被折成三行。 */
   @media (max-width: 639px) {
-    .resume-queue {
+    .resume-queue,
+    .serendipity-candidates {
       grid-template-columns: minmax(0, 1fr);
     }
   }

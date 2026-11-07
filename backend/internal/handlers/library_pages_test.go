@@ -142,14 +142,17 @@ func TestLibraryPageHandlersCursorStatusAndResponseShape(t *testing.T) {
 		t.Fatalf("random unread status=%d", randomUnreadResp.StatusCode)
 	}
 	var randomUnreadBody struct {
-		Album services.LibraryNodeSummary `json:"album"`
+		Albums []services.LibraryNodeSummary `json:"albums"`
 	}
 	if err := json.NewDecoder(randomUnreadResp.Body).Decode(&randomUnreadBody); err != nil {
 		t.Fatal(err)
 	}
 	_ = randomUnreadResp.Body.Close()
-	if randomUnreadBody.Album.ID == albumID {
-		t.Fatalf("started album appeared in random unread=%+v", randomUnreadBody.Album)
+	if len(randomUnreadBody.Albums) != 1 {
+		t.Fatalf("random unread albums=%d, want 1", len(randomUnreadBody.Albums))
+	}
+	if randomUnreadBody.Albums[0].ID == albumID {
+		t.Fatalf("started album appeared in random unread=%+v", randomUnreadBody.Albums[0])
 	}
 
 	dashboardResp, err := app.Test(httptest.NewRequest("GET", "/api/library/dashboard?kind=comic", nil))

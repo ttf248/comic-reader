@@ -124,12 +124,27 @@ func LibraryUnreadAlbumsPageHandler(catalog *services.ResourceCatalog, activitie
 	}
 }
 
-// LibraryRandomAlbumHandler 返回一个随机相册摘要。scope=unread 时只从未开始阅读的相册中抽取。
+// randomAlbumCountLimit 是随机抽取一次最多返回几本相册。
+// 上限防住「一次把整个库抽出来」这种没有意义的要求。
+const randomAlbumCountLimit = 12
+
+// LibraryRandomAlbumHandler 返回随机相册摘要。scope=unread 时只从未开始阅读的相册中抽取。
+//
+// count 决定返回几本（默认 1，最多 12）：首页「随手看看」一次给三本候选，
+// 抽出的相册互不相同。
 func LibraryRandomAlbumHandler(catalog *services.ResourceCatalog, activities *store.ActivityStore, unreadIndex *services.UnreadLibraryIndex) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		scope := strings.TrimSpace(c.Query("scope"))
 		if scope != "" && scope != "unread" {
 			return httputil.BadRequest(c, "invalid_random_scope", "scope must be empty or unread")
+		}
+		count := 1
+		if raw := strings.TrimSpace(c.Query("count")); raw != "" {
+			parsed, err := strconv.Atoi(raw)
+			if err != nil || parsed < 1 || parsed > randomAlbumCountLimit {
+				return httputil.BadRequest(c, "invalid_random_count", "count must be between 1 and 12")
+			}
+			count = parsed
 		}
 		kind, ok := parseLibraryKind(c)
 		if !ok {
@@ -141,19 +156,19 @@ func LibraryRandomAlbumHandler(catalog *services.ResourceCatalog, activities *st
 			if err != nil {
 				return httputil.Internal(c, "activity_unavailable", "activity storage is unavailable")
 			}
-			album, pageErr := unreadIndex.Random(snapshot, started, activityRevision, kind)
+			albums, pageErr := unreadIndex.Random(snapshot, started, activityRevision, kind, count)
 			if pageErr != nil {
 				return writeLibraryPageError(c, pageErr, snapshot.Revision())
 			}
 			setLibraryRevisionETag(c, snapshot.Revision())
-			return c.JSON(fiber.Map{"ok": true, "album": album, "revision": snapshot.Revision()})
+			return c.JSON(fiber.Map{"ok": true, "albums": albums, "revision": snapshot.Revision()})
 		}
-		album, err := services.RandomLibraryAlbum(snapshot, kind)
+		albums, err := services.RandomLibraryAlbums(snapshot, kind, count)
 		if err != nil {
 			return writeLibraryPageError(c, err, snapshot.Revision())
 		}
 		setLibraryRevisionETag(c, snapshot.Revision())
-		return c.JSON(fiber.Map{"ok": true, "album": album, "revision": snapshot.Revision()})
+		return c.JSON(fiber.Map{"ok": true, "albums": albums, "revision": snapshot.Revision()})
 	}
 }
 

@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import type { LibraryNodeSummary } from "../../api/library";
 import { useFavorites } from "../../hooks/useFavorites";
 import { photoCopy } from "../../utils/workbench";
-import { mediaCountLabel } from "../../utils/mediaCount";
+import { mediaCountCompact, mediaCountLabel } from "../../utils/mediaCount";
 import { nodeSummaryToCard } from "../../utils/libraryCard";
 import AlbumCard from "../album/AlbumCard";
 import type { CardData } from "../album/AlbumGrid";
@@ -83,25 +83,32 @@ export function RecentlyAddedHero({
 }
 
 interface SerendipityProps {
-  album: LibraryNodeSummary | null;
+  /** 随机候选：第一本是主角，其余是下面那一排。 */
+  albums: LibraryNodeSummary[];
   isLoading: boolean;
   onReshuffle: () => void;
 }
 
 /**
- * 随手看看：随机给一本照片相册。
+ * 随手看看：随机给几本照片相册。
  *
  * 照片工作台没有「未读」那种天然的下一步，所以给一个轻量的随机入口：
- * 一次点击换一本，让人从时间线之外撞见一张没预期的照片。
+ * 一次点击换一批，让人从时间线之外撞见没预期的照片。
+ *
+ * 一次给三本：只摆一本时面板下方空出一大片 —— 与「接着看」并排时，
+ * 两块面板一高一低，矮的那块读起来像没写完。三本候选把那块填上，
+ * 也让人一次撞见几种不同的照片。
  */
 export function SerendipityHero({
-  album,
+  albums,
   isLoading,
   onReshuffle,
 }: SerendipityProps) {
   const copy = photoCopy();
-  if (!album) return null;
-  const card = nodeSummaryToCard(album);
+  const featured = albums[0];
+  const rest = albums.slice(1, 3);
+  if (!featured) return null;
+  const card = nodeSummaryToCard(featured);
   return (
     <section
       className="hero-panel home-serendipity"
@@ -147,6 +154,37 @@ export function SerendipityHero({
           </div>
         </div>
       </div>
+      {rest.length > 0 && (
+        <div className="serendipity-candidates mini-queue">
+          {rest.map((album) => (
+            <SerendipityCandidate key={album.id} album={album} />
+          ))}
+        </div>
+      )}
     </section>
+  );
+}
+
+/** 随手看看的另外几本：与「接着看」的队列同一套小图语言。 */
+function SerendipityCandidate({ album }: { album: LibraryNodeSummary }) {
+  const card = nodeSummaryToCard(album);
+  return (
+    <Link
+      to={card.to}
+      className="mini-queue__item"
+      aria-label={`打开相册「${card.displayTitle ?? card.title}」`}
+    >
+      <span className="mini-queue__cover">
+        <Cover card={card} />
+      </span>
+      <span className="min-w-0">
+        <span className="block truncate text-body font-medium">
+          {card.displayTitle ?? card.title}
+        </span>
+        <span className="hero-panel__muted block mt-1 tabular-nums truncate">
+          {mediaCountCompact(card)}
+        </span>
+      </span>
+    </Link>
   );
 }

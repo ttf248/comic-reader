@@ -169,14 +169,49 @@ func TestLibraryKindParameterScopesUnreadAndRandom(t *testing.T) {
 		t.Fatalf("random status=%d body=%s", resp.StatusCode, body)
 	}
 	var random struct {
-		Album struct {
+		Albums []struct {
 			ContentKind string `json:"contentKind"`
-		} `json:"album"`
+		} `json:"albums"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&random); err != nil {
 		t.Fatal(err)
 	}
-	if random.Album.ContentKind != string(models.ContentKindComic) {
-		t.Fatalf("random album kind=%q, want comic", random.Album.ContentKind)
+	if len(random.Albums) != 1 {
+		t.Fatalf("random albums=%d, want 1", len(random.Albums))
+	}
+	if random.Albums[0].ContentKind != string(models.ContentKindComic) {
+		t.Fatalf("random album kind=%q, want comic", random.Albums[0].ContentKind)
+	}
+
+	// 要几本就给几本；候选不够时给全部（这里漫画侧只有一本）。
+	resp, err = app.Test(httptest.NewRequest("GET", "/api/albums/random?kind=comic&count=3", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var many struct {
+		Albums []struct {
+			ID          string `json:"id"`
+			ContentKind string `json:"contentKind"`
+		} `json:"albums"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&many); err != nil {
+		t.Fatal(err)
+	}
+	if len(many.Albums) != 1 {
+		t.Fatalf("random albums=%d, want 1 (only one comic album exists)", len(many.Albums))
+	}
+	for _, album := range many.Albums {
+		if album.ContentKind != string(models.ContentKindComic) {
+			t.Fatalf("random album kind=%q, want comic", album.ContentKind)
+		}
+	}
+
+	// count 越界要报错，而不是悄悄给一本。
+	badResp, err := app.Test(httptest.NewRequest("GET", "/api/albums/random?kind=comic&count=99", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if badResp.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("random count=99 status=%d, want 400", badResp.StatusCode)
 	}
 }

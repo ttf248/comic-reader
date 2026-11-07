@@ -903,23 +903,28 @@ func containsTag(tags []string, needle string) bool {
 	return false
 }
 
-// RandomLibraryAlbum 从当前 revision 的预计算相册摘要中安全地抽取一项。
-// 只在该属性的相册里抽：照片工作台不该随机开到一本漫画。
-func RandomLibraryAlbum(snapshot CatalogSnapshot, kind LibraryKindScope) (LibraryNodeSummary, error) {
+// RandomLibraryAlbums 从当前 revision 的预计算相册摘要中安全地抽取至多
+// count 本随机相册。只在该属性的相册里抽：照片工作台不该随机开到一本漫画。
+// 抽出的相册互不相同；候选不足 count 本时返回全部。
+func RandomLibraryAlbums(snapshot CatalogSnapshot, kind LibraryKindScope, count int) ([]LibraryNodeSummary, error) {
 	if !snapshot.Ready() || snapshot.state == nil || snapshot.state.library == nil {
-		return LibraryNodeSummary{}, ErrLibraryNotReady
+		return nil, ErrLibraryNotReady
 	}
 	albums := snapshot.state.library.albums
 	indexes := snapshot.state.library.albumIndexesByKind[models.ContentKind(kind)]
 	total := len(indexes)
 	if total == 0 {
-		return LibraryNodeSummary{}, ErrLibraryNoMatchingAlbum
+		return nil, ErrLibraryNoMatchingAlbum
 	}
-	picked, err := randomLibraryIndex(total)
+	picked, err := randomLibraryIndexes(total, count)
 	if err != nil {
-		return LibraryNodeSummary{}, fmt.Errorf("select random library album: %w", err)
+		return nil, fmt.Errorf("select random library albums: %w", err)
 	}
-	return cloneNodeSummary(albums[indexes[picked]]), nil
+	out := make([]LibraryNodeSummary, 0, len(picked))
+	for _, index := range picked {
+		out = append(out, cloneNodeSummary(albums[indexes[index]]))
+	}
+	return out, nil
 }
 
 func randomLibraryIndex(total int) (int, error) {
@@ -928,6 +933,31 @@ func randomLibraryIndex(total int) (int, error) {
 		return 0, err
 	}
 	return int(picked.Int64()), nil
+}
+
+// randomLibraryIndexes 抽 count 个互不相同的下标。
+//
+// 不用部分洗牌：候选可能有成千上万本，整份拷贝只为换几本不划算。
+// 这里每次抽一个下标、抽到重复的重来；count 很小（不超过十几本），
+// 命中的概率高，重来的次数有限。
+func randomLibraryIndexes(total, count int) ([]int, error) {
+	if count > total {
+		count = total
+	}
+	picked := make([]int, 0, count)
+	used := make(map[int]bool, count)
+	for len(picked) < count {
+		index, err := randomLibraryIndex(total)
+		if err != nil {
+			return nil, err
+		}
+		if used[index] {
+			continue
+		}
+		used[index] = true
+		picked = append(picked, index)
+	}
+	return picked, nil
 }
 
 func clonePage[T any](items []T, start, end int) []T {

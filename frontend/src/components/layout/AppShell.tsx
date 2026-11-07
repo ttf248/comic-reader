@@ -88,8 +88,11 @@ export default function AppShell() {
   }, []);
 
   const randomAlbum = useMutation({
-    mutationFn: () => libraryApi.randomAlbum(mode),
-    onSuccess: ({ album }) => navigate(albumRoute(mode, album.id)),
+    mutationFn: () => libraryApi.randomAlbums(mode),
+    onSuccess: ({ albums }) => {
+      const album = albums[0];
+      if (album) navigate(albumRoute(mode, album.id));
+    },
     onError: () => pushToast({ kind: "info", message: "没有可随机打开的相册" }),
   });
 

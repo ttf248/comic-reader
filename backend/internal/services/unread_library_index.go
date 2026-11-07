@@ -73,20 +73,26 @@ func (i *UnreadLibraryIndex) Summary(snapshot CatalogSnapshot, started StartedAl
 }
 
 // Random 从当前未读下标中安全抽取一项；没有匹配项时返回 ErrLibraryNoMatchingAlbum。
-func (i *UnreadLibraryIndex) Random(snapshot CatalogSnapshot, started StartedAlbums, activityRevision uint64, kind LibraryKindScope) (LibraryNodeSummary, error) {
+// Random 抽取至多 count 本还没开始读的随机相册。
+// 抽出的相册互不相同；未读候选不足 count 本时返回全部。
+func (i *UnreadLibraryIndex) Random(snapshot CatalogSnapshot, started StartedAlbums, activityRevision uint64, kind LibraryKindScope, count int) ([]LibraryNodeSummary, error) {
 	indexes, err := i.albumIndexesFor(snapshot, started, activityRevision)
 	if err != nil {
-		return LibraryNodeSummary{}, err
+		return nil, err
 	}
 	indexes = filterIndexesByKind(snapshot, indexes, kind)
 	if len(indexes) == 0 {
-		return LibraryNodeSummary{}, ErrLibraryNoMatchingAlbum
+		return nil, ErrLibraryNoMatchingAlbum
 	}
-	picked, err := randomLibraryIndex(len(indexes))
+	picked, err := randomLibraryIndexes(len(indexes), count)
 	if err != nil {
-		return LibraryNodeSummary{}, fmt.Errorf("select random unread library album: %w", err)
+		return nil, fmt.Errorf("select random unread library albums: %w", err)
 	}
-	return cloneNodeSummary(snapshot.state.library.albums[indexes[picked]]), nil
+	out := make([]LibraryNodeSummary, 0, len(picked))
+	for _, index := range picked {
+		out = append(out, cloneNodeSummary(snapshot.state.library.albums[indexes[index]]))
+	}
+	return out, nil
 }
 
 // Dashboard 使用未读下标生成首页有限预览；在读部分只遍历已有漫画阅读活动，

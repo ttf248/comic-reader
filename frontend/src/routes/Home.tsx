@@ -156,8 +156,11 @@ export default function Home() {
 
   const randomAlbum = useMutation({
     mutationFn: (scope: "any" | "unread") =>
-      libraryApi.randomAlbum(mode, scope),
-    onSuccess: ({ album }) => navigate(albumRoute(mode, album.id)),
+      libraryApi.randomAlbums(mode, scope),
+    onSuccess: ({ albums }) => {
+      const album = albums[0];
+      if (album) navigate(albumRoute(mode, album.id));
+    },
     onError: (_error, scope) =>
       pushToast({
         kind: "info",
@@ -593,7 +596,7 @@ export default function Home() {
         !isComic &&
         (resumeCards.length > 0 ||
           recentItems.length > 0 ||
-          serendipity.album !== null) && (
+          serendipity.albums.length > 0) && (
           <div className="page-shell">
             <div
               className={`home-overview${
@@ -604,7 +607,7 @@ export default function Home() {
                 <>
                   <ResumeHero cards={resumeCards} />
                   <SerendipityHero
-                    album={serendipity.album}
+                    albums={serendipity.albums}
                     isLoading={serendipity.isLoading}
                     onReshuffle={serendipity.reshuffle}
                   />
@@ -626,7 +629,7 @@ export default function Home() {
                     />
                   )}
                   <SerendipityHero
-                    album={serendipity.album}
+                    albums={serendipity.albums}
                     isLoading={serendipity.isLoading}
                     onReshuffle={serendipity.reshuffle}
                   />

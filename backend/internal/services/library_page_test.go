@@ -400,11 +400,11 @@ func TestRandomLibraryAlbumAndActivitySummaryUsePublishedIndex(t *testing.T) {
 	snapshot := fixture.catalog.Acquire()
 	unreadIndex := NewUnreadLibraryIndex()
 
-	random, err := RandomLibraryAlbum(snapshot, LibraryKindComic)
+	random, err := RandomLibraryAlbums(snapshot, LibraryKindComic, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if random.Kind != string(ResourceAlbum) || random.ID == "" {
+	if len(random) != 1 || random[0].Kind != string(ResourceAlbum) || random[0].ID == "" {
 		t.Fatalf("random album=%+v", random)
 	}
 
@@ -421,7 +421,7 @@ func TestRandomLibraryAlbumAndActivitySummaryUsePublishedIndex(t *testing.T) {
 	for _, album := range snapshot.state.library.albums {
 		excludeAll[album.ID] = struct{}{}
 	}
-	if _, err := unreadIndex.Random(snapshot, StartedAlbums{Image: excludeAll}, 2, LibraryKindComic); !errors.Is(err, ErrLibraryNoMatchingAlbum) {
+	if _, err := unreadIndex.Random(snapshot, StartedAlbums{Image: excludeAll}, 2, LibraryKindComic, 1); !errors.Is(err, ErrLibraryNoMatchingAlbum) {
 		t.Fatalf("all albums excluded error=%v, want ErrLibraryNoMatchingAlbum", err)
 	}
 	assertNoAbsolutePathInJSON(t, summary)
@@ -477,8 +477,8 @@ func TestLibraryActivitySummaryKeepsCurrentEmptyAlbumUnreadAfterRescan(t *testin
 	if err != nil || summary.UnreadCount != 1 {
 		t.Fatalf("summary=(%+v, %v)", summary, err)
 	}
-	random, err := unreadIndex.Random(snapshot, started, 1, LibraryKindComic)
-	if err != nil || random.ID != albumID {
+	random, err := unreadIndex.Random(snapshot, started, 1, LibraryKindComic, 1)
+	if err != nil || len(random) != 1 || random[0].ID != albumID {
 		t.Fatalf("random unread=(%+v, %v)", random, err)
 	}
 	unread, err := unreadIndex.Page(snapshot, started, 1, LibraryKindComic, "", 60)

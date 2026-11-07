@@ -98,12 +98,12 @@ function ResumeQueueItem({ card }: { card: CardData }) {
   return (
     <Link
       to={card.to}
-      className="resume-queue__item"
+      className="mini-queue__item"
       aria-label={`${copy.resumeButton}「${card.displayTitle ?? card.title}」`}
     >
       {/* 队列项也是一张小照片：展陈墙上不摆邮票大小的缩略图，
           那读起来像一排图标，不像一排看过的相册。 */}
-      <span className="resume-queue__cover">
+      <span className="mini-queue__cover">
         <Cover card={card} />
       </span>
       <span className="min-w-0">

@@ -301,13 +301,24 @@ export const libraryApi = {
     ),
   // scope 只区分「该模式下的任意一本」与「该模式下还没翻开的」；
   // 叫 "any" 而不是 "all"，避免和工作台模式混成一个概念。
-  randomAlbum: (kind: AppMode, scope: "any" | "unread" = "any") =>
+  //
+  // count 一次要几本：首页「随手看看」一次给三本候选。服务端保证
+  // 抽出的相册互不相同，候选不够时给全部。
+  randomAlbums: (
+    kind: AppMode,
+    scope: "any" | "unread" = "any",
+    count = 1,
+  ) =>
     api<{
       ok: boolean;
-      album: LibraryNodeSummary;
+      albums: LibraryNodeSummary[];
       revision: number;
     }>("/api/albums/random", {
-      params: { scope: scope === "unread" ? "unread" : undefined, kind },
+      params: {
+        scope: scope === "unread" ? "unread" : undefined,
+        kind,
+        count,
+      },
     }),
   allUnreadAlbums: (kind: AppMode) =>
     collectPages((cursor) => libraryApi.unreadAlbumPage(kind, cursor)),

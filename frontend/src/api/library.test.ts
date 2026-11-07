@@ -175,13 +175,15 @@ describe("libraryApi", () => {
         jsonResponse({
           ok: true,
           revision: 12,
-          album: {
-            id: "a_random",
-            kind: "album",
-            name: "随机相册",
-            displayName: "随机相册",
-            coverImages: [],
-          },
+          albums: [
+            {
+              id: "a_random",
+              kind: "album",
+              name: "随机相册",
+              displayName: "随机相册",
+              coverImages: [],
+            },
+          ],
         }),
       );
     vi.stubGlobal("fetch", fetchMock);
@@ -189,7 +191,7 @@ describe("libraryApi", () => {
     const [summary, dashboard, random] = await Promise.all([
       libraryApi.activitySummary("comic"),
       libraryApi.dashboard("comic"),
-      libraryApi.randomAlbum("comic", "unread"),
+      libraryApi.randomAlbums("comic", "unread"),
     ]);
 
     expect(summary.summary).toMatchObject({ albumCount: 320, unreadCount: 18 });
@@ -197,7 +199,7 @@ describe("libraryApi", () => {
       albumCount: 320,
       unreadCount: 18,
     });
-    expect(random.album.id).toBe("a_random");
+    expect(random.albums[0].id).toBe("a_random");
     expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
       "/api/library/activity-summary",
     );

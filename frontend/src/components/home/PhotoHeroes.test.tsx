@@ -93,11 +93,15 @@ describe("照片工作台的首屏专区", () => {
     expect(onShowAll).toHaveBeenCalledTimes(1);
   });
 
-  it("随手看看展示一本照片相册，换一本会回调", () => {
+  it("随手看看展示一本主角与两本候选，换一批会回调", () => {
     const onReshuffle = vi.fn();
     renderHero(
       <SerendipityHero
-        album={makeAlbum("a_9", "旧照片")}
+        albums={[
+          makeAlbum("a_9", "旧照片"),
+          makeAlbum("a_10", "另一本"),
+          makeAlbum("a_11", "还有一本"),
+        ]}
         isLoading={false}
         onReshuffle={onReshuffle}
       />,
@@ -108,13 +112,32 @@ describe("照片工作台的首屏专区", () => {
       "href",
       "/photo/albums/a_9",
     );
+    // 另外两本作为候选摆在下面，点哪本都能进。
+    expect(
+      screen.getByRole("link", { name: "打开相册「另一本」" }),
+    ).toHaveAttribute("href", "/photo/albums/a_10");
+    expect(
+      screen.getByRole("link", { name: "打开相册「还有一本」" }),
+    ).toHaveAttribute("href", "/photo/albums/a_11");
     fireEvent.click(screen.getByRole("button", { name: "换一本" }));
     expect(onReshuffle).toHaveBeenCalledTimes(1);
   });
 
+  it("随手看看只有一本时只摆主角", () => {
+    const { container } = renderHero(
+      <SerendipityHero
+        albums={[makeAlbum("a_9", "旧照片")]}
+        isLoading={false}
+        onReshuffle={vi.fn()}
+      />,
+    );
+    // 候选那一行没有内容就不留空壳。
+    expect(container.querySelector(".serendipity-candidates")).toBeNull();
+  });
+
   it("随手看看没有结果时不渲染", () => {
     renderHero(
-      <SerendipityHero album={null} isLoading={false} onReshuffle={vi.fn()} />,
+      <SerendipityHero albums={[]} isLoading={false} onReshuffle={vi.fn()} />,
     );
     expect(screen.queryByTestId("serendipity-hero")).toBeNull();
   });

@@ -130,7 +130,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 - `GET /api/library/unread?limit=60&cursor=...`：分页返回尚未翻开过的相册摘要；已读和在读相册不会传输。有图片的相册以漫画阅读活动判定，纯视频相册以视频播放活动判定（没有阅读活动可依）。未读只统计漫画目录的相册：`kind=photo` 时恒为空。
 - `GET /api/library/recent?limit=60`：返回该属性下最近加入的相册摘要，按业务日期倒序（`date` 缺失时退回 `modTime`）。照片工作台不记录浏览进度，没有「继续阅读」可言，这个接口是它与漫画侧对称的入口，也是收藏空态的推荐来源。不分页：`total` 是该属性下的相册总数，`items` 至多 `limit` 条。
 - `GET /api/library/:rootOrCollectionId/children?limit=60&cursor=...`：分页返回直属相册与子集合摘要。相册与集合都继承所属目录的属性，因此都参与 `kind` 过滤；属性不匹配的目录返回空页。集合摘要的 `albumCount` 恒为全部后代。
-- `GET /api/albums/random?scope=unread`：随机返回一个相册摘要；只在该属性的相册里抽取，`scope=unread` 时进一步只从未保存阅读活动的相册中抽取。没有匹配相册返回 `404 no_matching_album`。
+- `GET /api/albums/random?scope=unread&count=3`：随机返回相册摘要列表；只在该属性的相册里抽取，`scope=unread` 时进一步只从未保存阅读活动的相册中抽取。`count` 缺省 1、范围 1–12，越界返回 `400 invalid_random_count`；抽出的相册互不相同，候选不足 `count` 时返回全部。没有匹配相册返回 `404 no_matching_album`。
 - `GET /api/albums/:albumId/media?limit=60&cursor=...`：按统一自然顺序返回媒体；`index` 是相册内总序号，`kindIndex` 是图片或视频各自序号。图片项另带 `width` / `height`（原始像素宽高，未知时为 0），照片墙据此按真实宽高比排布，不必在浏览器里逐张探测。媒体流与工作台模式无关。
 - `POST /api/library/nodes/query`：body 为 `{ "ids": ["a_...", "c_..."] }`，按输入顺序批量解析相册/集合摘要；单批最多 500 项，失效 ID 返回在 `missing` 中。直达链接、收藏与最近浏览都靠它解析摘要，**不受工作台模式影响**。
 - `GET /api/tags?limit=60&cursor=...`：分页返回标签摘要。每个标签的 `albumCount` 按 `kind` 指定的属性重算，该属性下没有相册的标签整个不出现。
