@@ -74,7 +74,10 @@ export function ListFilterBar({
           {/* 没有视图切换 chip 的页面（如未读 / 最近）：总数靠左，
               避免整条筛选条只剩右半边、左侧空一大片。 */}
           {!viewChips?.length && (
-            <span className="text-meta text-fg-muted tabular-nums">
+            <span
+              className="text-meta text-fg-muted tabular-nums"
+              data-testid="filter-bar-count"
+            >
               共 {totalCount} 项
             </span>
           )}
@@ -85,7 +88,10 @@ export function ListFilterBar({
           )}
           {viewChips?.length &&
           totalCount !== viewChips.find((c) => c.key === "all")?.count ? (
-            <span className="text-meta text-fg-muted tabular-nums">
+            <span
+              className="text-meta text-fg-muted tabular-nums"
+              data-testid="filter-bar-count"
+            >
               共 {totalCount} 项
             </span>
           ) : null}

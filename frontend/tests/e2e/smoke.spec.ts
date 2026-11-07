@@ -2255,14 +2255,12 @@ test("失效收藏清理成功后刷新失败也立即更新收藏项数", async
     await expect(
       page.locator(`main a[href="/photo/albums/${album.id}"]`).first(),
     ).toBeVisible();
-    // 计数在页头的说明区里（页头的动作移到标题行右端后，
-    // 说明不再是标题的兄弟节点，改为按页头说明区定位）。
-    const count = page
-      .getByTestId("page-heading-description")
-      .getByText(/^\d+ 项$/);
+    // 计数在筛选条上：页头不再重复报条数（同一页两处各写一遍同一个数，
+    // 读起来像两处不同的统计），筛选条上那行「共 N 项」说的就是它。
+    const count = page.getByTestId("filter-bar-count");
     // 计数是「这一侧能看到的项数」：失效的那一条渲染不出来，
     // 另起一行说明，不混进计数里。
-    await expect(count).toHaveText(`${seededCount - 1} 项`);
+    await expect(count).toHaveText(`共 ${seededCount - 1} 项`);
     await expect(page.getByText("其中 1 项暂时找不到")).toBeVisible();
     await page.getByRole("link", { name: "设置", exact: true }).click();
     let failedReads = 0;
@@ -2282,7 +2280,7 @@ test("失效收藏清理成功后刷新失败也立即更新收藏项数", async
     await expect
       .poll(() => failedReads, { timeout: 15_000 })
       .toBeGreaterThanOrEqual(8);
-    await expect(count).toHaveText(`${confirmed.length} 项`);
+    await expect(count).toHaveText(`共 ${confirmed.length} 项`);
     await expect(
       page.locator(`main a[href="/photo/albums/${album.id}"]`).first(),
     ).toBeVisible();
