@@ -100,6 +100,10 @@ const FIELDS: { section: string; defs: FieldDef[] }[] = [
       {
         key: "thumbSizeW",
         label: "缩略图宽度",
+        /* 这两项决定所有封面与照片墙的清晰度：网格封面约 176px，
+           照片墙「宽松」档最宽的一格约 520px。调到 320 以下时
+           封面会被放大三四倍，看起来像糊了一层。 */
+        hint: "网格封面约 176px，照片墙最宽的一格约 520px；低于 320 明显发糊",
         kind: "number",
         min: 50,
         max: 2000,
@@ -107,6 +111,7 @@ const FIELDS: { section: string; defs: FieldDef[] }[] = [
       {
         key: "thumbSizeH",
         label: "缩略图高度",
+        hint: "竖幅照片按高度缩放；与宽度一起决定缩略图的长边",
         kind: "number",
         min: 50,
         max: 2000,
