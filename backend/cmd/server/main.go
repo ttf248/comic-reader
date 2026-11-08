@@ -306,22 +306,7 @@ func main() {
 		}
 	})
 
-	// 当 MediaRoots 变更：清空扫描缓存，扫描器/handler 已通过 mgr.Roots() 读最新值
-	onConfigUpdate := func(newCfg *config.Config, mediaRootsChanged bool) error {
-		if mediaRootsChanged {
-			runner.Invalidate()
-			if err := resourceCatalog.ClearWithCache(scanCache); err != nil {
-				return fmt.Errorf("clear scan cache: %w", err)
-			}
-			roots := newCfg.Roots()
-			if len(roots) == 1 {
-				log.Printf("  MediaRoot 变更为 %s，已清空扫描缓存", filepath.Base(roots[0]))
-			} else {
-				log.Printf("  MediaRoots 变更为 %d 个目录，已清空扫描缓存", len(roots))
-			}
-		}
-		return nil
-	}
+	onConfigUpdate := handlers.ConfigScanApply(mgr, runner, resourceCatalog, scanCache)
 
 	accessGate := middleware.NewAccessGate(mgr.Get)
 	api := app.Group("/api")

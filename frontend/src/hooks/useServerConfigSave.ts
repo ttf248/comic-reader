@@ -11,6 +11,7 @@ import { ApiError } from "../api/client";
 import { authApi } from "../api/auth";
 import { useUIStore } from "../store/uiStore";
 import { updateFsCapabilities } from "./useFsCapabilities";
+import { useScanStore } from "../store/scanStore";
 import { libraryQueryKeys } from "./useLibrary";
 
 export type FieldStatus = "idle" | "saving" | "saved" | "error";
@@ -106,12 +107,12 @@ export function useServerConfigSave(
     if (mounted.current) setIsReading(false);
   }
 
-  function refreshLibrary() {
+  function refreshLibrary(needsScan = true) {
     qc.removeQueries({ queryKey: libraryQueryKeys.root });
     changeRecovery((state) => ({
       ...state,
       rootsUncertain: false,
-      needsScan: true,
+      needsScan,
     }));
   }
 
@@ -146,7 +147,9 @@ export function useServerConfigSave(
         (patch.mediaRoots !== undefined && currentRecovery().rootsUncertain)
       ) {
         // 丢失响应后重试可能得到 changed=false，仍需清理客户端旧媒体库。
-        refreshLibrary();
+        refreshLibrary(
+          !response.scanId && response.config.mediaRoots.length > 0,
+        );
       }
       if (keys.includes("allowOsOpen"))
         updateFsCapabilities(qc, response.config.allowOsOpen);
@@ -155,6 +158,12 @@ export function useServerConfigSave(
       } else if (patch.accessMode === "local") {
         await authApi.logout().catch(() => {});
       }
+      if (response.scanId) useScanStore.getState().setActive(response.scanId);
+      if (response.scanStartError)
+        pushToast({
+          kind: "error",
+          message: "配置已保存，但自动扫描未能启动，请重新扫描",
+        });
       setFieldStatus(keys, "saved");
       const changedRestart = (response.requiresRestart ?? []).filter((key) =>
         keys.includes(key),

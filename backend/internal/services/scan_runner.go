@@ -134,6 +134,8 @@ func (r *AsyncScanRunner) Invalidate() {
 	if active := r.states[r.activeID]; active != nil && isActiveScan(active.Status) {
 		active.Cancel()
 	}
+	// 旧任务继续登记直至回收，但不再作为新配置的可复用任务。
+	r.activeID = ""
 }
 
 func (r *AsyncScanRunner) Get(id string) *ScanState {

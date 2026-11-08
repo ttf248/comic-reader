@@ -3,6 +3,7 @@ package handlers
 
 import (
 	"github.com/gofiber/fiber/v2"
+	"sync"
 
 	"github.com/tianlongxiang/local-gallery/internal/config"
 	"github.com/tianlongxiang/local-gallery/internal/pathutil"
@@ -58,6 +59,8 @@ func mediaRootResponses(cfg *config.Config) []MediaRootResponse {
 
 // ConfigUpdateResponse PUT /api/config 的响应体。
 type ConfigUpdateResponse struct {
+	ScanID            string         `json:"scanId,omitempty"`
+	ScanStartError    string         `json:"scanStartError,omitempty"`
 	OK                bool           `json:"ok"`
 	Config            ConfigResponse `json:"config"`
 	RequiresRestart   []string       `json:"requiresRestart,omitempty"`
@@ -106,31 +109,37 @@ func ConfigGetHandler(mgr *config.Manager) fiber.Handler {
 //  1. 解析 PATCH
 //  2. 委托给 Manager.Update（合并 → 校验 → 写盘 → 通知订阅者）
 //  3. 报告 requiresRestart / mediaRootsChanged
-func ConfigUpdateHandler(mgr *config.Manager, onUpdate func(c *config.Config, mediaRootsChanged bool) error) fiber.Handler {
+func ConfigUpdateHandler(mgr *config.Manager, onUpdate func(c *config.Config, mediaRootsChanged bool) (ConfigScanResult, error)) fiber.Handler {
+	var updateMu sync.Mutex
 	return func(c *fiber.Ctx) error {
+		updateMu.Lock()
+		defer updateMu.Unlock()
 		var patch config.ConfigPatch
 		if err := c.BodyParser(&patch); err != nil {
 			return writeError(c, fiber.StatusBadRequest, "invalid_config_body", "invalid JSON body")
 		}
 
-		prevRoots := mgr.Roots()
+		previous := mgr.Get()
 		requiresRestart, err := mgr.Update(patch)
 		if err != nil {
 			return writeError(c, fiber.StatusBadRequest, "invalid_config", "configuration is invalid")
 		}
 		newCfg := mgr.Get()
-		newRoots := newCfg.Roots()
-		mediaRootsChanged := !pathutil.EqualRoots(prevRoots, newRoots)
+		mediaRootsChanged := !equalMediaRoots(previous, newCfg)
 
+		var scan ConfigScanResult
 		if onUpdate != nil {
-			if err := onUpdate(newCfg, mediaRootsChanged); err != nil {
+			var err error
+			scan, err = onUpdate(newCfg, mediaRootsChanged)
+			if err != nil {
 				// 通知失败：内存已是新值但下游没跟上；返回 500 提示用户回滚或重启
 				return writeError(c, fiber.StatusInternalServerError, "config_apply_failed", "config saved, but applying to running services failed", fiber.Map{"applied": true})
 			}
 		}
 
 		return c.JSON(ConfigUpdateResponse{
-			OK: true,
+			OK:     true,
+			ScanID: scan.ScanID, ScanStartError: scan.ScanStartError,
 			Config: ConfigResponse{
 				MediaRoots:            mediaRootResponses(newCfg),
 				Host:                  newCfg.Host,
@@ -156,4 +165,21 @@ func ConfigUpdateHandler(mgr *config.Manager, onUpdate func(c *config.Config, me
 			MediaRootsChanged: mediaRootsChanged,
 		})
 	}
+}
+
+// equalMediaRoots 按规范路径与目录属性比较，等价写法及重排不触发扫描。
+func equalMediaRoots(first, second *config.Config) bool {
+	if !pathutil.EqualRoots(first.Roots(), second.Roots()) {
+		return false
+	}
+	kinds := map[string]string{}
+	for _, root := range first.NormalizedRoots() {
+		kinds[pathutil.RootKey(root.Path)] = root.Kind
+	}
+	for _, root := range second.NormalizedRoots() {
+		if kinds[pathutil.RootKey(root.Path)] != root.Kind {
+			return false
+		}
+	}
+	return true
 }

@@ -75,9 +75,11 @@ export type ServerConfigPatch = ServerConfigFields & {
 
 export interface ServerConfigUpdateResponse {
   ok: boolean;
+  scanId?: string;
+  scanStartError?: string;
   config: ServerConfig;
   requiresRestart: string[];
-  // 根集合是否变化（顺序无关）；前端据此决定是否提示"重新扫描"
+  // 根集合是否变化（顺序无关）；前端据此刷新列表并跟踪自动扫描
   mediaRootsChanged: boolean;
 }
 

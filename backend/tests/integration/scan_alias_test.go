@@ -40,7 +40,11 @@ func TestEquivalentRootConfigurationKeepsRevisionAndUniqueChildren(t *testing.T)
 	if runtime.GOOS == "windows" {
 		roots = append(roots, strings.ToUpper(h.root))
 	}
-	res, body := h.do(t, http.MethodPut, "/api/config", map[string]any{"mediaRoots": mediaRootsOf(roots)})
+	configuredRoots := mediaRootsOf(roots)
+	for i := range configuredRoots {
+		configuredRoots[i].Kind = "comic"
+	}
+	res, body := h.do(t, http.MethodPut, "/api/config", map[string]any{"mediaRoots": configuredRoots})
 	var updated struct {
 		MediaRootsChanged bool `json:"mediaRootsChanged"`
 		Config            struct {

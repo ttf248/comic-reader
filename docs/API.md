@@ -78,11 +78,13 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 可更新字段：`mediaRoots`、`host`、`port`、`accessMode`、`accessToken`、`cacheDir`、`thumbSizeW`、`thumbSizeH`、`thumbCacheSize`、`cacheMaxAgeDays`、`cacheMaxSizeMB`、`ffmpegPath`、`allowOsOpen`、`staticDir`、`skipHidden`、`excludePatterns`、`systemFiles`。`accessToken` 永不在 GET/PUT 响应中回显，只返回 `accessTokenConfigured`。
 
-`mediaRoots` 的每个条目同时携带目录路径与它的内容属性：`{ "path": "E:\照片", "kind": "photo" }`。`kind` 只有 `photo` 与 `comic` 两种且互斥，决定该目录里的相册与集合按哪种方式浏览、归入哪个工作台。条目写成映射但省略 `kind` 时按 `photo` 处理；非法 `kind` 返回 `400 invalid_config`。只写一个路径字符串的旧写法不再支持，启动时直接报错指出新写法。属性可热更新：它只决定「相册用什么方式打开」与列表归属，不影响扫描结果，改完立即生效，不需要重新扫描。
+`mediaRoots` 的每个条目同时携带目录路径与它的内容属性：`{ "path": "E:\照片", "kind": "photo" }`。`kind` 只有 `photo` 与 `comic` 两种且互斥，决定该目录里的相册与集合按哪种方式浏览、归入哪个工作台。条目写成映射但省略 `kind` 时按 `photo` 处理；非法 `kind` 返回 `400 invalid_config`。只写一个路径字符串的旧写法不再支持，启动时直接报错指出新写法。属性可热更新：它决定「相册用什么方式打开」与列表归属，保存后与路径变更一样触发自动扫描。
 
 `mediaRoots` 相对进程 CWD 绝对化、清理路径分隔与 `.`、去空并保序去重，响应和写回 YAML 均使用规范化后的路径，保留首次出现的大小写。Windows 比较时忽略大小写，其他平台区分大小写；不通过解析符号链接或 junction 合并不同路径。仅增加等价写法、重复项或调整顺序时，`mediaRootsChanged=false`，保留现有媒体库、revision 和有效扫描缓存。
 
-`host`、`port`、`cacheDir`、`ffmpegPath` 和 `staticDir` 修改后需要重启；`accessMode` 与 `accessToken` 可热更新，其中 LAN 令牌必须是 32-256 个无空白字符。缩略图尺寸、LRU、保留天数和 `allowOsOpen` 也可热更新，媒体根和扫描排除规则在下一次扫描生效。
+媒体根配置保存成功后，若规范路径或内容属性发生变化，服务端取消旧 generation、清库并启动最新非空根的扫描；根顺序和等价路径调整不触发扫描，空根只清库。`PUT /api/config` 成功响应增加可选 `scanId` 与 `scanStartError`：`scanId` 可交给现有 SSE 进度接口；`scanStartError=scan_start_failed` 表示配置已保存但自动扫描未能启动，可手动重试，不能将其当作配置保存失败重放。扫描属于进程生命周期，不随保存请求断连取消。
+
+`host`、`port`、`cacheDir`、`ffmpegPath` 和 `staticDir` 修改后需要重启；`accessMode` 与 `accessToken` 可热更新，其中 LAN 令牌必须是 32-256 个无空白字符。缩略图尺寸、LRU、保留天数和 `allowOsOpen` 也可热更新，媒体根变更自动触发扫描，扫描排除规则在下一次扫描生效。
 
 `cacheMaxSizeMB` 为整数 MiB，0～1048576，默认 10240；0 不限制容量。与 `cacheMaxAgeDays` 一起在下一轮自动维护生效，无需重启。启动时及每小时检查一次，只删除派生目录中的完整缓存文件；十分钟内的新文件与临时产物保留，因此容量是软上限。状态数据不参与清理。
 
