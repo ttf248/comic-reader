@@ -45,7 +45,9 @@ npm run dev
 
 ## 构建与运行
 
-Windows 源码目录支持 `build.bat` 构建、`start.bat` 运行。先准备上述配置，并设置 `staticDir: "../frontend/dist"`；两个入口可双击或从命令行调用，自动化可加 `--no-pause`。
+Windows 源码目录支持 `build.bat` 构建、`start.bat` 运行。先准备上述配置，并设置 `staticDir: "../frontend/dist"`。首次运行前在 `frontend/` 执行 `npm ci`；此后 `start.bat` 每次启动都会重建前后端，构建失败时不会启动已有二进制。两个入口可双击或从命令行调用，自动化可加 `--no-pause`。
+
+VSCode「运行和调试」里的“运行本机最新构建”也会在启动前构建前后端；“后端: Go (Fiber)”和“全栈复合调试”直接以 Go 调试器运行源码。
 
 其他平台可在仓库根目录执行 `pwsh -File scripts/build.ps1`，同样使用 `staticDir: "../frontend/dist"`，从 `backend/` 运行生成的 `../bin/local-gallery`。Windows 产物带 `.exe` 后缀。默认访问 `http://127.0.0.1:8080`。
 
@@ -88,6 +90,7 @@ pwsh -File scripts/install-ffmpeg.ps1
 | `frontend/` | `npm run build`                  | TypeScript 检查与生产构建              |
 | `frontend/` | `npm run test:e2e`               | 使用独立临时库启动真实全栈 E2E         |
 | 仓库根      | `pwsh -File scripts/build.ps1`   | 全栈构建；也可使用 VSCode `build: all` |
+| 仓库根      | VSCode「运行本机最新构建」或 Windows `start.bat` | 构建本机前后端最新代码并启动 |
 
 首次跑 E2E 需在 `frontend/` 执行 `npx playwright install chromium`。E2E 自动选择端口、生成媒体与构建产物，结束清理临时服务，不读取个人媒体库。业务改动按协作规则同步相应测试；纯文档改动检查链接、引用与格式。
 

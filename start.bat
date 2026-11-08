@@ -6,16 +6,6 @@ pushd "%~dp0backend"
 if errorlevel 1 exit /b 1
 
 set "result=1"
-if not exist "..\bin\local-gallery.exe" (
-  echo [错误] 缺少 bin\local-gallery.exe，请先运行 build.bat。
-
-  goto finish
-)
-if not exist "..\frontend\dist\index.html" (
-  echo [错误] 缺少 frontend\dist\index.html，请先运行 build.bat。
-
-  goto finish
-)
 if not exist "config.yaml" (
   echo [错误] 缺少 backend\config.yaml。
 
@@ -26,7 +16,40 @@ if not exist "config.yaml" (
   goto finish
 )
 
-echo 正在运行已构建的服务，按 Ctrl+C 停止。
+where pwsh.exe >nul 2>nul
+if errorlevel 1 (
+  echo [错误] 找不到 PowerShell 7（pwsh.exe），无法构建最新版本。
+
+  goto finish
+)
+
+if not exist "..\frontend\node_modules" (
+  echo [错误] 缺少前端依赖，请先在 frontend 目录执行 npm ci。
+
+  goto finish
+)
+
+echo 正在构建前后端最新代码...
+
+pwsh -NoProfile -ExecutionPolicy Bypass -File "..\scripts\build.ps1" -Local -SkipInstall
+if errorlevel 1 (
+  echo [错误] 最新代码构建失败，已取消启动。
+
+  goto finish
+)
+
+if not exist "..\bin\local-gallery.exe" (
+  echo [错误] 构建完成后仍缺少 bin\local-gallery.exe，已取消启动。
+
+  goto finish
+)
+if not exist "..\frontend\dist\index.html" (
+  echo [错误] 构建完成后仍缺少 frontend\dist\index.html，已取消启动。
+
+  goto finish
+)
+
+echo 正在运行最新构建的服务，按 Ctrl+C 停止。
 
 echo 浏览器访问配置的 host 和 port；默认地址为 http://127.0.0.1:8080。
 

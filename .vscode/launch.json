@@ -27,12 +27,13 @@
       }
     },
     {
-      "name": "3) 运行已构建版本",
+      "name": "3) 运行本机最新构建",
       "type": "node-terminal",
       "request": "launch",
       "command": "../bin/local-gallery --config config.yaml",
       "windows": { "command": "../bin/local-gallery.exe --config config.yaml" },
-      "cwd": "${workspaceFolder}/backend"
+      "cwd": "${workspaceFolder}/backend",
+      "preLaunchTask": "build: local"
     },
     {
       "name": "4) 后端: 调试服务测试",

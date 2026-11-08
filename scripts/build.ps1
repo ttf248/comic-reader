@@ -13,6 +13,7 @@ param(
   [string]$TargetOS = "",
   [ValidateSet("", "amd64", "arm64")]
   [string]$TargetArch = "",
+  [switch]$Local,
   [switch]$SkipInstall,
   [switch]$SkipFrontend
 )
@@ -68,17 +69,26 @@ $frontendRoot = Join-Path $repoRoot "frontend"
 $backendRoot = Join-Path $repoRoot "backend"
 $resolvedOutputDir = Resolve-RepositoryPath $OutputDir
 
+if ($Local -and (-not [string]::IsNullOrWhiteSpace($TargetOS) -or
+    -not [string]::IsNullOrWhiteSpace($TargetArch))) {
+  throw "Local 不能与 TargetOS 或 TargetArch 同时使用。"
+}
+
 if (-not [string]::IsNullOrWhiteSpace($Version) -and
     $Version -notmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$') {
   throw "Version 必须是不带 v 前缀的 SemVer，例如 2.0.0 或 2.0.0-rc.1。"
 }
 
-$effectiveTargetOS = if ([string]::IsNullOrWhiteSpace($TargetOS)) {
+$effectiveTargetOS = if ($Local) {
+  Get-GoEnvironmentValue "GOHOSTOS"
+} elseif ([string]::IsNullOrWhiteSpace($TargetOS)) {
   Get-GoEnvironmentValue "GOOS"
 } else {
   $TargetOS
 }
-$effectiveTargetArch = if ([string]::IsNullOrWhiteSpace($TargetArch)) {
+$effectiveTargetArch = if ($Local) {
+  Get-GoEnvironmentValue "GOHOSTARCH"
+} elseif ([string]::IsNullOrWhiteSpace($TargetArch)) {
   Get-GoEnvironmentValue "GOARCH"
 } else {
   $TargetArch

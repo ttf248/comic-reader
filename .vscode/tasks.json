@@ -28,6 +28,17 @@
       "problemMatcher": ["$go"]
     },
     {
+      "label": "build: local",
+      "type": "shell",
+      "command": "pwsh",
+      "args": ["-NoProfile", "-File", "scripts/build.ps1", "-Local", "-SkipInstall"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
       "label": "backend: test",
       "type": "shell",
       "command": "go test ./...",
