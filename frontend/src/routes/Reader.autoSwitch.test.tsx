@@ -15,6 +15,7 @@ import Reader from "./Reader";
 const mocks = vi.hoisted(() => ({
   getImage: vi.fn(),
   getPrefs: vi.fn(),
+  overview: vi.fn(),
 }));
 
 vi.mock("../api/library", async (importOriginal) => {
@@ -23,6 +24,7 @@ vi.mock("../api/library", async (importOriginal) => {
     ...actual,
     libraryApi: {
       ...actual.libraryApi,
+      overview: mocks.overview,
       allMedia: vi.fn(async () => ({
         revision: 1,
         total: 3,
@@ -132,7 +134,9 @@ describe("Reader 读到末尾自动切换下一本", () => {
       { key: "a_next", to: "/albums/a_next", name: "下一本" },
     ]);
     renderReader(2);
-    await waitFor(() => expect(screen.getByTestId("image-gallery")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByTestId("image-gallery")).toBeInTheDocument(),
+    );
 
     await act(async () => {
       fireEvent.keyDown(window, { key: "ArrowRight" });
@@ -161,7 +165,9 @@ describe("Reader 读到末尾自动切换下一本", () => {
       { key: "a_next", to: "/albums/a_next", name: "下一本" },
     ]);
     renderReader(2);
-    await waitFor(() => expect(screen.getByTestId("image-gallery")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByTestId("image-gallery")).toBeInTheDocument(),
+    );
 
     await act(async () => {
       fireEvent.keyDown(window, { key: "ArrowRight" });
@@ -169,6 +175,57 @@ describe("Reader 读到末尾自动切换下一本", () => {
 
     expect(screen.getByTestId("location")).toHaveTextContent(
       "/read/a_test?index=2",
+    );
+  });
+  it("已加载边界继续取页，跳过集合并进入下一卷", async () => {
+    setContext([{ key: "a_test", to: "/albums/a_test", name: "当前相册" }]);
+    const context = JSON.parse(
+      sessionStorage.getItem("local-gallery-context")!,
+    );
+    sessionStorage.setItem(
+      "local-gallery-context",
+      JSON.stringify({
+        ...context,
+        pagination: {
+          query: { kind: "comic", sort: "name" },
+          nextCursor: "next",
+        },
+      }),
+    );
+    mocks.overview.mockResolvedValue({
+      ok: true,
+      page: {
+        revision: 1,
+        items: [
+          {
+            kind: "album",
+            node: {
+              id: "a_next",
+              name: "分页下一卷",
+              contentKind: "comic",
+              imageCount: 3,
+            },
+          },
+        ],
+        total: 2,
+      },
+    });
+    renderReader(2);
+    await waitFor(() =>
+      expect(screen.getByTestId("image-gallery")).toBeInTheDocument(),
+    );
+    await act(async () => {
+      fireEvent.keyDown(window, { key: "ArrowRight" });
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        "/read/a_next?index=0",
+      ),
+    );
+    expect(mocks.overview).toHaveBeenCalledWith(
+      { kind: "comic", sort: "name" },
+      "next",
+      expect.any(AbortSignal),
     );
   });
 });

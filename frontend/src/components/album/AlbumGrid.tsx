@@ -20,6 +20,7 @@ import { useUIStore, type ViewMode } from "../../store/uiStore";
 export type { CardData } from "./AlbumCard";
 
 interface Props {
+  onEndReached?: () => void;
   items: CardData[];
   empty?: ReactNode;
   variant?: ViewMode;
@@ -68,6 +69,7 @@ const virtualListComponents = { List: VirtualList };
 // 右键菜单统一：打开 / 收藏 / 阅读标记 / 文件管理器 / 复制链接 / 属性。
 export default function AlbumGrid({
   items,
+  onEndReached,
   empty,
   variant = "grid",
   showLastSeen,
@@ -162,6 +164,7 @@ export default function AlbumGrid({
       {mode === "list" ? (
         <div ref={widthRef}>
           <Virtuoso
+            endReached={onEndReached}
             customScrollParent={scrollParent}
             useWindowScroll={!scrollParent}
             data={listRows}
@@ -187,6 +190,7 @@ export default function AlbumGrid({
         </div>
       ) : (
         <VirtuosoGrid
+          endReached={onEndReached}
           customScrollParent={scrollParent}
           useWindowScroll={!scrollParent}
           data={items}

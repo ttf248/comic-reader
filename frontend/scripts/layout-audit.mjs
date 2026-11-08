@@ -18,6 +18,7 @@
 //   - overflowPx        : 横向溢出像素
 //
 // 退出码：横向溢出、当前跨页对齐基线失败或页面加载失败时为 1。
+import assert from "node:assert/strict";
 import { chromium } from "@playwright/test";
 import {
   buildRoute,
@@ -220,6 +221,8 @@ const MEASURE = ({ minFontPx, minControlPx }) => {
     routeError,
     effectiveWidth,
     effectiveLeft,
+    // 照片墙页头以返回按钮开头；文字左缘会多出按钮宽度，比较容器边界。
+    alignmentLeft: main?.querySelector(".album-bar") ? Math.round(main.querySelector(".album-bar").getBoundingClientRect().left) : effectiveLeft,
     effectiveRatio:
       effectiveWidth === null
         ? null
@@ -343,6 +346,22 @@ async function prepareTagRoute(page, mode) {
 
 async function main() {
   const browser = await chromium.launch();
+  if (process.argv.includes("--self-test")) {
+    try {
+      const page = await browser.newPage();
+      for (const [offset, expected] of [[0,20],[12,32]]) {
+        await page.setContent(`<style>body{margin:0}.album-bar{display:flex;margin-left:${offset}px}button{width:45px;height:30px}h1{margin:0}</style><main style="padding:20px"><div class="album-bar"><button aria-label="返回"></button><h1>相册</h1></div></main>`);
+        const result = await page.evaluate(MEASURE,{minFontPx:MIN_FONT_PX,minControlPx:MIN_CONTROL_PX});
+        assert.equal(result.alignmentLeft,expected);
+        assert.equal(Math.abs(result.alignmentLeft-20)>2,offset!==0);
+      }
+      await page.setContent('<style>body{margin:0}h1{margin:0}</style><main style="padding:20px"><h1>列表</h1></main>');
+      const result=await page.evaluate(MEASURE,{minFontPx:MIN_FONT_PX,minControlPx:MIN_CONTROL_PX});
+      assert.equal(result.alignmentLeft,20);
+      console.log("布局审计 self-test：普通列表、带返回按钮的照片墙及错误偏移均通过");
+    } finally { await browser.close(); }
+    return;
+  }
   const report = [];
   const routeErrors = [];
   let failed = false;
@@ -446,7 +465,7 @@ async function main() {
   {
     const groups = new Map();
     for (const r of report) {
-      if (r.route === "reader" || r.effectiveLeft === null) continue;
+      if (r.route === "reader" || r.alignmentLeft === null) continue;
       const key = `${r.vp}|${r.theme}`;
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(r);
@@ -454,7 +473,7 @@ async function main() {
     for (const [key, rows] of groups) {
       const counts = new Map();
       for (const r of rows) {
-        counts.set(r.effectiveLeft, (counts.get(r.effectiveLeft) ?? 0) + 1);
+        counts.set(r.alignmentLeft, (counts.get(r.alignmentLeft) ?? 0) + 1);
       }
       // 多数派就是这一档的网格线
       let baseline = null;
@@ -467,12 +486,12 @@ async function main() {
       }
       for (const r of rows) {
         if (r.routeError) continue; // 页面本身崩了，不参与对齐比较
-        if (Math.abs(r.effectiveLeft - baseline) > 2) {
+        if (Math.abs(r.alignmentLeft - baseline) > 2) {
           misaligned.push({
             vp: r.vp,
             theme: r.theme,
             route: r.route,
-            effectiveLeft: r.effectiveLeft,
+            effectiveLeft: r.alignmentLeft,
             expected: baseline,
           });
         }

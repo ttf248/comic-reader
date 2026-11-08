@@ -240,6 +240,7 @@ func NormalizeLibraryPageLimit(limit int) int {
 // libraryPageIndex 随 ResourceCatalog 一次性发布。请求只做游标校验和切片，
 // 不再按页遍历目录树、复制完整相册或重复自然排序。
 type libraryPageIndex struct {
+	queryCacheFields
 	manifest   LibraryManifest
 	children   map[string][]LibraryNodeSummary
 	media      map[string][]LibraryMediaItem

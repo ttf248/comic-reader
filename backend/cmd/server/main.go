@@ -335,6 +335,7 @@ func main() {
 	api.Post("/scans", handlers.AsyncScanStartHandler(runner, mgr))
 	api.Get("/scans/:id/events", handlers.AsyncScanEventsHandler(runner))
 	api.Delete("/scans/:id", handlers.AsyncScanCancelHandler(runner))
+	api.Get("/library/overview", handlers.LibraryQueryHandler(resourceCatalog, prefs, activities))
 	api.Get("/library/manifest", handlers.LibraryManifestHandler(resourceCatalog))
 	api.Get("/library/:id/children", handlers.LibraryChildrenPageHandler(resourceCatalog))
 	api.Post("/library/nodes/query", handlers.LibraryNodesQueryHandler(resourceCatalog))

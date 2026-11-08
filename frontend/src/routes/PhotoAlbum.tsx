@@ -414,6 +414,11 @@ export default function PhotoAlbum({ album }: Props) {
               icon: <GridIcon size={12} />,
             },
             {
+              id: "copy",
+              label: "复制相册链接",
+              icon: <CopyIcon size={12} />,
+            },
+            {
               id: "cover",
               label: "设为封面",
               icon: <ImageIcon size={12} />,
@@ -452,9 +457,9 @@ export default function PhotoAlbum({ album }: Props) {
                 );
               return;
             }
-            if (id === "properties") {
-              setPropertiesFileId(item.id);
-            }
+            if (id === "properties") setPropertiesFileId(item.id);
+            if (id === "copy") void copyLink();
+            if (id === "explorer") void openInExplorer();
           }}
           onClose={() => setContextMenu(null)}
         />

@@ -1,9 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
-import {
-  useParams,
-  useSearchParams,
-  useNavigate,
-} from "react-router-dom";
+import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useGalleryStore } from "../store/galleryStore";
 import { useKeyboard } from "../hooks/useKeyboard";
@@ -41,6 +37,7 @@ import { albumRoute, homeRoute, readerRoute } from "../utils/path";
 import { useSafeBack } from "../utils/navigation";
 import {
   getGalleryContext,
+  setGalleryContext,
   entryReaderUrl,
   type GalleryContextEntry,
   entryDisplayName,
@@ -733,12 +730,12 @@ export default function Reader() {
   // (slideshow effect 的 deps 不包含 pushToast/toggleSlideshow,这些会
   // 因 user 操作 stale,但回调需要读最新 store + push 最新 toast)。
   const onReachEndRef = useRef<() => void>(() => {});
-  onReachEndRef.current = () => {
+  onReachEndRef.current = async () => {
     // 「阅读到末尾自动切换下一卷」：读完直接进入上下文里的下一卷，
     // 幻灯片也跟着继续（不当作异常终止）。
     if (
       autoSwitchAlbum &&
-      goAdjacent(1, { notify: showSwitchNotif, albumsOnly: true })
+      (await goAdjacent(1, { notify: showSwitchNotif, albumsOnly: true }))
     ) {
       return;
     }
@@ -829,14 +826,78 @@ export default function Reader() {
   //   集合没有阅读器入口，回到它的首页。
   // - notify=false 时不弹「下一卷：xxx」提示（跟随「切换时显示通知」设置）。
   // - albumsOnly=true 时跳过集合，只找相册（自动切换下一卷用）。
+  const adjacentPending = useRef(false);
+  const adjacentController = useRef<AbortController>();
+  useEffect(() => () => adjacentController.current?.abort(), [pathParam]);
   const goAdjacent = useCallback(
-    (
+    async (
       direction: 1 | -1,
       options?: { notify?: boolean; albumsOnly?: boolean },
     ) => {
       const notify = options?.notify ?? true;
       const albumsOnly = options?.albumsOnly ?? false;
-      const ctx = getGalleryContext();
+      if (adjacentPending.current) return false;
+      adjacentPending.current = true;
+      const controller = new AbortController();
+      adjacentController.current = controller;
+      let ctx = getGalleryContext();
+      try {
+        // 前向到达已加载边界时继续取页；反向环绕需要找到真正的末尾。
+        while (ctx?.pagination?.nextCursor) {
+          const current = ctx.list.findIndex(
+            (entry) => entry.key === pathParam,
+          );
+          const remaining = ctx.list
+            .slice(current + 1)
+            .some(
+              (entry) =>
+                entryReaderUrl(entry) &&
+                (!albumsOnly ||
+                  (isVideo ? entry.videoCount : entry.imageCount) !== 0),
+            );
+          if (
+            (direction === 1 && remaining) ||
+            (direction === -1 && current > 0)
+          )
+            break;
+          const page = await libraryApi.overview(
+            ctx.pagination.query,
+            ctx.pagination.nextCursor,
+            controller.signal,
+          );
+          const entries = page.page.items.flatMap((item) =>
+            item.kind !== "album"
+              ? []
+              : [
+                  {
+                    key: item.node.id,
+                    to: albumRoute(item.node.contentKind, item.node.id),
+                    name: item.node.name,
+                    parentName: item.node.parentName,
+                    imageCount: item.node.imageCount ?? 0,
+                    videoCount: item.node.videoCount ?? 0,
+                    contentKind: item.node.contentKind,
+                  },
+                ],
+          );
+          ctx = {
+            ...ctx,
+            list: [...ctx.list, ...entries],
+            pagination: { ...ctx.pagination, nextCursor: page.page.nextCursor },
+          };
+          setGalleryContext(ctx);
+        }
+      } catch {
+        if (controller.signal.aborted) return false;
+        pushToast({
+          kind: "error",
+          message: "无法加载下一批相册，请返回列表刷新后重试",
+        });
+        return false;
+      } finally {
+        adjacentPending.current = false;
+      }
+      if (controller.signal.aborted) return false;
       const found = resolveAdjacentEntry(ctx, pathParam, direction, {
         albumsOnly,
         isVideo,
@@ -1067,7 +1128,9 @@ export default function Reader() {
           >
             ←
           </button>
-          <span className="font-medium text-white/85 truncate">{headerName}</span>
+          <span className="font-medium text-white/85 truncate">
+            {headerName}
+          </span>
         </div>
         <div className="flex-1 flex items-center justify-center px-6">
           {!pathParam ? (
@@ -1337,7 +1400,10 @@ export default function Reader() {
             type="button"
             onClick={() => {
               setShowFinished(false);
-              goAdjacent(1, { notify: showSwitchNotif, albumsOnly: true });
+              void goAdjacent(1, {
+                notify: showSwitchNotif,
+                albumsOnly: true,
+              });
             }}
             className="shrink-0 rounded border border-white/20 px-3 py-1.5 text-meta text-white/90 transition-colors hover:bg-white/10"
           >

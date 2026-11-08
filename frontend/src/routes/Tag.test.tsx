@@ -1,15 +1,19 @@
+import { listFixture } from "../test-library-list";
+import { useLibraryList } from "../hooks/useLibraryList";
+vi.mock("../hooks/useLibraryList", async (original) => ({
+  ...(await original<typeof import("../hooks/useLibraryList")>()),
+  useLibraryList: vi.fn(),
+}));
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import Tag from "./Tag";
-import { useTagAlbums } from "../hooks/useLibrary";
 import { useFavorites } from "../hooks/useFavorites";
 import { useImageActivities } from "../hooks/useImageActivity";
 import { useSearchStore } from "../store/searchStore";
 import { useAppModeStore } from "../store/appModeStore";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
-vi.mock("../hooks/useLibrary", () => ({ useTagAlbums: vi.fn() }));
 vi.mock("../hooks/useFavorites", () => ({ useFavorites: vi.fn() }));
 vi.mock("../hooks/useImageActivity", () => ({
   useImageActivities: vi.fn(),
@@ -30,7 +34,9 @@ vi.mock("../components/album/AlbumGrid", () => ({
 function Location() {
   const location = useLocation();
   return (
-    <output data-testid="location">{location.pathname + location.search}</output>
+    <output data-testid="location">
+      {location.pathname + location.search}
+    </output>
   );
 }
 
@@ -74,31 +80,36 @@ describe("Tag", () => {
   });
 
   it("使用标签分页摘要渲染全部相册", () => {
-    vi.mocked(useTagAlbums).mockReturnValue({
-      data: {
-        revision: 3,
-        total: 1,
-        items: [
-          {
-            id: "a_trip",
-            kind: "album",
-            name: "旅行册",
-            displayName: "旅行册",
-            tags: ["旅行"],
-            coverImage: "f_cover",
-            coverImages: ["f_cover"],
-            imageCount: 12,
-            videoCount: 1,
-            contentKind: "comic",
-          },
-        ],
-      },
-      isLoading: false,
-    } as never);
+    vi.mocked(useLibraryList).mockReturnValue(
+      listFixture({
+        data: {
+          revision: 3,
+          total: 1,
+          items: [
+            {
+              id: "a_trip",
+              kind: "album",
+              name: "旅行册",
+              displayName: "旅行册",
+              tags: ["旅行"],
+              coverImage: "f_cover",
+              coverImages: ["f_cover"],
+              imageCount: 12,
+              videoCount: 1,
+              contentKind: "comic",
+            },
+          ],
+        },
+        isLoading: false,
+      }) as never,
+    );
 
     renderTag();
 
-    expect(useTagAlbums).toHaveBeenCalledWith("旅行");
+    expect(useLibraryList).toHaveBeenCalledWith(
+      expect.objectContaining({ tag: "旅行" }),
+      true,
+    );
     expect(screen.getByText("旅行册")).toBeInTheDocument();
     expect(screen.getByText("13")).toBeInTheDocument();
     // 拆分跟着侧走：这一页是漫画侧，媒体是页不是「图片」。
@@ -107,10 +118,12 @@ describe("Tag", () => {
   });
 
   it("加载时不误报标签不存在", () => {
-    vi.mocked(useTagAlbums).mockReturnValue({
-      data: undefined,
-      isLoading: true,
-    } as never);
+    vi.mocked(useLibraryList).mockReturnValue(
+      listFixture({
+        data: undefined,
+        isLoading: true,
+      }) as never,
+    );
 
     renderTag();
 
@@ -127,12 +140,17 @@ describe("Tag", () => {
   it.each(["作者A", "作者 A", "C++", "100%", "字面%20", "字面%2F", "字面%25"])(
     "标签 %s 的路径只解码一次",
     (tag) => {
-      vi.mocked(useTagAlbums).mockReturnValue({
-        data: { items: [] },
-        isLoading: false,
-      } as never);
+      vi.mocked(useLibraryList).mockReturnValue(
+        listFixture({
+          data: { items: [] },
+          isLoading: false,
+        }) as never,
+      );
       renderTag(`/tags/${encodeURIComponent(tag)}`);
-      expect(useTagAlbums).toHaveBeenCalledWith(tag);
+      expect(useLibraryList).toHaveBeenCalledWith(
+        expect.objectContaining({ tag }),
+        true,
+      );
     },
   );
 });

@@ -1,32 +1,32 @@
 import { Fragment, useEffect, useMemo } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { useSearchStore, type SortKey } from "../store/searchStore";
+import { useSearchStore } from "../store/searchStore";
 import { useFavorites } from "../hooks/useFavorites";
 import { useGalleryContextSync } from "../hooks/useGalleryContextSync";
 import { historyApi } from "../api/prefs";
-import { useViewedSort } from "../hooks/useHistory";
+import { useLibraryList, listYearGroups } from "../hooks/useLibraryList";
+import ListPagination from "../components/common/ListPagination";
 import { ListFilterBar } from "../components/common/ListFilterBar";
-import ViewedSortNotice from "../components/common/ViewedSortNotice";
 import { syncHistoryCache } from "../utils/historyCache";
 import { useUIStore } from "../store/uiStore";
-import type { CardData } from "../components/album/AlbumGrid";
 import AlbumGrid from "../components/album/AlbumGrid";
 import AlbumGridSkeleton from "../components/album/AlbumGridSkeleton";
 import YearTimeline from "../components/home/YearTimeline";
-import {
-  groupAlbumsAndCollectionsByYear,
-  type AlbumLike,
-  type CollectionLike,
-} from "../utils/albumGrouping";
+import { type AlbumLike, type CollectionLike } from "../utils/albumGrouping";
 import EmptyState from "../components/common/EmptyState";
-import { albumRoute, decodeFavPath, decodePathTail, homeRoute, readerRoute } from "../utils/path";
+import {
+  albumRoute,
+  decodeFavPath,
+  decodePathTail,
+  homeRoute,
+  readerRoute,
+} from "../utils/path";
 import { albumCountUnit, workbenchCopy } from "../utils/workbench";
 import CardCover from "../components/album/CardCover";
 import { useAppMode } from "../hooks/useAppMode";
 import { useSafeBack } from "../utils/navigation";
-import { compareDatesDesc, usableDate } from "../utils/date";
-import { compareByAdded } from "../utils/cardSorting";
+import { usableDate } from "../utils/date";
 import {
   ChevronLeftIcon,
   StarIcon,
@@ -35,19 +35,16 @@ import {
 } from "../components/common/Icon";
 import PhotoAlbum from "./PhotoAlbum";
 import {
-  LibraryRevisionChangedError,
   type AppMode,
   type ContentKind,
   type LibraryNodeSummary,
 } from "../api/library";
-import {
-  useLibraryAncestors,
-  useLibraryChildren,
-  useLibraryNodes,
-} from "../hooks/useLibrary";
+import { useLibraryAncestors, useLibraryNodes } from "../hooks/useLibrary";
 import type { GalleryContextEntry } from "../utils/galleryContext";
 
 interface CollectionDetail {
+  albumCount: number;
+  collectionCount: number;
   path: string;
   name: string;
   displayName?: string;
@@ -138,17 +135,19 @@ export default function Album() {
 
   const nodeIds = useMemo(() => (resourceID ? [resourceID] : []), [resourceID]);
   const nodeQuery = useLibraryNodes(nodeIds);
-  const refetchNode = nodeQuery.refetch;
   const node = nodeQuery.data?.items[0];
   // 集合的子节点按集合自己的属性查：集合继承所属目录的属性，
   // 用当前工作台去查会把另一侧的成员过滤掉，集合看起来是空的。
-  const childrenQuery = useLibraryChildren(
-    node?.kind === "collection" ? node.id : "",
-    node?.contentKind ?? mode,
-    nodeQuery.data?.revision,
+  const listQuery = useMemo(
+    () => ({
+      kind: node?.contentKind ?? mode,
+      parent: node?.id,
+      q: query,
+      sort: sortBy,
+    }),
+    [node?.contentKind, node?.id, mode, query, sortBy],
   );
-  const revisionChanged =
-    childrenQuery.error instanceof LibraryRevisionChangedError;
+  const childrenQuery = useLibraryList(listQuery, node?.kind === "collection");
 
   // 面包屑：集合的上级集合链，从最外层到紧邻它的那一层。
   const ancestorsQuery = useLibraryAncestors(
@@ -159,20 +158,24 @@ export default function Album() {
     [ancestorsQuery.data],
   );
 
-  useEffect(() => {
-    if (revisionChanged) void refetchNode();
-  }, [refetchNode, revisionChanged]);
-
   const detail = useMemo<CollectionDetail | null>(() => {
     if (!node || node.kind !== "collection") return null;
-    if (!childrenQuery.data) return null;
+    if (!childrenQuery.summary) return null;
     const albums: AlbumLike[] = [];
     const collections: CollectionLike[] = [];
-    for (const child of childrenQuery.data.items) {
+    for (const item of childrenQuery.summary.items) {
+      if (item.kind === "smart") continue;
+      const child = item.node;
       if (child.kind === "album") albums.push(toAlbumLike(child));
       else collections.push(toCollectionLike(child));
     }
     return {
+      albumCount: (
+        childrenQuery.summary.scopeCounts ?? childrenQuery.summary.counts
+      ).album,
+      collectionCount: (
+        childrenQuery.summary.scopeCounts ?? childrenQuery.summary.counts
+      ).collection,
       path: node.id,
       name: node.name,
       displayName: node.displayName,
@@ -188,10 +191,11 @@ export default function Album() {
       contentKind: node.contentKind,
       parentId: node.parentId ?? "",
     };
-  }, [childrenQuery.data, node]);
+  }, [childrenQuery.summary, node]);
 
   const isLoading =
-    revisionChanged || nodeQuery.isLoading || childrenQuery.isLoading;
+    nodeQuery.isLoading ||
+    (node?.kind === "collection" && childrenQuery.isLoading);
 
   // 访问记录：相册被打开过就记一条，最近列表据此排序。
   const historyAlbumId = node?.kind === "album" ? node.id : "";
@@ -201,7 +205,7 @@ export default function Album() {
         ? node.location || node.displayName || node.name
         : node.displayName || node.name
       : "";
-  const historyImageCount = node?.kind === "album" ? node.imageCount ?? 0 : 0;
+  const historyImageCount = node?.kind === "album" ? (node.imageCount ?? 0) : 0;
   useEffect(() => {
     if (!historyAlbumId) return;
     historyApi
@@ -224,7 +228,9 @@ export default function Album() {
   if (isLoading) {
     // 骨架而不是转圈：数据到达后卡片直接落在骨架的位置上，页面不会先
     // 空一段再整块跳出来。
-    return <AlbumGridSkeleton variant={viewMode} label={`正在加载${albumWord}`} />;
+    return (
+      <AlbumGridSkeleton variant={viewMode} label={`正在加载${albumWord}`} />
+    );
   }
 
   if (!node) {
@@ -265,6 +271,21 @@ export default function Album() {
     return <PhotoAlbum album={node} />;
   }
 
+  if (childrenQuery.isError && !childrenQuery.summary)
+    return (
+      <EmptyState
+        title="列表加载失败"
+        action={
+          <button
+            className="btn btn-outline"
+            onClick={() => void childrenQuery.refetch()}
+          >
+            重试
+          </button>
+        }
+      />
+    );
+
   if (!detail) {
     return (
       <EmptyState
@@ -286,8 +307,7 @@ export default function Album() {
       detail={detail}
       ancestors={ancestors}
       mode={mode}
-      query={query}
-      sortBy={sortBy}
+      list={childrenQuery}
       viewMode={viewMode}
       onBack={goBack}
       isFavorite={isFav}
@@ -333,8 +353,8 @@ function CollectionHead({
   onBack: () => void;
 }) {
   const copy = workbenchCopy(detail.contentKind);
-  const albumCount = detail.albums.length;
-  const collectionCount = detail.collections.length;
+  const albumCount = detail.albumCount;
+  const collectionCount = detail.collectionCount;
   // 集合在照片侧叫「集合」，在漫画侧叫「作品」—— 首页的作品索引也是
   // 同一个词。两处用同一个词，用户才认得出这是同一类东西。
   const isComic = detail.contentKind === "comic";
@@ -345,7 +365,10 @@ function CollectionHead({
       {/* 返回 + 面包屑同一行：「返回」只说得出「回去」，祖先链才说得出
           「回到哪」。集合越嵌越深，这一行就越重要。 */}
       <div className="mb-4 flex items-center gap-3 min-w-0">
-        <button onClick={onBack} className="btn btn-sm btn-ghost -ml-2 shrink-0">
+        <button
+          onClick={onBack}
+          className="btn btn-sm btn-ghost -ml-2 shrink-0"
+        >
           <ChevronLeftIcon size={13} />
           <span>返回</span>
         </button>
@@ -394,7 +417,9 @@ function CollectionHead({
             {/* 来源是身份的一部分，不占计数行：多根库下它告诉用户这一屏
                 来自哪个目录；单根库里它只是重复了顶栏已知的事实。 */}
             {multiRoot && detail.sourceName && (
-              <span className="page-eyebrow__source">来自 {detail.sourceName}</span>
+              <span className="page-eyebrow__source">
+                来自 {detail.sourceName}
+              </span>
             )}
           </p>
           {/* 标题与动作同一行：动作贴在标题这一行的右端。页头横跨
@@ -465,8 +490,7 @@ function CollectionView({
   detail,
   ancestors,
   mode,
-  query,
-  sortBy,
+  list,
   viewMode,
   onBack,
   onToggleFav,
@@ -475,98 +499,18 @@ function CollectionView({
   detail: CollectionDetail;
   ancestors: LibraryNodeSummary[];
   mode: AppMode;
-  query: string;
   // 复用全局 SortKey:Album 详情也支持「最近看」('viewed' 用 history 排序)
-  sortBy: SortKey;
+  list: ReturnType<typeof useLibraryList>;
   viewMode: "grid" | "list";
   onBack: () => void;
   onToggleFav: () => void;
   isFavorite: boolean;
 }) {
-  // 集合:把直属于本层的 Albums + 嵌套子集合 Collections 都展平成统一
-  // 的 CardData 列表渲染。子集合(5 层嵌套的中间层)用 variant=
-  // 'collection' 区分,点击继续下钻。
-  const allCards: CardData[] = useMemo(() => {
-    const albumCards: CardData[] = detail.albums.map((a) => ({
-      id: "a:" + a.path,
-      variant: "album",
-      // 散图在集合内已有父目录做上下文，标题回到语义名：否则 "2011年"
-      // 集合里会出现一张同样叫 "2011年" 的卡片（location 就是父目录名）。
-      // 标题用「散图」而不是服务端的「本目录媒体」：后者是技术叫法，
-      // 在界面上读不出这是什么。
-      title: a.virtual ? "散图" : a.name,
-      subtitle: a.virtual ? "" : (a.tags ?? []).join(" · "),
-      count: a.imageCount,
-      imageCount: a.imageCount,
-      videoCount: a.videoCount ?? 0,
-      modTime: usableDate(a.modTime),
-      date: usableDate(a.date),
-      coverPath: a.coverImage,
-      coverKind: a.coverKind,
-      to: albumRoute(a.contentKind, a.path),
-      sourceRoot: a.sourceRoot,
-      sourceName: a.sourceName,
-      // 集合里的相册要带上属性：漫画卷在集合里同样显示进度与已读完徽标。
-      contentKind: a.contentKind,
-    }));
-    const collCards: CardData[] = detail.collections.map((sub) => {
-      return {
-        id: "c:" + sub.path,
-        variant: "collection",
-        title: sub.name,
-        displayTitle: sub.displayName,
-        subtitle: sub.contentKind === "comic" ? "子作品" : "子集合",
-        count: sub.albumCount,
-        coverPath: sub.coverImage ?? "",
-        covers: sub.coverImages,
-        to: albumRoute(sub.contentKind, sub.path),
-        sourceRoot: sub.sourceRoot,
-        sourceName: sub.sourceName,
-        modTime: usableDate(detail.modTime),
-        date: usableDate(sub.date),
-        contentKind: sub.contentKind,
-      };
-    });
-    return [...albumCards, ...collCards];
-  }, [detail]);
-  const needsHistory = sortBy === "viewed" && detail.albums.length > 0;
-  const { query: historyQuery, compareViewed } = useViewedSort(needsHistory);
-
-  const filtered = useMemo(() => {
-    const items = allCards.filter(
-      (c) => !query || c.title.toLowerCase().includes(query.toLowerCase()),
-    );
-    switch (sortBy) {
-      case "count":
-        return items.sort((a, b) => b.count - a.count);
-      case "added":
-        return items.sort(
-          (a, b) => compareByAdded(a, b) || a.title.localeCompare(b.title),
-        );
-      case "recent":
-        return items.sort(
-          (a, b) =>
-            compareDatesDesc(a.modTime, b.modTime) ||
-            a.title.localeCompare(b.title),
-        );
-      case "viewed":
-        return items.sort(
-          (a, b) =>
-            compareViewed(decodeFavPath(a.to), decodeFavPath(b.to)) ||
-            a.title.localeCompare(b.title),
-        );
-      default:
-        return items.sort((a, b) => a.title.localeCompare(b.title));
-    }
-  }, [allCards, query, sortBy, compareViewed]);
-
-  const cards = filtered;
-
-  // 子集合页时间线:对当前集合下的子 album/子 collection 重新分桶,跟首页视觉一致。
-  const yearGroups = useMemo(() => {
-    return groupAlbumsAndCollectionsByYear(detail.albums, detail.collections);
-  }, [detail]);
-
+  const cards = list.cards;
+  const yearGroups = useMemo(
+    () => listYearGroups(list.summary, list.query),
+    [list.summary, list.query],
+  );
   // 时间线只在「真的有年份可分」时才出现。
   //
   // 多数子集合(如 2024年、B站、散图)里的子相册并不带 4 位年份,
@@ -579,7 +523,7 @@ function CollectionView({
   const collEntries = useMemo<GalleryContextEntry[]>(
     () =>
       cards.map((c) => ({
-        key: c.to,
+        key: decodeFavPath(c.to),
         to: c.to,
         name: c.title,
         parentName: c.parentName,
@@ -594,6 +538,8 @@ function CollectionView({
   useGalleryContextSync(
     { type: "collection", parentPath: detail.path },
     collEntries,
+    undefined,
+    { query: list.query, nextCursor: list.nextCursor },
   );
 
   return (
@@ -607,8 +553,10 @@ function CollectionView({
         onBack={onBack}
       />
       <div className="flex-1 min-h-0 overflow-auto">
-        {needsHistory && <ViewedSortNotice query={historyQuery} />}
-        <ListFilterBar totalCount={cards.length} showMinImageFilter={false} />
+        <ListFilterBar
+          totalCount={list.summary?.total ?? 0}
+          showMinImageFilter={false}
+        />
         {/* 时间线只在 ≥2 个真实年份桶时才有意义:
             - 大多数子集合(如 2023年、B站、散图)子相册基本不带 4 位年份,
               全部进「其他」桶,1 张大年卡独享一整行,视觉比例严重失衡。
@@ -630,7 +578,19 @@ function CollectionView({
           </div>
         )}
 
-        {cards.length === 0 ? (
+        {list.isError && !list.summary ? (
+          <EmptyState
+            title="列表加载失败"
+            action={
+              <button
+                className="btn btn-outline"
+                onClick={() => void list.refetch()}
+              >
+                重试
+              </button>
+            }
+          />
+        ) : cards.length === 0 ? (
           <EmptyState
             title="无匹配结果"
             description="试试修改搜索条件或排序。"
@@ -644,7 +604,18 @@ function CollectionView({
              卡片贴到了侧栏边上，与其它页面的左缘对不齐。 */
           <section className="page-shell">
             <div className="pb-10">
-              <AlbumGrid items={cards} variant={viewMode} />
+              <AlbumGrid
+                items={cards}
+                variant={viewMode}
+                onEndReached={() => {
+                  if (list.hasNextPage && !list.isFetching && !list.isError)
+                    void list.fetchNextPage();
+                }}
+              />
+              <ListPagination
+                {...list}
+                load={() => void list.fetchNextPage()}
+              />
             </div>
           </section>
         )}

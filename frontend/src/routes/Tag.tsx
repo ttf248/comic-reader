@@ -18,18 +18,16 @@ import {
 } from "../components/common/Icon";
 import { thumbUrl } from "../api/thumbs";
 import type { GalleryContextEntry } from "../utils/galleryContext";
-import { useTagAlbums } from "../hooks/useLibrary";
+import { useLibraryList } from "../hooks/useLibraryList";
+import ListPagination from "../components/common/ListPagination";
 import { useAppMode } from "../hooks/useAppMode";
 import { mediaCountParts } from "../utils/mediaCount";
 import { nodeSummaryToCard } from "../utils/libraryCard";
-import { decodePathTail, homeRoute } from "../utils/path";
+import { decodeFavPath, decodePathTail, homeRoute } from "../utils/path";
+import { usableDate } from "../utils/date";
 import { useReducedMotion } from "../hooks/useReducedMotion";
-import { compareDatesDesc } from "../utils/date";
-import { compareByAdded } from "../utils/cardSorting";
 import { workbenchCopy } from "../utils/workbench";
-import { useViewedSort } from "../hooks/useHistory";
 import { ListFilterBar } from "../components/common/ListFilterBar";
-import ViewedSortNotice from "../components/common/ViewedSortNotice";
 
 // 标签页：展示一个标签下的全部文件夹，支持排序、阅读进度、收藏。
 export default function Tag() {
@@ -45,24 +43,24 @@ export default function Tag() {
   const pushToast = useUIStore((s) => s.pushToast);
 
   const [coverIdx, setCoverIdx] = useState(0);
-  const albumsQuery = useTagAlbums(tag);
   const { mode } = useAppMode();
+  const listQuery = useMemo(
+    () => ({ kind: mode, tag, q: query, sort: sortBy }),
+    [mode, tag, query, sortBy],
+  );
+  const albumsQuery = useLibraryList(listQuery, !!tag);
   const reducedMotion = useReducedMotion();
   const albums = useMemo(
-    () => albumsQuery.data?.items ?? [],
+    () =>
+      albumsQuery.data?.pages.flatMap((page) =>
+        page.items.flatMap((item) =>
+          item.kind === "smart" ? [] : [item.node],
+        ),
+      ) ?? [],
     [albumsQuery.data],
   );
-  const needsHistory = sortBy === "viewed" && albums.length > 0;
-  const { query: historyQuery, compareViewed } = useViewedSort(needsHistory);
-
-  const totalImages = useMemo(
-    () => albums.reduce((sum, album) => sum + (album.imageCount ?? 0), 0),
-    [albums],
-  );
-  const totalVideos = useMemo(
-    () => albums.reduce((sum, album) => sum + (album.videoCount ?? 0), 0),
-    [albums],
-  );
+  const totalImages = albumsQuery.summary?.imageTotal ?? 0;
+  const totalVideos = albumsQuery.summary?.videoTotal ?? 0;
   const totalMedia = totalImages + totalVideos;
 
   const progressPaths = useMemo(
@@ -76,49 +74,10 @@ export default function Tag() {
       album.contentKind === "comic" ? progressMap?.[album.id] : undefined,
     [progressMap],
   );
-  const readCount = useMemo(() => {
-    let count = 0;
-    for (const album of albums) {
-      if (activityFor(album)?.status === "completed") count++;
-    }
-    return count;
-  }, [albums, activityFor]);
+  const readCount = albumsQuery.summary?.completedCount ?? 0;
+  const recentDate = usableDate(albumsQuery.summary?.latestModified);
 
-  const recentDate = useMemo(() => {
-    const dates = albums.map((a) => a.modTime).filter(Boolean) as string[];
-    if (dates.length === 0) return null;
-    return dates.sort().reverse()[0];
-  }, [albums]);
-
-  const filtered = useMemo(() => {
-    let list = albums;
-    if (query) {
-      const q = query.toLowerCase();
-      list = list.filter((a) => a.name.toLowerCase().includes(q));
-    }
-    switch (sortBy) {
-      case "count":
-        return [...list].sort(
-          (a, b) => (b.imageCount ?? 0) - (a.imageCount ?? 0),
-        );
-      case "added":
-        return [...list].sort(
-          (a, b) => compareByAdded(a, b) || a.name.localeCompare(b.name),
-        );
-      case "recent":
-        return [...list].sort(
-          (a, b) =>
-            compareDatesDesc(a.modTime, b.modTime) ||
-            a.name.localeCompare(b.name),
-        );
-      case "viewed":
-        return [...list].sort(
-          (a, b) => compareViewed(a.id, b.id) || a.name.localeCompare(b.name),
-        );
-      default:
-        return [...list].sort((a, b) => a.name.localeCompare(b.name));
-    }
-  }, [albums, query, sortBy, compareViewed]);
+  const filtered = albums;
 
   const cards: CardData[] = filtered.map((album) => {
     const activity = activityFor(album);
@@ -137,7 +96,7 @@ export default function Tag() {
   const tagEntries = useMemo<GalleryContextEntry[]>(
     () =>
       cards.map((c) => ({
-        key: c.to,
+        key: decodeFavPath(c.to),
         to: c.to,
         name: c.title,
         parentName: c.parentName,
@@ -147,7 +106,10 @@ export default function Tag() {
       })),
     [cards],
   );
-  useGalleryContextSync({ type: "tag", tag }, tagEntries);
+  useGalleryContextSync({ type: "tag", tag }, tagEntries, undefined, {
+    query: listQuery,
+    nextCursor: albumsQuery.nextCursor,
+  });
 
   // 头图：随机从 6 张里挑（每隔 4s 切一张，类似走马灯）
   useEffect(() => {
@@ -176,7 +138,25 @@ export default function Tag() {
     );
   }
 
-  if (albums.length === 0) {
+  if (albumsQuery.isError && !albumsQuery.summary)
+    return (
+      <EmptyState
+        title="标签加载失败"
+        action={
+          <button
+            className="btn btn-outline"
+            onClick={() => void albumsQuery.refetch()}
+          >
+            重试
+          </button>
+        }
+      />
+    );
+
+  if (
+    ((albumsQuery.summary?.scopeCounts ?? albumsQuery.summary?.counts)?.album ??
+      0) === 0
+  ) {
     return (
       <div className="min-h-full">
         <div className="page-shell pt-8 pb-5">
@@ -191,9 +171,7 @@ export default function Tag() {
               原来写成「标签：xxx」——冒号加前缀像是表单字段，
               与有内容时的页头也不是一套。 */}
           <p className="page-eyebrow">由标签串起的故事</p>
-          <h1 className="page-title page-title--sm break-words mt-1">
-            {tag}
-          </h1>
+          <h1 className="page-title page-title--sm break-words mt-1">{tag}</h1>
         </div>
         {/* 页头已经写着是哪个标签，空态再说一遍「未找到该标签」是同一句话
             说两次。这里只说结论，并给出下一步。 */}
@@ -255,7 +233,12 @@ export default function Tag() {
                 /* 词跟着侧走：标签下挂的是叶级相册，漫画侧的一叶是一卷，
                    计数单位说「卷」；照片侧说「相册」。 */
                 label={mode === "comic" ? "卷数" : "相册数"}
-                value={albums.length}
+                value={
+                  (
+                    albumsQuery.summary?.scopeCounts ??
+                    albumsQuery.summary?.counts
+                  )?.album ?? 0
+                }
               />
               <Stat
                 icon={<ReaderIcon size={13} />}
@@ -264,11 +247,13 @@ export default function Tag() {
                 /* 拆分跟着侧走：照片说「张」，漫画说「页」——
                    漫画的媒体就是页，写「图片 13」既用错了词，也没有单位。
                    写法与卡片上的「19 张 · 1 个视频」同一套。 */
-                detail={mediaCountParts({
-                  imageCount: totalImages,
-                  videoCount: totalVideos,
-                  contentKind: mode,
-                }).label}
+                detail={
+                  mediaCountParts({
+                    imageCount: totalImages,
+                    videoCount: totalVideos,
+                    contentKind: mode,
+                  }).label
+                }
               />
               {/* 阅读进度只属于漫画工作台：照片目录下的相册没有
                   「读完」这个状态，这一格在照片模式下不出现。 */}
@@ -276,7 +261,7 @@ export default function Tag() {
                 <Stat
                   icon={<ClockIcon size={13} />}
                   label="已读完"
-                  value={`${readCount}/${albums.length}`}
+                  value={`${readCount}/${(albumsQuery.summary?.scopeCounts ?? albumsQuery.summary?.counts)?.album ?? 0}`}
                 />
               )}
               <Stat
@@ -305,8 +290,10 @@ export default function Tag() {
 
       {/* 标签下的相册列表 */}
       <section aria-label="相册列表" className="page-shell pt-8 pb-10">
-        {needsHistory && <ViewedSortNotice query={historyQuery} />}
-        <ListFilterBar totalCount={cards.length} showMinImageFilter={false} />
+        <ListFilterBar
+          totalCount={albumsQuery.summary?.total ?? 0}
+          showMinImageFilter={false}
+        />
         {filtered.length === 0 ? (
           <EmptyState
             /* 标签下挂的是叶级相册，两侧都叫「相册」——
@@ -317,7 +304,24 @@ export default function Tag() {
             dense
           />
         ) : (
-          <AlbumGrid items={cards} variant={viewMode} />
+          <>
+            <AlbumGrid
+              items={cards}
+              variant={viewMode}
+              onEndReached={() => {
+                if (
+                  albumsQuery.hasNextPage &&
+                  !albumsQuery.isFetching &&
+                  !albumsQuery.isError
+                )
+                  void albumsQuery.fetchNextPage();
+              }}
+            />
+            <ListPagination
+              {...albumsQuery}
+              load={() => void albumsQuery.fetchNextPage()}
+            />
+          </>
         )}
       </section>
     </div>

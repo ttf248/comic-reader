@@ -1,17 +1,17 @@
+import { listFixture } from "../test-library-list";
+import { useLibraryList } from "../hooks/useLibraryList";
+vi.mock("../hooks/useLibraryList", async (original) => ({
+  ...(await original<typeof import("../hooks/useLibraryList")>()),
+  useLibraryList: vi.fn(),
+}));
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  cleanup,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import Album from "./Album";
 import {
   useAlbumMedia,
   useLibraryAncestors,
-  useLibraryChildren,
   useLibraryNodes,
 } from "../hooks/useLibrary";
 import { useFavorites } from "../hooks/useFavorites";
@@ -21,7 +21,6 @@ import { historyApi } from "../api/prefs";
 vi.mock("../hooks/useLibrary", () => ({
   useAlbumMedia: vi.fn(),
   useLibraryAncestors: vi.fn(),
-  useLibraryChildren: vi.fn(),
   useLibraryNodes: vi.fn(),
   useTagAlbums: vi.fn(),
 }));
@@ -52,7 +51,9 @@ vi.mock("./PhotoAlbum", () => ({
 function Location() {
   const location = useLocation();
   return (
-    <output data-testid="location">{location.pathname + location.search}</output>
+    <output data-testid="location">
+      {location.pathname + location.search}
+    </output>
   );
 }
 
@@ -120,30 +121,36 @@ describe("Album", () => {
       },
       isLoading: false,
     } as never);
-    vi.mocked(useLibraryChildren).mockReturnValue({
-      data: {
-        revision: 4,
-        total: 1,
-        items: [
-          {
-            id: "a_trip",
-            kind: "album",
-            name: "春游",
-            displayName: "春游",
-            coverImage: "f_trip",
-            coverImages: ["f_trip"],
-            imageCount: 8,
-          },
-        ],
-      },
-      isLoading: false,
-    } as never);
+    vi.mocked(useLibraryList).mockReturnValue(
+      listFixture({
+        data: {
+          revision: 4,
+          total: 1,
+          items: [
+            {
+              id: "a_trip",
+              kind: "album",
+              contentKind: "photo",
+              name: "春游",
+              displayName: "春游",
+              coverImage: "f_trip",
+              coverImages: ["f_trip"],
+              imageCount: 8,
+            },
+          ],
+        },
+        isLoading: false,
+      }) as never,
+    );
 
     renderAlbum();
 
     expect(useLibraryNodes).toHaveBeenCalledWith(["c_year"]);
     // 集合的子节点按集合自己的属性查：kind 是必填的第二个参数。
-    expect(useLibraryChildren).toHaveBeenCalledWith("c_year", "photo", 4);
+    expect(useLibraryList).toHaveBeenCalledWith(
+      expect.objectContaining({ parent: "c_year", kind: "photo" }),
+      true,
+    );
     expect(screen.getByText("2025")).toBeInTheDocument();
     expect(screen.getByText("春游")).toBeInTheDocument();
   });
@@ -169,12 +176,21 @@ describe("Album", () => {
       },
       isLoading: false,
     } as never);
-    vi.mocked(useLibraryChildren).mockReturnValue({
-      data: { revision: 4, total: 0, items: [] },
-      isLoading: false,
-    } as never);
+    vi.mocked(useLibraryList).mockReturnValue(
+      listFixture({
+        data: { revision: 4, total: 0, items: [] },
+        isLoading: false,
+      }) as never,
+    );
     vi.mocked(useLibraryAncestors).mockReturnValue({
-      data: [{ id: "c_school", kind: "collection", name: "中学", displayName: "中学" }],
+      data: [
+        {
+          id: "c_school",
+          kind: "collection",
+          name: "中学",
+          displayName: "中学",
+        },
+      ],
       isLoading: false,
     } as never);
 
@@ -209,35 +225,39 @@ describe("Album", () => {
       },
       isLoading: false,
     } as never);
-    vi.mocked(useLibraryChildren).mockReturnValue({
-      data: {
-        revision: 4,
-        total: 2,
-        items: [
-          {
-            id: "a_loose",
-            kind: "album",
-            name: "本目录媒体",
-            displayName: "本目录媒体",
-            virtual: true,
-            location: "2011年",
-            coverImage: "f_loose",
-            coverImages: ["f_loose"],
-            imageCount: 102,
-          },
-          {
-            id: "a_trip",
-            kind: "album",
-            name: "春游",
-            displayName: "春游",
-            coverImage: "f_trip",
-            coverImages: ["f_trip"],
-            imageCount: 8,
-          },
-        ],
-      },
-      isLoading: false,
-    } as never);
+    vi.mocked(useLibraryList).mockReturnValue(
+      listFixture({
+        data: {
+          revision: 4,
+          total: 2,
+          items: [
+            {
+              id: "a_loose",
+              kind: "album",
+              contentKind: "photo",
+              name: "本目录媒体",
+              displayName: "本目录媒体",
+              virtual: true,
+              location: "2011年",
+              coverImage: "f_loose",
+              coverImages: ["f_loose"],
+              imageCount: 102,
+            },
+            {
+              id: "a_trip",
+              kind: "album",
+              contentKind: "photo",
+              name: "春游",
+              displayName: "春游",
+              coverImage: "f_trip",
+              coverImages: ["f_trip"],
+              imageCount: 8,
+            },
+          ],
+        },
+        isLoading: false,
+      }) as never,
+    );
 
     renderAlbum();
 
@@ -259,10 +279,12 @@ describe("Album", () => {
       data: undefined,
       isLoading: true,
     } as never);
-    vi.mocked(useLibraryChildren).mockReturnValue({
-      data: undefined,
-      isLoading: false,
-    } as never);
+    vi.mocked(useLibraryList).mockReturnValue(
+      listFixture({
+        data: undefined,
+        isLoading: false,
+      }) as never,
+    );
 
     renderAlbum();
 
@@ -279,9 +301,9 @@ describe("Album", () => {
           {
             id: "a_trip",
             kind: "album",
+            contentKind: "photo",
             name: "春游",
             imageCount: 8,
-            contentKind: "photo",
           },
         ],
       },
@@ -290,7 +312,9 @@ describe("Album", () => {
 
     renderAlbum("/albums/a_trip");
 
-    expect(screen.getByTestId("photo-album")).toHaveTextContent("照片墙:a_trip");
+    expect(screen.getByTestId("photo-album")).toHaveTextContent(
+      "照片墙:a_trip",
+    );
     expect(screen.queryByRole("button", { name: /开始浏览/ })).toBeNull();
   });
 
@@ -303,9 +327,9 @@ describe("Album", () => {
           {
             id: "a_comic",
             kind: "album",
+            contentKind: "comic",
             name: "第一卷",
             imageCount: 120,
-            contentKind: "comic",
           },
         ],
       },

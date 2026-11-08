@@ -7,13 +7,14 @@ import { useFavoritesByMode } from "../hooks/useFavoritesByMode";
 import { useMarkAlbumRead, useMarkAlbumsRead } from "../hooks/useImageActivity";
 import { useGalleryContextSync } from "../hooks/useGalleryContextSync";
 import { scanApi } from "../api/scan";
-import { useHistoryCards, useViewedSort } from "../hooks/useHistory";
+import { useHistoryCards } from "../hooks/useHistory";
 import { libraryApi } from "../api/library";
 import AlbumGrid, { type CardData } from "../components/album/AlbumGrid";
 import AlbumGridSkeleton from "../components/album/AlbumGridSkeleton";
 import { ListFilterBar } from "../components/common/ListFilterBar";
 import EmptyState from "../components/common/EmptyState";
-import ViewedSortNotice from "../components/common/ViewedSortNotice";
+import ListPagination from "../components/common/ListPagination";
+import { useLibraryList, listYearGroups } from "../hooks/useLibraryList";
 import YearTimeline from "../components/home/YearTimeline";
 import SeriesTimeline from "../components/home/SeriesTimeline";
 import { ContinueHero, UnreadHero } from "../components/home/HomeHeroes";
@@ -36,27 +37,15 @@ import {
   unreadRoute,
 } from "../utils/path";
 import { continueReadingTarget } from "../utils/continueReading";
-import { compareDatesDesc, formatRelative } from "../utils/date";
-import { compareByAdded } from "../utils/cardSorting";
+import { formatRelative } from "../utils/date";
 import type { GalleryContextEntry } from "../utils/galleryContext";
 import {
-  extractYear,
-  groupLibraryNodesBySeries,
-  groupLibraryNodesByYear,
-  type SeriesGroup,
-  type YearGroup,
-} from "../utils/albumGrouping";
-import {
   useLibraryDashboard,
-  useLibraryOverview,
+  useLibraryManifest,
   useOnThisDayAlbums,
   useLibraryRecentAlbums,
 } from "../hooks/useLibrary";
-import {
-  libraryOverviewCards,
-  nodeSummaryToCard,
-  cardMatchesQuery,
-} from "../utils/libraryCard";
+import { nodeSummaryToCard } from "../utils/libraryCard";
 import {
   StarIcon,
   ShuffleIcon,
@@ -70,8 +59,8 @@ import {
 
 export default function Home() {
   const navigate = useNavigate();
-  const overview = useLibraryOverview();
-  const manifest = overview.manifest;
+  const manifestQuery = useLibraryManifest();
+  const manifest = manifestQuery.data?.manifest;
   const dashboardQuery = useLibraryDashboard();
   const dashboard = dashboardQuery.data?.dashboard;
   const sse = useScanSSE();
@@ -154,10 +143,6 @@ export default function Home() {
       ),
     [dashboard],
   );
-  const needsHistory =
-    sortBy === "viewed" && overview.nodes.some((node) => node.kind === "album");
-  const { query: historyQuery, compareViewed } = useViewedSort(needsHistory);
-
   const startScan = useMutation({
     mutationFn: () => scanApi.start(),
     onSuccess: (r) => {
@@ -264,11 +249,6 @@ export default function Home() {
       },
     );
   };
-  const cards = useMemo(
-    () => libraryOverviewCards(overview.nodes, overview.tags, mode),
-    [overview.nodes, overview.tags, mode],
-  );
-
   // 在读列表由首页仪表盘提供，按最后阅读时间倒序且包含任意层级的相册。
   const inProgressAll = useMemo<CardData[]>(() => {
     return (dashboard?.inProgress ?? []).map((progress) => ({
@@ -276,19 +256,6 @@ export default function Home() {
       progress: { index: progress.pageIndex, total: progress.pageCount },
     }));
   }, [dashboard]);
-
-  // 时光轴：按年份分组（画廊模式，替代早期"全新/重温/最近加入"的分区）
-  const yearGroups = useMemo<YearGroup[]>(
-    () => groupLibraryNodesByYear(overview.nodes),
-    [overview.nodes],
-  );
-
-  // 漫画侧按连载分组：漫画常常不以年份命名，按年份分会把同一部作品
-  // 拆散在好几处。照片侧不分组 —— 照片的天然维度是时间。
-  const seriesGroups = useMemo<SeriesGroup[]>(
-    () => (isComic ? groupLibraryNodesBySeries(overview.nodes) : []),
-    [overview.nodes, isComic],
-  );
 
   // 切换视图到 collection/smart 时清掉 yearFilter（年份只对 album 有意义）
   useEffect(() => {
@@ -301,74 +268,49 @@ export default function Home() {
   const yearFilterActive =
     yearFilter !== null && (view === "all" || view === "album");
   const minImageCount = useSearchStore((s) => s.minImageCount);
-  // 除「视图」以外的所有筛选（搜索 / 年份 / 最少图数）。
-  // 视图 chip 上的计数按这一层算：年份筛选生效时，chip 上的「相册 14」
-  // 与屏幕上剩下的两件对不上号 —— 数字要回答「点它会得到几件」。
-  const filteredByScope = useMemo(() => {
-    return cards.filter((it) => {
-      // 最小图数过滤:仅对 album 变体生效;collection / smart 走 albumCount 概念,
-      // 不参与图数过滤(它们的「张数」语义不同)。
-      if (
-        minImageCount > 0 &&
-        it.variant === "album" &&
-        (it.count ?? 0) < minImageCount
-      ) {
-        return false;
-      }
-      // 年份筛选：用 item 自身的 title 提取年份来匹配。
-      // collection/smart 自身也可能没有年份（或有），让 extractYear 自然处理，
-      // 避免把"萍乡中学"这种没年份的 collection 因为不是 album 就被误删。
-      if (yearFilterActive) {
-        if (yearFilter === "other") {
-          if (extractYear(it.title) !== null) return false;
-        } else if (typeof yearFilter === "number") {
-          if (extractYear(it.title) !== yearFilter) return false;
-        }
-      }
-      if (query) {
-        if (!cardMatchesQuery(it, query)) return false;
-      }
-      return true;
-    });
-  }, [cards, query, yearFilter, yearFilterActive, minImageCount]);
-  const filtered = useMemo(() => {
-    const list = filteredByScope.filter((it) => {
-      if (view !== "all" && it.variant !== view) return false;
-      return true;
-    });
-    const withProgress = list.map((c) => {
-      if (c.variant !== "album") return c;
-      const k = decodeFavPath(c.to);
-      const p = dashboardProgressByID.get(k);
-      if (!p) return c;
-      return {
-        ...c,
-        progress: { index: p.pageIndex, total: p.pageCount },
-      };
-    });
-    switch (sortBy) {
-      case "count":
-        return withProgress.sort((a, b) => b.count - a.count);
-      case "added":
-        return withProgress.sort(
-          (a, b) => compareByAdded(a, b) || a.title.localeCompare(b.title),
-        );
-      case "recent":
-        return withProgress.sort(
-          (a, b) =>
-            compareDatesDesc(a.modTime, b.modTime) ||
-            a.title.localeCompare(b.title),
-        );
-      case "viewed":
-        return withProgress.sort(
-          (a, b) =>
-            compareViewed(decodeFavPath(a.to), decodeFavPath(b.to)) ||
-            a.title.localeCompare(b.title),
-        );
-      default:
-        return withProgress.sort((a, b) => a.title.localeCompare(b.title));
-    }
-  }, [filteredByScope, sortBy, view, dashboardProgressByID, compareViewed]);
+  const listQuery = useMemo(
+    () => ({
+      kind: mode,
+      view,
+      q: query,
+      sort: sortBy,
+      year: yearFilterActive ? String(yearFilter) : undefined,
+      minImageCount,
+    }),
+    [mode, view, query, sortBy, yearFilterActive, yearFilter, minImageCount],
+  );
+  const overview = useLibraryList(listQuery, !!manifest);
+  const filtered = useMemo(
+    () =>
+      overview.cards.map((card) => {
+        const progress = dashboardProgressByID.get(decodeFavPath(card.to));
+        return progress
+          ? {
+              ...card,
+              progress: {
+                index: progress.pageIndex,
+                total: progress.pageCount,
+              },
+            }
+          : card;
+      }),
+    [overview.cards, dashboardProgressByID],
+  );
+  const yearGroups = useMemo(
+    () => listYearGroups(overview.summary, listQuery),
+    [overview.summary, listQuery],
+  );
+  const seriesGroups = useMemo(
+    () =>
+      (overview.summary?.series ?? []).map((group) => ({
+        key: group.id,
+        label: group.name,
+        to: albumRoute(mode, group.id),
+        count: group.count,
+        coverPath: group.coverImage,
+      })),
+    [overview.summary, mode],
+  );
 
   const homeEntries = useMemo<GalleryContextEntry[]>(
     () =>
@@ -385,27 +327,24 @@ export default function Home() {
         })),
     [filtered],
   );
-  useGalleryContextSync({ type: "home" }, homeEntries);
+  useGalleryContextSync({ type: "home" }, homeEntries, undefined, {
+    query: listQuery,
+    nextCursor: overview.nextCursor,
+  });
 
-  const counts = useMemo(() => {
-    // 视图 chip 上的数字要跟着当前筛选走：年份筛选生效时，「相册 14」
-    // 与屏幕上剩下的两件对不上号。数字按「除视图以外的所有筛选」来算，
-    // 于是每一枚 chip 报的都是「点它会得到几件」。
-    const c = {
-      all: filteredByScope.length,
-      album: 0,
-      collection: 0,
-      smart: 0,
-    };
-    for (const it of filteredByScope) c[it.variant]++;
-    return c;
-  }, [filteredByScope]);
-
+  const counts = overview.summary?.counts ?? {
+    all: 0,
+    album: 0,
+    collection: 0,
+    smart: 0,
+  };
   const isLoadingInitial =
-    overview.isLoading ||
-    dashboardQuery.isLoading ||
-    (!manifest && !!(sse.isRunning || sse.scanId));
-  const hasContent = !!manifest && cards.length > 0;
+    manifestQuery.isLoading || (!manifest && !!(sse.isRunning || sse.scanId));
+  const hasContent =
+    !!manifest &&
+    (mode === "comic"
+      ? manifest.statistics.comicAlbumCount
+      : manifest.statistics.photoAlbumCount)! > 0;
   // 「这一侧没有内容」和「整个库还没内容」是两回事：媒体根可能全被设成
   // 漫画属性，照片工作台就一部都没有，但库本身是扫过的。
   // 两种情况给的引导不一样：前者该把人送去设置里改属性或去另一侧看看，
@@ -435,7 +374,10 @@ export default function Home() {
     onThisDay: (hasSeriesIndex ? 1 : 0) + 1,
     year: (hasSeriesIndex ? 1 : 0) + (hasOnThisDay ? 1 : 0) + 1,
     library:
-      (hasSeriesIndex ? 1 : 0) + (hasOnThisDay ? 1 : 0) + (hasYearIndex ? 1 : 0) + 1,
+      (hasSeriesIndex ? 1 : 0) +
+      (hasOnThisDay ? 1 : 0) +
+      (hasYearIndex ? 1 : 0) +
+      1,
   };
   const pad = (n: number) => String(n).padStart(2, "0");
 
@@ -733,9 +675,6 @@ export default function Home() {
               「全部图像」标题正下方贴着网格；不要提到未读 / 继续阅读 /
               时间线这些区块前面 —— 那里离网格有两千多像素，用户滚到
               网格时控件早已不在视野里。 */}
-          {!isLoadingInitial && needsHistory && (
-            <ViewedSortNotice query={historyQuery} />
-          )}
           {!isLoadingInitial && (
             <ListFilterBar
               viewChips={[
@@ -754,15 +693,28 @@ export default function Home() {
               ]}
               activeViewKey={view}
               onChangeView={(k) => setView(k as typeof view)}
-              totalCount={filtered.length}
+              totalCount={overview.summary?.total ?? 0}
             />
           )}
 
-          {isLoadingInitial ? (
+          {isLoadingInitial || overview.isLoading ? (
             <AlbumGridSkeleton
               variant={viewMode}
               bare
               label="正在加载图像库…"
+            />
+          ) : overview.isError && !overview.summary ? (
+            <EmptyState
+              title="列表加载失败"
+              description="其他专区仍可使用，请重试。"
+              action={
+                <button
+                  className="btn btn-outline"
+                  onClick={() => void overview.refetch()}
+                >
+                  重试
+                </button>
+              }
             />
           ) : filtered.length === 0 ? (
             <EmptyState
@@ -834,7 +786,22 @@ export default function Home() {
             />
           ) : (
             <div className="pb-10">
-              <AlbumGrid items={filtered} variant={viewMode} />
+              <AlbumGrid
+                items={filtered}
+                variant={viewMode}
+                onEndReached={() => {
+                  if (
+                    overview.hasNextPage &&
+                    !overview.isFetching &&
+                    !overview.isError
+                  )
+                    void overview.fetchNextPage();
+                }}
+              />
+              <ListPagination
+                {...overview}
+                load={() => void overview.fetchNextPage()}
+              />
             </div>
           )}
         </section>

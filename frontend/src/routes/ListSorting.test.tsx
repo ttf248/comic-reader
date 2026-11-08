@@ -137,12 +137,9 @@ vi.mock("../hooks/useLibrary", () => {
 });
 
 const pages = [
-  ["主页", "/"],
-  ["集合", "/albums/c_root"],
   ["收藏", "/favorites"],
   ["最近", "/recents"],
   ["未读", "/unread"],
-  ["标签", "/tags/测试"],
 ] as const;
 const expected = ["M新相册", "A中相册", "Z旧相册"];
 
@@ -291,22 +288,6 @@ it.each(sortablePages)(
   },
 );
 
-it.each(
-  pages.filter(
-    ([_name, path]) => path === "/albums/c_root" || path === "/tags/测试",
-  ),
-)("%s 可以在当前页选择排序和列表视图", async (_name, path) => {
-  vi.mocked(historyApi.list).mockResolvedValue({ history: viewedHistory });
-  renderPage(path);
-  expect(historyApi.list).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "排序" }));
-  fireEvent.click(screen.getByRole("button", { name: "按最近看" }));
-  await waitFor(() => expect(order()).toEqual(viewedExpected));
-  fireEvent.click(screen.getByRole("button", { name: "列表视图" }));
-  expect(useUIStore.getState().viewMode).toBe("list");
-  expect(historyApi.list).toHaveBeenCalledTimes(1);
-});
-
 it.each(noticePages)(
   "%s 最近看读取失败保留卡片，重试后更新顺序",
   async (_name, path) => {
@@ -337,7 +318,7 @@ it("最近看读取中显示状态并保留可操作的卡片", () => {
 it("后台刷新失败保留上次访问顺序，切换名称排序后隐藏访问错误", async () => {
   useSearchStore.getState().setSortBy("viewed");
   vi.mocked(historyApi.list).mockResolvedValue({ history: viewedHistory });
-  const client = renderPage("/albums/c_root");
+  const client = renderPage("/unread");
   await waitFor(() => expect(order()).toEqual(viewedExpected));
   vi.mocked(historyApi.list).mockRejectedValue(new Error("offline"));
   await act(async () => {
@@ -355,9 +336,7 @@ it("后台刷新失败保留上次访问顺序，切换名称排序后隐藏访�
 
 // 主页是这组用例里的例外：它的「接着看」专区要读访问历史，
 // 与排序无关。其余页面的历史只服务于「最近看」排序，名称排序不该碰它。
-const historyFreeSortPages = noticePages.filter(
-  ([_name, path]) => path !== "/",
-);
+const historyFreeSortPages = noticePages;
 
 it.each(historyFreeSortPages)(
   "%s 名称排序不读取访问历史",
@@ -368,10 +347,3 @@ it.each(historyFreeSortPages)(
     expect(historyApi.list).not.toHaveBeenCalled();
   },
 );
-
-it("主页读访问历史是为了「接着看」，名称排序的结果不受影响", async () => {
-  useSearchStore.getState().setSortBy("name");
-  renderPage("/");
-  await waitFor(() => expect(order()).toEqual(nameExpected));
-  expect(historyApi.list).toHaveBeenCalled();
-});

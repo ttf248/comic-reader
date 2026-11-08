@@ -1,7 +1,6 @@
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import {
   useInfiniteQuery,
-  useQueries,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
@@ -110,34 +109,6 @@ export function useLibraryUnreadAlbums() {
   });
 }
 
-/**
- * 某个根或集合下的直属子节点。
- *
- * kind 由调用方给出，不取当前工作台：集合继承所属目录的属性，
- * 用当前模式去查会把漫画集合里的卷过滤掉，集合看起来是空的。
- */
-export function useLibraryChildren(
-  parentId: string,
-  kind: AppMode,
-  expectedRevision?: number,
-) {
-  const { ready } = useAppMode();
-  return useQuery({
-    queryKey: [...libraryQueryKeys.children(parentId, kind), expectedRevision],
-    queryFn: async () => {
-      const page = await libraryApi.allChildren(parentId, kind);
-      if (
-        expectedRevision !== undefined &&
-        page.revision !== expectedRevision
-      ) {
-        throw new LibraryRevisionChangedError();
-      }
-      return page;
-    },
-    enabled: parentId.length > 0 && ready,
-  });
-}
-
 export function useAlbumMedia(albumId: string, expectedRevision?: number) {
   // 详情页只先取首屏媒体；调用方在虚拟网格接近末尾时继续取下一页。
   // 阅读器仍可使用 libraryApi.allMedia 一次性建立跨页导航上下文。
@@ -213,19 +184,16 @@ export function useOnThisDayAlbums(
 ) {
   const { ready } = useAppMode();
   return useQuery({
-    queryKey: [...libraryQueryKeys.mode(kind), "on-this-day", month, day, limit],
+    queryKey: [
+      ...libraryQueryKeys.mode(kind),
+      "on-this-day",
+      month,
+      day,
+      limit,
+    ],
     queryFn: () => libraryApi.onThisDay(kind, month, day, limit),
     enabled: ready && enabled,
     staleTime: 60 * 60 * 1000,
-  });
-}
-
-export function useTagAlbums(tag: string) {
-  const { mode, ready } = useAppMode();
-  return useQuery({
-    queryKey: libraryQueryKeys.tagAlbums(tag, mode),
-    queryFn: () => libraryApi.allTagAlbums(tag, mode),
-    enabled: tag.length > 0 && ready,
   });
 }
 
@@ -264,47 +232,4 @@ export function useLibraryAncestors(parentId: string) {
     enabled: parentId.length > 0,
     staleTime: 60_000,
   });
-}
-
-// 首页只装配 manifest、各根直属节点与标签摘要，不加载嵌套树或媒体数组。
-export function useLibraryOverview() {
-  const manifestQuery = useLibraryManifest();
-  const manifest = manifestQuery.data?.manifest;
-  const roots = manifest?.roots ?? [];
-  const { mode, ready } = useAppMode();
-  const childrenQueries = useQueries({
-    queries: roots.map((root) => ({
-      queryKey: [
-        ...libraryQueryKeys.children(root.id, mode),
-        manifest?.revision,
-      ] as const,
-      queryFn: async () => {
-        const page = await libraryApi.allChildren(root.id, mode);
-        if (page.revision !== manifest?.revision) {
-          throw new LibraryRevisionChangedError();
-        }
-        return page;
-      },
-      enabled: ready,
-    })),
-  });
-  const tagsQuery = useLibraryTags(!!manifest, manifest?.revision);
-  const nodes = useMemo(
-    () => childrenQueries.flatMap((query) => query.data?.items ?? []),
-    [childrenQueries],
-  );
-
-  return {
-    manifest,
-    nodes,
-    tags: tagsQuery.data?.items ?? [],
-    isLoading:
-      manifestQuery.isLoading ||
-      childrenQueries.some((query) => query.isLoading) ||
-      tagsQuery.isLoading,
-    isError:
-      manifestQuery.isError ||
-      childrenQueries.some((query) => query.isError) ||
-      tagsQuery.isError,
-  };
 }

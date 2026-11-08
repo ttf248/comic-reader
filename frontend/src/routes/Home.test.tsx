@@ -1,3 +1,9 @@
+import { listFixture } from "../test-library-list";
+import { useLibraryList } from "../hooks/useLibraryList";
+vi.mock("../hooks/useLibraryList", async (original) => ({
+  ...(await original<typeof import("../hooks/useLibraryList")>()),
+  useLibraryList: vi.fn(),
+}));
 import { render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
@@ -12,6 +18,7 @@ import Home from "./Home";
 const mocks = vi.hoisted(() => ({
   items: [] as LibraryNodeSummary[],
   inProgress: true,
+  listItems: undefined as LibraryNodeSummary[] | undefined,
 }));
 
 vi.mock("../api/prefs", () => ({ historyApi: { list: vi.fn() } }));
@@ -67,6 +74,8 @@ vi.mock("../hooks/useLibrary", () => {
     statistics: {
       rootCount: 1,
       albumCount: 1,
+      photoAlbumCount: 1,
+      comicAlbumCount: 1,
       collectionCount: 0,
       tagCount: 0,
       warningCount: 0,
@@ -131,6 +140,14 @@ beforeEach(() => {
   useUIStore.setState({ viewMode: "grid" });
   useSearchStore.getState().reset();
   mocks.inProgress = true;
+  mocks.listItems = undefined;
+  vi.mocked(useLibraryList).mockImplementation(
+    (query) =>
+      listFixture(
+        { data: { items: mocks.listItems ?? mocks.items } },
+        query,
+      ) as never,
+  );
   // 「继续阅读」与「未读」属于漫画工作台，首页的这些用例都在漫画模式跑。
   useAppModeStore.setState({ preference: "comic", hydrated: true });
   vi.mocked(historyApi.list).mockResolvedValue({ history: [] });
@@ -308,6 +325,7 @@ it("漫画工作台不显示「接着看」专区", async () => {
 // 空结果时要说清是哪个筛选筛没了内容，并给每个生效的筛选一个手柄。
 // 早先只有一个笼统的「清除筛选」，按一下还会把排序与视图一起重置。
 it("空结果时按生效的筛选分别给手柄", async () => {
+  mocks.listItems = [];
   useSearchStore.setState({ view: "album", yearFilter: 1999 });
   renderHome();
   await waitFor(() =>
@@ -354,9 +372,14 @@ it("视图 chip 的计数跟着年份筛选走", async () => {
   expect(allChip().textContent).toContain("2");
   expect(albumChip().textContent).toContain("2");
 
+  mocks.listItems = [mocks.items[0]];
   useSearchStore.getState().setYearFilter(2023);
   await waitFor(() => expect(allChip().textContent).toContain("1"));
   expect(albumChip().textContent).toContain("1");
+  expect(useLibraryList).toHaveBeenLastCalledWith(
+    expect.objectContaining({ year: "2023" }),
+    true,
+  );
 });
 
 // 漫画侧的主索引是「作品」，年份只是附带的筛选：只剩「其他」一桶时，

@@ -146,6 +146,7 @@ func newHarness(t *testing.T) *harness {
 	api.Post("/scans", handlers.AsyncScanStartHandler(runner, mgr))
 	api.Get("/scans/:id/events", handlers.AsyncScanEventsHandler(runner))
 	api.Delete("/scans/:id", handlers.AsyncScanCancelHandler(runner))
+	api.Get("/library/overview", handlers.LibraryQueryHandler(catalog, prefsStore, activityStore))
 	api.Get("/library/manifest", handlers.LibraryManifestHandler(catalog))
 	api.Get("/library/:id/children", handlers.LibraryChildrenPageHandler(catalog))
 	api.Post("/library/nodes/query", handlers.LibraryNodesQueryHandler(catalog))
@@ -354,6 +355,18 @@ func TestPagedLibraryFlowAfterScan(t *testing.T) {
 	}
 	if bytes.Contains(body, []byte(h.root)) {
 		t.Fatalf("children page exposed absolute root: %s", body)
+	}
+
+	res, body = h.do(t, http.MethodGet, "/api/library/overview?kind=comic&view=album&sort=name&limit=1", nil)
+	var overview struct {
+		Page services.LibraryQueryPage `json:"page"`
+	}
+	if err := json.Unmarshal(body, &overview); err != nil || res.StatusCode != http.StatusOK || len(overview.Page.Items) != 1 || overview.Page.Total != 2 || overview.Page.NextCursor == "" || bytes.Contains(body, []byte(h.root)) {
+		t.Fatalf("overview: %d %s %v", res.StatusCode, body, err)
+	}
+	res, body = h.do(t, http.MethodGet, "/api/library/overview?kind=comic&view=album&sort=count&limit=1&cursor="+url.QueryEscape(overview.Page.NextCursor), nil)
+	if res.StatusCode != http.StatusBadRequest || !bytes.Contains(body, []byte("invalid_cursor")) {
+		t.Fatalf("query cursor: %d %s", res.StatusCode, body)
 	}
 
 	res, body = h.do(t, http.MethodGet, "/api/library/activity-summary?kind=comic", nil)

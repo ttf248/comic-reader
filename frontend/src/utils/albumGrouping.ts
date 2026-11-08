@@ -18,6 +18,7 @@ import { albumRoute } from "./path";
 const OTHER_KEY = -1;
 
 export interface YearGroup {
+  count?: number;
   /** null 表示「其他」桶（解析不到年份的相册） */
   year: number | null;
   /** 用于 UI 展示：「2024」或「其他」 */

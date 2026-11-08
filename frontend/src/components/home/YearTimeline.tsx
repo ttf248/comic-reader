@@ -56,7 +56,7 @@ export default function YearTimeline({ groups, gridRef }: Props) {
         const count =
           total > 0
             ? `${total} ${unit}`
-            : `${group.albums.length} ${albumCountUnit(mode)}`;
+            : `${group.count ?? group.albums.length} ${albumCountUnit(mode)}`;
         return {
           key,
           label: group.label,

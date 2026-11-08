@@ -1,15 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import PhotoAlbum from "./PhotoAlbum";
 import { useAlbumMedia } from "../hooks/useLibrary";
 import { useFavorites } from "../hooks/useFavorites";
+import { fsApi } from "../api/fs";
 import { useUIStore } from "../store/uiStore";
 
 vi.mock("../hooks/useLibrary", () => ({
@@ -21,7 +17,10 @@ vi.mock("../hooks/useLibrary", () => ({
 }));
 vi.mock("../hooks/useFavorites", () => ({ useFavorites: vi.fn() }));
 vi.mock("../api/fs", () => ({
-  fsApi: { capabilities: vi.fn().mockResolvedValue({ allowOsOpen: false }) },
+  fsApi: {
+    capabilities: vi.fn().mockResolvedValue({ allowOsOpen: false }),
+    openInExplorer: vi.fn().mockResolvedValue({ ok: true }),
+  },
 }));
 vi.mock("../api/albums", () => ({
   albumsApi: {
@@ -32,13 +31,22 @@ vi.mock("../components/wall/PhotoWall", () => ({
   default: ({
     items,
     onOpen,
+    onContextMenu,
   }: {
     items: { id: string; kind: string; name: string }[];
     onOpen: (item: unknown, index: number) => void;
+    onContextMenu: (
+      item: unknown,
+      event: React.MouseEvent<HTMLButtonElement>,
+    ) => void;
   }) => (
     <div data-testid="photo-wall">
       {items.map((item, index) => (
-        <button key={item.id} onClick={() => onOpen(item, index)}>
+        <button
+          key={item.id}
+          onClick={() => onOpen(item, index)}
+          onContextMenu={(event) => onContextMenu(item, event)}
+        >
           {item.name}
         </button>
       ))}
@@ -66,7 +74,9 @@ const album = {
 function Location() {
   const location = useLocation();
   return (
-    <output data-testid="location">{location.pathname + location.search}</output>
+    <output data-testid="location">
+      {location.pathname + location.search}
+    </output>
   );
 }
 
@@ -110,9 +120,27 @@ describe("PhotoAlbum", () => {
           {
             total: 4,
             items: [
-              { id: "f_1", kind: "image", index: 0, kindIndex: 0, name: "1.jpg" },
-              { id: "f_2", kind: "image", index: 1, kindIndex: 1, name: "2.jpg" },
-              { id: "f_3", kind: "video", index: 2, kindIndex: 0, name: "3.mp4" },
+              {
+                id: "f_1",
+                kind: "image",
+                index: 0,
+                kindIndex: 0,
+                name: "1.jpg",
+              },
+              {
+                id: "f_2",
+                kind: "image",
+                index: 1,
+                kindIndex: 1,
+                name: "2.jpg",
+              },
+              {
+                id: "f_3",
+                kind: "video",
+                index: 2,
+                kindIndex: 0,
+                name: "3.mp4",
+              },
             ],
           },
         ],
@@ -165,6 +193,20 @@ describe("PhotoAlbum", () => {
         Object.defineProperty(navigator, "clipboard", originalClipboard);
       else Reflect.deleteProperty(navigator, "clipboard");
     }
+  });
+
+  it("照片右键菜单调用已有系统打开动作并恢复焦点", async () => {
+    vi.mocked(fsApi.capabilities).mockResolvedValueOnce({ allowOsOpen: true });
+    renderPhotoAlbum();
+    const image = screen.getByText("1.jpg");
+    fireEvent.contextMenu(image);
+    const open = screen.getByRole("menuitem", { name: "在文件管理器中打开" });
+    await waitFor(() => expect(open).toBeEnabled());
+    fireEvent.click(open);
+    await waitFor(() =>
+      expect(fsApi.openInExplorer).toHaveBeenCalledWith("a_trip"),
+    );
+    expect(image).toHaveFocus();
   });
 
   // 内容属性只按目录设置，页面上没有「把这本归类到漫画」的入口。

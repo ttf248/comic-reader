@@ -6,7 +6,7 @@
 // 关闭标签页或点开完全不同的来源时由写入方覆盖。
 
 import { decodeFavPath, readerRoute } from "./path";
-import type { ContentKind } from "../api/library";
+import type { ContentKind, LibraryListQuery } from "../api/library";
 
 export type GallerySource =
   | {
@@ -81,6 +81,7 @@ export function entryDisplayName(entry: GalleryContextEntry): string {
 }
 
 export interface GalleryContext {
+  pagination?: { query: LibraryListQuery; nextCursor?: string };
   source: GallerySource;
   /** 当前列表的全部条目。 */
   list: GalleryContextEntry[];

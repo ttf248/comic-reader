@@ -11,4 +11,9 @@ export function syncHistoryCache(
     previous ? { ...previous, history } : undefined,
   );
   void client.invalidateQueries({ queryKey: ["history"] });
+  void client.invalidateQueries({
+    predicate: (query) =>
+      query.queryKey.includes("list") &&
+      JSON.stringify(query.queryKey).includes('"viewed"'),
+  });
 }

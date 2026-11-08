@@ -176,6 +176,37 @@ export interface LibraryNodeQueryResult {
   missing: string[];
 }
 
+export interface LibraryListQuery {
+  kind: AppMode;
+  parent?: string;
+  tag?: string;
+  view?: "all" | "album" | "collection" | "smart";
+  q?: string;
+  year?: string;
+  minImageCount?: number;
+  sort?: "name" | "count" | "added" | "recent" | "viewed";
+}
+export type LibraryListItem =
+  | { kind: "album" | "collection"; node: LibraryNodeSummary }
+  | { kind: "smart"; tag: LibraryTagSummary };
+export interface LibraryListPage extends LibraryPage<LibraryListItem> {
+  scopeCounts?: Record<"all" | "album" | "collection" | "smart", number>;
+  completedCount?: number;
+  latestModified?: string;
+  counts: Record<"all" | "album" | "collection" | "smart", number>;
+  years: {
+    year: number | null;
+    count: number;
+    imageTotal: number;
+    videoTotal: number;
+    target: LibraryListItem;
+    coverImage?: string;
+  }[];
+  series: { id: string; name: string; count: number; coverImage?: string }[];
+  imageTotal: number;
+  videoTotal: number;
+}
+
 interface PageResponse<T> {
   ok: boolean;
   page: LibraryPage<T>;
@@ -225,7 +256,11 @@ async function collectPages<T>(
 
 // isInvalidCursor 识别「游标对不上当前作用域」这一类 400。
 function isInvalidCursor(error: unknown): boolean {
-  return error instanceof ApiError && error.status === 400 && error.code === "invalid_cursor";
+  return (
+    error instanceof ApiError &&
+    error.status === 400 &&
+    error.code === "invalid_cursor"
+  );
 }
 
 async function queryNodes(ids: string[]): Promise<LibraryNodeQueryResult> {
@@ -256,6 +291,11 @@ async function queryNodes(ids: string[]): Promise<LibraryNodeQueryResult> {
 }
 
 export const libraryApi = {
+  overview: (query: LibraryListQuery, cursor?: string, signal?: AbortSignal) =>
+    api<{ ok: boolean; page: LibraryListPage }>("/api/library/overview", {
+      params: { ...query, cursor, limit: LIBRARY_PAGE_LIMIT },
+      signal,
+    }),
   manifest: () =>
     api<{ ok: boolean; manifest: LibraryManifest }>("/api/library/manifest"),
   activitySummary: (kind: AppMode) =>
@@ -320,11 +360,7 @@ export const libraryApi = {
   //
   // count 一次要几本：首页「随手看看」一次给三本候选。服务端保证
   // 抽出的相册互不相同，候选不够时给全部。
-  randomAlbums: (
-    kind: AppMode,
-    scope: "any" | "unread" = "any",
-    count = 1,
-  ) =>
+  randomAlbums: (kind: AppMode, scope: "any" | "unread" = "any", count = 1) =>
     api<{
       ok: boolean;
       albums: LibraryNodeSummary[];
@@ -338,14 +374,10 @@ export const libraryApi = {
     }),
   allUnreadAlbums: (kind: AppMode) =>
     collectPages((cursor) => libraryApi.unreadAlbumPage(kind, cursor)),
-  allChildren: (parentId: string, kind: AppMode) =>
-    collectPages((cursor) => libraryApi.childrenPage(parentId, kind, cursor)),
   allMedia: (albumId: string) =>
     collectPages((cursor) => libraryApi.mediaPage(albumId, cursor)),
   allTags: (kind: AppMode) =>
     collectPages((cursor) => libraryApi.tagPage(kind, cursor)),
-  allTagAlbums: (tag: string, kind: AppMode) =>
-    collectPages((cursor) => libraryApi.tagAlbumsPage(tag, kind, cursor)),
   /**
    * 「最近加入」的相册摘要，按业务日期倒序。
    *

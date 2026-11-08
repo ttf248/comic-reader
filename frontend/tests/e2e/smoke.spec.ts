@@ -739,8 +739,8 @@ for (const kind of ["images", "mixed", "videos"] as const) {
       // 比的是顶栏的内容左缘（page-shell 有左右内边距），不是它的外框。
       const shell = page.locator("header.app-toolbar > .page-shell");
       const headerBox = await shell.boundingBox();
-      const headerPadding = await shell.evaluate(
-        (element) => parseFloat(getComputedStyle(element).paddingLeft),
+      const headerPadding = await shell.evaluate((element) =>
+        parseFloat(getComputedStyle(element).paddingLeft),
       );
       const listBox = await list.boundingBox();
       expect(headerBox).not.toBeNull();
@@ -876,10 +876,9 @@ test("浏览器抽帧上传后封面可通过原资源 URL 显示", async ({ pag
   await expect.poll(() => probes).toBeGreaterThan(0);
   await page.clock.fastForward(21_000);
   await expect.poll(() => uploaded).toBe(true);
-  const cover = page.getByRole("img", {
-    name: "sample-video-cover",
-    exact: true,
-  });
+  const cover = page
+    .locator(`[data-virtuoso-scroller] img[src="/api/thumbs/${fileId}"]`)
+    .first();
   await expect(cover).toHaveAttribute("src", `/api/thumbs/${fileId}`);
   await expect
     .poll(() => cover.evaluate((image: HTMLImageElement) => image.naturalWidth))
@@ -936,7 +935,10 @@ for (const albumName of ["sample-video-cover", "sample-mixed-cover"]) {
     await expect(page).toHaveURL(albumUrlPattern(album!));
     await grid.getByRole("button", { name: /^播放/ }).focus();
     await page.keyboard.press("Space");
-    await expect(page).toHaveURL(/\/gallery\?.*type=video/);
+    await expect(
+      page.getByRole("dialog", { name: `${albumName} 大图预览` }),
+    ).toBeVisible();
+    await expect(page.getByRole("dialog").locator("video")).toBeAttached();
     expect(errors).toEqual([]);
   });
 }
@@ -1678,7 +1680,9 @@ for (const failure of ["favorites", "nodes", "tags"] as const) {
     expect(album).toBeDefined();
     const resourceId = failure === "tags" ? "smart:测试" : album!.id;
     if (failure === "tags") {
-      const tags = (await (await page.request.get("/api/tags?kind=photo")).json()) as {
+      const tags = (await (
+        await page.request.get("/api/tags?kind=photo")
+      ).json()) as {
         page: { items: Array<{ tag: string }> };
       };
       expect(tags.page.items).toContainEqual(
@@ -1913,7 +1917,7 @@ test("收藏写入成功后列表刷新失败仍保留已确认的状态", async
   try {
     await page.goto(albumUrl(album!));
     await expect(
-      page.getByRole("button", { name: "已收藏", exact: true }),
+      page.getByRole("button", { name: "取消收藏", exact: true }),
     ).toBeVisible();
     let failedReads = 0;
     await page.route("**/api/favorites", async (route) => {
@@ -1924,7 +1928,7 @@ test("收藏写入成功后列表刷新失败仍保留已确认的状态", async
         json: { code: "test_unavailable", message: "unavailable" },
       });
     });
-    await page.getByRole("button", { name: "已收藏", exact: true }).click();
+    await page.getByRole("button", { name: "取消收藏", exact: true }).click();
     const unselected = page.getByRole("button", { name: "收藏", exact: true });
     await expect(unselected).toBeVisible();
     await expect(page.getByText("已取消收藏", { exact: true })).toBeVisible();
@@ -1938,7 +1942,7 @@ test("收藏写入成功后列表刷新失败仍保留已确认的状态", async
     await expect(unselected).toBeVisible();
     await unselected.click();
     await expect(
-      page.getByRole("button", { name: "已收藏", exact: true }),
+      page.getByRole("button", { name: "取消收藏", exact: true }),
     ).toBeVisible();
     await expect(page.getByText("已加入收藏", { exact: true })).toBeVisible();
     const added = (await (await page.request.get("/api/favorites")).json()) as {
@@ -2453,14 +2457,18 @@ test("六个列表的最近改排序使用真实修改时间", async ({ page }) 
               element.scrollTop = element.scrollHeight;
             });
             return page
-              .locator('main [data-virtuoso-scroller] a[href^="/comic/albums/"]')
+              .locator(
+                'main [data-virtuoso-scroller] a[href^="/comic/albums/"]',
+              )
               .evaluateAll(
                 (links, expected) =>
                   [
                     ...new Set(
                       links.map((link) =>
                         decodeURIComponent(
-                          link.getAttribute("href")!.slice("/comic/albums/".length),
+                          link
+                            .getAttribute("href")!
+                            .slice("/comic/albums/".length),
                         ),
                       ),
                     ),
@@ -2567,14 +2575,18 @@ test("六个列表支持按最近看排序，集合与标签具有当前页排�
               element.scrollTop = element.scrollHeight;
             });
             return page
-              .locator('main [data-virtuoso-scroller] a[href^="/comic/albums/"]')
+              .locator(
+                'main [data-virtuoso-scroller] a[href^="/comic/albums/"]',
+              )
               .evaluateAll(
                 (links, expected) =>
                   [
                     ...new Set(
                       links.map((link) =>
                         decodeURIComponent(
-                          link.getAttribute("href")!.slice("/comic/albums/".length),
+                          link
+                            .getAttribute("href")!
+                            .slice("/comic/albums/".length),
                         ),
                       ),
                     ),
@@ -2609,7 +2621,7 @@ test("六个列表支持按最近看排序，集合与标签具有当前页排�
   }
 });
 
-for (const name of ["home", "collection", "unread", "tag"] as const) {
+for (const name of ["unread"] as const) {
   test(`${name} 最近看读取失败保留列表并可重试`, async ({ page }) => {
     // 含未读页：未读属于漫画工作台，整组在漫画模式下跑。
     await setWorkbenchMode(page.request, "comic");
@@ -2661,7 +2673,8 @@ for (const name of ["home", "collection", "unread", "tag"] as const) {
         timeout: 15_000,
       });
       await expect(alert).toContainText("暂按名称排序");
-      const albums = name === "collection" ? childAlbums : rootAlbums;
+      const albums =
+        (name as string) === "collection" ? childAlbums : rootAlbums;
       const ids = albums.map((node) => node.id);
       const currentOrder = () =>
         page
@@ -2680,7 +2693,7 @@ for (const name of ["home", "collection", "unread", "tag"] as const) {
             ids,
           );
       await expect.poll(currentOrder).toEqual(ids);
-      if (name === "collection" || name === "tag") {
+      if ((name as string) === "collection" || (name as string) === "tag") {
         for (const theme of ["light", "dark"] as const) {
           await page.emulateMedia({
             colorScheme: theme,
@@ -2707,7 +2720,7 @@ for (const name of ["home", "collection", "unread", "tag"] as const) {
   });
 }
 
-for (const name of ["home", "collection", "unread", "tag"] as const) {
+for (const name of ["unread"] as const) {
   for (const mode of ["grid", "list"] as const) {
     test(`${name} ${mode} 长相册列表随实际滚动区域更新首尾卡片`, async ({
       page,
@@ -3360,7 +3373,9 @@ test("收藏标签复制链接保留字面百分号并可直接打开", async ({
       page.getByRole("heading", { name: tag, exact: true }),
     ).toBeVisible();
     await expect(
-      page.locator('main [data-virtuoso-scroller] a[href^="/photo/albums/"]').first(),
+      page
+        .locator('main [data-virtuoso-scroller] a[href^="/photo/albums/"]')
+        .first(),
     ).toBeVisible();
   } finally {
     if (!original.favorites.includes(resourceId))
@@ -3392,7 +3407,7 @@ for (const entrypoint of ["more", "image"] as const) {
         else await source.click({ button: "right" });
         await page
           .getByRole("menuitem", {
-            name: entrypoint === "more" ? "复制链接" : "复制相册链接",
+            name: "复制相册链接",
             exact: true,
           })
           .click();
@@ -3939,7 +3954,10 @@ test("设置目录选择可分页和错误重试，完整保留 POSIX 路径", a
       return route.fulfill({
         json: {
           ok: true,
-          config: { ...config, mediaRoots: [{ path: selected, kind: "photo" }] },
+          config: {
+            ...config,
+            mediaRoots: [{ path: selected, kind: "photo" }],
+          },
           requiresRestart: [],
           mediaRootsChanged: false,
         },
@@ -4073,7 +4091,9 @@ test("设置媒体根按 Esc 撤销整组未提交内容并保留已经确认的
   const writes: { mediaRoots: MediaRootConfig[] }[] = [];
   await page.route("**/api/config", async (route) => {
     if (route.request().method() === "PUT") {
-      const patch = route.request().postDataJSON() as { mediaRoots: MediaRootConfig[] };
+      const patch = route.request().postDataJSON() as {
+        mediaRoots: MediaRootConfig[];
+      };
       writes.push(patch);
       current = { ...current, ...patch };
       return route.fulfill({
@@ -4358,7 +4378,8 @@ for (const failFirst of [false, true]) {
       const last = page.waitForResponse(
         (response) =>
           response.request().method() === "PUT" &&
-          response.request().postDataJSON().mediaRoots?.[0]?.path === "/queue/latest",
+          response.request().postDataJSON().mediaRoots?.[0]?.path ===
+            "/queue/latest",
       );
       release[1]();
       expect((await last).ok()).toBe(true);
@@ -4913,10 +4934,9 @@ test("卡片右上角的星标可以直接收藏，且不会跳转", async ({ pa
   await link.hover();
 
   // 星标按相册名精确定位：页面上还有标签卡片的星标，不能拿「第一个收藏按钮」。
-  const title = (await link.getAttribute("aria-label"))!.replace(
-    /^打开相册“/,
-    "",
-  ).replace(/”$/, "");
+  const title = (await link.getAttribute("aria-label"))!
+    .replace(/^打开相册“/, "")
+    .replace(/”$/, "");
   const star = card.getByRole("button", {
     name: `收藏「${title}」`,
     exact: true,
@@ -5213,7 +5233,11 @@ for (const width of [1920, 1440, 1024, 768, 390]) {
     const album = nodes.find((node) => node.name === "sample-album")!;
     expect(album).toBeDefined();
     await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
-    for (const path of ["/photo", "/comic/unread", `/photo/albums/${album.id}`]) {
+    for (const path of [
+      "/photo",
+      "/comic/unread",
+      `/photo/albums/${album.id}`,
+    ]) {
       await page.goto(path);
       await page.waitForTimeout(400);
       const overflow = await page.evaluate(() => {
@@ -5306,3 +5330,118 @@ test("阅读器全屏按钮可点击，点击后阅读器控制仍然可用", as
   await expect(page.getByRole("toolbar", { name: "阅读控制" })).toBeVisible();
   await expect(page.getByRole("button", { name: "下一页" })).toBeEnabled();
 });
+
+test("列表只取首屏，真实后端分页与筛选保留完整计数", async ({
+  page,
+  request,
+}) => {
+  await scannedNodes(request, "comic");
+  const calls: string[] = [];
+  await page.route("**/api/library/overview?**", async (route) => {
+    const url = new URL(route.request().url());
+    calls.push(url.searchParams.get("cursor") ?? "first");
+    url.searchParams.set("limit", "20");
+    await route.fulfill({
+      response: await route.fetch({ url: url.toString() }),
+    });
+  });
+  await page.goto("/comic");
+  await expect(page.getByRole("heading", { name: "库内一览" })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "加载更多", exact: true }),
+  ).toBeAttached();
+  expect(calls.filter((cursor) => cursor === "first")).toHaveLength(1);
+  expect(calls).toHaveLength(1);
+  await page.getByRole("button", { name: "加载更多", exact: true }).click();
+  await expect.poll(() => calls.length).toBeGreaterThan(1);
+  await page.getByRole("button", { name: "排序", exact: true }).click();
+  await page.getByRole("button", { name: "按最近改", exact: true }).click();
+  await expect
+    .poll(() => calls.filter((cursor) => cursor === "first").length)
+    .toBe(2);
+});
+
+test("分页浏览明暗主题与四个断点实际截图", async ({ page, request }) => {
+  test.setTimeout(90_000);
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await scannedNodes(request, "photo");
+  const output = path.resolve(".smoke/roadmap-browse");
+  mkdirSync(output, { recursive: true });
+  for (const theme of ["light", "dark"]) {
+    for (const width of [390, 768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto("/photo");
+      await page.getByRole("button", { name: /^主题:/ }).click();
+      await page
+        .getByRole("menuitemradio", {
+          name: theme === "dark" ? "深色" : "浅色",
+          exact: true,
+        })
+        .click();
+      await page.keyboard.press("Escape");
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+      await expect(
+        page.getByRole("heading", { name: "库内一览" }),
+      ).toBeAttached();
+      await page.waitForFunction(() =>
+        Array.from(document.images)
+          .filter((image) => {
+            const rect = image.getBoundingClientRect();
+            return (
+              rect.width > 0 &&
+              rect.height > 0 &&
+              rect.top < innerHeight &&
+              rect.bottom > 0 &&
+              rect.left < innerWidth &&
+              rect.right > 0
+            );
+          })
+          .every((image) => image.complete),
+      );
+      await page.screenshot({
+        path: path.join(output, `${theme}-${width}.png`),
+      });
+    }
+  }
+});
+
+for (const source of ["home", "collection", "tag"] as const) {
+  test(`${source} 服务端排序读取失败可重试`, async ({ page, request }) => {
+    const { collectionId } = await sortFixture(request);
+    const paths = {
+      home: "/comic",
+      collection: `/comic/albums/${collectionId}`,
+      tag: `/comic/tags/${encodeURIComponent("测试")}`,
+    };
+    let blocked = true;
+    await page.route("**/api/library/overview?**", async (route) => {
+      if (
+        blocked &&
+        new URL(route.request().url()).searchParams.get("sort") === "viewed"
+      ) {
+        await route.fulfill({
+          status: 500,
+          json: { code: "test_unavailable", message: "unavailable" },
+        });
+      } else await route.continue();
+    });
+    await page.goto(paths[source]);
+    await page.getByRole("button", { name: "排序", exact: true }).click();
+    await page.getByRole("button", { name: "按最近看", exact: true }).click();
+    await expect(
+      page.getByRole("heading", {
+        name: source === "tag" ? "标签加载失败" : "列表加载失败",
+      }),
+    ).toBeVisible({ timeout: 15000 });
+    blocked = false;
+    await page.getByRole("button", { name: "重试", exact: true }).click();
+    await expect(
+      page.getByRole("heading", {
+        name: source === "tag" ? "标签加载失败" : "列表加载失败",
+      }),
+    ).toHaveCount(0);
+    await expect(
+      page.locator("[data-virtuoso-scroller]").first(),
+    ).toBeAttached();
+  });
+}
