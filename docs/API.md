@@ -72,6 +72,18 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 认证请求体最大 1 KiB，令牌最大 256 字符；同一来源 5 分钟内超过 8 次失败返回 `429 too_many_auth_attempts`。正确令牌不会被失败计数锁死，并会清理该来源计数。
 
+### 本机状态备份与恢复
+
+三个端点均经过现有访问门禁与回环限制，响应 `Cache-Control: no-store`，错误不包含底层文件路径。
+
+- `GET /api/admin/state/export` 下载 v1 JSON：`version`、`exportedAt`、`favorites`、`history`、`preferences`、`activities`、`covers`。`preferences` 仅为服务端偏好字段；`covers` 每项为 `{albumId,itemId}`。不含配置、令牌、扫描缓存或浏览器本机阅读偏好。当前库无法解析的旧封面不导出，`unresolvedCovers` 报告数量，恢复目录后可再次导出。
+- `POST /api/admin/state/import/preview` 请求 `{backup}`，返回 `versions`、`libraryRevision`、`ready`、分类 `counts`、`missing` 与 `skippedCovers`。未知字段、损坏 JSON、非 v1 版本、非法或重复 ID 均返回 `400 invalid_state_backup`。设置页文件上限 32 MiB，接口含 JSON 包装上限 34 MiB，超限返回 `413 state_backup_too_large`。
+- `POST /api/admin/state/import` 请求 `{backup,categories,versions,libraryRevision}`；类别为 `favorites/history/preferences/activities/covers`。`versions` 来自预览，是当前状态摘要，不是授权凭据。相关状态变化返回 `409 state_changed`；库变化或恢复封面时库未就绪返回 `409 library_not_ready`，均需重新预览。
+
+覆盖前先在 `state/backups/` 保存同格式的恢复前 JSON 与仅服务端可见的完整内部封面映射；创建失败时不写入任何类别。收藏、历史和偏好共享文件，在一次锁内合并提交并保留未选类别；随后依次恢复活动与封面，每个文件原子落盘。响应 `{completed,failed?,pending,code?,skippedCovers}`，失败后停止后续类别。已经完成的写入不因其他类别失败回滚，客户端不得自动重放恢复请求。
+
+失效收藏、历史与活动保留供原有清理功能处理；封面须通过当前根、链接组件、相册成员与普通文件校验，失效项跳过。偏好中的 `maxRecent` 若会裁剪未选历史，或所选历史超过当前/所选偏好上限，返回 `400 history_limit_conflict`，需选择匹配的历史与偏好，不能静默丢失记录。首版适用于相同媒体根身份和相对路径，暂不提供目录迁移映射。
+
 ### `GET /api/config` / `PUT /api/config`
 
 读取或更新 `config.yaml`。与下文的目录选择接口同属允许处理绝对路径的本机配置管理例外，只接受服务端回环地址请求；远程请求返回 `403 local_access_required`。

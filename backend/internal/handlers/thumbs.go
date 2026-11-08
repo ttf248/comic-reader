@@ -90,8 +90,8 @@ func ThumbCleanupHandlerWithCacheStats(svc *services.ThumbnailService, cacheStat
 //   - 与 /api/thumbs 的 key 体系一致：mtime/size 变化自动失效
 //
 // 注意：直接用 c.Body() 读整 body。Fiber 默认 BodyLimit=4MiB，所以
-// 启动时需要在 app/fiber.Config{ BodyLimit: 6 MiB } 给该接口留点余量。
-// BodyLimit 是 Fiber 全局设置，本 handler 不另行检查（Fiber 自身会
+// 全局 BodyLimit 为备份导入留有余量，本接口独立限制 5 MiB。
+// BodyLimit 是 Fiber 全局设置；封面大小还由下方独立检查（Fiber 自身会
 // 拦截超大请求并返回 413）。
 func ThumbCoverHandler(svc *services.ThumbnailService) fiber.Handler {
 	const maxCoverBytes = 5 * 1024 * 1024 // 5 MB

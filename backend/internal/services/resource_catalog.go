@@ -123,6 +123,25 @@ func (c *ResourceCatalog) CommitScan(
 func (c *ResourceCatalog) RefreshCovers(cache *ScanResultCache, covers *CoverOverrideStore) (*models.ScanResult, uint64, bool) {
 	c.publishMu.Lock()
 	defer c.publishMu.Unlock()
+	return c.refreshCoversLocked(cache, covers)
+}
+
+// CompareAndRestoreCovers 把库版本比较、封面提交和视图发布放在同一发布锁内。
+func (c *ResourceCatalog) CompareAndRestoreCovers(revision uint64, cache *ScanResultCache, covers *CoverOverrideStore, expected, next map[string]CoverOverride) error {
+	c.publishMu.Lock()
+	defer c.publishMu.Unlock()
+	current := c.state.Load()
+	if current == nil || current.result == nil || current.revision != revision {
+		return ErrCoverStateChanged
+	}
+	if err := covers.CompareAndReplace(expected, next); err != nil {
+		return err
+	}
+	c.refreshCoversLocked(cache, covers)
+	return nil
+}
+
+func (c *ResourceCatalog) refreshCoversLocked(cache *ScanResultCache, covers *CoverOverrideStore) (*models.ScanResult, uint64, bool) {
 	current := c.state.Load()
 	if current == nil || current.result == nil {
 		return nil, 0, false
@@ -192,13 +211,13 @@ func (c *ResourceCatalog) ClearWithCache(cache *ScanResultCache) error {
 func (c *ResourceCatalog) publish(result *models.ScanResult, roots []string, customCovers map[string]bool) uint64 {
 	revision := c.revision.Add(1)
 	state := &resourceCatalogState{
-		revision:       revision,
-		byID:           make(map[string]ResourceRef),
-		byPathKind:     make(map[string]string),
-		albums:         make(map[string]models.Album),
-		collections:    make(map[string]models.Collection),
-		customCovers:   cloneCustomCoverPaths(customCovers),
-		contentPolicy:  c.contentPolicy,
+		revision:        revision,
+		byID:            make(map[string]ResourceRef),
+		byPathKind:      make(map[string]string),
+		albums:          make(map[string]models.Album),
+		collections:     make(map[string]models.Collection),
+		customCovers:    cloneCustomCoverPaths(customCovers),
+		contentPolicy:   c.contentPolicy,
 		collectionNames: make(map[string]string),
 	}
 	for _, root := range pathutil.NormalizeRoots(roots) {

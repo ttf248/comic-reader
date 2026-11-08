@@ -83,9 +83,8 @@ func main() {
 		// 超时，确保退出窗口有明确上界。SSE 不设置 WriteTimeout。
 		ReadTimeout: 30 * time.Second,
 		IdleTimeout: 60 * time.Second,
-		// BodyLimit 提到 6 MiB：默认 4 MiB 不够 /api/thumbs/cover 上传
-		// 4K canvas JPEG 封面（典型 2-4 MB）。
-		BodyLimit: 6 * 1024 * 1024,
+		// 备份导入允许 32 MiB 文件及 JSON 包装；封面和认证接口另有自身限制。
+		BodyLimit: 64 * 1024 * 1024,
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			if fe, ok := err.(*fiber.Error); ok {
 				return httputil.Error(c, fe.Code, "http_error", fe.Message)
@@ -364,6 +363,10 @@ func main() {
 	api.Post("/admin/fs/directories", middleware.LoopbackOnly(), handlers.DirectoriesHandler())
 
 	// 配置读写
+	backupService := &services.StateBackupService{Prefs: prefs, Activities: activities, Covers: coverOverrides, Catalog: resourceCatalog, ScanCache: scanCache, ValidatePath: safetyState.Validate, BackupDir: services.StateBackupDirectory(cacheLayout)}
+	api.Get("/admin/state/export", middleware.LoopbackOnly(), handlers.StateExportHandler(backupService))
+	api.Post("/admin/state/import/preview", middleware.LoopbackOnly(), handlers.StatePreviewHandler(backupService))
+	api.Post("/admin/state/import", middleware.LoopbackOnly(), handlers.StateImportHandler(backupService))
 	api.Get("/config", middleware.LoopbackOnly(), handlers.ConfigGetHandler(mgr))
 	api.Put("/config", middleware.LoopbackOnly(), handlers.ConfigUpdateHandler(mgr, onConfigUpdate))
 

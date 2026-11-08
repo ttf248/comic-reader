@@ -7,6 +7,7 @@ import { useScanSSE } from "../hooks/useScanSSE";
 import ThemeSwitcher from "../components/common/ThemeSwitcher";
 import { useUIStore } from "../store/uiStore";
 import { libraryQueryKeys, useLibraryManifest } from "../hooks/useLibrary";
+import StateBackupPanel from "../components/settings/StateBackupPanel";
 import ServerConfigPanel from "../components/settings/ServerConfigPanel";
 import ScanWarnings from "../components/common/ScanWarnings";
 import { syncHistoryCache } from "../utils/historyCache";
@@ -653,6 +654,8 @@ export default function Settings() {
           </div>
           <ServerConfigPanel />
         </section>
+
+        <StateBackupPanel />
 
         <Section title="关于" icon={<InfoIcon size={13} />}>
           <div className="text-body text-fg-muted leading-relaxed">

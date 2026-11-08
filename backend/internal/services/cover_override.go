@@ -15,9 +15,11 @@ package services
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sync"
 
 	"github.com/tianlongxiang/local-gallery/internal/models"
@@ -67,55 +69,72 @@ func (s *CoverOverrideStore) Load() error {
 	return nil
 }
 
-// flush 写盘（持锁或单线程下调用）。失败不返回上层错误：让上层
-// 走"内存已更新、稍后 retry"路径。
-func (s *CoverOverrideStore) flush() error {
-	s.mu.RLock()
-	cp := make(map[string]CoverOverride, len(s.data))
-	for k, v := range s.data {
-		cp[k] = v
-	}
-	s.mu.RUnlock()
-
-	if len(cp) == 0 {
-		// 没有覆盖就删文件，避免磁盘上一直留空文件
-		if err := os.Remove(s.path); err != nil && !os.IsNotExist(err) {
-			return err
-		}
-		return nil
-	}
-
+// commitLocked 先原子落盘，再发布内存；失败保留原有封面状态。
+func (s *CoverOverrideStore) commitLocked(next map[string]CoverOverride) error {
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(cp, "", "  ")
+	data, err := json.MarshalIndent(next, "", "  ")
 	if err != nil {
 		return err
 	}
-	tmp := s.path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+	file, err := os.CreateTemp(filepath.Dir(s.path), ".covers-*.tmp")
+	if err != nil {
 		return err
 	}
-	return os.Rename(tmp, s.path)
+	name := file.Name()
+	defer os.Remove(name)
+	if err = file.Chmod(0o600); err == nil {
+		_, err = file.Write(data)
+	}
+	if err == nil {
+		err = file.Sync()
+	}
+	closeErr := file.Close()
+	if err != nil {
+		return err
+	}
+	if closeErr != nil {
+		return closeErr
+	}
+	if err = os.Rename(name, s.path); err != nil {
+		return err
+	}
+	s.data = next
+	return nil
 }
 
-// Set 设置 album path 的封面覆盖，立即落盘。
 func (s *CoverOverrideStore) Set(albumPath, file string) error {
-	albumPath = filepath.Clean(albumPath)
-	file = filepath.Clean(file)
 	s.mu.Lock()
-	s.data[albumPath] = CoverOverride{File: file}
-	s.mu.Unlock()
-	return s.flush()
+	defer s.mu.Unlock()
+	next := s.snapshotLocked()
+	next[filepath.Clean(albumPath)] = CoverOverride{File: filepath.Clean(file)}
+	return s.commitLocked(next)
+}
+func (s *CoverOverrideStore) Clear(albumPath string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	next := s.snapshotLocked()
+	delete(next, filepath.Clean(albumPath))
+	return s.commitLocked(next)
 }
 
-// Clear 删除 album path 的封面覆盖，落盘。
-func (s *CoverOverrideStore) Clear(albumPath string) error {
-	albumPath = filepath.Clean(albumPath)
+var ErrCoverStateChanged = errors.New("cover state changed since preview")
+
+func (s *CoverOverrideStore) CompareAndReplace(expected, next map[string]CoverOverride) error {
 	s.mu.Lock()
-	delete(s.data, albumPath)
-	s.mu.Unlock()
-	return s.flush()
+	defer s.mu.Unlock()
+	if !reflect.DeepEqual(s.data, expected) {
+		return ErrCoverStateChanged
+	}
+	return s.commitLocked(next)
+}
+func (s *CoverOverrideStore) snapshotLocked() map[string]CoverOverride {
+	next := make(map[string]CoverOverride, len(s.data))
+	for key, value := range s.data {
+		next[key] = value
+	}
+	return next
 }
 
 // Get 返回 album path 的覆盖（无则 nil）。
