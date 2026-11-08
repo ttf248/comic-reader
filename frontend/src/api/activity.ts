@@ -80,6 +80,13 @@ export type ActivityInput =
     };
 
 export const activityApi = {
+  removeImages: (albumIds: string[]) =>
+    withActivityChanged(
+      api<{ deleted: number }>("/api/activity/batch", {
+        method: "DELETE",
+        body: { albumIds },
+      }),
+    ),
   get: (identity: ActivityIdentity) =>
     api<Activity>("/api/activity", {
       params: {
@@ -204,10 +211,12 @@ export const activityApi = {
       credentials: "include",
       keepalive: true,
       body: JSON.stringify(activity),
-    }).then((response) => {
-      if (response.ok) {
-        notifyActivityChanged();
-      }
-    }).catch(() => {});
+    })
+      .then((response) => {
+        if (response.ok) {
+          notifyActivityChanged();
+        }
+      })
+      .catch(() => {});
   },
 };

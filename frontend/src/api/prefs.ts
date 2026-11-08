@@ -1,54 +1,59 @@
-import { api } from './client'
-import type { AppMode } from './library'
+import { api } from "./client";
+import type { AppMode } from "./library";
 
 export interface Prefs {
-  favorites: string[]
+  favorites: string[];
   history: {
-    albumId: string
-    name: string
-    imageCount: number
-    openedAt: string
-  }[]
-  maxRecent: number
-  autoSwitchAlbum: boolean
-  showSwitchNotif: boolean
-  theme: 'light' | 'dark' | 'system'
-  sidebarCollapsed: boolean
+    albumId: string;
+    name: string;
+    imageCount: number;
+    openedAt: string;
+  }[];
+  maxRecent: number;
+  autoSwitchAlbum: boolean;
+  showSwitchNotif: boolean;
+  theme: "light" | "dark" | "system";
+  sidebarCollapsed: boolean;
   /**
    * 全局工作台模式。photo / comic 让列表只呈现对应目录属性的相册，
    * 两档互斥：没有不过滤的「全部」。
    */
-  appMode: AppMode
+  appMode: AppMode;
 }
 
 export const prefsApi = {
-  get: () => api<Prefs>('/api/prefs'),
+  get: () => api<Prefs>("/api/prefs"),
   patch: (patch: Partial<Prefs>) =>
-    api<Prefs>('/api/prefs', { method: 'PATCH', body: patch }),
-}
+    api<Prefs>("/api/prefs", { method: "PATCH", body: patch }),
+};
 
 export const favoritesApi = {
-  list: () => api<{ favorites: string[] }>('/api/favorites'),
+  batch: (resourceIds: string[], action: "add" | "remove") =>
+    api<{ favorites: string[]; updated: number }>("/api/favorites/batch", {
+      method: "POST",
+      body: { resourceIds, action },
+    }),
+  list: () => api<{ favorites: string[] }>("/api/favorites"),
   add: (resourceId: string) =>
-    api<{ favorites: string[] }>('/api/favorites', {
-      method: 'POST',
+    api<{ favorites: string[] }>("/api/favorites", {
+      method: "POST",
       body: { resourceId },
     }),
   remove: (resourceId: string) =>
-    api<{ favorites: string[] }>('/api/favorites', {
-      method: 'DELETE',
+    api<{ favorites: string[] }>("/api/favorites", {
+      method: "DELETE",
       body: { resourceId },
     }),
   prune: () =>
-    api<{ removed: string[] }>('/api/favorites/prune', { method: 'POST' }),
-}
+    api<{ removed: string[] }>("/api/favorites/prune", { method: "POST" }),
+};
 
 export const historyApi = {
-  list: () => api<{ history: Prefs['history'] }>('/api/history'),
+  list: () => api<{ history: Prefs["history"] }>("/api/history"),
   add: (entry: { albumId: string; name: string; imageCount: number }) =>
-    api<{ history: Prefs['history'] }>('/api/history', {
-      method: 'POST',
+    api<{ history: Prefs["history"] }>("/api/history", {
+      method: "POST",
       body: entry,
     }),
-  clear: () => api<{ ok: boolean }>('/api/history', { method: 'DELETE' }),
-}
+  clear: () => api<{ ok: boolean }>("/api/history", { method: "DELETE" }),
+};

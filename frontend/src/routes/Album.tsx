@@ -605,6 +605,7 @@ function CollectionView({
           <section className="page-shell">
             <div className="pb-10">
               <AlbumGrid
+                selectable
                 items={cards}
                 variant={viewMode}
                 onEndReached={() => {

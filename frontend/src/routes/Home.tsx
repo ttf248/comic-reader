@@ -787,6 +787,7 @@ export default function Home() {
           ) : (
             <div className="pb-10">
               <AlbumGrid
+                selectable
                 items={filtered}
                 variant={viewMode}
                 onEndReached={() => {

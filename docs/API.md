@@ -72,6 +72,12 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 认证请求体最大 1 KiB，令牌最大 256 字符；同一来源 5 分钟内超过 8 次失败返回 `429 too_many_auth_attempts`。正确令牌不会被失败计数锁死，并会清理该来源计数。
 
+### 批量收藏与漫画未读重置
+
+- `POST /api/favorites/batch` 请求 `{resourceIds:[资源ID],action:"add"|"remove"}`，一批 1–1,000 项；ID 可以是相册、集合或 `smart:<tag>`，整批校验并去重，返回 `{favorites:[当前完整收藏ID],updated:实际变化数}`。非法请求返回 `400 invalid_favorites_batch`；添加后超过既有 500 项收藏上限返回 `400 favorite_limit`，不裁掉原有收藏。一次锁内合并并只落盘一次。
+- `DELETE /api/activity/batch` 请求 `{albumIds:[相册ID]}`，一批 1–1,000 项，返回 `{deleted:实际删除的漫画活动数}`。非法请求返回 `400 invalid_activity_batch`；不存在的活动幂等忽略，只重置图片阅读活动，保留视频播放位置，整批一次原子落盘。
+- 批量标记已读复用 `PUT /api/activity/batch`。前端固定选择清单，先查询所选相册的当前属性和图片总数，仅提交非空漫画相册；集合、标签与照片不参与已读操作。
+
 ### 本机状态备份与恢复
 
 三个端点均经过现有访问门禁与回环限制，响应 `Cache-Control: no-store`，错误不包含底层文件路径。

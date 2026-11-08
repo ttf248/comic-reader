@@ -5,6 +5,7 @@ import RouteLoading from "./components/common/RouteLoading";
 import AccessGate from "./components/auth/AccessGate";
 import ErrorBoundary from "./components/common/ErrorBoundary";
 import ToastViewport from "./components/common/Toast";
+import { useSelectionScope } from "./store/selectionStore";
 import { useTheme } from "./hooks/useTheme";
 import { useAppMode, useAppModeHydration } from "./hooks/useAppMode";
 import { useLibraryActivitySync } from "./hooks/useLibrary";
@@ -49,6 +50,7 @@ const MODE_ROUTE_ELEMENTS: Record<
 const MODES: AppMode[] = ["photo", "comic"];
 
 export default function App() {
+  useSelectionScope();
   useTheme();
   // 工作台偏好来自服务端：先水合，根路径才知道该落到哪一侧。
   useAppModeHydration();

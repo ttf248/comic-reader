@@ -363,7 +363,12 @@ export default function Favorites() {
           <div className="pb-10">
             {/* 收藏是"精选陈列"，不是"全量浏览"：用更疏的网格，
             与未读 / 最近 / 全部图像的密集清单区分开。 */}
-            <AlbumGrid items={filtered} variant={viewMode} density="spacious" />
+            <AlbumGrid
+              selectable
+              items={filtered}
+              variant={viewMode}
+              density="spacious"
+            />
           </div>
         </section>
       )}

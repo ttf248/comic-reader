@@ -9,7 +9,11 @@ import AlbumGrid from "../components/album/AlbumGrid";
 import AlbumGridSkeleton from "../components/album/AlbumGridSkeleton";
 import { ListFilterBar } from "../components/common/ListFilterBar";
 import EmptyState from "../components/common/EmptyState";
-import { SparkleIcon, ShuffleIcon, FilterIcon } from "../components/common/Icon";
+import {
+  SparkleIcon,
+  ShuffleIcon,
+  FilterIcon,
+} from "../components/common/Icon";
 import type { GalleryContextEntry } from "../utils/galleryContext";
 import { albumRoute, decodeFavPath, homeRoute } from "../utils/path";
 import { compareDatesDesc } from "../utils/date";
@@ -126,7 +130,8 @@ export default function Unread() {
                 {copy.collectionUnit}
                 {copy.unreadCountVerb}
                 <span className="text-fg-subtle mx-1.5">·</span>
-                全库 <span className="text-fg">{total}</span> {copy.collectionUnit}
+                全库 <span className="text-fg">{total}</span>{" "}
+                {copy.collectionUnit}
               </span>
             )}
           </p>
@@ -156,7 +161,10 @@ export default function Unread() {
                 去设置
               </button>
             ) : (
-              <button onClick={() => navigate(homeRoute("comic"))} className="btn btn-outline">
+              <button
+                onClick={() => navigate(homeRoute("comic"))}
+                className="btn btn-outline"
+              >
                 回主页
               </button>
             )
@@ -180,6 +188,7 @@ export default function Unread() {
         <section className="page-shell">
           <div className="pb-10">
             <AlbumGrid
+              selectable
               items={filtered}
               variant={viewMode}
               showUnreadBadge={false}

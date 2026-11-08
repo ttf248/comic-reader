@@ -373,6 +373,7 @@ func main() {
 	// 偏好 / 收藏 / 历史
 	api.Get("/prefs", handlers.PrefsGetHandler(prefs))
 	api.Patch("/prefs", handlers.PrefsPatchHandler(prefs))
+	api.Post("/favorites/batch", handlers.FavoritesBatchHandler(prefs))
 	api.Get("/favorites", handlers.FavoritesListHandler(prefs))
 	api.Post("/favorites", handlers.FavoriteAddHandler(prefs))
 	api.Delete("/favorites", handlers.FavoriteRemoveHandler(prefs))
@@ -384,6 +385,7 @@ func main() {
 	api.Put("/activity", handlers.ActivityPutHandler(activities))
 	api.Delete("/activity", handlers.ActivityDeleteHandler(activities))
 	api.Post("/activity/query", handlers.ActivityQueryHandler(activities))
+	api.Delete("/activity/batch", handlers.ActivityBatchDeleteHandler(activities))
 	api.Put("/activity/batch", handlers.ActivityBatchPutHandler(activities))
 	api.Delete("/activity/all", handlers.ActivityClearHandler(activities))
 

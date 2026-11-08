@@ -306,6 +306,7 @@ export default function Tag() {
         ) : (
           <>
             <AlbumGrid
+              selectable
               items={cards}
               variant={viewMode}
               onEndReached={() => {

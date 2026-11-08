@@ -7,6 +7,10 @@ import {
   type ReactNode,
 } from "react";
 import { Virtuoso, VirtuosoGrid, type ListProps } from "react-virtuoso";
+import BulkActions from "./BulkActions";
+import SelectionCard from "./SelectionCard";
+import { useSelectionStore } from "../../store/selectionStore";
+import { decodeFavPath } from "../../utils/path";
 import AlbumCard, { type CardData, type CoverRatio } from "./AlbumCard";
 import AlbumContextMenu from "./AlbumContextMenu";
 import PropertiesDialog from "../common/PropertiesDialog";
@@ -20,6 +24,7 @@ import { useUIStore, type ViewMode } from "../../store/uiStore";
 export type { CardData } from "./AlbumCard";
 
 interface Props {
+  selectable?: boolean;
   onEndReached?: () => void;
   items: CardData[];
   empty?: ReactNode;
@@ -69,6 +74,7 @@ const virtualListComponents = { List: VirtualList };
 // 右键菜单统一：打开 / 收藏 / 阅读标记 / 文件管理器 / 复制链接 / 属性。
 export default function AlbumGrid({
   items,
+  selectable = false,
   onEndReached,
   empty,
   variant = "grid",
@@ -77,6 +83,20 @@ export default function AlbumGrid({
   coverRatio,
   density = "default",
 }: Props) {
+  const selectionActive = useSelectionStore((s) => s.active);
+  const selectionItems = useSelectionStore((s) => s.items);
+  const selectionBusy = useSelectionStore((s) => s.busy);
+  const selectedDescriptors = useMemo(
+    () =>
+      items.map((card) => ({
+        id: favoriteResourceId(card),
+        albumId: card.variant === "album" ? decodeFavPath(card.to) : undefined,
+        title: card.title,
+        contentKind: card.contentKind,
+        imageCount: card.imageCount ?? 0,
+      })),
+    [items],
+  );
   const [menu, setMenu] = useState<{
     x: number;
     y: number;
@@ -144,6 +164,25 @@ export default function AlbumGrid({
 
   const renderCard = (it: CardData) => {
     const isFav = favorites.includes(favoriteResourceId(it));
+    if (selectable && selectionActive)
+      return (
+        <SelectionCard
+          card={it}
+          checked={!!selectionItems[favoriteResourceId(it)]}
+          busy={selectionBusy}
+          variant={mode}
+          ratio={ratio}
+          onToggle={() => {
+            const descriptor = selectedDescriptors.find(
+              (item) => item.id === favoriteResourceId(it),
+            );
+            if (descriptor && !useSelectionStore.getState().toggle(descriptor))
+              useUIStore
+                .getState()
+                .pushToast({ kind: "info", message: "最多选择 1,000 项" });
+          }}
+        />
+      );
     return (
       <AlbumCard
         data={{ ...it, isFavorite: isFav }}
@@ -161,6 +200,7 @@ export default function AlbumGrid({
 
   return (
     <div ref={bindScrollParent}>
+      {selectable && <BulkActions loaded={selectedDescriptors} />}
       {mode === "list" ? (
         <div ref={widthRef}>
           <Virtuoso

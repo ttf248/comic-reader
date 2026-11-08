@@ -35,7 +35,7 @@ export default function Cover({
       className="w-full h-full object-cover object-[50%_30%]"
     />
   ) : (
-    <span className="w-full h-full flex items-center justify-center text-white/70">
+    <span className="w-full h-full flex items-center justify-center bg-bg-subtle text-fg-muted">
       <FolderIcon size={large ? 28 : 16} />
     </span>
   );

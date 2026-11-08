@@ -14,10 +14,13 @@ import (
 	"github.com/tianlongxiang/local-gallery/internal/models"
 )
 
+const maxFavorites = 500
+
 // PrefsStore 文件型偏好存储。
 //
 // 文件不存在 → 返回默认值；解析失败 → 返回错误并保留旧文件备份。
 // 每次写入采用 tmp + rename 原子替换，避免崩溃时半截文件。
+
 type PrefsStore struct {
 	path string
 
@@ -92,7 +95,6 @@ func normalize(p models.Prefs) models.Prefs {
 		seenFavorites[id] = struct{}{}
 		favorites = append(favorites, id)
 	}
-	const maxFavorites = 500
 	if len(favorites) > maxFavorites {
 		favorites = favorites[len(favorites)-maxFavorites:]
 	}
