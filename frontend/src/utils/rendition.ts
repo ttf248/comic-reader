@@ -52,3 +52,41 @@ export function pickRenditionWidth(
 export function renditionCandidates(): number[] {
   return [...RENDITION_WIDTHS];
 }
+
+/**
+ * fitPreviewWidth 按图片在舞台里的真实显示宽度选档。
+ *
+ * 视口宽不是图片显示宽：一张 3456 见方的照片在 1440×788 的舞台里只显示
+ * 788 像素宽。照视口宽去要图会白白多拉一档；照视口宽 × 像素比去要更是
+ * 直接要满 4096 档 —— 服务端对"源图比档位窄"的情况会原样返回原图，
+ * 于是一张 3.7MB 的原图就为了看 788 像素宽的一屏被整个拉了下来。
+ *
+ * 这里按舞台尺寸与图片原始比例算出真正显示的 CSS 宽，再乘像素比与缩放
+ * 倍数，取够用的最小档位。图片原始尺寸未知时退回舞台宽。
+ */
+export function fitPreviewWidth(options: {
+  stageWidth: number;
+  stageHeight: number;
+  imageWidth?: number;
+  imageHeight?: number;
+  dpr?: number;
+  zoom?: number;
+}): number {
+  const {
+    stageWidth,
+    stageHeight,
+    imageWidth = 0,
+    imageHeight = 0,
+    dpr = devicePixelRatio(),
+    zoom = 1,
+  } = options;
+  const factor = Math.max(1, zoom);
+  if (!stageWidth || !stageHeight || !imageWidth || !imageHeight) {
+    return pickRenditionWidth(stageWidth * factor, dpr);
+  }
+  // 图片不放大：源图比舞台小的时候按原尺寸显示（CSS 的 max-* 只约束
+  // 缩不放），所以缩放比要封顶在 1。
+  const scale = Math.min(stageWidth / imageWidth, stageHeight / imageHeight, 1);
+  const fittedWidth = imageWidth * scale;
+  return pickRenditionWidth(fittedWidth * factor, dpr);
+}

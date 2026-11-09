@@ -1,6 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { previewUrl } from "../../api/images";
-import { pickRenditionWidth } from "../../utils/rendition";
+import {
+  devicePixelRatio,
+  fitPreviewWidth,
+  pickRenditionWidth,
+} from "../../utils/rendition";
 import type { LibraryMediaItem } from "../../api/library";
 import { isFullscreen, toggleFullscreen } from "../../utils/fullscreen";
 import { shouldIgnoreShortcut } from "../../utils/shortcuts";
@@ -87,19 +98,35 @@ export default function PhotoViewer({
   const current = items[index];
   const isVideo = current?.kind === "video";
 
-  // 视口宽 × 像素比是这张图在缩放 1 倍时需要的像素宽。
-  const basePreviewWidth = useMemo(() => {
-    if (typeof window === "undefined") return 1600;
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    return Math.round(window.innerWidth * dpr);
-  }, []);
+  // 舞台尺寸：图片真正显示多大由它决定。
+  //
+  // 先量再取图：尺寸没量到就发请求会先要一张视口宽的图（常常直接命中
+  // 4096 档的原图），量到之后再改 URL 等于白拉一次。
+  const [stageSize, setStageSize] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
+  const [stageMeasured, setStageMeasured] = useState(false);
 
   // 放大时按放大倍数向上一档取图：否则放大看到的只是被拉大的像素。
   // 档位固定，缩放过程中 URL 只在跨档时变一次，不会来回重下。
-  const previewWidth = useMemo(
-    () => pickRenditionWidth(basePreviewWidth * Math.max(1, zoom)),
-    [basePreviewWidth, zoom],
-  );
+  const previewWidth = useMemo(() => {
+    const factor = Math.max(1, zoom);
+    if (stageSize) {
+      return fitPreviewWidth({
+        stageWidth: stageSize.width,
+        stageHeight: stageSize.height,
+        imageWidth: current?.width,
+        imageHeight: current?.height,
+        zoom: factor,
+      });
+    }
+    // 舞台还没量到：先按视口宽估一档，宁可多要一点也别先要一张 320 的
+    // 小图再升级。
+    const viewportWidth =
+      typeof window === "undefined" ? 1600 : window.innerWidth;
+    return pickRenditionWidth(viewportWidth * factor, devicePixelRatio());
+  }, [stageSize, current?.width, current?.height, zoom]);
 
   const clampPan = useCallback(
     (next: { x: number; y: number }, scale: number) => {
@@ -157,6 +184,35 @@ export default function PhotoViewer({
     return () => window.removeEventListener("resize", onResize);
   }, [measureFitted]);
 
+  // 量舞台尺寸：决定图片实际显示多大，也就决定了该拉哪一档的图。
+  //
+  // 用 layout effect 而不是 effect：DOM 提交后同一拍里就能量到，
+  // 图片的 src 一次成型，不会先发一版请求再改。
+  useLayoutEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const measure = () => {
+      const rect = stage.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      setStageSize((prev) =>
+        prev && prev.width === rect.width && prev.height === rect.height
+          ? prev
+          : { width: rect.width, height: rect.height },
+      );
+      setStageMeasured(true);
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") {
+      // 没有 ResizeObserver 的环境（老浏览器、测试）也把状态收尾，
+      // 图片照常显示，只是按视口宽估档。
+      setStageMeasured(true);
+      return;
+    }
+    const observer = new ResizeObserver(measure);
+    observer.observe(stage);
+    return () => observer.disconnect();
+  }, []);
+
   // 滚轮缩放：覆盖层吃掉了页面滚动，普通滚轮直接用来缩放更符合看图习惯。
   useEffect(() => {
     const stage = stageRef.current;
@@ -165,10 +221,7 @@ export default function PhotoViewer({
       event.preventDefault();
       const factor = event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
       setZoom((current) => {
-        const scale = Math.max(
-          MIN_ZOOM,
-          Math.min(MAX_ZOOM, current * factor),
-        );
+        const scale = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, current * factor));
         setPan((panNow) => clampPan(panNow, scale));
         return scale;
       });
@@ -403,21 +456,23 @@ export default function PhotoViewer({
               这张图片无法显示
             </div>
           ) : (
-            <img
-              ref={imageRef}
-              src={previewUrl(current.id, previewWidth, current.version)}
-              alt={current.name}
-              onLoad={measureFitted}
-              onError={() => setFailed(true)}
-              draggable={false}
-              /* 照片落在暗场里要有一道柔和的投影把它托住，
-                 否则它和背景之间没有任何边界，读起来像贴上去的。 */
-              className="max-h-full max-w-full select-none object-contain shadow-[0_28px_90px_-24px_rgba(0,0,0,0.95)]"
-              style={{
-                transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
-                cursor: zoom > 1 ? "grab" : "default",
-              }}
-            />
+            stageMeasured && (
+              <img
+                ref={imageRef}
+                src={previewUrl(current.id, previewWidth, current.version)}
+                alt={current.name}
+                onLoad={measureFitted}
+                onError={() => setFailed(true)}
+                draggable={false}
+                /* 照片落在暗场里要有一道柔和的投影把它托住，
+                   否则它和背景之间没有任何边界，读起来像贴上去的。 */
+                className="max-h-full max-w-full select-none object-contain shadow-[0_28px_90px_-24px_rgba(0,0,0,0.95)]"
+                style={{
+                  transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+                  cursor: zoom > 1 ? "grab" : "default",
+                }}
+              />
+            )
           )}
         </div>
 

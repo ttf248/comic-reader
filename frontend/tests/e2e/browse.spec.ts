@@ -373,7 +373,10 @@ test("浏览器抽帧上传后封面可通过原资源 URL 显示", async ({ pag
     .locator(`[data-virtuoso-scroller] img[src^="/api/thumbs/${fileId}"]`)
     .first();
   // 封面 URL 带档位与版本号（?w=…&v=…），这里只认它的路径部分。
-  await expect(cover).toHaveAttribute("src", new RegExp(`^/api/thumbs/${fileId}`));
+  await expect(cover).toHaveAttribute(
+    "src",
+    new RegExp(`^/api/thumbs/${fileId}`),
+  );
   await expect
     .poll(() => cover.evaluate((image: HTMLImageElement) => image.naturalWidth))
     .toBeGreaterThan(0);
@@ -466,6 +469,42 @@ test("视频封面按原始比例完整显示，不裁切也不补黑边", async
     height: image.naturalHeight,
   }));
   expect(natural.width).toBe(natural.height);
+});
+
+test("照片大图预览按显示尺寸取档，URL 只有一个问号", async ({ page }) => {
+  const nodes = await scannedNodes(page.request);
+  const album = nodes.find((node) => node.name === "sample-album");
+  expect(album).toBeDefined();
+  await page.goto(albumUrl(album!));
+  const scroller = page.locator("[data-virtuoso-scroller]");
+  const tile = scroller.getByRole("button", {
+    name: "查看 page-1.png",
+    exact: true,
+  });
+  await expect(tile).toBeVisible();
+  await tile.click();
+
+  const viewer = page.getByRole("dialog", { name: /大图预览/ });
+  await expect(viewer).toBeVisible();
+  const image = viewer.locator("img");
+  await expect(image).toBeVisible();
+
+  // w 与 v 是两个独立参数：拼成 "?w=320?v=…" 时服务端把整串当成 w 的值，
+  // 预览图直接 400，浮层里显示的是「这张图片无法显示」。
+  const src = await image.getAttribute("src");
+  expect(src).not.toBeNull();
+  const query = new URL(src!, "http://localhost").searchParams;
+  expect([...query.keys()]).toEqual(["w", "v"]);
+  expect(query.get("w")).toMatch(/^\d+$/);
+  // 图真的加载出来了。
+  await expect
+    .poll(() =>
+      image.evaluate((element: HTMLImageElement) => element.naturalWidth),
+    )
+    .toBeGreaterThan(0);
+  // 档位按实际显示宽取，不按视口宽：素材只有 1×1 像素，档位再大也没有
+  // 更多细节，不该顺手要一档 4096（服务端会原样返回原图）。
+  expect(Number(query.get("w"))).toBeLessThanOrEqual(1920);
 });
 
 test("离开相册会取消浏览器抽帧且不继续上传封面", async ({ page }) => {

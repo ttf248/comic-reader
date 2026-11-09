@@ -23,7 +23,9 @@ export function previewUrl(
   version?: string,
 ): string {
   const w = Math.max(320, Math.min(4096, Math.round(width)));
-  const p = `/api/previews/${encodeURIComponent(fileId)}?w=${w}`;
-  const query = renditionQuery(version);
+  const p = `/api/previews/${encodeURIComponent(fileId)}`;
+  // 查询串统一由 renditionQuery 拼：自己手写 "?w=…" 再拼一个 "?v=…" 会
+  // 拼出两个问号，服务端把 "?v=…" 当成 w 的值，整张图直接 400。
+  const query = renditionQuery(version, w);
   return API_BASE ? `${API_BASE}${p}${query}` : `${p}${query}`;
 }
