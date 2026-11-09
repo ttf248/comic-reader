@@ -2,10 +2,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { RefreshIcon } from "../common/Icon";
 import { ApiError } from "../../api/client";
-import {
-  cacheApi,
-  type CacheRebuildScope,
-} from "../../api/cache";
+import { cacheApi, type CacheRebuildScope } from "../../api/cache";
 import { useCacheRebuild } from "../../hooks/useCacheRebuild";
 import { useUIStore } from "../../store/uiStore";
 
@@ -25,8 +22,10 @@ const SCOPE_LABEL: Record<CacheRebuildScope, string> = {
 function message(error: unknown) {
   if (error instanceof ApiError) {
     if (error.code === "invalid_rebuild_scope") return "重建范围不正确。";
-    if (error.code === "missing_rebuild_scope") return "请至少选择一类要重建的缓存。";
-    if (error.code === "library_not_ready") return "媒体库尚未就绪，请先完成扫描。";
+    if (error.code === "missing_rebuild_scope")
+      return "请至少选择一类要重建的缓存。";
+    if (error.code === "library_not_ready")
+      return "媒体库尚未就绪，请先完成扫描。";
   }
   return "操作失败，请重试。";
 }
@@ -104,7 +103,10 @@ export default function CacheRebuildPanel() {
       : 0;
 
   return (
-    <section aria-labelledby="cache-rebuild-heading" className="settings-section">
+    <section
+      aria-labelledby="cache-rebuild-heading"
+      className="settings-section"
+    >
       <div className="settings-section__heading">
         <span className="text-fg-muted">
           <RefreshIcon size={13} />
@@ -135,9 +137,10 @@ export default function CacheRebuildPanel() {
             ))}
           </div>
           <p className="text-meta text-fg-muted">
-            预览图按 1280 宽生成，全库一份约 2GB 磁盘，只有确实需要大图时才值得。
-            冷重建按本机实测约每秒 20 张：满库一万多项要十分钟上下，过程中照常
-            浏览不受影响。
+            预览图按 1280 宽生成，全库一份约 2GB
+            磁盘，只有确实需要大图时才值得。 冷重建按本机实测约每秒 20
+            张：满库一万多项要十分钟上下，缓存还在
+            的话会快得多。过程中照常浏览不受影响。
           </p>
         </fieldset>
 
@@ -157,7 +160,10 @@ export default function CacheRebuildPanel() {
             清空并重建
           </button>
           {rebuild.isRunning && (
-            <button className="btn btn-ghost" onClick={() => void cancelRebuild()}>
+            <button
+              className="btn btn-ghost"
+              onClick={() => void cancelRebuild()}
+            >
               取消
             </button>
           )}
@@ -190,7 +196,10 @@ export default function CacheRebuildPanel() {
         )}
 
         {rebuild.isComplete && (
-          <p className="text-meta text-success" data-testid="cache-rebuild-done">
+          <p
+            className="text-meta text-success"
+            data-testid="cache-rebuild-done"
+          >
             重建完成
             {progress?.failed ? ` · ${progress.failed} 项失败` : ""}
           </p>
@@ -199,7 +208,9 @@ export default function CacheRebuildPanel() {
           <p className="text-meta text-fg-muted">重建已取消</p>
         )}
         {rebuild.isError && (
-          <p className="text-meta text-danger">重建失败：{progress?.error ?? "未知错误"}</p>
+          <p className="text-meta text-danger">
+            重建失败：{progress?.error ?? "未知错误"}
+          </p>
         )}
         {error && <p className="text-meta text-danger">{error}</p>}
       </div>

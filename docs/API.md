@@ -371,7 +371,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 - `POST /api/cache/clear?scope=thumbs|converted|previews|faststart|transcode|all`：统一清空入口，按 scope 删 thumbs / converted / previews / faststart / transcode 缓存中对应的一类；scope=all 同时清理五类派生缓存和视频元数据内存摘要。响应 `{ scope, thumbs?, converted?, previews?, faststart?, transcode?, totalDeleted, totalFreedBytes }`，未涉及的 scope 字段省略。删除数量与释放字节只统计磁盘文件，不包含内存摘要。
 - `POST /api/cache/rebuild`：启动一次后台重建，请求体 `{ scopes: ["thumbs","previews"], previewWidth?: number }`。响应 `{ ok, jobId, reused, scopes, previewWidth }`；已有任务在跑时复用它（`reused=true`）。范围只接受 `thumbs` 与 `previews`，其它值返回 `400 invalid_rebuild_scope`，空范围返回 `400 missing_rebuild_scope`。
 - `GET /api/cache/rebuild/:id`：返回重建进度快照 `{ jobId, status, scopes, total, done, failed, elapsedMs, error? }`。`status` 取 `pending` / `running` / `complete` / `cancelled` / `error`。未知 jobId 返回 `404 rebuild_not_found`。
-- `GET /api/cache/rebuild/:id/events`：重建进度的 SSE 流，事件名与任务状态同名（`pending`/`running`/`complete`/`cancelled`/`error`），data 为上述快照；终态事件后连接关闭，每 15 秒发一次注释心跳。
+- `GET /api/cache/rebuild/:id/events`：重建进度的 SSE 流，事件名与任务状态同名（`pending`/`running`/`complete`/`cancelled`/`error`），data 为上述快照；终态事件后连接关闭，每 15 秒发一次注释心跳。`running` 事件在任务运行期间每 500ms 推一次快照，进度条不会停在起点；终态事件带最终计数。
 - `DELETE /api/cache/rebuild/:id`：取消正在进行的重建。任务已结束时返回 `{ ok: true, alreadyDone: true }`。
 
 重建把渲染图与预览图提前算好，免得清空之后每次打开页面都要在请求里现算。

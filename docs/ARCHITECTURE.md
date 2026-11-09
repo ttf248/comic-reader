@@ -84,6 +84,12 @@ ID 只能证明扫描时的身份。每次媒体、批量元数据及系统打�
 - 视频封面优先 ffmpeg（同文件合并、全局最多两个任务），按视频流时长定位、短视频取片头，无帧时从片头重试。等比缩小、不放大、不补边；没有服务端封面时浏览器通过 Range 抽帧并回传。
 - `useVideoCover` 的一次 effect 拥有探测、抽帧、上传整条链，切换/重试/卸载均取消并忽略迟到结果。探测 20 秒、抽帧 30 秒期限包含挂起请求；完成释放媒体元素、canvas、网络监听和计时器。
 
+### 缓存重建任务
+
+`internal/services/cache_rebuild.go` 的 `CacheRebuildService` 在后台重建派生缓存：枚举库快照里的相册与媒体（只在本机内部用绝对路径），按所选范围（缩略图 / 预览图）生成对应档位，video 不参与（ffmpeg 抽帧与转码代价另算）。任务状态机与 SSE 订阅复刻扫描任务的做法：终态事件后关闭连接。运行期间每 500ms 推一次进度快照 —— 逐项推太密，不推进度条就十分钟不动，看着像卡死了。
+
+前端 `components/settings/CacheRebuildPanel.tsx` 发起任务，`hooks/useCacheRebuild.ts` 订阅 SSE，`store/cacheRebuildStore.ts` 持有 jobId 与进度 —— 只持久化 jobId，进度每次连接重新获取。切走页面再回来，任务仍在跑，进度接得上。
+
 ### 视频元数据与转码
 
 `VideoInfoService` 优先 ffprobe JSON，缺失或失败则解析 ffmpeg 输入头；工具检查与探测均有超时，超时不缓存部分输出。成功摘要按规范化路径、大小、纳秒修改时间缓存到最多 512 项内存 LRU，同指纹 singleflight，失败可重试。单条/批量接口共用 DTO 与当前路径校验，批量保持顺序和逐项错误。

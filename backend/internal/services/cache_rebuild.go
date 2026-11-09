@@ -100,15 +100,20 @@ type CacheRebuildService struct {
 	catalog *ResourceCatalog
 	thumbs  *ThumbnailService
 
+	// progressInterval 是进度快照的推送间隔；测试里调小它，
+	// 免得为了等一条进度把用例拖成慢用例。
+	progressInterval time.Duration
+
 	closed bool
 }
 
 // NewCacheRebuildService 创建重建服务。
 func NewCacheRebuildService(catalog *ResourceCatalog, thumbs *ThumbnailService) *CacheRebuildService {
 	return &CacheRebuildService{
-		states:  make(map[string]*cacheRebuildState),
-		catalog: catalog,
-		thumbs:  thumbs,
+		states:           make(map[string]*cacheRebuildState),
+		catalog:          catalog,
+		thumbs:           thumbs,
+		progressInterval: rebuildProgressInterval,
 	}
 }
 
@@ -229,13 +234,20 @@ func (s *CacheRebuildService) run(state *cacheRebuildState, previewWidth int) {
 	s.mu.Lock()
 	state.status = RebuildStatusRunning
 	s.mu.Unlock()
-	s.publish(state, s.progressWithStatus(state, RebuildStatusRunning))
+	s.publish(state, s.progressSnapshot(state, RebuildStatusRunning))
 
 	files := s.mediaFiles()
 	s.mu.Lock()
 	state.total = len(files)
 	s.mu.Unlock()
-	s.publish(state, s.progressWithStatus(state, RebuildStatusRunning))
+	s.publish(state, s.progressSnapshot(state, RebuildStatusRunning))
+
+	// 进度推送：跑的过程中定期发快照。
+	//
+	// 逐项发太密（每秒几十条），不发又会让进度条十分钟不动 —— 重建要跑
+	// 好几分钟，用户对着不动的进度条只会以为卡死了。
+	stopProgress := s.startProgressTicker(state)
+	defer stopProgress()
 
 	// 并行重建：渲染图的解码与缩放是 CPU 密集的，单线程跑整个库要半小时。
 	// 并行度跟着核数走，ThumbnailService 自己的解码预算仍会兜住内存。
@@ -395,7 +407,7 @@ func (s *CacheRebuildService) finish(state *cacheRebuildState, status CacheRebui
 	state.status = status
 	state.err = err
 	s.mu.Unlock()
-	event := s.progressWithStatus(state, status)
+	event := s.progressSnapshot(state, status)
 	if err != nil && status == RebuildStatusError {
 		event.Error = err.Error()
 	}
@@ -406,6 +418,39 @@ func (s *CacheRebuildService) finish(state *cacheRebuildState, status CacheRebui
 		delete(state.subs, ch)
 	}
 	s.mu.Unlock()
+}
+
+// startProgressTicker 在任务运行期间定期推送进度快照。
+//
+// 返回的函数用来停掉推送：调用方保证它被调用（defer），推送协程不会
+// 泄漏，也不会在任务结束后继续往已关闭的通道里写。
+func (s *CacheRebuildService) startProgressTicker(state *cacheRebuildState) func() {
+	interval := s.progressInterval
+	if interval <= 0 {
+		interval = rebuildProgressInterval
+	}
+	stop := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-state.ctx.Done():
+				return
+			case <-ticker.C:
+				s.mu.Lock()
+				active := isActiveRebuild(state.status)
+				s.mu.Unlock()
+				if !active {
+					return
+				}
+				s.publish(state, s.progressSnapshot(state, RebuildStatusRunning))
+			}
+		}
+	}()
+	return func() { close(stop) }
 }
 
 func (s *CacheRebuildService) publish(state *cacheRebuildState, event CacheRebuildProgress) {
@@ -433,11 +478,22 @@ func (s *CacheRebuildService) progressLocked(state *cacheRebuildState) CacheRebu
 	}
 }
 
-func (s *CacheRebuildService) progressWithStatus(state *cacheRebuildState, status CacheRebuildStatus) CacheRebuildProgress {
+// progressSnapshot 取一份带锁的进度快照。
+//
+// 快照要读 worker 正在写的计数（done / total / failed），不能直接用
+// progressLocked —— 那个函数假定调用方已经持锁。
+func (s *CacheRebuildService) progressSnapshot(state *cacheRebuildState, status CacheRebuildStatus) CacheRebuildProgress {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	event := s.progressLocked(state)
 	event.Status = status
 	return event
 }
+
+// rebuildProgressInterval 是进度快照的推送间隔。
+//
+// 半秒一次：进度条要看着在动，又不至于每秒几十条把 SSE 通道塞满。
+const rebuildProgressInterval = 500 * time.Millisecond
 
 // normalizeRebuildScopes 归一化重建范围：去重、只保留认识的范围、保序。
 func normalizeRebuildScopes(scopes []string) []string {

@@ -1,6 +1,7 @@
 package services
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -108,6 +109,71 @@ func TestCacheRebuildReportsProgress(t *testing.T) {
 				}
 				return
 			}
+		case <-deadline:
+			t.Fatal("rebuild did not finish in time")
+		}
+	}
+}
+
+// 重建跑的过程中要持续推进度：进度条十分钟不动，用户只会以为卡死了。
+func TestCacheRebuildStreamsProgressWhileRunning(t *testing.T) {
+	// 素材要多到跑得完一个推送间隔：几张小图会在第一次推送之前就结束，
+	// 那样的用例测不出「跑的过程中有没有进度」。
+	root := t.TempDir()
+	albumPath := filepath.Join(root, "album")
+	if err := os.MkdirAll(albumPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := make([]string, 0, 24)
+	for i := 0; i < 24; i++ {
+		files = append(files, makeTestImage(t, albumPath, fmt.Sprintf("page-%02d.jpg", i), 2000, 1500))
+	}
+	catalog := NewResourceCatalog()
+	catalog.Publish(&models.ScanResult{
+		Roots: []string{root},
+		Albums: []models.Album{{
+			Type:       "album",
+			Path:       albumPath,
+			SourceRoot: root,
+			ImageFiles: files,
+			CoverImage: files[0],
+		}},
+	}, []string{root})
+	thumbs, err := NewThumbnailService(ThumbnailOptions{CacheDir: t.TempDir()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc := NewCacheRebuildService(catalog, thumbs)
+	svc.progressInterval = 10 * time.Millisecond
+	jobID, _, err := svc.Start([]string{CacheScopeThumbs}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	events, unsubscribe, ok := svc.Subscribe(jobID)
+	if !ok {
+		t.Fatal("subscribe should succeed")
+	}
+	defer unsubscribe()
+
+	running := 0
+	deadline := time.After(30 * time.Second)
+	for {
+		select {
+		case ev, open := <-events:
+			if !open {
+				t.Fatal("event stream closed before terminal state")
+			}
+			if ev.Status == RebuildStatusPending || ev.Status == RebuildStatusRunning {
+				// pending 是订阅时的初始快照，running 才是推进度的推送。
+				if ev.Status == RebuildStatusRunning {
+					running++
+				}
+				continue
+			}
+			if running == 0 {
+				t.Fatal("no running progress event before the terminal one")
+			}
+			return
 		case <-deadline:
 			t.Fatal("rebuild did not finish in time")
 		}
