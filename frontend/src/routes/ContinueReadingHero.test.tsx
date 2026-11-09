@@ -132,12 +132,14 @@ describe("ContinueReadingHero", () => {
   });
 });
 
-it("主封面使用清晰预览，加载失败后仍可继续阅读", () => {
+it("主封面取够宽的渲染图，加载失败后仍可继续阅读", () => {
   const { container, onContinue } = renderHero([makeCard("/a", "A", 5, 20)]);
   const cover = container.querySelector(
     ".hero-cover img",
   ) as HTMLImageElement;
-  expect(cover.src).toContain("/api/previews/");
+  // hero 封面宽 176~260px，渲染图按档位取，宽度必须够这个槽位。
+  expect(cover.src).toContain("/api/thumbs/");
+  expect(cover.src).toContain("w=");
   fireEvent.error(cover);
   expect(container.querySelector(".hero-cover img")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "继续阅读「A」" }));

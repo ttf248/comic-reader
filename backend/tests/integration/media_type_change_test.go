@@ -37,7 +37,7 @@ func TestMediaFileReplacedByDirectoryIsUnavailable(t *testing.T) {
 				t.Fatal("fixture file was not indexed")
 			}
 			thumbs, err := services.NewThumbnailService(services.ThumbnailOptions{
-				CacheDir: filepath.Join(h.cache, "type-change"), Width: 16, Height: 16, MaxAgeDays: 30,
+				CacheDir: filepath.Join(h.cache, "type-change"), MaxAgeDays: 30,
 			})
 			if err != nil {
 				t.Fatal(err)
@@ -51,7 +51,7 @@ func TestMediaFileReplacedByDirectoryIsUnavailable(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			if _, err := thumbs.GetOrCreate(path); err != nil {
+			if _, err := thumbs.GetOrCreate(path, 320); err != nil {
 				t.Fatal(err)
 			}
 			// 只替换当前夹具中的文件，原文件保留为同目录的普通文件。

@@ -29,14 +29,8 @@ var ErrImageConvertUnavailable = errors.New("image conversion unavailable")
 // 调用方继续按"不支持的格式"处理（前端显示占位图而不是破图）。
 type ImageConverter struct {
 	ffmpegPath string
-	width      int
-	height     int
 	quality    int
 	timeout    time.Duration
-	// scaleW/scaleH 是 ffmpeg 侧的解码尺寸（默认缩略图的两倍），
-	// 留出余量给 Go 侧再做一次高质量缩放。
-	scaleW int
-	scaleH int
 
 	// 可用性探测缓存：整个 service 生命周期只跑一次 `ffmpeg -version`。
 	availOnce sync.Once
@@ -45,26 +39,14 @@ type ImageConverter struct {
 
 // ImageConverterOptions 构造选项。
 type ImageConverterOptions struct {
-	FFmpegPath  string        // ffmpeg 可执行文件路径；为空则不可用
-	Width       int           // 缩略图宽度，默认 320
-	Height      int           // 缩略图高度，默认 350
-	Quality     int           // JPEG 质量 1-100，默认 85
-	Timeout     time.Duration // 单次转换超时，默认 10s
-	ScaleWidth  int           // 内部解码尺寸，默认宽高的两倍
-	ScaleHeight int
+	FFmpegPath string        // ffmpeg 可执行文件路径；为空则不可用
+	Quality    int           // JPEG 质量 1-100，默认 85
+	Timeout    time.Duration // 单次转换超时，默认 10s
 }
 
 // NewImageConverter 构造转换器。FFmpegPath 为空时构造仍成功，
 // 但 Available()=false，Convert 一律返回 ErrImageConvertUnavailable。
 func NewImageConverter(opts ImageConverterOptions) *ImageConverter {
-	w := opts.Width
-	if w <= 0 {
-		w = 320
-	}
-	h := opts.Height
-	if h <= 0 {
-		h = 350
-	}
 	q := opts.Quality
 	if q <= 0 {
 		q = jpegQuality
@@ -73,22 +55,10 @@ func NewImageConverter(opts ImageConverterOptions) *ImageConverter {
 	if t <= 0 {
 		t = 10 * time.Second
 	}
-	sw := opts.ScaleWidth
-	if sw <= 0 {
-		sw = 2 * w
-	}
-	sh := opts.ScaleHeight
-	if sh <= 0 {
-		sh = 2 * h
-	}
 	return &ImageConverter{
 		ffmpegPath: opts.FFmpegPath,
-		width:      w,
-		height:     h,
 		quality:    q,
 		timeout:    t,
-		scaleW:     sw,
-		scaleH:     sh,
 	}
 }
 
@@ -107,12 +77,22 @@ func (c *ImageConverter) Available() bool {
 // Convert 把图片转成可解码的位图（HEIC/HEIF → JPEG）。
 //
 // 返回的是解码后的图像，缩放与编码仍由缩略图服务统一走同一条路径，
-// 保证 HEIC 缩略图与其它格式的尺寸、质量完全一致。
+// 保证 HEIC 渲染图与其它格式的尺寸、质量完全一致。
+//
+// targetWidth 是这次要渲染的档位宽度：ffmpeg 侧按它的两倍解码，留出
+// 余量给 Go 侧再做一次高质量缩放。直接按原分辨率解码既慢又费内存。
 //
 // 失败时返回 ErrImageConvertUnavailable（ffmpeg 不可用 / 转换失败），
 // 调用方应回退到"不支持的格式"。
-func (c *ImageConverter) Convert(absPath string) (image.Image, error) {
-	img, _, err := c.convert(absPath, c.scaleW, c.scaleH)
+func (c *ImageConverter) Convert(absPath string, targetWidth int) (image.Image, error) {
+	scale := 2 * targetWidth
+	if scale < 640 {
+		scale = 640
+	}
+	if scale > 2*convertedMaxDim {
+		scale = 2 * convertedMaxDim
+	}
+	img, _, err := c.convert(absPath, scale, scale)
 	return img, err
 }
 

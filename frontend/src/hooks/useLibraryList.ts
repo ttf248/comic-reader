@@ -107,5 +107,6 @@ export function listYearGroups(
     videoTotal: group.videoTotal,
     totalFiles: group.imageTotal + group.videoTotal,
     coverPreviewPaths: group.coverImage ? [group.coverImage] : [],
+    coverPreviewVersions: group.coverImageVersion ? [group.coverImageVersion] : [],
   }));
 }

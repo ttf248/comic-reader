@@ -1,9 +1,7 @@
 package handlers
 
 import (
-	"crypto/sha256"
 	"errors"
-	"fmt"
 
 	"github.com/gofiber/fiber/v2"
 
@@ -12,7 +10,21 @@ import (
 	"github.com/tianlongxiang/local-gallery/internal/services"
 )
 
-// ThumbHandler 返回 JPEG 缩略图。稳定资源 URL 每次重新验证；ETag 基于实际响应字节。
+// ThumbHandler 返回 JPEG 渲染图。
+//
+//	GET /api/thumbs/:id?w=640&v=<内容版本号>
+//
+// w 是渲染档位的目标宽度，会向上对齐到固定档位阶梯（320/640/1280/1920/
+// 2560/4096）。渲染不裁剪，输出宽高比恒等于源图比例，所以同一张图在
+// 各档之间比例一致，前端可以用 srcset 让浏览器按显示宽度自选。
+//
+// v 是源文件的内容版本号（mtime + size + 渲染算法版本）。带上的请求若与
+// 当前版本一致，说明这个 URL 的字节已经定死，服务端回 immutable，
+// 浏览器可以长期缓存；不带或对不上则保持每次重新验证。
+//
+// ETag 由版本号与档位派生：条件请求只要一次 stat 加一次字符串比较，
+// 不必先把整张图读进内存算哈希。
+//
 // 视频封面尚未生成时返回不可缓存的 video_cover_missing 错误。
 func ThumbHandler(svc *services.ThumbnailService) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -20,8 +32,26 @@ func ThumbHandler(svc *services.ThumbnailService) fiber.Handler {
 		if path == "" {
 			return httputil.BadRequest(c, "missing_path", "missing 'path' query parameter")
 		}
+		width, err := renditionWidth(c, services.DefaultRenditionWidth)
+		if err != nil {
+			return httputil.BadRequest(c, "invalid_render_width", err.Error())
+		}
 
-		data, err := svc.GetOrCreate(path)
+		version, versionErr := services.MediaVersion(path)
+		if versionErr != nil {
+			if errors.Is(versionErr, services.ErrSourceMissing) {
+				return httputil.NotFound(c, "source_not_found", "source not found")
+			}
+			return httputil.Internal(c, "thumbnail_error", "thumbnail generation failed")
+		}
+		etag := services.RenditionETag(version, width)
+		if mediaIfNoneMatch(mediaIfNoneMatchValue(c), etag) {
+			c.Set("ETag", etag)
+			c.Set("Cache-Control", renditionCacheControl(c, version))
+			return c.SendStatus(fiber.StatusNotModified)
+		}
+
+		data, err := svc.GetOrCreate(path, width)
 		if err != nil {
 			switch {
 			case errors.Is(err, services.ErrSourceMissing):
@@ -37,13 +67,8 @@ func ThumbHandler(svc *services.ThumbnailService) fiber.Handler {
 			}
 		}
 
-		// 对实际响应字节计算 ETag，覆盖尺寸变化和同一视频的封面重写。
-		etag := fmt.Sprintf(`"%x"`, sha256.Sum256(data))
 		c.Set("ETag", etag)
-		c.Set("Cache-Control", "private, no-cache")
-		if mediaIfNoneMatch(mediaIfNoneMatchValue(c), etag) {
-			return c.SendStatus(fiber.StatusNotModified)
-		}
+		c.Set("Cache-Control", renditionCacheControl(c, version))
 		c.Set("Content-Type", "image/jpeg")
 		return c.Send(data)
 	}

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { thumbUrl } from "../../api/thumbs";
+import RenditionImage from "../common/RenditionImage";
 import VideoCoverImage from "../common/VideoCoverImage";
 import { FolderIcon } from "../common/Icon";
 import type { CardData } from "./AlbumCard";
@@ -7,7 +7,13 @@ import type { CardData } from "./AlbumCard";
 interface Props {
   data: Pick<
     CardData,
-    "coverKind" | "coverPath" | "covers" | "title" | "variant"
+    | "coverKind"
+    | "coverPath"
+    | "covers"
+    | "coverVersion"
+    | "coverVersions"
+    | "title"
+    | "variant"
   >;
   loading?: "lazy" | "eager";
   /**
@@ -51,6 +57,8 @@ export default function CardCover({
           <VideoCoverImage
             key={paths[0]}
             videoPath={paths[0]}
+            version={data.coverVersion}
+            displayWidth={260}
             loading={loading}
             alt={data.title}
             showRetryAction={false}
@@ -65,6 +73,7 @@ export default function CardCover({
       <CoverImage
         key={paths[0]}
         path={paths[0]}
+        version={data.coverVersion}
         alt={data.title}
         loading={loading}
         /* 相册封面统一偏上取景：漫画封面的标题与人物头部在上方，
@@ -82,12 +91,18 @@ export default function CardCover({
       }
       data-testid="card-cover-mosaic"
     >
-      {paths.map((path) => (
+      {paths.map((path, index) => (
         <div
           key={path}
           className="cover-mosaic__cell min-w-0 min-h-0 overflow-hidden bg-bg-subtle"
         >
-          <CoverImage path={path} alt="" loading={loading} />
+          <CoverImage
+            path={path}
+            version={data.coverVersions?.[index]}
+            alt=""
+            loading={loading}
+            displayWidth={130}
+          />
         </div>
       ))}
     </div>
@@ -109,25 +124,30 @@ function getCoverPaths(
 
 function CoverImage({
   path,
+  version,
   alt,
   loading,
   position = "50% 50%",
+  displayWidth = 260,
 }: {
   path: string;
+  version?: string;
   alt: string;
   loading: "lazy" | "eager";
   position?: string;
+  displayWidth?: number;
 }) {
   const [failed, setFailed] = useState(false);
 
   if (failed) return <CoverPlaceholder />;
 
   return (
-    <img
-      src={thumbUrl(path)}
+    <RenditionImage
+      fileId={path}
+      version={version}
       alt={alt}
+      displayWidth={displayWidth}
       loading={loading}
-      decoding="async"
       onError={() => setFailed(true)}
       style={{ objectPosition: position }}
       className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"

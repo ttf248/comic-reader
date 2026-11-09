@@ -22,7 +22,7 @@ func TestMediaConditionalETagMatching(t *testing.T) {
 	}
 	app, videoURL := mediaUpdateRoute(t, h, videoPath)
 	_, validator := middleware.PathSafetyMiddleware([]string{h.root})
-	thumbs, err := services.NewThumbnailService(services.ThumbnailOptions{CacheDir: t.TempDir(), Width: 16, Height: 16})
+	thumbs, err := services.NewThumbnailService(services.ThumbnailOptions{CacheDir: t.TempDir()})
 	if err != nil {
 		t.Fatal(err)
 	}

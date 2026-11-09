@@ -67,6 +67,13 @@ export interface LibraryNodeSummary {
   sourceName?: string;
   coverImage?: string;
   coverImages: string[];
+  /**
+   * 封面文件的内容版本号，与 coverImage / coverImages 一一对应。
+   * 前端把它拼进封面 URL，服务端据此回 immutable，重复打开页面时
+   * 封面不用再走网络。
+   */
+  coverImageVersion?: string;
+  coverImageVersions?: string[];
   coverKind?: "image" | "video";
   imageCount?: number;
   videoCount?: number;
@@ -118,6 +125,11 @@ export interface LibraryMediaItem {
   /** 原始像素宽高；未知时为 0，照片墙据此按真实宽高比排布。 */
   width?: number;
   height?: number;
+  /**
+   * 媒体内容版本号（源文件 mtime + size + 渲染算法版本）。
+   * 前端把它拼进渲染图 URL，服务端据此回 immutable。
+   */
+  version?: string;
 }
 
 export interface LibraryTagSummary {
@@ -125,6 +137,9 @@ export interface LibraryTagSummary {
   albumCount: number;
   coverImage?: string;
   coverImages: string[];
+  /** 封面内容版本号，与 coverImage / coverImages 一一对应。 */
+  coverImageVersion?: string;
+  coverImageVersions?: string[];
   /**
    * 该标签在两种属性下的册数。
    * 列表接口按当前属性收敛，只要一个数就够；按名解析时两个都要，
@@ -201,8 +216,15 @@ export interface LibraryListPage extends LibraryPage<LibraryListItem> {
     videoTotal: number;
     target: LibraryListItem;
     coverImage?: string;
+    coverImageVersion?: string;
   }[];
-  series: { id: string; name: string; count: number; coverImage?: string }[];
+  series: {
+    id: string;
+    name: string;
+    count: number;
+    coverImage?: string;
+    coverImageVersion?: string;
+  }[];
   imageTotal: number;
   videoTotal: number;
 }

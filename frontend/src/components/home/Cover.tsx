@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { thumbUrl } from "../../api/thumbs";
-import { previewUrl } from "../../api/images";
+import RenditionImage from "../common/RenditionImage";
 import { FolderIcon } from "../common/Icon";
 import type { CardData } from "../album/AlbumGrid";
 
@@ -20,17 +19,14 @@ export default function Cover({
   large?: boolean;
 }) {
   const [failedSource, setFailedSource] = useState<string | null>(null);
-  const src = card.coverPath
-    ? large && card.coverKind !== "video"
-      ? previewUrl(card.coverPath, 640)
-      : thumbUrl(card.coverPath)
-    : "";
+  const src = card.coverPath;
   return src && src !== failedSource ? (
-    <img
-      src={src}
+    <RenditionImage
+      fileId={src}
+      version={card.coverVersion}
       alt=""
+      displayWidth={large ? 160 : 48}
       loading={large ? "eager" : "lazy"}
-      decoding="async"
       onError={() => setFailedSource(src)}
       className="w-full h-full object-cover object-[50%_30%]"
     />

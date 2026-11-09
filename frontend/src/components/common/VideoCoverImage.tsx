@@ -1,9 +1,19 @@
 import { useVideoCover } from "../../hooks/useVideoCover";
+import { pickRenditionWidth } from "../../utils/rendition";
 import { FolderIcon, PlayFilledIcon } from "./Icon";
 
 interface Props {
   /** 视频文件资源 ID（也是 thumbUrl 要请求的标识） */
   videoPath: string;
+  /** 视频文件的内容版本号；带上之后封面可被浏览器长期缓存。 */
+  version?: string;
+  /**
+   * 槽位的显示宽度（CSS 像素）。
+   *
+   * 封面按这个宽度取档：小格子不必下载大封面，照片墙的瓦片也不会
+   * 拿到不够宽的一档而发虚。
+   */
+  displayWidth?: number;
   /** 是否要 lazy（与 <img loading> 语义一致） */
   loading?: "lazy" | "eager";
   alt?: string;
@@ -31,6 +41,8 @@ interface Props {
  */
 export default function VideoCoverImage({
   videoPath,
+  version,
+  displayWidth,
   loading = "lazy",
   alt = "",
   onRetry,
@@ -38,7 +50,10 @@ export default function VideoCoverImage({
   showRetryAction = true,
   fit = "contain",
 }: Props) {
-  const { status, url, retry, enabled } = useVideoCover(videoPath);
+  const { status, url, retry, enabled } = useVideoCover(videoPath, {
+    version,
+    width: pickRenditionWidth(displayWidth ?? 320),
+  });
 
   if (!enabled) {
     return (

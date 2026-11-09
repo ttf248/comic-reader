@@ -49,7 +49,7 @@ func TestImageConverterUnavailableWithoutFFmpeg(t *testing.T) {
 	if conv.Available() {
 		t.Fatal("空 ffmpeg 路径不应报告可用")
 	}
-	if _, err := conv.Convert("whatever.heic"); err == nil {
+	if _, err := conv.Convert("whatever.heic", 320); err == nil {
 		t.Fatal("不可用时应返回错误")
 	}
 }
@@ -73,15 +73,13 @@ func TestImageConverterConvertsHEIC(t *testing.T) {
 
 	conv := NewImageConverter(ImageConverterOptions{
 		FFmpegPath: ffmpeg,
-		Width:      320,
-		Height:     350,
 		Quality:    85,
 		Timeout:    30_000_000_000,
 	})
 	if !conv.Available() {
 		t.Fatalf("ffmpeg 不可用: %s", ffmpeg)
 	}
-	img, err := conv.Convert(sample)
+	img, err := conv.Convert(sample, 320)
 	if err != nil {
 		t.Fatalf("转换 HEIC 失败: %v", err)
 	}
@@ -120,19 +118,15 @@ func TestThumbnailServiceFallsBackToConverter(t *testing.T) {
 
 	svc, err := NewThumbnailService(ThumbnailOptions{
 		CacheDir: filepath.Join(dir, "cache"),
-		Width:    320,
-		Height:   350,
 		ImageConverter: NewImageConverter(ImageConverterOptions{
 			FFmpegPath: ffmpeg,
-			Width:      320,
-			Height:     350,
 			Timeout:    30_000_000_000,
 		}),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, err := svc.GetOrCreate(local)
+	out, err := svc.GetOrCreate(local, 320)
 	if err != nil {
 		t.Fatalf("HEIC 缩略图应能生成: %v", err)
 	}

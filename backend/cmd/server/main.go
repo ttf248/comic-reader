@@ -71,7 +71,7 @@ func main() {
 		}
 	}
 	log.Printf("  CacheDir:  <configured>")
-	log.Printf("  Thumbnail: %dx%d", cfg.ThumbSizeW, cfg.ThumbSizeH)
+	log.Printf("  Rendition: %v", services.RenditionWidths)
 	log.Printf("  Listen:    %s", cfg.Addr())
 	log.Printf("  Access:    %s", cfg.AccessMode)
 
@@ -108,8 +108,6 @@ func main() {
 	// ThumbnailService 会自动回退到原"客户端抽帧 + 上传"流程。
 	videoCover := services.NewVideoCoverExtractor(services.VideoCoverOptions{
 		FFmpegPath: cfg.FFmpegPath,
-		Width:      cfg.ThumbSizeW,
-		Height:     cfg.ThumbSizeH,
 		Quality:    85,
 		Timeout:    10 * time.Second,
 	})
@@ -123,8 +121,6 @@ func main() {
 	// ffmpeg 不可用时这类文件按"不支持的格式"处理(前端显示占位图)。
 	imageConverter := services.NewImageConverter(services.ImageConverterOptions{
 		FFmpegPath: cfg.FFmpegPath,
-		Width:      cfg.ThumbSizeW,
-		Height:     cfg.ThumbSizeH,
 		Quality:    85,
 		Timeout:    10 * time.Second,
 	})
@@ -213,8 +209,6 @@ func main() {
 		CacheDir:       cacheLayout.ThumbnailDir,
 		ConvertedDir:   cacheLayout.ConvertedDir,
 		PreviewDir:     cacheLayout.PreviewDir,
-		Width:          cfg.ThumbSizeW,
-		Height:         cfg.ThumbSizeH,
 		MaxAgeDays:     cfg.CacheMaxAgeDays,
 		LRUSize:        cfg.ThumbCacheSize,
 		VideoCover:     videoCover,
@@ -286,19 +280,15 @@ func main() {
 	// 会明确返回 requiresRestart，避免只切换部分实例造成缓存与元数据分裂。
 	mgr.OnChange("thumbnail", func(snapshot *config.Config) {
 		if err := thumbs.UpdateOptions(services.ThumbnailOptions{
-			Width:      snapshot.ThumbSizeW,
-			Height:     snapshot.ThumbSizeH,
 			MaxAgeDays: snapshot.CacheMaxAgeDays,
 			LRUSize:    snapshot.ThumbCacheSize,
 			VideoCover: services.NewVideoCoverExtractor(services.VideoCoverOptions{
 				FFmpegPath: cfg.FFmpegPath,
-				Width:      snapshot.ThumbSizeW, Height: snapshot.ThumbSizeH,
-				Quality: 85, Timeout: 10 * time.Second,
+				Quality:   85, Timeout: 10 * time.Second,
 			}),
 			ImageConverter: services.NewImageConverter(services.ImageConverterOptions{
 				FFmpegPath: cfg.FFmpegPath,
-				Width:      snapshot.ThumbSizeW, Height: snapshot.ThumbSizeH,
-				Quality: 85, Timeout: 10 * time.Second,
+				Quality:   85, Timeout: 10 * time.Second,
 			}),
 		}); err != nil {
 			log.Printf("警告：缩略图服务热更新失败: %v", err)

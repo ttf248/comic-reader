@@ -36,14 +36,18 @@
 
 ### ETag / 304 协商
 
-`/api/thumbs/:fileId` 和 `/api/media/:fileId` 在 200 响应中带 `ETag` 头，值为**双引号包裹**的派生哈希：
+`/api/thumbs/:fileId`、`/api/previews/:fileId` 和 `/api/media/:fileId` 在 200 响应中带 `ETag` 头，值为**双引号包裹**的派生标识：
 
-- 缩略图：`"<sha256(JPEG 响应字节)>"`，尺寸变化或视频封面重写都会重新验证实际内容
+- 渲染图（缩略图 / 预览图）：`"<内容版本号>-<档位宽度>"`，内容版本号形如 `<mtime_ns>-<size>-r<算法版本>`
 - 媒体文件：`"<hex_mtime_ns>-<hex_size>"`
+
+渲染图的 ETag 由源文件版本与渲染档位派生，不再对响应字节做哈希：同一个版本与档位渲染出的字节是确定的，因此条件请求只要一次 stat 加一次字符串比较，不必先把整张图读进内存算 sha256。
 
 客户端带 `If-None-Match` 命中当前 ETag 时返回 `304 Not Modified` + 空 body。按 [RFC 9110 §13.1.2](https://www.rfc-editor.org/rfc/rfc9110.html#section-13.1.2) 使用弱比较：当前 ETag 为 `"abc"` 时，`W/"abc"`、`"old", "abc"` 均可命中；`*` 对存在的资源也返回 304。重复字段行按逗号列表合并，引号内的逗号属于标识内容。标识仍须带双引号，格式错误的列表不命中；该弱比较不用于 If-Range。
 
-缩略图先取得内存或磁盘缓存中的实际 JPEG 再校验；原图和视频以实际发送文件的元数据校验。源文件不存在或失效时先返回 404，通配符不绕过源校验。原图、视频和缩略图使用 `Cache-Control: private, no-cache`，成功及 304 响应保留此策略；原图和视频的 200、206、304 均携带 ETag。缓存条件命中先于 Range 判断，304 不携带 Content-Range。
+源文件不存在或失效时先返回 404，通配符不绕过源校验。原图、视频和渲染图默认使用 `Cache-Control: private, no-cache`，成功及 304 响应保留此策略；原图和视频的 200、206、304 均携带 ETag。缓存条件命中先于 Range 判断，304 不携带 Content-Range。
+
+渲染图另有一种可长期缓存的形态：请求带上 `?v=<内容版本号>` 且该版本号与当前源文件一致时，响应改为 `Cache-Control: private, max-age=31536000, immutable`。版本号一致意味着源文件没动、渲染算法没变，这个 URL 的字节已经定死，浏览器可以长期缓存 —— 重复打开页面时这张图一次网络请求都不发。版本号对不上（源文件刚被改写）或没带时，仍按每次重新验证处理，不会给出陈旧内容。
 
 原图和视频在没有 `If-None-Match` 时支持 `If-Modified-Since`，按文件修改时间的秒精度返回 304，并保留 ETag、Last-Modified 与缓存策略。两者同时出现时以 `If-None-Match` 为准；ETag 未命中不会被时间条件再次判为 304。304 不携带媒体字节，客户端仍可复用已验证的内容。
 
@@ -53,6 +57,8 @@
 
 - 源文件 `mtime` 变化（修改、覆盖、抽取新封面）
 - 源文件 `size` 变化
+- 渲染算法版本变化（缩放算法、JPEG 质量或档位集合调整）
+- 渲染档位宽度变化（同一个 URL 带不同 `w` 即是不同产物）
 - 视频经转码后由转码缓存文件代替原文件，ETag 派生的是实际发送文件
 - 视频经 faststart remux 后同上
 
@@ -94,7 +100,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 读取或更新 `config.yaml`。与下文的目录选择接口同属允许处理绝对路径的本机配置管理例外，只接受服务端回环地址请求；远程请求返回 `403 local_access_required`。
 
-可更新字段：`mediaRoots`、`host`、`port`、`accessMode`、`accessToken`、`cacheDir`、`thumbSizeW`、`thumbSizeH`、`thumbCacheSize`、`cacheMaxAgeDays`、`cacheMaxSizeMB`、`ffmpegPath`、`allowOsOpen`、`staticDir`、`skipHidden`、`excludePatterns`、`systemFiles`。`accessToken` 永不在 GET/PUT 响应中回显，只返回 `accessTokenConfigured`。
+可更新字段：`mediaRoots`、`host`、`port`、`accessMode`、`accessToken`、`cacheDir`、`thumbCacheSize`、`cacheMaxAgeDays`、`cacheMaxSizeMB`、`ffmpegPath`、`allowOsOpen`、`staticDir`、`skipHidden`、`excludePatterns`、`systemFiles`。`accessToken` 永不在 GET/PUT 响应中回显，只返回 `accessTokenConfigured`。
 
 `mediaRoots` 的每个条目同时携带目录路径与它的内容属性：`{ "path": "E:\照片", "kind": "photo" }`。`kind` 只有 `photo` 与 `comic` 两种且互斥，决定该目录里的相册与集合按哪种方式浏览、归入哪个工作台。条目写成映射但省略 `kind` 时按 `photo` 处理；非法 `kind` 返回 `400 invalid_config`。只写一个路径字符串的旧写法不再支持，启动时直接报错指出新写法。属性可热更新：它决定「相册用什么方式打开」与列表归属，保存后与路径变更一样触发自动扫描。
 
@@ -102,7 +108,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 媒体根配置保存成功后，若规范路径或内容属性发生变化，服务端取消旧 generation、清库并启动最新非空根的扫描；根顺序和等价路径调整不触发扫描，空根只清库。`PUT /api/config` 成功响应增加可选 `scanId` 与 `scanStartError`：`scanId` 可交给现有 SSE 进度接口；`scanStartError=scan_start_failed` 表示配置已保存但自动扫描未能启动，可手动重试，不能将其当作配置保存失败重放。扫描属于进程生命周期，不随保存请求断连取消。
 
-`host`、`port`、`cacheDir`、`ffmpegPath` 和 `staticDir` 修改后需要重启；`accessMode` 与 `accessToken` 可热更新，其中 LAN 令牌必须是 32-256 个无空白字符。缩略图尺寸、LRU、保留天数和 `allowOsOpen` 也可热更新，媒体根变更自动触发扫描，扫描排除规则在下一次扫描生效。
+`host`、`port`、`cacheDir`、`ffmpegPath` 和 `staticDir` 修改后需要重启；`accessMode` 与 `accessToken` 可热更新，其中 LAN 令牌必须是 32-256 个无空白字符。渲染图的档位阶梯是固定实现约定（320/640/1280/1920/2560/4096），不可配置。LRU、保留天数和 `allowOsOpen` 可热更新，媒体根变更自动触发扫描，扫描排除规则在下一次扫描生效。
 
 `cacheMaxSizeMB` 为整数 MiB，0～1048576，默认 10240；0 不限制容量。与 `cacheMaxAgeDays` 一起在下一轮自动维护生效，无需重启。启动时及每小时检查一次，只删除派生目录中的完整缓存文件；十分钟内的新文件与临时产物保留，因此容量是软上限。状态数据不参与清理。
 
@@ -229,15 +235,15 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 浏览器原生解不了的图片格式（HEIC/HEIF/TIFF）不按原文件发送：服务端用 ffmpeg 转成 JPEG（最长边 2560）后再返回，`Content-Type` 为 `image/jpeg`，ETag 仍取源文件的 mtime+size，因此条件请求照常协商 304。转换结果按源文件 mtime+size 派生的键缓存在 `derived/converted/`，第二次访问直接命中缓存。ffmpeg 不可用或转换失败时返回 `415 unsupported_image_format`，前端显示"该图片无法显示"，不再把浏览器解不了的原文件当图片发出去。
 
-### `GET /api/previews/:fileId?w=<像素宽度>`
+### `GET /api/previews/:fileId?w=<像素宽度>&v=<内容版本号>`
 
-返回按宽度等比缩放的预览图（JPEG）。`w` 缺省 1600，非数字或非正数返回 `400 invalid_preview_width`；宽度会被夹到 320～4096。
+返回按宽度等比缩放的预览图（JPEG）。`w` 缺省 1600，非数字或非正数返回 `400 invalid_preview_width`；宽度会**向上对齐**到固定档位阶梯 320 / 640 / 1280 / 1920 / 2560 / 4096。
 
 阅读器连续模式按视口宽度展示图片。直接发原图的话，手机照片动辄 12MP / 5MB，一屏就是几 MB，整本翻下来是 GB 级流量，浏览器还要为每张原图解码出几十 MB 位图。预览图按请求宽度缩放后约 200–400KB。
 
 源图比 `w` 还窄时直接返回原图字节（不重新编码，零画质损失）；需要缩放时输出 JPEG（q85），带 alpha 的 PNG 先压到白底再编码，避免透明区域变成黑块。HEIC/HEIF/TIFF 仍走 ffmpeg 转换路径。
 
-响应 `Content-Type: image/jpeg`，ETag 由源文件的 mtime+size+目标宽度派生；带 `If-None-Match` 命中时返回 `304`，不重复传图。预览图按源文件版本与宽度分别缓存在 `derived/previews/`，可在设置页单独清理。
+响应 `Content-Type: image/jpeg`，ETag 由源文件的 mtime+size+渲染算法版本+目标档位派生；带 `If-None-Match` 命中时返回 `304`，不重复传图。条件判定在生成之前完成，冷缓存上的 304 也不必付出解码代价。预览图按源文件版本与档位分别缓存在 `derived/previews/`，可在设置页单独清理。带 `v` 且版本一致时响应 `Cache-Control: private, max-age=31536000, immutable`。
 
 | 状态 | code                       | 含义                           |
 | ---- | -------------------------- | ------------------------------ |
@@ -246,15 +252,19 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 | 415  | `unsupported_image_format` | 不是受支持的图片，例如视频文件 |
 | 500  | `preview_failed`           | 无法生成预览图                 |
 
-### `GET /api/thumbs/:fileId`
+### `GET /api/thumbs/:fileId?w=<像素宽度>&v=<内容版本号>`
 
-返回 JPEG 缩略图。视频尚无封面时返回 `404` 和 `code: video_cover_missing`。
+返回 JPEG 渲染图。`w` 缺省 640，非数字或非正数返回 `400 invalid_render_width`；宽度会**向上对齐**到固定档位阶梯 320 / 640 / 1280 / 1920 / 2560 / 4096。视频尚无封面时返回 `404` 和 `code: video_cover_missing`。
 
 源路径不存在或不再是普通文件时返回 `404 source_not_found`；先校验源类型，再查询内存/磁盘缓存或尝试抽帧，不将目录误报为 `video_cover_missing`。
 
 纯 Go 解码器不支持的图片格式（HEIC/HEIF 等 iPhone 照片）优先用 ffmpeg 转换后生成缩略图；ffmpeg 不可用或转换失败时返回 `415 unsupported_format`，前端显示占位图而不是破图。
 
-缩略图与视频封面都等比缩放到不超过配置尺寸，不补边、不放大，因此返回的 JPEG 尺寸随源文件宽高比变化（例如 16:9 视频返回 320×180，而不是补边后的 320×350）。前端按原始比例展示，不裁切画面。
+渲染图等比缩放到不超过目标宽度，不补边、不放大，因此返回的 JPEG 尺寸随源文件宽高比变化（例如 16:9 视频在 640 档返回 640×360，而不是补边后的 640×640）。前端按原始比例展示，不裁切画面。
+
+档位阶梯是前后端共同的实现约定，不是配置项：同一张源图在各档之间宽高比一致，前端才能用 `srcset` 让浏览器按显示宽度与像素比自选档位。档位进缓存键与 ETag，因此换档就是换一份产物。
+
+视频封面另有一层「母版」：服务端 ffmpeg 抽帧（或前端浏览器抽帧后上传）得到的原帧存为母版，母版宽 1280；各档渲染图从母版缩出，不按档位重复抽帧。母版比目标档位还窄时直接给母版，不放大。
 
 ### `POST /api/thumbs/:fileId/cover`
 

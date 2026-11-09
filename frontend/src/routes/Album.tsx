@@ -53,6 +53,9 @@ interface CollectionDetail {
   modTime?: string;
   coverImage: string;
   coverImages?: string[];
+  /** 封面内容版本号，与 coverImage / coverImages 一一对应。 */
+  coverImageVersion?: string;
+  coverImageVersions?: string[];
   imageCount: number;
   videoCount: number;
   albums: AlbumLike[];
@@ -183,6 +186,8 @@ export default function Album() {
       sourceName: node.sourceName,
       modTime: usableDate(node.modTime),
       coverImage: node.coverImage ?? "",
+      coverImageVersion: node.coverImageVersion,
+      coverImageVersions: node.coverImageVersions,
       coverImages: node.coverImages,
       imageCount: node.imageCount ?? 0,
       videoCount: node.videoCount ?? 0,
@@ -407,7 +412,9 @@ function CollectionHead({
               variant: "collection",
               title: detail.name,
               coverPath: detail.coverImage,
+              coverVersion: detail.coverImageVersion,
               covers: detail.coverImages,
+              coverVersions: detail.coverImageVersions,
             }}
           />
         </div>

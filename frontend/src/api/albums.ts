@@ -10,6 +10,8 @@ export interface SearchHit {
   tags?: string[];
   count: number;
   coverImage?: string;
+  /** 封面内容版本号，用于拼出版本化 URL 让浏览器长期缓存。 */
+  coverImageVersion?: string;
   /** 内容用途："photo" / "comic"。搜索结果据此决定跳转目标。 */
   contentKind?: ContentKind;
 }

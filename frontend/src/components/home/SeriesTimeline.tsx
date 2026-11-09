@@ -25,6 +25,7 @@ export default function SeriesTimeline({ groups }: Props) {
         label: group.label,
         count: `${group.count} 卷`,
         coverPath: group.coverPath,
+        coverVersion: group.coverVersion,
         onActivate: () => navigate(group.to),
       })),
     [groups, navigate],

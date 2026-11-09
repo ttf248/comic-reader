@@ -16,7 +16,7 @@ import {
   FolderIcon,
   FolderSearchIcon,
 } from "../components/common/Icon";
-import { thumbUrl } from "../api/thumbs";
+import RenditionImage from "../components/common/RenditionImage";
 import type { GalleryContextEntry } from "../utils/galleryContext";
 import { useLibraryList } from "../hooks/useLibraryList";
 import ListPagination from "../components/common/ListPagination";
@@ -277,10 +277,12 @@ export default function Tag() {
           </div>
           {cover?.coverImage && (
             <div className="tag-feature__image">
-              <img
+              <RenditionImage
                 key={cover.id}
-                src={thumbUrl(cover.coverImage)}
+                fileId={cover.coverImage}
+                version={cover.coverImageVersion}
                 alt=""
+                displayWidth={320}
                 className="w-full h-full object-cover"
               />
             </div>

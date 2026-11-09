@@ -165,6 +165,8 @@ export default function PhotoWall({
                     {isVideo ? (
                       <VideoCoverImage
                         videoPath={item.id}
+                        version={item.version}
+                        displayWidth={tile.width}
                         alt={item.name}
                         loading="lazy"
                       />
@@ -173,6 +175,8 @@ export default function PhotoWall({
                         fileId={item.id}
                         alt={item.name}
                         loading="lazy"
+                        version={item.version}
+                        displayWidth={tile.width}
                         className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
                       />
                     )}

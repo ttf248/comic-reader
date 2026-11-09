@@ -15,8 +15,6 @@ const config: ServerConfig = {
   accessMode: "local",
   accessTokenConfigured: false,
   cacheDir: "cache",
-  thumbSizeW: 320,
-  thumbSizeH: 350,
   thumbCacheSize: 100,
   cacheMaxAgeDays: 30,
   cacheMaxSizeMB: 1024,

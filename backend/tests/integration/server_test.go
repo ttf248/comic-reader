@@ -97,8 +97,6 @@ func newHarness(t *testing.T) *harness {
 		AccessMode:      config.AccessModeLocal,
 		AllowOsOpen:     false,
 		CacheDir:        cache,
-		ThumbSizeW:      64,
-		ThumbSizeH:      64,
 		ThumbCacheSize:  100,
 		CacheMaxAgeDays: 30,
 		StaticDir:       "",
@@ -116,8 +114,6 @@ func newHarness(t *testing.T) *harness {
 
 	thumbs, err := services.NewThumbnailService(services.ThumbnailOptions{
 		CacheDir:   cacheLayout.ThumbnailDir,
-		Width:      64,
-		Height:     64,
 		MaxAgeDays: 30,
 	})
 	if err != nil {
@@ -591,9 +587,23 @@ func TestThumb(t *testing.T) {
 	if err != nil {
 		t.Fatalf("thumb decode: %v", err)
 	}
-	// 测试用例中创建的是 200×300，缩略图应保持宽高比：max(W,H)=64, 比例 2:3 → 42×64
-	if cfg.Width != 42 || cfg.Height != 64 {
-		t.Errorf("thumb size=%dx%d, want 42x64 (proportional to 200x300)", cfg.Width, cfg.Height)
+	// 渲染图等比缩放、不裁剪、不放大：200×300 的源图比最小档（320）还窄，
+	// 因此原样返回，宽高比不变。
+	if cfg.Width != 200 || cfg.Height != 300 {
+		t.Errorf("thumb size=%dx%d, want 200x300 (aspect kept, no upscale)", cfg.Width, cfg.Height)
+	}
+
+	// 指定档位时按档位缩放：200×300 的源图在 320 档下仍是原尺寸。
+	res, body = h.do(t, "GET", "/api/thumbs?path="+escape(img)+"&w=320", nil)
+	if res.StatusCode != 200 {
+		t.Fatalf("status=%d body=%s", res.StatusCode, body)
+	}
+	cfg, _, err = image.DecodeConfig(bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("thumb decode: %v", err)
+	}
+	if cfg.Width != 200 || cfg.Height != 300 {
+		t.Errorf("thumb size=%dx%d, want 200x300 (source is narrower than the 320 tier)", cfg.Width, cfg.Height)
 	}
 }
 
@@ -867,17 +877,18 @@ func TestVideoCover_FullFlow(t *testing.T) {
 		t.Fatalf("upload cover status=%d body=%s", res.StatusCode, body)
 	}
 
-	// 3) 再次请求 → 200 + PNG
+	// 3) 再次请求 → 200 + JPEG
 	res, body = h.do(t, "GET", "/api/thumbs?path="+escape(vidPath), nil)
 	if res.StatusCode != 200 {
 		t.Fatalf("after cover upload, status=%d body=%s", res.StatusCode, body)
 	}
 	cfg, _, err := image.DecodeConfig(bytes.NewReader(body))
 	if err != nil {
-		t.Fatalf("decode cover png: %v", err)
+		t.Fatalf("decode cover: %v", err)
 	}
-	if cfg.Width > 64 || cfg.Height > 64 {
-		t.Errorf("cover too large: %dx%d", cfg.Width, cfg.Height)
+	// 视频封面固定渲染到 videoCoverWidth 宽；源图比它窄时不放大。
+	if cfg.Width != 80 || cfg.Height != 60 {
+		t.Errorf("cover size = %dx%d, want 80x60 (no upscale)", cfg.Width, cfg.Height)
 	}
 }
 
@@ -1047,8 +1058,6 @@ func TestVideoStream_FaststartRemux(t *testing.T) {
 		Host:            "127.0.0.1",
 		Port:            8080,
 		CacheDir:        cache,
-		ThumbSizeW:      64,
-		ThumbSizeH:      64,
 		ThumbCacheSize:  100,
 		CacheMaxAgeDays: 30,
 	}, "")

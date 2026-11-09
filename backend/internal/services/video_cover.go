@@ -41,8 +41,6 @@ var ErrFFmpegUnavailable = errors.New("ffmpeg unavailable")
 type VideoCoverExtractor struct {
 	ffmpegPath  string
 	ffprobePath string
-	width       int
-	height      int
 	quality     int
 
 	// 抽帧位置(秒):取 max(1, min(3, duration*0.1))。
@@ -68,8 +66,6 @@ type VideoCoverExtractor struct {
 type VideoCoverOptions struct {
 	FFmpegPath  string        // ffmpeg 可执行文件绝对路径(为空时 Available()=false)
 	FFprobePath string        // ffprobe 可执行文件绝对路径(可空,默认从 ffmpeg 同目录推断)
-	Width       int           // 输出宽度,默认 320
-	Height      int           // 输出高度,默认 350
 	Quality     int           // JPEG 质量 1-100,默认 85
 	Timeout     time.Duration // 单次抽帧超时,默认 10s
 }
@@ -77,14 +73,6 @@ type VideoCoverOptions struct {
 // NewVideoCoverExtractor 构造;FFmpegPath 为空时构造仍成功但 Available()=false,
 // 后续调用会一律返回 ErrFFmpegUnavailable(graceful degradation)。
 func NewVideoCoverExtractor(opts VideoCoverOptions) *VideoCoverExtractor {
-	w := opts.Width
-	if w <= 0 {
-		w = 320
-	}
-	h := opts.Height
-	if h <= 0 {
-		h = 350
-	}
 	q := opts.Quality
 	if q <= 0 {
 		q = jpegQuality
@@ -106,8 +94,6 @@ func NewVideoCoverExtractor(opts VideoCoverOptions) *VideoCoverExtractor {
 	return &VideoCoverExtractor{
 		ffmpegPath:  opts.FFmpegPath,
 		ffprobePath: ffprobe,
-		width:       w,
-		height:      h,
 		quality:     q,
 		seekMin:     1.0,
 		seekMax:     3.0,
@@ -309,7 +295,7 @@ func (e *VideoCoverExtractor) Extract(absPath string) ([]byte, error) {
 		return nil, errors.New("ffmpeg produced empty output")
 	}
 	// 兜底:ffmpeg 抽出来的图有可能不是 1:1 精确尺寸(参数解析 round),
-	// 强制过一遍 imaging 走标准化 resize,保证 UI 看到的就是 Width×Height。
+	// 强制过一遍 imaging 走标准化 resize,保证 UI 看到的就是固定档位宽度。
 	img, err := jpeg.Decode(bytes.NewReader(out))
 	if err != nil {
 		// 也可能是 PNG(罕见);用 image.Decode 兜底
@@ -318,7 +304,7 @@ func (e *VideoCoverExtractor) Extract(absPath string) ([]byte, error) {
 			return nil, fmt.Errorf("decode ffmpeg output: %w", err)
 		}
 	}
-	thumb := imaging.Fit(img, e.width, e.height, imaging.Lanczos)
+	thumb := imaging.Fit(img, videoCoverMasterWidth, videoCoverMasterWidth, imaging.Lanczos)
 	return encodeJPEG(thumb, e.quality)
 }
 
@@ -334,7 +320,7 @@ func (e *VideoCoverExtractor) runExtract(ctx context.Context, absPath string, se
 	// image2pipe + mjpeg:把 JPEG 字节直接写到 stdout,免去落盘再读。
 	filter := fmt.Sprintf(
 		"scale=w='min(%d,iw)':h='min(%d,ih)':force_original_aspect_ratio=decrease",
-		e.width, e.height,
+		videoCoverMasterWidth, videoCoverMasterWidth,
 	)
 	cmd := exec.CommandContext(ctx, e.ffmpegPath,
 		"-hide_banner",

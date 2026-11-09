@@ -69,8 +69,6 @@ func TestPreviewHandlerScalesImage(t *testing.T) {
 	root, path, catalog := previewFixture(t)
 	svc, err := services.NewThumbnailService(services.ThumbnailOptions{
 		CacheDir: filepath.Join(t.TempDir(), "thumbs"),
-		Width:    320,
-		Height:   350,
 		LRUSize:  10,
 	})
 	if err != nil {
@@ -102,8 +100,9 @@ func TestPreviewHandlerScalesImage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Width != 400 || cfg.Height != 200 {
-		t.Fatalf("preview size = %dx%d, want 400x200", cfg.Width, cfg.Height)
+	// w=400 会向上对齐到档位 640。
+	if cfg.Width != 640 || cfg.Height != 320 {
+		t.Fatalf("preview size = %dx%d, want 640x320", cfg.Width, cfg.Height)
 	}
 
 	// 带 If-None-Match 复访应返回 304，不再传图。
@@ -124,8 +123,6 @@ func TestPreviewHandlerRejectsInvalidWidth(t *testing.T) {
 	root, path, catalog := previewFixture(t)
 	svc, err := services.NewThumbnailService(services.ThumbnailOptions{
 		CacheDir: filepath.Join(t.TempDir(), "thumbs"),
-		Width:    320,
-		Height:   350,
 		LRUSize:  10,
 	})
 	if err != nil {
@@ -172,8 +169,6 @@ func TestPreviewHandlerRejectsVideoResource(t *testing.T) {
 	}, []string{root})
 	svc, err := services.NewThumbnailService(services.ThumbnailOptions{
 		CacheDir: filepath.Join(t.TempDir(), "thumbs"),
-		Width:    320,
-		Height:   350,
 		LRUSize:  10,
 	})
 	if err != nil {

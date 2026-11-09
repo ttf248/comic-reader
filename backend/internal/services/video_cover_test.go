@@ -98,8 +98,6 @@ func TestVideoCoverExtractor_Extract(t *testing.T) {
 	vidPath := generateTestVideo(t, ff)
 	ex := NewVideoCoverExtractor(VideoCoverOptions{
 		FFmpegPath: ff,
-		Width:      320,
-		Height:     350,
 		Quality:    85,
 		Timeout:    10 * 1e9, // 10s
 	})
@@ -170,8 +168,6 @@ func TestVideoCoverExtractor_Extract_ShortClip(t *testing.T) {
 	vidPath := generateShortTestVideo(t, ff)
 	ex := NewVideoCoverExtractor(VideoCoverOptions{
 		FFmpegPath: ff,
-		Width:      320,
-		Height:     350,
 		Quality:    85,
 		Timeout:    10 * 1e9, // 10s
 	})
@@ -211,8 +207,6 @@ func TestVideoCoverExtractor_Extract_GarbageData(t *testing.T) {
 	}
 	ex := NewVideoCoverExtractor(VideoCoverOptions{
 		FFmpegPath: ff,
-		Width:      320,
-		Height:     350,
 		Timeout:    5 * 1e9,
 	})
 	_, err := ex.Extract(badPath)
@@ -261,8 +255,6 @@ func TestVideoCoverExtractor_Extract_KeepsAspectRatio(t *testing.T) {
 
 	ex := NewVideoCoverExtractor(VideoCoverOptions{
 		FFmpegPath: ff,
-		Width:      320,
-		Height:     350,
 		Quality:    85,
 		Timeout:    10 * 1e9,
 	})
@@ -275,12 +267,13 @@ func TestVideoCoverExtractor_Extract_KeepsAspectRatio(t *testing.T) {
 		t.Fatalf("decode extracted jpeg: %v", err)
 	}
 	w, h := img.Bounds().Dx(), img.Bounds().Dy()
-	if w != 320 {
-		t.Errorf("width = %d, want 320 (宽边按目标缩放)", w)
+	// 夹具视频本身就是 640x360：不放大，所以母版保持原尺寸。
+	if w != 640 {
+		t.Errorf("width = %d, want 640 (不放大)", w)
 	}
-	// 320 / 16 * 9 = 180。补黑边的话这里会是 350。
-	if h != 180 {
-		t.Errorf("height = %d, want 180 (16:9 应保持比例,不补边)", h)
+	// 640 / 16 * 9 = 360。补黑边的话这里会是一个正方形。
+	if h != 360 {
+		t.Errorf("height = %d, want 360 (16:9 应保持比例,不补边)", h)
 	}
 }
 
@@ -300,8 +293,6 @@ func TestVideoCoverExtractor_Extract_NoUpscale(t *testing.T) {
 	}
 	ex := NewVideoCoverExtractor(VideoCoverOptions{
 		FFmpegPath: ff,
-		Width:      320,
-		Height:     350,
 		Timeout:    10 * 1e9,
 	})
 	data, err := ex.Extract(vidPath)
@@ -337,14 +328,10 @@ func TestThumbnailService_WithFFmpeg_VideoCover(t *testing.T) {
 	ex := NewVideoCoverExtractor(VideoCoverOptions{
 		FFmpegPath:  ff,
 		FFprobePath: ffprobe,
-		Width:       320,
-		Height:      350,
 		Timeout:     10 * 1e9,
 	})
 	svc, err := NewThumbnailService(ThumbnailOptions{
 		CacheDir:   t.TempDir(),
-		Width:      320,
-		Height:     350,
 		MaxAgeDays: 30,
 		LRUSize:    100,
 		VideoCover: ex,
@@ -352,7 +339,7 @@ func TestThumbnailService_WithFFmpeg_VideoCover(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, err := svc.GetOrCreate(vidPath)
+	data, err := svc.GetOrCreate(vidPath, 320)
 	if err != nil {
 		t.Fatalf("GetOrCreate with FFmpeg: %v", err)
 	}
@@ -364,7 +351,7 @@ func TestThumbnailService_WithFFmpeg_VideoCover(t *testing.T) {
 		t.Errorf("thumbnail too large: %dx%d", img.Bounds().Dx(), img.Bounds().Dy())
 	}
 	// 二次访问应命中磁盘缓存(LRU 验证:不依赖 ffmpeg 第二次)
-	data2, err := svc.GetOrCreate(vidPath)
+	data2, err := svc.GetOrCreate(vidPath, 320)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -378,8 +365,6 @@ func TestThumbnailService_WithFFmpeg_VideoCover(t *testing.T) {
 func TestThumbnailService_WithoutFFmpeg_VideoCoverStillMissing(t *testing.T) {
 	svc, err := NewThumbnailService(ThumbnailOptions{
 		CacheDir:   t.TempDir(),
-		Width:      320,
-		Height:     350,
 		MaxAgeDays: 30,
 		// VideoCover 故意不传
 	})
@@ -388,7 +373,7 @@ func TestThumbnailService_WithoutFFmpeg_VideoCoverStillMissing(t *testing.T) {
 	}
 	vidPath := filepath.Join(t.TempDir(), "v.mp4")
 	os.WriteFile(vidPath, []byte("fake"), 0o644)
-	_, err = svc.GetOrCreate(vidPath)
+	_, err = svc.GetOrCreate(vidPath, 320)
 	if !errors.Is(err, ErrVideoCoverMissing) {
 		t.Errorf("expected ErrVideoCoverMissing, got %v", err)
 	}

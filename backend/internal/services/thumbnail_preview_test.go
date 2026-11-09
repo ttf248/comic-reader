@@ -18,8 +18,6 @@ func newPreviewService(t *testing.T) (*ThumbnailService, string) {
 		CacheDir:     filepath.Join(root, "thumbs"),
 		ConvertedDir: filepath.Join(root, "converted"),
 		PreviewDir:   filepath.Join(root, "previews"),
-		Width:        320,
-		Height:       350,
 		MaxAgeDays:   30,
 		LRUSize:      100,
 	})
@@ -45,8 +43,9 @@ func TestPreviewScalesDownToRequestedWidth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode preview: %v", err)
 	}
-	if cfg.Width != 400 || cfg.Height != 200 {
-		t.Fatalf("preview size = %dx%d, want 400x200", cfg.Width, cfg.Height)
+	// w=400 会向上对齐到档位 640。
+	if cfg.Width != 640 || cfg.Height != 320 {
+		t.Fatalf("preview size = %dx%d, want 640x320", cfg.Width, cfg.Height)
 	}
 
 	// 磁盘缓存：同一份预览应落到 previews 目录里。
@@ -104,11 +103,11 @@ func TestPreviewWidthIsClamped(t *testing.T) {
 	if err != nil {
 		t.Fatalf("decode preview: %v", err)
 	}
-	if cfg.Width != previewMinWidth {
-		t.Fatalf("clamped width = %d, want %d", cfg.Width, previewMinWidth)
+	if cfg.Width != RenditionWidths[0] {
+		t.Fatalf("snapped width = %d, want %d", cfg.Width, RenditionWidths[0])
 	}
 
-	tooBig, err := svc.GetOrCreatePreview(src, previewMaxWidth*4)
+	tooBig, err := svc.GetOrCreatePreview(src, RenditionWidths[len(RenditionWidths)-1]*4)
 	if err != nil {
 		t.Fatalf("GetOrCreatePreview: %v", err)
 	}
@@ -118,6 +117,36 @@ func TestPreviewWidthIsClamped(t *testing.T) {
 	}
 	if cfg2.Width != 800 {
 		t.Fatalf("width = %d, want 800 (source is narrower, no upscale)", cfg2.Width)
+	}
+}
+
+// 预览宽度会向上对齐到档位阶梯：同一个源图不会因为视口差几十像素
+// 就多出一份缓存产物。
+func TestPreviewWidthSnapsToRenditionLadder(t *testing.T) {
+	svc := newTestService(t)
+	src := makeTestImage(t, t.TempDir(), "page.jpg", 3000, 2000)
+
+	for _, tc := range []struct{ asked, want int }{
+		{1, 320},
+		{320, 320},
+		{321, 640},
+		{640, 640},
+		{641, 1280},
+		{2000, 2560},
+		// 超过最大档位时按最大档处理；源图更窄则不放大。
+		{99999, 3000},
+	} {
+		preview, err := svc.GetOrCreatePreview(src, tc.asked)
+		if err != nil {
+			t.Fatalf("GetOrCreatePreview(%d): %v", tc.asked, err)
+		}
+		cfg, _, err := image.DecodeConfig(bytes.NewReader(preview.Data))
+		if err != nil {
+			t.Fatalf("decode preview: %v", err)
+		}
+		if cfg.Width != tc.want {
+			t.Fatalf("asked=%d snapped=%d want %d", tc.asked, cfg.Width, tc.want)
+		}
 	}
 }
 
@@ -189,7 +218,7 @@ func TestClearPreviewsRemovesOnlyPreviews(t *testing.T) {
 	if _, err := svc.GetOrCreatePreview(src, 400); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.GetOrCreate(src); err != nil {
+	if _, err := svc.GetOrCreate(src, 320); err != nil {
 		t.Fatal(err)
 	}
 
@@ -208,7 +237,7 @@ func TestClearPreviewsRemovesOnlyPreviews(t *testing.T) {
 		t.Fatalf("preview dir still has %d files", len(entries))
 	}
 	// 缩略图缓存不受影响。
-	if _, err := svc.GetOrCreate(src); err != nil {
+	if _, err := svc.GetOrCreate(src, 320); err != nil {
 		t.Fatalf("thumbnail broken after ClearPreviews: %v", err)
 	}
 }

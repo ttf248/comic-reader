@@ -40,7 +40,7 @@ func BenchmarkThumbnailCold(b *testing.B) {
 	}
 	img = nil
 	runtime.GC()
-	svc, err := NewThumbnailService(ThumbnailOptions{CacheDir: filepath.Join(dir, "cache"), Width: 320, Height: 350})
+	svc, err := NewThumbnailService(ThumbnailOptions{CacheDir: filepath.Join(dir, "cache")})
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -75,7 +75,7 @@ func BenchmarkThumbnailCold(b *testing.B) {
 			defer wg.Done()
 			for i := range jobs {
 				t := time.Now()
-				if _, err := svc.GetOrCreate(paths[i]); err != nil {
+				if _, err := svc.GetOrCreate(paths[i], 320); err != nil {
 					b.Error(err)
 				}
 				times[i] = time.Since(t)
@@ -145,11 +145,11 @@ func BenchmarkThumbnail(b *testing.B) {
 		})
 	}
 
-	// 缩略图实际使用的路径：先 Box 预缩放，再 Lanczos。
-	b.Run("FitToThumbnail", func(b *testing.B) {
+	// 渲染图实际使用的路径：先 Box 预缩放，再 Lanczos。
+	b.Run("ResizeToWidth", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			thumb := fitToThumbnail(img, 320, 350)
-			if _, err := encodeJPEG(thumb, jpegQuality); err != nil {
+			thumb := resizeToWidth(img, 320)
+			if _, err := encodeJPEG(flattenOnWhite(thumb), jpegQuality); err != nil {
 				b.Fatal(err)
 			}
 		}

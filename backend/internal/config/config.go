@@ -107,8 +107,6 @@ type Config struct {
 	AccessToken     string      `yaml:"accessToken" json:"-"`
 	AllowOsOpen     bool        `yaml:"allowOsOpen"`
 	CacheDir        string      `yaml:"cacheDir"`
-	ThumbSizeW      int         `yaml:"thumbSizeW"`
-	ThumbSizeH      int         `yaml:"thumbSizeH"`
 	ThumbCacheSize  int         `yaml:"thumbCacheSize"`
 	CacheMaxAgeDays int         `yaml:"cacheMaxAgeDays"`
 	CacheMaxSizeMB  int64       `yaml:"cacheMaxSizeMB"`
@@ -196,8 +194,6 @@ func Default() *Config {
 		AccessToken:     "",
 		AllowOsOpen:     false,
 		CacheDir:        filepath.Join(".", DefaultCacheDirName),
-		ThumbSizeW:      320,
-		ThumbSizeH:      350,
 		ThumbCacheSize:  500,
 		CacheMaxAgeDays: 30,
 		CacheMaxSizeMB:  10240,
@@ -284,12 +280,6 @@ func mergeFile(dst, file *Config) {
 	if file.CacheDir != "" {
 		dst.CacheDir = file.CacheDir
 	}
-	if file.ThumbSizeW != 0 {
-		dst.ThumbSizeW = file.ThumbSizeW
-	}
-	if file.ThumbSizeH != 0 {
-		dst.ThumbSizeH = file.ThumbSizeH
-	}
 	if file.CacheMaxAgeDays != 0 {
 		dst.CacheMaxAgeDays = file.CacheMaxAgeDays
 	}
@@ -341,9 +331,6 @@ func (c *Config) Validate() error {
 		}
 	default:
 		return fmt.Errorf("invalid accessMode %q (must be %q or %q)", c.AccessMode, AccessModeLocal, AccessModeLAN)
-	}
-	if c.ThumbSizeW <= 0 || c.ThumbSizeH <= 0 {
-		return errors.New("thumb size must be positive")
 	}
 	if c.CacheMaxSizeMB < 0 || c.CacheMaxSizeMB > 1048576 {
 		return errors.New("cacheMaxSizeMB must be between 0 and 1048576")

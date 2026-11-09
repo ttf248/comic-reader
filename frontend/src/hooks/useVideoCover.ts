@@ -7,6 +7,15 @@ export type VideoCoverStatus =
 
 interface Options {
   onStatusChange?: (status: VideoCoverStatus) => void;
+  /**
+   * 视频文件的内容版本号。
+   *
+   * 封面 URL 带上它，服务端就能回 immutable：重复打开页面时封面
+   * 一次网络请求都不发。
+   */
+  version?: string;
+  /** 渲染档位宽度（已对齐到档位阶梯）。缺省用最小档。 */
+  width?: number;
 }
 
 interface Result {
@@ -33,6 +42,8 @@ export function useVideoCover(
   const [retryNonce, setRetryNonce] = useState(0);
   const onStatusChange = useRef(opts.onStatusChange);
   onStatusChange.current = opts.onStatusChange;
+  const version = opts.version;
+  const width = opts.width;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -45,14 +56,14 @@ export function useVideoCover(
     notify(videoPath ? "loading" : "idle");
     if (videoPath) {
       void (async () => {
-        if (!(await probeCover(videoPath, signal))) {
+        if (!(await probeCover(videoPath, signal, version, width))) {
           notify("missing");
           notify("extracting");
           const blob = await captureVideoFrame(videoPath, signal);
           if (signal.aborted) return;
           await uploadVideoCover(videoPath, blob, signal);
           if (signal.aborted) return;
-          const response = await fetch(thumbUrl(videoPath), {
+          const response = await fetch(thumbUrl(videoPath, version, width), {
             method: "HEAD",
             signal,
           });
@@ -62,7 +73,7 @@ export function useVideoCover(
       })().catch(() => notify("error"));
     }
     return () => controller.abort();
-  }, [videoPath, retryNonce]);
+  }, [videoPath, retryNonce, version, width]);
 
   const retry = useCallback(() => setRetryNonce((nonce) => nonce + 1), []);
   const status =
@@ -73,7 +84,7 @@ export function useVideoCover(
         : "idle";
   return {
     status,
-    url: videoPath ? thumbUrl(videoPath) : "",
+    url: videoPath ? thumbUrl(videoPath, version, width) : "",
     retry,
     enabled: !!videoPath,
   };
@@ -83,6 +94,8 @@ export function useVideoCover(
 async function probeCover(
   fileId: string,
   parentSignal: AbortSignal,
+  version?: string,
+  width?: number,
 ): Promise<boolean> {
   if (parentSignal.aborted) throw parentSignal.reason;
   const controller = new AbortController();
@@ -96,7 +109,7 @@ async function probeCover(
   let delay = SERVER_POLL_INITIAL_MS;
   try {
     while (true) {
-      const response = await fetch(thumbUrl(fileId), {
+      const response = await fetch(thumbUrl(fileId, version, width), {
         method: "HEAD",
         signal: controller.signal,
       });

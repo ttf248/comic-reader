@@ -44,6 +44,8 @@ type LibraryQueryYear struct {
 	VideoTotal int              `json:"videoTotal"`
 	Target     LibraryQueryItem `json:"target"`
 	CoverImage string           `json:"coverImage,omitempty"`
+	// CoverImageVersion 是封面文件的内容版本号。
+	CoverImageVersion string `json:"coverImageVersion,omitempty"`
 }
 
 type LibraryQuerySeries struct {
@@ -51,6 +53,8 @@ type LibraryQuerySeries struct {
 	Name       string `json:"name"`
 	Count      int    `json:"count"`
 	CoverImage string `json:"coverImage,omitempty"`
+	// CoverImageVersion 是封面文件的内容版本号。
+	CoverImageVersion string `json:"coverImageVersion,omitempty"`
 }
 
 type LibraryQueryPage struct {
@@ -158,7 +162,7 @@ func PageLibraryQuery(snapshot CatalogSnapshot, q LibraryQuery, history []models
 			y := queryYearPattern.FindString(n.Name)
 			group := years[y]
 			if group == nil {
-				group = &LibraryQueryYear{Target: item, CoverImage: n.CoverImage}
+				group = &LibraryQueryYear{Target: item, CoverImage: n.CoverImage, CoverImageVersion: n.CoverImageVersion}
 				if y != "" {
 					value, _ := strconv.Atoi(y)
 					group.Year = &value
@@ -171,10 +175,11 @@ func PageLibraryQuery(snapshot CatalogSnapshot, q LibraryQuery, history []models
 			if (n.Kind == "collection" && group.Target.Kind != "collection") || (n.Kind == group.Target.Kind && queryItemCount(item) > queryItemCount(group.Target)) {
 				group.Target = item
 				group.CoverImage = n.CoverImage
+				group.CoverImageVersion = n.CoverImageVersion
 			}
 		}
 		if n.Kind == "collection" && q.Kind == LibraryKindComic {
-			result.Series = append(result.Series, LibraryQuerySeries{ID: n.ID, Name: n.DisplayName, Count: n.AlbumCount, CoverImage: n.CoverImage})
+			result.Series = append(result.Series, LibraryQuerySeries{ID: n.ID, Name: n.DisplayName, Count: n.AlbumCount, CoverImage: n.CoverImage, CoverImageVersion: n.CoverImageVersion})
 		}
 	}
 	for _, group := range years {

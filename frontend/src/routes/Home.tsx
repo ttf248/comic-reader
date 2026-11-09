@@ -283,6 +283,7 @@ export default function Home() {
         to: albumRoute(mode, group.id),
         count: group.count,
         coverPath: group.coverImage,
+        coverVersion: group.coverImageVersion,
       })),
     [overview.summary, mode],
   );

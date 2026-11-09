@@ -16,14 +16,11 @@ import (
 	"github.com/disintegration/imaging"
 )
 
-func TestThumbnailHotReloadChangesCachedDimensions(t *testing.T) {
+func TestThumbnailRenditionWidthsAreIndependent(t *testing.T) {
 	svc := newTestService(t)
 	src := makeTestImage(t, t.TempDir(), "page.jpg", 128, 128)
 	for _, size := range []int{8, 32, 16} {
-		if err := svc.UpdateOptions(ThumbnailOptions{Width: size, Height: size}); err != nil {
-			t.Fatal(err)
-		}
-		data, err := svc.GetOrCreate(src)
+		data, err := svc.GetOrCreate(src, size)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -34,19 +31,15 @@ func TestThumbnailHotReloadChangesCachedDimensions(t *testing.T) {
 	}
 }
 
-func TestThumbnailConcurrentReloadAndClear(t *testing.T) {
+func TestThumbnailConcurrentRenditionsAndClear(t *testing.T) {
 	svc := newTestService(t)
 	src := makeTestImage(t, t.TempDir(), "page.jpg", 128, 128)
-	if err := svc.UpdateOptions(ThumbnailOptions{Width: 8, Height: 8}); err != nil {
-		t.Fatal(err)
-	}
 	var wg sync.WaitGroup
 	for i := 0; i < 20; i++ {
 		wg.Add(2)
 		go func(i int) {
 			defer wg.Done()
-			size := 8 + i%2*8
-			if err := svc.UpdateOptions(ThumbnailOptions{Width: size, Height: size, LRUSize: i + 1}); err != nil {
+			if err := svc.UpdateOptions(ThumbnailOptions{LRUSize: i + 1}); err != nil {
 				t.Error(err)
 			}
 			if _, _, err := svc.ClearThumbnails(); err != nil {
@@ -55,7 +48,8 @@ func TestThumbnailConcurrentReloadAndClear(t *testing.T) {
 		}(i)
 		go func() {
 			defer wg.Done()
-			data, err := svc.GetOrCreate(src)
+			size := 8 + i%2*8
+			data, err := svc.GetOrCreate(src, size)
 			if err != nil {
 				t.Error(err)
 				return
@@ -100,8 +94,6 @@ func newTestService(t *testing.T) *ThumbnailService {
 		CacheDir:     filepath.Join(root, "thumbnails"),
 		ConvertedDir: filepath.Join(root, "converted"),
 		PreviewDir:   filepath.Join(root, "previews"),
-		Width:        320,
-		Height:       350,
 		MaxAgeDays:   30,
 		LRUSize:      100,
 	})
@@ -111,12 +103,12 @@ func newTestService(t *testing.T) *ThumbnailService {
 	return svc
 }
 
-// TestFitToThumbnailMatchesDirectLanczos 验证「先 Box 预缩放再 Lanczos」
+// TestResizeToWidthMatchesDirectLanczos 验证「先 Box 预缩放再 Lanczos」
 // 与直接 Lanczos 的结果在平滑图像上基本一致。
 //
-// 预缩放是缩略图提速的关键：24MP 原图直接跑 Lanczos 仅缩放一步就要
+// 预缩放是渲染提速的关键：24MP 原图直接跑 Lanczos 仅缩放一步就要
 // 40ms 以上。误差过大说明预缩放参数需要调整。
-func TestFitToThumbnailMatchesDirectLanczos(t *testing.T) {
+func TestResizeToWidthMatchesDirectLanczos(t *testing.T) {
 	const w, h = 2400, 1800
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
 	for y := 0; y < h; y++ {
@@ -130,8 +122,8 @@ func TestFitToThumbnailMatchesDirectLanczos(t *testing.T) {
 			})
 		}
 	}
-	direct := imaging.Fit(img, 320, 350, imaging.Lanczos)
-	stepped := fitToThumbnail(img, 320, 350)
+	direct := imaging.Resize(img, 320, 0, imaging.Lanczos)
+	stepped := resizeToWidth(img, 320)
 	if direct.Bounds() != stepped.Bounds() {
 		t.Fatalf("size mismatch: direct=%v stepped=%v", direct.Bounds(), stepped.Bounds())
 	}
@@ -218,7 +210,7 @@ func TestGetOrCreate_GeneratesAndCaches(t *testing.T) {
 	src := makeTestImage(t, t.TempDir(), "test.jpg", 800, 600)
 
 	// 第一次：生成
-	data1, err := svc.GetOrCreate(src)
+	data1, err := svc.GetOrCreate(src, 320)
 	if err != nil {
 		t.Fatalf("first GetOrCreate: %v", err)
 	}
@@ -230,7 +222,7 @@ func TestGetOrCreate_GeneratesAndCaches(t *testing.T) {
 	}
 
 	// 第二次：命中（内存或磁盘），返回相同数据
-	data2, err := svc.GetOrCreate(src)
+	data2, err := svc.GetOrCreate(src, 320)
 	if err != nil {
 		t.Fatalf("second GetOrCreate: %v", err)
 	}
@@ -259,7 +251,7 @@ func TestGetOrCreate_GeneratesAndCaches(t *testing.T) {
 
 func TestGetOrCreate_MissingSource(t *testing.T) {
 	svc := newTestService(t)
-	_, err := svc.GetOrCreate(filepath.Join(t.TempDir(), "nope.jpg"))
+	_, err := svc.GetOrCreate(filepath.Join(t.TempDir(), "nope.jpg"), 320)
 	if err != ErrSourceMissing {
 		t.Errorf("expected ErrSourceMissing, got %v", err)
 	}
@@ -270,7 +262,7 @@ func TestGetOrCreate_UnsupportedFormat(t *testing.T) {
 	// 写一个 .png 后缀但内容是文本
 	path := filepath.Join(t.TempDir(), "fake.png")
 	os.WriteFile(path, []byte("not an image"), 0o644)
-	_, err := svc.GetOrCreate(path)
+	_, err := svc.GetOrCreate(path, 320)
 	if err == nil {
 		t.Fatal("expected error for unsupported format")
 	}
@@ -284,7 +276,7 @@ func TestGetOrCreate_KeyChangesWithMtime(t *testing.T) {
 	svc := newTestService(t)
 	src := makeTestImage(t, t.TempDir(), "test.jpg", 400, 300)
 
-	_, err := svc.GetOrCreate(src)
+	_, err := svc.GetOrCreate(src, 320)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -293,7 +285,7 @@ func TestGetOrCreate_KeyChangesWithMtime(t *testing.T) {
 	future := time.Now().Add(time.Hour)
 	os.Chtimes(src, future, future)
 
-	_, err = svc.GetOrCreate(src)
+	_, err = svc.GetOrCreate(src, 320)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -349,7 +341,7 @@ func TestCleanup_RemovesOldFiles(t *testing.T) {
 func TestStats(t *testing.T) {
 	svc := newTestService(t)
 	src := makeTestImage(t, t.TempDir(), "test.jpg", 400, 300)
-	svc.GetOrCreate(src)
+	svc.GetOrCreate(src, 320)
 
 	stats := svc.Stats()
 	if stats.MemoryItems < 1 {
@@ -377,14 +369,14 @@ func TestGetOrCreate_VideoCoverMissing(t *testing.T) {
 	vidPath := filepath.Join(srcDir, "clip.mp4")
 	os.WriteFile(vidPath, []byte("fake"), 0o644)
 
-	_, err := svc.GetOrCreate(vidPath)
+	_, err := svc.GetOrCreate(vidPath, 320)
 	if err != ErrVideoCoverMissing {
 		t.Errorf("expected ErrVideoCoverMissing, got %v", err)
 	}
 
 	// 源视频不存在 → ErrSourceMissing（不是 ErrVideoCoverMissing）
 	missing := filepath.Join(srcDir, "nope.mp4")
-	_, err = svc.GetOrCreate(missing)
+	_, err = svc.GetOrCreate(missing, 320)
 	if err != ErrSourceMissing {
 		t.Errorf("expected ErrSourceMissing, got %v", err)
 	}
@@ -410,20 +402,20 @@ func TestSaveVideoCover_AndReadback(t *testing.T) {
 	}
 
 	// 现在 GetOrCreate 应返回 JPEG（不再是 ErrVideoCoverMissing）
-	data, err := svc.GetOrCreate(vidPath)
+	data, err := svc.GetOrCreate(vidPath, 320)
 	if err != nil {
 		t.Fatalf("GetOrCreate after save: %v", err)
 	}
 	if !isJPEG(data) {
 		t.Error("output should be valid JPEG")
 	}
-	// 尺寸 ≤ 320×350
+	// 尺寸 ≤ videoCoverMasterWidth 宽
 	img, err := jpeg.Decode(bytes.NewReader(data))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if img.Bounds().Dx() > 320 || img.Bounds().Dy() > 350 {
-		t.Errorf("thumbnail too large: %dx%d", img.Bounds().Dx(), img.Bounds().Dy())
+	if img.Bounds().Dx() > videoCoverMasterWidth {
+		t.Errorf("cover too large: %dx%d", img.Bounds().Dx(), img.Bounds().Dy())
 	}
 }
 
@@ -466,7 +458,7 @@ func TestVideoCover_MtimeInvalidates(t *testing.T) {
 	if err := svc.SaveVideoCover(vidPath, coverBytes); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.GetOrCreate(vidPath); err != nil {
+	if _, err := svc.GetOrCreate(vidPath, 320); err != nil {
 		t.Fatalf("after save, GetOrCreate should succeed: %v", err)
 	}
 
@@ -477,7 +469,7 @@ func TestVideoCover_MtimeInvalidates(t *testing.T) {
 	os.WriteFile(vidPath, []byte("v2-changed"), 0o644)
 	os.Chtimes(vidPath, future, future)
 
-	_, err := svc.GetOrCreate(vidPath)
+	_, err := svc.GetOrCreate(vidPath, 320)
 	if err != ErrVideoCoverMissing {
 		t.Errorf("after mtime+size change, expected ErrVideoCoverMissing, got %v", err)
 	}

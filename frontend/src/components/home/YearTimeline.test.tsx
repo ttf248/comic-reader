@@ -47,6 +47,7 @@ function makeGroup(year: number, albumCount = 1): YearGroup {
     imageTotal: 3 * albumCount,
     videoTotal: 0,
     coverPreviewPaths: [`/a0/cover.jpg`],
+    coverPreviewVersions: [],
   };
 }
 

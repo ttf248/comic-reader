@@ -22,7 +22,7 @@ import { useAppMode } from "../../hooks/useAppMode";
 import { useMediaQuery, WIDE_LAYOUT_QUERY } from "../../hooks/useMediaQuery";
 import { libraryApi } from "../../api/library";
 import { albumRoute, favoritesRoute, homeRoute, recentsRoute, unreadRoute } from "../../utils/path";
-import { thumbUrl } from "../../api/thumbs";
+import RenditionImage from "../common/RenditionImage";
 import { nodeSummaryToCard } from "../../utils/libraryCard";
 import type { CardData } from "../album/AlbumGrid";
 import { timeAgo } from "../../utils/date";
@@ -419,11 +419,12 @@ function ResumeMiniCard({
         }`}
       >
         {card.coverPath ? (
-          <img
-            src={thumbUrl(card.coverPath)}
+          <RenditionImage
+            fileId={card.coverPath}
+            version={card.coverVersion}
             alt=""
+            displayWidth={48}
             loading="lazy"
-            decoding="async"
             className="w-full h-full object-cover object-[50%_30%]"
           />
         ) : null}

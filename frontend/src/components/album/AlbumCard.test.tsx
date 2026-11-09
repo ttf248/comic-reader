@@ -173,7 +173,7 @@ describe("AlbumCard 封面语义", () => {
 
     const images = container.querySelectorAll('[data-testid="card-cover"] img');
     expect(images).toHaveLength(1);
-    expect(images[0]).toHaveAttribute("src", "/api/thumbs/cover-main");
+    expect(images[0].getAttribute("src")).toContain("/api/thumbs/cover-main");
     expect(screen.queryByTestId("card-cover-mosaic")).not.toBeInTheDocument();
   });
 
@@ -195,7 +195,7 @@ describe("AlbumCard 封面语义", () => {
       container.querySelectorAll('[data-testid="card-cover"] img'),
     ).toHaveLength(4);
     expect(
-      container.querySelector('img[src="/api/thumbs/legacy-cover"]'),
+      container.querySelector('img[src^="/api/thumbs/legacy-cover"]'),
     ).toBeNull();
   });
 
@@ -214,8 +214,7 @@ describe("AlbumCard 封面语义", () => {
       "data-cover-layout",
       "single",
     );
-    expect(container.querySelector("img")).toHaveAttribute(
-      "src",
+    expect(container.querySelector("img")?.getAttribute("src")).toContain(
       "/api/thumbs/cover-main",
     );
   });

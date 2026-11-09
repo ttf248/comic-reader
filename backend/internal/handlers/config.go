@@ -23,8 +23,6 @@ type ConfigResponse struct {
 	AccessMode            string              `json:"accessMode"`
 	AccessTokenConfigured bool                `json:"accessTokenConfigured"`
 	CacheDir              string              `json:"cacheDir"`
-	ThumbSizeW            int                 `json:"thumbSizeW"`
-	ThumbSizeH            int                 `json:"thumbSizeH"`
 	ThumbCacheSize        int                 `json:"thumbCacheSize"`
 	CacheMaxAgeDays       int                 `json:"cacheMaxAgeDays"`
 	AllowOsOpen           bool                `json:"allowOsOpen"`
@@ -86,8 +84,6 @@ func ConfigGetHandler(mgr *config.Manager) fiber.Handler {
 			AccessMode:            cfg.AccessMode,
 			AccessTokenConfigured: cfg.AccessToken != "",
 			CacheDir:              cfg.CacheDir,
-			ThumbSizeW:            cfg.ThumbSizeW,
-			ThumbSizeH:            cfg.ThumbSizeH,
 			ThumbCacheSize:        cfg.ThumbCacheSize,
 			CacheMaxAgeDays:       cfg.CacheMaxAgeDays,
 			CacheMaxSizeMB:        cfg.CacheMaxSizeMB,
@@ -147,8 +143,6 @@ func ConfigUpdateHandler(mgr *config.Manager, onUpdate func(c *config.Config, me
 				AccessMode:            newCfg.AccessMode,
 				AccessTokenConfigured: newCfg.AccessToken != "",
 				CacheDir:              newCfg.CacheDir,
-				ThumbSizeW:            newCfg.ThumbSizeW,
-				ThumbSizeH:            newCfg.ThumbSizeH,
 				ThumbCacheSize:        newCfg.ThumbCacheSize,
 				CacheMaxAgeDays:       newCfg.CacheMaxAgeDays,
 				CacheMaxSizeMB:        newCfg.CacheMaxSizeMB,

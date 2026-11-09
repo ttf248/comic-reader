@@ -65,11 +65,6 @@ const (
 	// convertedCacheSize 整图转换结果的内存缓存条数（每条约 1MB）。
 	convertedCacheSize = 8
 
-	// previewMinWidth 预览图允许的最小宽度：低于缩略图尺寸的请求没有意义，
-	// 却仍要付出一次全图解码的代价，直接夹到下限。
-	previewMinWidth = 320
-	// previewMaxWidth 预览图允许的最大宽度：防止一次请求生成超大缓存文件。
-	previewMaxWidth = 4096
 	// previewCacheSize 预览图内存 LRU 条数（每条几百 KB）。
 	previewCacheSize = 16
 	// previewJPEGQuality 预览图 JPEG 质量，与缩略图一致（85）：
@@ -82,8 +77,6 @@ const (
 // 缓存 key 由 (abs_path, mtime, size) 派生，确保源文件变更后能自动失效。
 type ThumbnailService struct {
 	cacheDir   string
-	width      int
-	height     int
 	maxAgeDays int
 	lruSize    int
 	// convertedDir 存放"浏览器可直接显示"的整图转换结果（HEIC/TIFF 等）。
@@ -131,8 +124,6 @@ type ThumbnailService struct {
 // ThumbnailOptions 构造选项。
 type ThumbnailOptions struct {
 	CacheDir   string // 必填
-	Width      int    // 默认 320
-	Height     int    // 默认 350
 	MaxAgeDays int    // 默认 30
 	LRUSize    int    // 默认 500
 
@@ -162,14 +153,6 @@ func NewThumbnailService(opts ThumbnailOptions) (*ThumbnailService, error) {
 		return nil, fmt.Errorf("create cache dir: %w", err)
 	}
 
-	w := opts.Width
-	if w <= 0 {
-		w = 320
-	}
-	h := opts.Height
-	if h <= 0 {
-		h = 350
-	}
 	days := opts.MaxAgeDays
 	if days <= 0 {
 		days = 30
@@ -208,8 +191,6 @@ func NewThumbnailService(opts ThumbnailOptions) (*ThumbnailService, error) {
 		cacheDir:        opts.CacheDir,
 		convertedDir:    convertedDir,
 		previewDir:      previewDir,
-		width:           w,
-		height:          h,
 		maxAgeDays:      days,
 		lruSize:         lruSize,
 		memCache:        cache,
@@ -249,6 +230,22 @@ func CacheKeyFromStat(absPath string, fi os.FileInfo) string {
 func videoCoverKey(absPath string, mtime time.Time, size int64) string {
 	h := md5.New()
 	fmt.Fprintf(h, "vc2:%s|%d|%d", absPath, mtime.UnixNano(), size)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// videoCoverMasterWidth 视频封面母版的宽度。
+//
+// 母版只抽一次，各档渲染图都从母版缩出来。取 1280 是为了在照片墙
+// 550px 的瓦片上，即使屏幕是 2 倍像素也拿得到够宽的一档。
+const videoCoverMasterWidth = 1280
+
+// videoCoverMasterKey 封面母版（未分档）的缓存键。
+//
+// 与分档渲染图的键（renditionKey）分开：母版是缩放的来源，
+// 分档图是从母版派生出来的产物，两者生命周期不同。
+func videoCoverMasterKey(absPath string, mtime time.Time, size int64) string {
+	h := md5.New()
+	fmt.Fprintf(h, "vcm:%s|%d|%d", absPath, mtime.UnixNano(), size)
 	return hex.EncodeToString(h.Sum(nil))
 }
 
@@ -331,20 +328,23 @@ func (s *ThumbnailService) generateConverted(absPath, diskPath, key string) ([]b
 	return data, nil
 }
 
-// GetOrCreate 获取或生成缩略图。返回 JPEG 字节。
+// GetOrCreate 获取或生成指定宽度的渲染图。返回 JPEG 字节。
+//
+// width 是渲染档位的目标宽度；调用方应先用 SnapRenditionWidth 把它对齐
+// 到档位阶梯上，缓存键里带的就是这个宽度。
 //
 // 按源文件类型自动分流：
 //   - 图片（jpg/png/gif/bmp/webp/tiff）：解码 → 缩放 → 缓存
 //   - 视频（mp4/webm/mov/mkv/avi/m4v）：仅查询已缓存的封面
 //     （由前端浏览器抽帧后回填到 SaveVideoCover），未命中返回
 //     ErrVideoCoverMissing，handler 端透传 404 + code 让前端触发抽帧。
-func (s *ThumbnailService) GetOrCreate(absPath string) ([]byte, error) {
+func (s *ThumbnailService) GetOrCreate(absPath string, width int) ([]byte, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if models.IsVideoFile(filepath.Base(absPath)) {
-		return s.getVideoCover(absPath)
+		return s.getVideoCover(absPath, width)
 	}
-	return s.getOrCreateImage(absPath)
+	return s.getOrCreateImage(absPath, width)
 }
 
 // PreviewImage 预览图结果。
@@ -354,9 +354,11 @@ func (s *ThumbnailService) GetOrCreate(absPath string) ([]byte, error) {
 type PreviewImage struct {
 	Data        []byte
 	ContentType string
-	// ETag 由源文件的 mtime + size + 目标宽度派生，
-	// 源文件变化或换了宽度都会让旧缓存失效。
+	// ETag 由源文件版本与目标档位派生，
+	// 源文件变化或换了档位都会让旧缓存失效。
 	ETag string
+	// Version 是源文件的内容版本号，供 handler 判断能否回 immutable。
+	Version string
 }
 
 // GetOrCreatePreview 返回按 maxWidth 缩放的预览图。
@@ -366,15 +368,11 @@ type PreviewImage struct {
 // 原图解码出几十 MB 的位图。这里按请求宽度等比缩放并缓存到磁盘，
 // 1600px 宽的 q85 JPEG 约 200–400KB，是原图的 1/10~1/30。
 //
-// maxWidth 会被夹到 [previewMinWidth, previewMaxWidth]。
-// 缓存键包含源文件版本与目标宽度，源文件改了或换了宽度都会重新生成。
+// maxWidth 会被对齐到档位阶梯（SnapRenditionWidth）：档位固定之后，
+// 同一个源图不会因为视口差几十像素就多出一份缓存产物。
+// 缓存键包含源文件版本与目标档位，源文件改了或换了档位都会重新生成。
 func (s *ThumbnailService) GetOrCreatePreview(absPath string, maxWidth int) (PreviewImage, error) {
-	if maxWidth < previewMinWidth {
-		maxWidth = previewMinWidth
-	}
-	if maxWidth > previewMaxWidth {
-		maxWidth = previewMaxWidth
-	}
+	maxWidth = SnapRenditionWidth(maxWidth)
 	fi, err := os.Stat(absPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -386,20 +384,21 @@ func (s *ThumbnailService) GetOrCreatePreview(absPath string, maxWidth int) (Pre
 		return PreviewImage{}, ErrSourceMissing
 	}
 
+	version := MediaVersionFromStat(fi)
 	sourceKey := CacheKeyFromStat(absPath, fi)
 	key := previewCacheKey(sourceKey, maxWidth)
-	etag := fmt.Sprintf(`"%x-%x-%d"`, fi.ModTime().UnixNano(), fi.Size(), maxWidth)
+	etag := RenditionETag(version, maxWidth)
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	if data, ok := s.previewCache.Get(key); ok {
-		return PreviewImage{Data: data, ContentType: "image/jpeg", ETag: etag}, nil
+		return PreviewImage{Data: data, ContentType: "image/jpeg", ETag: etag, Version: version}, nil
 	}
 	diskPath := filepath.Join(s.previewDir, key+JPEGExt)
 	if data, err := os.ReadFile(diskPath); err == nil {
 		s.previewCache.Add(key, data)
-		return PreviewImage{Data: data, ContentType: "image/jpeg", ETag: etag}, nil
+		return PreviewImage{Data: data, ContentType: "image/jpeg", ETag: etag, Version: version}, nil
 	}
 
 	// 同 key 并发只生成一次，避免一屏多张图同时请求时重复解码原图。
@@ -425,15 +424,16 @@ func (s *ThumbnailService) GetOrCreatePreview(absPath string, maxWidth int) (Pre
 	if err != nil {
 		return PreviewImage{}, err
 	}
-	return PreviewImage{Data: v.([]byte), ContentType: "image/jpeg", ETag: etag}, nil
+	return PreviewImage{Data: v.([]byte), ContentType: "image/jpeg", ETag: etag, Version: version}, nil
 }
 
-// previewCacheKey 把目标宽度纳入缓存键。
+// previewCacheKey 把目标档位纳入缓存键。
 //
-// 同一张图按不同宽度请求会得到不同产物，键里必须带宽度；
+// 同一张图按不同档位请求会得到不同产物，键里必须带档位；
 // 前缀 pv1 与缩略图 / 整图转换的键区分开，避免互相覆盖。
+// 渲染算法版本也进键：算法升级后旧产物不再命中。
 func previewCacheKey(sourceKey string, maxWidth int) string {
-	sum := md5.Sum([]byte(fmt.Sprintf("pv1:%s|%d|jpeg-v1", sourceKey, maxWidth)))
+	sum := md5.Sum([]byte(fmt.Sprintf("pv1:%s|%d|jpeg-r%d", sourceKey, maxWidth, renditionAlgoVersion)))
 	return hex.EncodeToString(sum[:])
 }
 
@@ -467,7 +467,7 @@ func (s *ThumbnailService) generatePreview(absPath string, maxWidth int) ([]byte
 	if err != nil {
 		if errors.Is(err, ErrUnsupportedFormat) {
 			// 纯 Go 解不了的格式（HEIC/HEIF）：交给 ffmpeg 转换后再缩放。
-			converted, cerr := s.convertUnsupported(absPath)
+			converted, cerr := s.convertUnsupported(absPath, maxWidth)
 			if cerr != nil {
 				return nil, ErrUnsupportedFormat
 			}
@@ -514,6 +514,15 @@ func flattenOnWhite(img image.Image) *image.NRGBA {
 	return dst
 }
 
+// imageDimensionsOf 从字节读图片头，返回宽高。读不出来时返回错误。
+func imageDimensionsOf(data []byte) (int, int, error) {
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return 0, 0, err
+	}
+	return cfg.Width, cfg.Height, nil
+}
+
 // imageDimensions 只读图片头，返回宽高。读不出来时返回错误。
 func imageDimensions(absPath string) (int, int, error) {
 	f, err := os.Open(absPath)
@@ -528,15 +537,15 @@ func imageDimensions(absPath string) (int, int, error) {
 	return cfg.Width, cfg.Height, nil
 }
 
-// renditionKey 把尺寸和编码版本纳入磁盘及内存缓存标识。
-// 调用方持有配置读锁，保证同次生成使用一致的尺寸。
-func (s *ThumbnailService) renditionKey(sourceKey string) string {
-	sum := md5.Sum([]byte(fmt.Sprintf("%s|%dx%d|jpeg-v2", sourceKey, s.width, s.height)))
+// renditionKey 把渲染档位和编码版本纳入磁盘及内存缓存标识。
+// 宽度进键：同一张源图在不同档位下是不同产物，必须分开存。
+func (s *ThumbnailService) renditionKey(sourceKey string, width int) string {
+	sum := md5.Sum([]byte(fmt.Sprintf("%s|%d|jpeg-r%d", sourceKey, width, renditionAlgoVersion)))
 	return hex.EncodeToString(sum[:])
 }
 
-// getOrCreateImage 现有图片缩略图流程。
-func (s *ThumbnailService) getOrCreateImage(absPath string) ([]byte, error) {
+// getOrCreateImage 图片渲染流程：按目标宽度等比缩放，不裁剪、不放大。
+func (s *ThumbnailService) getOrCreateImage(absPath string, width int) ([]byte, error) {
 	fi, err := os.Stat(absPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -548,7 +557,7 @@ func (s *ThumbnailService) getOrCreateImage(absPath string) ([]byte, error) {
 		return nil, ErrSourceMissing
 	}
 
-	key := s.renditionKey(CacheKeyFromStat(absPath, fi))
+	key := s.renditionKey(CacheKeyFromStat(absPath, fi), width)
 
 	// 1) 内存缓存
 	if data, ok := s.memCache.Get(key); ok {
@@ -574,7 +583,7 @@ func (s *ThumbnailService) getOrCreateImage(absPath string) ([]byte, error) {
 			s.memCache.Add(key, data)
 			return data, nil
 		}
-		return s.generateAndPersist(absPath, key)
+		return s.generateAndPersist(absPath, key, width)
 	})
 	if err != nil {
 		return nil, err
@@ -585,8 +594,8 @@ func (s *ThumbnailService) getOrCreateImage(absPath string) ([]byte, error) {
 // generateAndPersist 调用 decode+resize+encode 并把结果写盘 + 加内存缓存。
 // 假定 diskPath 还没命中（已经被 singleflight 拦截过一次）。调用方需持
 // memCache.Add 路径锁；这里串行写避免与并发 singleflight 重复覆盖。
-func (s *ThumbnailService) generateAndPersist(absPath, key string) ([]byte, error) {
-	data, err := s.generate(absPath)
+func (s *ThumbnailService) generateAndPersist(absPath, key string, width int) ([]byte, error) {
+	data, err := s.generate(absPath, width)
 	if err != nil {
 		return nil, err
 	}
@@ -610,7 +619,7 @@ func (s *ThumbnailService) generateAndPersist(absPath, key string) ([]byte, erro
 //
 // 注意:先做 Stat 校验源文件存在,避免对已删除视频返回错误状态码
 // 误导前端"以为要抽帧"。
-func (s *ThumbnailService) getVideoCover(absPath string) ([]byte, error) {
+func (s *ThumbnailService) getVideoCover(absPath string, width int) ([]byte, error) {
 	fi, err := os.Stat(absPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -621,8 +630,53 @@ func (s *ThumbnailService) getVideoCover(absPath string) ([]byte, error) {
 	if !fi.Mode().IsRegular() {
 		return nil, ErrSourceMissing
 	}
-	key := s.renditionKey(videoCoverKey(absPath, fi.ModTime(), fi.Size()))
+	sourceKey := videoCoverKey(absPath, fi.ModTime(), fi.Size())
+	tierKey := s.renditionKey(sourceKey, width)
 
+	// 1) 档位缓存
+	if data, ok := s.memCache.Get(tierKey); ok {
+		return data, nil
+	}
+	diskPath := filepath.Join(s.cacheDir, tierKey+JPEGExt)
+	if data, err := os.ReadFile(diskPath); err == nil {
+		s.memCache.Add(tierKey, data)
+		return data, nil
+	}
+
+	master, err := s.videoCoverMaster(absPath, fi)
+	if err != nil {
+		return nil, err
+	}
+
+	// 母版比这一档还窄时直接给母版，不放大。
+	if masterWidth, _, derr := imageDimensionsOf(master); derr == nil && masterWidth <= width {
+		s.memCache.Add(tierKey, master)
+		return master, nil
+	}
+
+	// 2) 从母版缩出这一档。
+	img, _, derr := image.Decode(bytes.NewReader(master))
+	if derr != nil {
+		return nil, ErrVideoCoverMissing
+	}
+	buf, err := encodeJPEG(flattenOnWhite(resizeToWidth(img, width)), jpegQuality)
+	if err != nil {
+		return nil, err
+	}
+	if werr := os.WriteFile(diskPath, buf, 0o644); werr != nil {
+		// 写失败不影响返回（仅缓存丢失，下次重新生成）
+		fmt.Fprintf(os.Stderr, "write video cover rendition key=%s: %v\n", tierKey, werr)
+	}
+	s.memCache.Add(tierKey, buf)
+	return buf, nil
+}
+
+// videoCoverMaster 取视频封面的母版（未分档）。
+//
+// 母版只做一次：服务端 ffmpeg 抽帧，或前端浏览器抽帧后上传回来的那张。
+// 各档渲染图都从母版缩出来 —— 抽帧很贵，不能每个档位抽一次。
+func (s *ThumbnailService) videoCoverMaster(absPath string, fi os.FileInfo) ([]byte, error) {
+	key := videoCoverMasterKey(absPath, fi.ModTime(), fi.Size())
 	if data, ok := s.memCache.Get(key); ok {
 		return data, nil
 	}
@@ -655,8 +709,8 @@ func (s *ThumbnailService) getVideoCover(absPath string) ([]byte, error) {
 		data, extractErr := extractor.Extract(absPath)
 		if extractErr == nil && len(data) > 0 {
 			if werr := os.WriteFile(diskPath, data, 0o644); werr != nil {
-				// 写盘失败不影响返回
-				fmt.Fprintf(os.Stderr, "write video cover cache key=%s: %v\n", key, werr)
+				// 写失败不影响返回
+				fmt.Fprintf(os.Stderr, "write video cover master key=%s: %v\n", key, werr)
 			}
 			s.memCache.Add(key, data)
 			return data, nil
@@ -684,8 +738,8 @@ func (s *ThumbnailService) getVideoCover(absPath string) ([]byte, error) {
 //  1. 校验 absPath 是受支持的视频扩展名 + 文件存在（用于派生 cache key）
 //  2. 解码 data 为 image.Image（支持 jpeg/png，前端 canvas.toBlob 通常
 //     给出 jpeg，但允许 png）
-//  3. 缩放到 s.width × s.height（与图片缩略图同一尺寸，UI 通用）
-//  4. 编码为 PNG，写磁盘 + 加内存缓存
+//  3. 缩到 videoCoverMasterWidth 以内，存成母版
+//  4. 编码为 JPEG，写磁盘 + 加内存缓存
 //
 // 源文件不存在时返回 ErrSourceMissing（前端抽完帧视频已被删等场景）。
 // 源文件存在但 data 不是合法图片时返回 ErrUnsupportedFormat。
@@ -712,14 +766,14 @@ func (s *ThumbnailService) SaveVideoCover(absPath string, data []byte) error {
 		return fmt.Errorf("decode cover data: %w", ErrUnsupportedFormat)
 	}
 
-	// 缩放到目标尺寸
-	thumb := imaging.Fit(img, s.width, s.height, imaging.Lanczos)
-	buf, err := encodeJPEG(thumb, jpegQuality)
+	// 缩到母版宽度：浏览器抽帧拿到的是画布尺寸，可能比这大得多。
+	thumb := resizeToWidth(img, videoCoverMasterWidth)
+	buf, err := encodeJPEG(flattenOnWhite(thumb), jpegQuality)
 	if err != nil {
 		return fmt.Errorf("encode jpeg: %w", err)
 	}
 
-	key := s.renditionKey(videoCoverKey(absPath, fi.ModTime(), fi.Size()))
+	key := videoCoverMasterKey(absPath, fi.ModTime(), fi.Size())
 	diskPath := filepath.Join(s.cacheDir, key+JPEGExt)
 	if werr := os.WriteFile(diskPath, buf, 0o644); werr != nil {
 		return fmt.Errorf("write cover cache: %w", werr)
@@ -733,7 +787,7 @@ func (s *ThumbnailService) SaveVideoCover(absPath string, data []byte) error {
 const jpegQuality = 85
 
 // generate 解码 → 缩放 → 编码为 JPEG。
-func (s *ThumbnailService) generate(absPath string) ([]byte, error) {
+func (s *ThumbnailService) generate(absPath string, width int) ([]byte, error) {
 	// 先按像素预算排队，再占用并行槽位：像素预算是内存闸门，先拿到它
 	// 才不会让一堆大图同时进入解码阶段把内存顶高。
 	weight, err := decodePixelWeight(absPath)
@@ -752,7 +806,7 @@ func (s *ThumbnailService) generate(absPath string) ([]byte, error) {
 	if err != nil {
 		if errors.Is(err, ErrUnsupportedFormat) {
 			// 纯 Go 解不了的格式（目前是 HEIC/HEIF）：交给 ffmpeg 转换。
-			converted, cerr := s.convertUnsupported(absPath)
+			converted, cerr := s.convertUnsupported(absPath, width)
 			if cerr != nil {
 				return nil, ErrUnsupportedFormat
 			}
@@ -762,10 +816,12 @@ func (s *ThumbnailService) generate(absPath string) ([]byte, error) {
 		}
 	}
 
-	// 缩放到目标尺寸，保持比例（不裁剪、不填充）
-	thumb := fitToThumbnail(img, s.width, s.height)
+	// 缩放到目标宽度，保持比例（不裁剪、不填充、不放大）
+	thumb := resizeToWidth(img, width)
 
-	buf, err := encodeJPEG(thumb, jpegQuality)
+	// JPEG 没有 alpha 通道，PNG 的透明区域要先压到白底，
+	// 否则透明像素会变成黑块（漫画线稿常见）。
+	buf, err := encodeJPEG(flattenOnWhite(thumb), jpegQuality)
 	if err != nil {
 		return nil, fmt.Errorf("encode: %w", err)
 	}
@@ -799,24 +855,6 @@ func decodePixelWeight(absPath string) (int64, error) {
 	return weight, nil
 }
 
-// fitToThumbnail 把原图缩放到目标尺寸（保持比例，letterbox 填充）。
-//
-// 大原图（手机常见的 12MP 以上）直接跑 Lanczos，卷积核要覆盖几十个
-// 原图像素，成本随像素数线性上升：4608×3456 的原图仅缩放一步就要
-// 40ms 以上。
-//
-// 这里先用一个廉价的 Box 面积平均把长边压到目标的 2 倍以内，再在小图
-// 上做 Lanczos —— 这是 libvips / ImageMagick 的标准降采样做法，结果与
-// 直接 Lanczos 肉眼无差别，耗时降到零头。
-func fitToThumbnail(img image.Image, width, height int) *image.NRGBA {
-	srcW, srcH := img.Bounds().Dx(), img.Bounds().Dy()
-	if srcW <= 2*width && srcH <= 2*height {
-		return imaging.Fit(img, width, height, imaging.Lanczos)
-	}
-	pre := imaging.Fit(img, 2*width, 2*height, imaging.Box)
-	return imaging.Fit(pre, width, height, imaging.Lanczos)
-}
-
 // decodeImage 按扩展名选择解码器：
 //   - HEIC/HEIF：纯 Go 解不了（需要 libde265 CGO 依赖），返回 ErrUnsupportedFormat
 //   - 其他：imaging（覆盖 jpg/png/gif/bmp/webp/tiff）
@@ -845,11 +883,11 @@ func decodeImage(absPath string) (image.Image, error) {
 //
 // ffmpeg 不可用或转换失败时返回错误，调用方按"不支持的格式"处理
 // （前端显示占位图，不显示破图）。
-func (s *ThumbnailService) convertUnsupported(absPath string) (image.Image, error) {
+func (s *ThumbnailService) convertUnsupported(absPath string, width int) (image.Image, error) {
 	if s.imageConverter == nil {
 		return nil, ErrImageConvertUnavailable
 	}
-	return s.imageConverter.Convert(absPath)
+	return s.imageConverter.Convert(absPath, width)
 }
 
 // isThumbnailCacheFile 只识别当前 ThumbnailService 按源路径 MD5 生成的 JPEG。
@@ -994,8 +1032,6 @@ type ThumbnailStats struct {
 	MemoryItems int    `json:"memoryItems"`
 	DiskFiles   int    `json:"diskFiles"`
 	CacheDir    string `json:"cacheDir"`
-	Width       int    `json:"width"`
-	Height      int    `json:"height"`
 	MaxAgeDays  int    `json:"maxAgeDays"`
 	LRUSize     int    `json:"lruSize"`
 }
@@ -1006,8 +1042,6 @@ func (s *ThumbnailService) Stats() ThumbnailStats {
 	stats := ThumbnailStats{
 		MemoryItems: s.memCache.Len(),
 		CacheDir:    s.cacheDir,
-		Width:       s.width,
-		Height:      s.height,
 		MaxAgeDays:  s.maxAgeDays,
 		LRUSize:     s.lruSize,
 	}
@@ -1033,7 +1067,6 @@ func (s *ThumbnailService) SetVideoCover(vc *VideoCoverExtractor) {
 // UpdateOptions 热更新部分运行参数。0 值表示"不修改"（除了 LRUSize 显式
 // 用 0 表示"不重建 LRU"）。调用方负责保证 CacheDir 已存在。
 //
-//   - Width/Height 变化：使用新的缓存键，旧尺寸文件等待清理
 //   - MaxAgeDays 变化：影响后续 Cleanup 的截止时间
 //   - LRUSize 变化：重建 LRU 内存缓存（现有项全部丢弃）
 //   - CacheDir 变化：先 MkdirAll 验证新目录可创建，再切换；旧目录保留
@@ -1045,12 +1078,6 @@ func (s *ThumbnailService) UpdateOptions(opts ThumbnailOptions) error {
 	}
 	if opts.ImageConverter != nil {
 		s.imageConverter = opts.ImageConverter
-	}
-	if opts.Width > 0 {
-		s.width = opts.Width
-	}
-	if opts.Height > 0 {
-		s.height = opts.Height
 	}
 	if opts.MaxAgeDays > 0 {
 		s.maxAgeDays = opts.MaxAgeDays

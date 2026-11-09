@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Virtuoso } from "react-virtuoso";
-import { thumbUrl } from "../../api/thumbs";
+import RenditionImage from "../common/RenditionImage";
 import { CloseIcon, SinglePageIcon } from "../common/Icon";
 import { useMediaQuery } from "../../hooks/useMediaQuery";
 
@@ -147,11 +147,11 @@ export default function PageOverview({
                     <SinglePageIcon size={18} />
                   </span>
                   {!failed.has(item.id) && (
-                    <img
-                      src={thumbUrl(item.id)}
+                    <RenditionImage
+                      fileId={item.id}
                       alt=""
+                      displayWidth={96}
                       loading="lazy"
-                      decoding="async"
                       className="relative h-full w-full object-cover"
                       onError={() => markFailed(item.id)}
                     />

@@ -111,27 +111,32 @@ const libraryManifestWarningLimit = 100
 // LibraryNodeSummary 是 root/collection 直属子节点的统一卡片 DTO。
 // CoverImages 最多四项，可直接用于 collection 的拼贴封面。
 type LibraryNodeSummary struct {
-	ID             string    `json:"id"`
-	Kind           string    `json:"kind"`
-	Name           string    `json:"name"`
-	DisplayName    string    `json:"displayName"`
-	SourceRoot     string    `json:"sourceRoot,omitempty"`
-	SourceName     string    `json:"sourceName,omitempty"`
-	CoverImage     string    `json:"coverImage,omitempty"`
-	CoverImages    []string  `json:"coverImages"`
-	CoverKind      string    `json:"coverKind,omitempty"`
-	ImageCount     int       `json:"imageCount,omitempty"`
-	VideoCount     int       `json:"videoCount,omitempty"`
-	MediaCount     int       `json:"mediaCount,omitempty"`
-	AlbumCount     int       `json:"albumCount,omitempty"`
-	ChildCount     int       `json:"childCount,omitempty"`
-	FolderSize     int64     `json:"folderSize,omitempty"`
-	Tags           []string  `json:"tags,omitempty"`
-	ModTime        time.Time `json:"modTime,omitempty"`
-	Date           time.Time `json:"date,omitempty"`
-	DateSource     string    `json:"dateSource,omitempty"`
-	Virtual        bool      `json:"virtual,omitempty"`
-	HasCustomCover bool      `json:"hasCustomCover,omitempty"`
+	ID          string   `json:"id"`
+	Kind        string   `json:"kind"`
+	Name        string   `json:"name"`
+	DisplayName string   `json:"displayName"`
+	SourceRoot  string   `json:"sourceRoot,omitempty"`
+	SourceName  string   `json:"sourceName,omitempty"`
+	CoverImage  string   `json:"coverImage,omitempty"`
+	CoverImages []string `json:"coverImages"`
+	// CoverImageVersion / CoverImageVersions 是封面文件的内容版本号，
+	// 与 CoverImage / CoverImages 一一对应。前端把它拼进封面 URL，
+	// 服务端据此回 immutable，重复打开页面时封面不用再走网络。
+	CoverImageVersion  string    `json:"coverImageVersion,omitempty"`
+	CoverImageVersions []string  `json:"coverImageVersions,omitempty"`
+	CoverKind          string    `json:"coverKind,omitempty"`
+	ImageCount         int       `json:"imageCount,omitempty"`
+	VideoCount         int       `json:"videoCount,omitempty"`
+	MediaCount         int       `json:"mediaCount,omitempty"`
+	AlbumCount         int       `json:"albumCount,omitempty"`
+	ChildCount         int       `json:"childCount,omitempty"`
+	FolderSize         int64     `json:"folderSize,omitempty"`
+	Tags               []string  `json:"tags,omitempty"`
+	ModTime            time.Time `json:"modTime,omitempty"`
+	Date               time.Time `json:"date,omitempty"`
+	DateSource         string    `json:"dateSource,omitempty"`
+	Virtual            bool      `json:"virtual,omitempty"`
+	HasCustomCover     bool      `json:"hasCustomCover,omitempty"`
 	// Location 是虚拟相册归属目录相对媒体根的路径（斜杠分隔），
 	// 例如 "2020年" / "2011年/10.1一号公馆"。前端用它替代
 	// “本目录媒体”作为卡片标题。普通相册为空。
@@ -159,6 +164,13 @@ type LibraryMediaItem struct {
 	// 照片墙据此按真实宽高比排布，不必在浏览器里逐张探测。
 	Width  int `json:"width,omitempty"`
 	Height int `json:"height,omitempty"`
+	// Version 是媒体文件的内容版本号（mtime + size + 渲染算法版本）。
+	// 前端把它拼进渲染图 URL，服务端据此回 immutable。
+	Version string `json:"version,omitempty"`
+
+	// sourcePath 只在服务端内部用：分页时才 stat 出 Version，
+	// 不必在索引构建阶段给全库每个文件都做一次 stat。
+	sourcePath string
 }
 
 type LibraryTagSummary struct {
@@ -166,6 +178,9 @@ type LibraryTagSummary struct {
 	AlbumCount  int      `json:"albumCount"`
 	CoverImage  string   `json:"coverImage,omitempty"`
 	CoverImages []string `json:"coverImages"`
+	// CoverImageVersion / CoverImageVersions 与封面一一对应的内容版本号。
+	CoverImageVersion  string   `json:"coverImageVersion,omitempty"`
+	CoverImageVersions []string `json:"coverImageVersions,omitempty"`
 	// PhotoAlbumCount / ComicAlbumCount 是该标签在两种属性下的册数。
 	// 列表接口按当前属性收敛，只要一个数就够；按名解析时两个都要，
 	// 客户端据此判断「这个标签在当前这一侧还有没有作品」。
@@ -184,6 +199,8 @@ type LibrarySearchHit struct {
 	Tags       []string `json:"tags,omitempty"`
 	Count      int      `json:"count"`
 	CoverImage string   `json:"coverImage,omitempty"`
+	// CoverImageVersion 是封面文件的内容版本号。
+	CoverImageVersion string `json:"coverImageVersion,omitempty"`
 	// ContentKind 让搜索结果不必再查一次相册摘要就能决定跳转目标。
 	ContentKind string `json:"contentKind,omitempty"`
 }
@@ -324,11 +341,12 @@ func buildLibraryPageIndex(state *resourceCatalogState) *libraryPageIndex {
 		kindIndexes := map[string]int{"image": 0, "video": 0}
 		for itemIndex, source := range sources {
 			items = append(items, LibraryMediaItem{
-				ID:        source.id,
-				Kind:      source.kind,
-				Name:      filepath.Base(source.path),
-				Index:     itemIndex,
-				KindIndex: kindIndexes[source.kind],
+				ID:         source.id,
+				Kind:       source.kind,
+				Name:       filepath.Base(source.path),
+				Index:      itemIndex,
+				KindIndex:  kindIndexes[source.kind],
+				sourcePath: source.path,
 			})
 			kindIndexes[source.kind]++
 		}
@@ -440,11 +458,12 @@ func buildLibrarySearchIndex(index *libraryPageIndex) []LibrarySearchHit {
 	for _, album := range index.albums {
 		hits = append(hits, LibrarySearchHit{
 			Kind: "album", Path: album.ID, Name: searchHitName(album),
-			Virtual:     album.Virtual,
-			Tags:        append([]string(nil), album.Tags...),
-			Count:       album.ImageCount,
-			CoverImage:  album.CoverImage,
-			ContentKind: album.ContentKind,
+			Virtual:           album.Virtual,
+			Tags:              append([]string(nil), album.Tags...),
+			Count:             album.ImageCount,
+			CoverImage:        album.CoverImage,
+			CoverImageVersion: album.CoverImageVersion,
+			ContentKind:       album.ContentKind,
 		})
 	}
 	collections := make([]LibraryNodeSummary, 0, len(index.nodes))
@@ -466,13 +485,15 @@ func buildLibrarySearchIndex(index *libraryPageIndex) []LibrarySearchHit {
 		hits = append(hits, LibrarySearchHit{
 			Kind: "collection", Path: collection.ID, Name: collection.DisplayName,
 			Count: collection.AlbumCount, CoverImage: collection.CoverImage,
-			ContentKind: collection.ContentKind,
+			CoverImageVersion: collection.CoverImageVersion,
+			ContentKind:       collection.ContentKind,
 		})
 	}
 	for _, tag := range index.tags {
 		hits = append(hits, LibrarySearchHit{
 			Kind: "smartCollection", Path: "smart:" + tag.Tag, Name: tag.Tag,
 			Tags: []string{tag.Tag}, Count: tag.AlbumCount, CoverImage: tag.CoverImage,
+			CoverImageVersion: tag.CoverImageVersion,
 		})
 	}
 	return hits
@@ -610,8 +631,19 @@ func PageAlbumMedia(snapshot CatalogSnapshot, albumID, cursor string, limit int)
 	if err != nil {
 		return LibraryPage[LibraryMediaItem]{}, err
 	}
+	items := clonePage(media, start, end)
+	// 版本号按需 stat：只为这一页的文件付代价，不在索引构建阶段给
+	// 全库每个文件都 stat 一次。
+	for i := range items {
+		if items[i].sourcePath == "" {
+			continue
+		}
+		if version, verr := MediaVersion(items[i].sourcePath); verr == nil {
+			items[i].Version = version
+		}
+	}
 	return LibraryPage[LibraryMediaItem]{
-		Revision: snapshot.Revision(), Items: clonePage(media, start, end), Total: len(media), NextCursor: next,
+		Revision: snapshot.Revision(), Items: items, Total: len(media), NextCursor: next,
 	}, nil
 }
 
@@ -1076,6 +1108,35 @@ func clonePage[T any](items []T, start, end int) []T {
 	return append([]T(nil), items[start:end]...)
 }
 
+// mediaVersionOfID 按资源 ID 派生媒体文件的内容版本号。
+//
+// 读不到（文件离线、不是普通文件、目录被移除）时返回空串：前端拿到空串
+// 就不会往 URL 里带版本号，服务端按"每次重新验证"处理，不会给出陈旧内容。
+func mediaVersionOfID(state *resourceCatalogState, id string) string {
+	if id == "" || state == nil {
+		return ""
+	}
+	ref, ok := state.byID[id]
+	if !ok {
+		return ""
+	}
+	version, err := MediaVersion(ref.AbsolutePath)
+	if err != nil {
+		return ""
+	}
+	return version
+}
+
+// firstNonEmpty 返回切片里第一个非空字符串，没有则返回空串。
+func firstNonEmpty(values []string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
 func cloneNodePage(items []LibraryNodeSummary, start, end int) []LibraryNodeSummary {
 	out := clonePage(items, start, end)
 	for i := range out {
@@ -1086,6 +1147,7 @@ func cloneNodePage(items []LibraryNodeSummary, start, end int) []LibraryNodeSumm
 
 func cloneNodeSummary(item LibraryNodeSummary) LibraryNodeSummary {
 	item.CoverImages = append([]string(nil), item.CoverImages...)
+	item.CoverImageVersions = append([]string(nil), item.CoverImageVersions...)
 	item.Tags = append([]string(nil), item.Tags...)
 	return item
 }
@@ -1094,6 +1156,7 @@ func cloneTagPage(items []LibraryTagSummary, start, end int) []LibraryTagSummary
 	out := clonePage(items, start, end)
 	for i := range out {
 		out[i].CoverImages = append([]string(nil), out[i].CoverImages...)
+		out[i].CoverImageVersions = append([]string(nil), out[i].CoverImageVersions...)
 	}
 	return out
 }
@@ -1224,34 +1287,38 @@ func albumSummary(state *resourceCatalogState, album models.Album) LibraryNodeSu
 	sourceRoot, sourceName := nodeSource(state, id, album.SourceRoot, album.SourceName)
 	cover := externalID(state, album.CoverImage, ResourceFile)
 	covers := []string{}
+	coverVersions := []string{}
 	if cover != "" {
 		covers = append(covers, cover)
+		coverVersions = append(coverVersions, mediaVersionOfID(state, cover))
 	}
 	tags := append([]string(nil), album.Tags...)
 	return LibraryNodeSummary{
-		ID:             id,
-		Kind:           string(ResourceAlbum),
-		Name:           album.Name,
-		DisplayName:    albumDisplayName(album),
-		SourceRoot:     sourceRoot,
-		SourceName:     sourceName,
-		CoverImage:     cover,
-		CoverImages:    covers,
-		CoverKind:      album.CoverKind,
-		ImageCount:     album.ImageCount,
-		VideoCount:     album.VideoCount,
-		MediaCount:     len(album.ImageFiles) + len(album.VideoFiles),
-		FolderSize:     album.FolderSize,
-		Tags:           tags,
-		ModTime:        album.ModTime,
-		Date:           album.Date,
-		DateSource:     album.DateSource,
-		Virtual:        album.Virtual,
-		HasCustomCover: state.customCovers[filepath.Clean(album.Path)],
-		Location:       album.Location,
-		ParentName:     parentNameFor(state, album),
-		ParentID:       parentCollectionID(state, album.Path, album.Virtual),
-		ContentKind:    album.ContentKind,
+		ID:                 id,
+		Kind:               string(ResourceAlbum),
+		Name:               album.Name,
+		DisplayName:        albumDisplayName(album),
+		SourceRoot:         sourceRoot,
+		SourceName:         sourceName,
+		CoverImage:         cover,
+		CoverImages:        covers,
+		CoverImageVersion:  firstNonEmpty(coverVersions),
+		CoverImageVersions: coverVersions,
+		CoverKind:          album.CoverKind,
+		ImageCount:         album.ImageCount,
+		VideoCount:         album.VideoCount,
+		MediaCount:         len(album.ImageFiles) + len(album.VideoFiles),
+		FolderSize:         album.FolderSize,
+		Tags:               tags,
+		ModTime:            album.ModTime,
+		Date:               album.Date,
+		DateSource:         album.DateSource,
+		Virtual:            album.Virtual,
+		HasCustomCover:     state.customCovers[filepath.Clean(album.Path)],
+		Location:           album.Location,
+		ParentName:         parentNameFor(state, album),
+		ParentID:           parentCollectionID(state, album.Path, album.Virtual),
+		ContentKind:        album.ContentKind,
 	}
 }
 
@@ -1307,31 +1374,37 @@ func collectionSummary(state *resourceCatalogState, collection models.Collection
 	sourceRoot, sourceName := nodeSource(state, id, collection.SourceRoot, collection.SourceName)
 	covers, coverKind := collectionCovers(state, collection, 4)
 	cover := ""
+	coverVersions := make([]string, 0, len(covers))
+	for _, id := range covers {
+		coverVersions = append(coverVersions, mediaVersionOfID(state, id))
+	}
 	if len(covers) > 0 {
 		cover = covers[0]
 	}
 	albumCount, imageCount, videoCount, folderSize := collectionTotals(collection)
 	return LibraryNodeSummary{
-		ID:          id,
-		Kind:        string(ResourceCollection),
-		Name:        collection.Name,
-		DisplayName: nodeDisplayName(collection.DisplayName, collection.Name),
-		SourceRoot:  sourceRoot,
-		SourceName:  sourceName,
-		CoverImage:  cover,
-		CoverImages: covers,
-		CoverKind:   coverKind,
-		ImageCount:  imageCount,
-		VideoCount:  videoCount,
-		MediaCount:  imageCount + videoCount,
-		AlbumCount:  albumCount,
-		ChildCount:  len(collection.Albums) + len(collection.Collections),
-		FolderSize:  folderSize,
-		ParentID:    parentCollectionID(state, collection.Path, false),
-		ContentKind: collection.ContentKind,
-		ModTime:     collection.ModTime,
-		Date:        collection.Date,
-		DateSource:  collection.DateSource,
+		ID:                 id,
+		Kind:               string(ResourceCollection),
+		Name:               collection.Name,
+		DisplayName:        nodeDisplayName(collection.DisplayName, collection.Name),
+		SourceRoot:         sourceRoot,
+		SourceName:         sourceName,
+		CoverImage:         cover,
+		CoverImages:        covers,
+		CoverImageVersion:  firstNonEmpty(coverVersions),
+		CoverImageVersions: coverVersions,
+		CoverKind:          coverKind,
+		ImageCount:         imageCount,
+		VideoCount:         videoCount,
+		MediaCount:         imageCount + videoCount,
+		AlbumCount:         albumCount,
+		ChildCount:         len(collection.Albums) + len(collection.Collections),
+		FolderSize:         folderSize,
+		ParentID:           parentCollectionID(state, collection.Path, false),
+		ContentKind:        collection.ContentKind,
+		ModTime:            collection.ModTime,
+		Date:               collection.Date,
+		DateSource:         collection.DateSource,
 	}
 }
 
@@ -1452,10 +1525,15 @@ func tagSummary(state *resourceCatalogState, smart models.SmartCollection) Libra
 		}
 	}
 	cover := externalID(state, smart.CoverImage, ResourceFile)
+	coverVersions := make([]string, 0, len(covers))
+	for _, id := range covers {
+		coverVersions = append(coverVersions, mediaVersionOfID(state, id))
+	}
 	if cover == "" && len(covers) > 0 {
 		cover = covers[0]
 	}
 	return LibraryTagSummary{
 		Tag: smart.Tag, AlbumCount: smart.AlbumCount, CoverImage: cover, CoverImages: covers,
+		CoverImageVersion: firstNonEmpty(coverVersions), CoverImageVersions: coverVersions,
 	}
 }

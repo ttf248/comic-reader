@@ -25,10 +25,6 @@ type ConfigPatch struct {
 	AccessTokenSet     bool     `json:"-"`
 	CacheDir           string   `json:"cacheDir,omitempty"`
 	CacheDirSet        bool     `json:"-"`
-	ThumbSizeW         int      `json:"thumbSizeW,omitempty"`
-	ThumbSizeWSet      bool     `json:"-"`
-	ThumbSizeH         int      `json:"thumbSizeH,omitempty"`
-	ThumbSizeHSet      bool     `json:"-"`
 	ThumbCacheSize     int      `json:"thumbCacheSize,omitempty"`
 	ThumbCacheSizeSet  bool     `json:"-"`
 	CacheMaxAgeDays    int      `json:"cacheMaxAgeDays,omitempty"`
@@ -85,12 +81,6 @@ func (p *ConfigPatch) UnmarshalJSON(data []byte) error {
 	}
 	if _, ok := raw["cacheDir"]; ok {
 		p.CacheDirSet = true
-	}
-	if _, ok := raw["thumbSizeW"]; ok {
-		p.ThumbSizeWSet = true
-	}
-	if _, ok := raw["thumbSizeH"]; ok {
-		p.ThumbSizeHSet = true
 	}
 	if _, ok := raw["thumbCacheSize"]; ok {
 		p.ThumbCacheSizeSet = true

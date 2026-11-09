@@ -6,7 +6,7 @@ import { SearchIcon } from "./Icon";
 import { useDebounce } from "../../hooks/useDebounce";
 import { useAppMode } from "../../hooks/useAppMode";
 import { albumsApi, type SearchHit } from "../../api/albums";
-import { thumbUrl } from "../../api/thumbs";
+import RenditionImage from "./RenditionImage";
 import { albumRoute, tagRoute } from "../../utils/path";
 import { albumCountUnit, collectionUnit, mediaUnit, workbenchCopy } from "../../utils/workbench";
 
@@ -141,9 +141,11 @@ export default function GlobalSearch() {
               }`}
             >
               {h.coverImage ? (
-                <img
-                  src={thumbUrl(h.coverImage)}
+                <RenditionImage
+                  fileId={h.coverImage}
+                  version={h.coverImageVersion}
                   alt=""
+                  displayWidth={32}
                   /* 漫画侧也是一本书（竖版 + 装订边），与网格卡同一套语言。
                      32px 宽的缩略图上装订边只剩一条黑线，看着像划痕，
                      因此这里只保留不对称的圆角轮廓。 */

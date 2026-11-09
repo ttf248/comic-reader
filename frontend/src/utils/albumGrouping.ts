@@ -36,6 +36,8 @@ export interface YearGroup {
    * 可能少于 4 个（空 coverPath 会被 UI 层跳过）。
    */
   coverPreviewPaths: string[];
+  /** 与 coverPreviewPaths 一一对应的封面内容版本号。 */
+  coverPreviewVersions: string[];
 }
 
 export function extractYear(name: string): number | null {
@@ -53,6 +55,7 @@ export type AlbumLike = {
   imageCount: number;
   videoCount?: number;
   coverImage: string;
+  coverImageVersion?: string;
   coverKind?: "image" | "video";
   tags?: string[];
   displayName?: string;
@@ -73,7 +76,9 @@ export type CollectionLike = {
   imageCount?: number;
   videoCount?: number;
   coverImage?: string;
+  coverImageVersion?: string;
   coverImages?: string[];
+  coverImageVersions?: string[];
   albums?: AlbumLike[];
   collections?: CollectionLike[];
   displayName?: string;
@@ -101,6 +106,7 @@ function cardForAlbumLike(a: AlbumLike): {
       imageCount: a.imageCount,
       videoCount: a.videoCount ?? 0,
       coverPath: a.coverImage,
+      coverVersion: a.coverImageVersion,
       coverKind: a.coverKind,
       to: albumRoute(a.contentKind, a.path),
       sourceRoot: a.sourceRoot,
@@ -147,7 +153,9 @@ function cardForCollection(c: CollectionLike): {
       subtitle: "集合",
       count: c.albumCount,
       coverPath: c.coverImage ?? c.albums?.[0]?.coverImage ?? "",
+      coverVersion: c.coverImageVersion ?? c.albums?.[0]?.coverImageVersion,
       covers: c.coverImages,
+      coverVersions: c.coverImageVersions,
       date: usableDate(c.date),
       to: albumRoute(c.contentKind, c.path),
       sourceRoot: c.sourceRoot,
@@ -186,6 +194,7 @@ export function groupAlbumsAndCollectionsByYear(
         imageTotal: 0,
         videoTotal: 0,
         coverPreviewPaths: [],
+        coverPreviewVersions: [],
       });
     }
     const g = groups.get(key)!;
@@ -219,10 +228,12 @@ export function groupAlbumsAndCollectionsByYear(
   // 同一年份内：文件多的在前（封面更吸引人的优先）
   for (const g of arr) {
     g.albums.sort((a, b) => b.count - a.count);
-    g.coverPreviewPaths = g.albums
-      .map((a) => a.coverPath)
-      .filter((p): p is string => !!p)
+    const previews = g.albums
+      .map((a) => ({ path: a.coverPath, version: a.coverVersion ?? "" }))
+      .filter((p) => !!p.path)
       .slice(0, 4);
+    g.coverPreviewPaths = previews.map((p) => p.path);
+    g.coverPreviewVersions = previews.map((p) => p.version);
   }
   return arr;
 }
@@ -242,6 +253,7 @@ export function groupLibraryNodesByYear(
         imageCount: node.imageCount ?? 0,
         videoCount: node.videoCount,
         coverImage: node.coverImage ?? "",
+        coverImageVersion: node.coverImageVersion,
         coverKind: node.coverKind,
         tags: node.tags,
         displayName: node.displayName,
@@ -260,7 +272,9 @@ export function groupLibraryNodesByYear(
       imageCount: node.imageCount,
       videoCount: node.videoCount,
       coverImage: node.coverImage,
+      coverImageVersion: node.coverImageVersion,
       coverImages: node.coverImages,
+      coverImageVersions: node.coverImageVersions,
       displayName: node.displayName,
       sourceRoot: node.sourceRoot,
       sourceName: node.sourceName,
@@ -289,6 +303,8 @@ export interface SeriesGroup {
   count: number;
   /** 封面（可为空）。 */
   coverPath?: string;
+  /** 封面内容版本号。 */
+  coverVersion?: string;
 }
 
 /**
@@ -303,6 +319,7 @@ export function groupLibraryNodesBySeries(
   const groups: SeriesGroup[] = [];
   let looseCount = 0;
   let looseCover: string | undefined;
+  let looseCoverVersion: string | undefined;
   let looseTo = "";
   for (const node of nodes) {
     if (node.kind === "collection") {
@@ -312,12 +329,16 @@ export function groupLibraryNodesBySeries(
         to: albumRoute(node.contentKind, node.id),
         count: node.albumCount ?? 0,
         coverPath: node.coverImage ?? node.coverImages?.[0],
+        coverVersion: node.coverImageVersion,
       });
       continue;
     }
     // 直挂根下的卷：没有上级集合。
     looseCount += 1;
-    if (!looseCover && node.coverImage) looseCover = node.coverImage;
+    if (!looseCover && node.coverImage) {
+      looseCover = node.coverImage;
+      looseCoverVersion = node.coverImageVersion;
+    }
     if (!looseTo) looseTo = albumRoute(node.contentKind, node.id);
   }
   if (looseCount > 0) {
@@ -327,6 +348,7 @@ export function groupLibraryNodesBySeries(
       to: looseTo,
       count: looseCount,
       coverPath: looseCover,
+      coverVersion: looseCoverVersion,
     });
   }
   // 卷多的作品排前面。

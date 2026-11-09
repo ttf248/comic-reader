@@ -156,9 +156,11 @@ export default function HoverPreview({ data, anchorRect, lastSeenAt, onPointerEn
                 <ThumbImage
                   key={item.id}
                   fileId={item.id}
+                  version={item.version}
                   alt=""
                   loading="eager"
                   iconSize={14}
+                  displayWidth={120}
                   className="h-full w-full object-cover"
                 />
               ))}

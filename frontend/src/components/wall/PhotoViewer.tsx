@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { previewUrl } from "../../api/images";
+import { pickRenditionWidth } from "../../utils/rendition";
 import type { LibraryMediaItem } from "../../api/library";
 import { isFullscreen, toggleFullscreen } from "../../utils/fullscreen";
 import { shouldIgnoreShortcut } from "../../utils/shortcuts";
@@ -86,11 +87,19 @@ export default function PhotoViewer({
   const current = items[index];
   const isVideo = current?.kind === "video";
 
-  const previewWidth = useMemo(() => {
+  // 视口宽 × 像素比是这张图在缩放 1 倍时需要的像素宽。
+  const basePreviewWidth = useMemo(() => {
     if (typeof window === "undefined") return 1600;
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     return Math.round(window.innerWidth * dpr);
   }, []);
+
+  // 放大时按放大倍数向上一档取图：否则放大看到的只是被拉大的像素。
+  // 档位固定，缩放过程中 URL 只在跨档时变一次，不会来回重下。
+  const previewWidth = useMemo(
+    () => pickRenditionWidth(basePreviewWidth * Math.max(1, zoom)),
+    [basePreviewWidth, zoom],
+  );
 
   const clampPan = useCallback(
     (next: { x: number; y: number }, scale: number) => {
@@ -396,7 +405,7 @@ export default function PhotoViewer({
           ) : (
             <img
               ref={imageRef}
-              src={previewUrl(current.id, previewWidth)}
+              src={previewUrl(current.id, previewWidth, current.version)}
               alt={current.name}
               onLoad={measureFitted}
               onError={() => setFailed(true)}

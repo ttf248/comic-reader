@@ -130,6 +130,7 @@ export default function PhotoAlbum({ album }: Props) {
     subtitle: (album.tags ?? []).join(" · "),
     count: album.imageCount ?? 0,
     coverPath: album.coverImage ?? "",
+    coverVersion: album.coverImageVersion,
     coverKind: album.coverKind ?? "image",
     to: albumRoute("photo", album.id),
     isFavorite,

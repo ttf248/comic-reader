@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { thumbUrl } from "../../api/thumbs";
+import { thumbSrcSet, thumbUrl } from "../../api/thumbs";
+import { pickRenditionWidth, renditionCandidates } from "../../utils/rendition";
 import { ImageIcon } from "./Icon";
 
 interface Props {
@@ -11,6 +12,15 @@ interface Props {
   loading?: "lazy" | "eager";
   /** 占位图里的图标尺寸。 */
   iconSize?: number;
+  /** 媒体内容版本号；带上之后服务端可回 immutable，浏览器长期缓存。 */
+  version?: string;
+  /**
+   * 槽位的显示宽度（CSS 像素）。
+   *
+   * 有了它才能算出该取哪一档：显示 48px 的小图不必下载 640 宽的渲染图，
+   * 显示 550px 的照片墙瓦片也不会拿到不够宽的一档而发虚。
+   */
+  displayWidth?: number;
 }
 
 /**
@@ -26,6 +36,8 @@ export default function ThumbImage({
   className = "",
   loading = "lazy",
   iconSize = 22,
+  version,
+  displayWidth,
 }: Props) {
   const [failed, setFailed] = useState(false);
 
@@ -42,9 +54,18 @@ export default function ThumbImage({
     );
   }
 
+  // 宽度未知时退回缺省档：宁可多拿一点，也不要拿不够宽的。
+  const width = pickRenditionWidth(displayWidth ?? 320);
+
   return (
     <img
-      src={thumbUrl(fileId)}
+      src={thumbUrl(fileId, version, width)}
+      srcSet={
+        displayWidth
+          ? thumbSrcSet(fileId, version, renditionCandidates())
+          : undefined
+      }
+      sizes={displayWidth ? `${displayWidth}px` : undefined}
       alt={alt}
       loading={loading}
       decoding="async"

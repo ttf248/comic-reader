@@ -42,9 +42,6 @@ func TestDefault(t *testing.T) {
 	if d.Port <= 0 || d.Port > 65535 {
 		t.Errorf("default Port out of range: %d", d.Port)
 	}
-	if d.ThumbSizeW <= 0 || d.ThumbSizeH <= 0 {
-		t.Error("default thumb size must be positive")
-	}
 	if d.CacheMaxAgeDays <= 0 {
 		t.Error("default cache max age must be positive")
 	}
@@ -94,8 +91,6 @@ mediaRoots:
 port: 9090
 accessMode: lan
 accessToken: 0123456789abcdef0123456789abcdef
-thumbSizeW: 210
-thumbSizeH: 280
 allowOsOpen: true
 cacheDir: D:\custom-cache
 staticDir: build/web
@@ -117,9 +112,6 @@ staticDir: build/web
 	}
 	if cfg.AccessMode != AccessModeLAN || cfg.AccessToken != "0123456789abcdef0123456789abcdef" {
 		t.Errorf("access configuration was not loaded")
-	}
-	if cfg.ThumbSizeW != 210 || cfg.ThumbSizeH != 280 {
-		t.Errorf("thumb size: got %dx%d", cfg.ThumbSizeW, cfg.ThumbSizeH)
 	}
 	if !cfg.AllowOsOpen {
 		t.Error("allowOsOpen should be true from file")
@@ -157,9 +149,6 @@ func TestLoadFile_PartialOverrides(t *testing.T) {
 	d := Default()
 	if cfg.Host != d.Host {
 		t.Errorf("host should keep default, got %q", cfg.Host)
-	}
-	if cfg.ThumbSizeW != d.ThumbSizeW {
-		t.Errorf("thumbSizeW should keep default")
 	}
 }
 
@@ -207,8 +196,6 @@ func TestValidate(t *testing.T) {
 			c.AccessToken = "0123456789abcdef0123456789abcdef"
 			c.MediaRoots = []MediaRoot{{Path: dir, Kind: DefaultMediaRootKind}}
 		}, false},
-		{"bad_thumb_w", func(c *Config) { c.ThumbSizeW = 0 }, true},
-		{"bad_thumb_h", func(c *Config) { c.ThumbSizeH = -1 }, true},
 		{"bad_root_kind", func(c *Config) {
 			c.MediaRoots = []MediaRoot{{Path: dir, Kind: "manga"}}
 		}, true},

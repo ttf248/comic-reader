@@ -63,6 +63,7 @@ export default function YearTimeline({ groups, gridRef }: Props) {
           count,
           numeric: group.year !== null,
           coverPath: group.coverPreviewPaths.find(Boolean),
+          coverVersion: group.coverPreviewVersions[0],
           active: isActive,
           onActivate: () => {
             if (enterTarget) navigate(enterTarget.to);

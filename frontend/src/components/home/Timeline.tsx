@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { thumbUrl } from "../../api/thumbs";
+import RenditionImage from "../common/RenditionImage";
 import { useAppMode } from "../../hooks/useAppMode";
 import { useEdgeFade } from "../../hooks/useEdgeFade";
 import { FolderIcon } from "../common/Icon";
@@ -13,6 +13,8 @@ export interface TimelineEntry {
   count: string;
   /** 封面（可为空）。 */
   coverPath?: string;
+  /** 封面内容版本号。 */
+  coverVersion?: string;
   /** 点击主区域时的行为。 */
   onActivate: () => void;
   /** 右上角的次级操作；没有就不渲染那一枚按钮。 */
@@ -78,11 +80,12 @@ function TimelineCard({ entry }: { entry: TimelineEntry }) {
           }`}
         >
           {cover && cover !== failedSource ? (
-            <img
-              src={thumbUrl(cover)}
+            <RenditionImage
+              fileId={cover}
+              version={entry.coverVersion}
               alt=""
+              displayWidth={48}
               loading="lazy"
-              decoding="async"
               onError={() => setFailedSource(cover)}
               className="w-full h-full object-cover"
             />

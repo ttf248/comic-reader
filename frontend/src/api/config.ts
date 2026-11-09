@@ -15,8 +15,6 @@ export interface ServerConfig {
   accessMode: "local" | "lan";
   accessTokenConfigured: boolean;
   cacheDir: string;
-  thumbSizeW: number;
-  thumbSizeH: number;
   thumbCacheSize: number;
   cacheMaxAgeDays: number;
   cacheMaxSizeMB: number;
@@ -54,8 +52,6 @@ type ServerConfigFields = Partial<
     | "port"
     | "accessMode"
     | "cacheDir"
-    | "thumbSizeW"
-    | "thumbSizeH"
     | "thumbCacheSize"
     | "cacheMaxAgeDays"
     | "cacheMaxSizeMB"

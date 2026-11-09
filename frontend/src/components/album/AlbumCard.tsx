@@ -58,6 +58,13 @@ export interface CardData {
   /** 集合 / 智能视图的代表封面，按顺序最多展示四张；为空时回退到 coverPath。 */
   covers?: string[];
   /**
+   * 封面文件的内容版本号，与 coverPath / covers 一一对应。
+   * 前端把它拼进封面 URL，服务端据此回 immutable，重复打开页面时
+   * 封面一次网络请求都不发。
+   */
+  coverVersion?: string;
+  coverVersions?: string[];
+  /**
    * 封面源类型："image" / "video" / 不传（不传时由 coverPath 扩展名推断）。
    * 视频封面由前端浏览器抽帧 → 上传后才会显示首帧静态图（见 useVideoCover）。
    */

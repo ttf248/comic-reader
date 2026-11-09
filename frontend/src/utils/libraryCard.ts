@@ -44,7 +44,9 @@ export function nodeSummaryToCard(
     // 「按拍摄时间」排序用它，缺省时退回修改时间。
     date: usableDate(node.date),
     coverPath: node.coverImage ?? "",
+    coverVersion: node.coverImageVersion,
     covers: node.coverImages,
+    coverVersions: node.coverImageVersions,
     coverKind: node.coverKind,
     to: albumRoute(node.contentKind, node.id),
     sourceRoot: node.sourceRoot,
@@ -61,7 +63,9 @@ export function tagSummaryToCard(tag: LibraryTagSummary, mode: AppMode): CardDat
     title: tag.tag,
     count: tag.albumCount,
     coverPath: tag.coverImage ?? "",
+    coverVersion: tag.coverImageVersion,
     covers: tag.coverImages,
+    coverVersions: tag.coverImageVersions,
     to: tagRoute(mode, tag.tag),
     // 标签是跨目录的导航容器，它的「属于哪一侧」看当前工作台。
     contentKind: mode,

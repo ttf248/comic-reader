@@ -193,8 +193,8 @@ func TestManager_Update_SerializesConcurrentPatches(t *testing.T) {
 		go func() {
 			<-start
 			_, err := mgr.Update(ConfigPatch{
-				ThumbSizeW:    640,
-				ThumbSizeWSet: true,
+				ThumbCacheSize: 640,
+				ThumbCacheSizeSet: true,
 			})
 			errs <- err
 		}()
@@ -206,8 +206,8 @@ func TestManager_Update_SerializesConcurrentPatches(t *testing.T) {
 			}
 		}
 		got := mgr.Get()
-		if got.AccessToken != "fedcba9876543210fedcba9876543210" || got.ThumbSizeW != 640 {
-			t.Fatalf("concurrent update lost at attempt %d: token=%q thumbSizeW=%d", attempt, got.AccessToken, got.ThumbSizeW)
+		if got.AccessToken != "fedcba9876543210fedcba9876543210" || got.ThumbCacheSize != 640 {
+			t.Fatalf("concurrent update lost at attempt %d: token=%q thumbCacheSize=%d", attempt, got.AccessToken, got.ThumbCacheSize)
 		}
 	}
 }
@@ -242,7 +242,7 @@ func TestManagerOfflineRootCanBeRepaired(t *testing.T) {
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("offline root blocks startup: %v", err)
 	}
-	if _, err := mgr.Update(ConfigPatch{ThumbSizeW: 640, ThumbSizeWSet: true}); err != nil {
+	if _, err := mgr.Update(ConfigPatch{ThumbCacheSize: 640, ThumbCacheSizeSet: true}); err != nil {
 		t.Fatalf("offline root blocks unrelated settings: %v", err)
 	}
 	if _, err := mgr.Update(ConfigPatch{MediaRoots: cfg.MediaRoots, MediaRootsSet: true}); err == nil {
@@ -318,8 +318,8 @@ func TestManager_Update_NotifiesSubscribers(t *testing.T) {
 	}()
 
 	_, err = mgr.Update(ConfigPatch{
-		ThumbSizeW:    200,
-		ThumbSizeWSet: true,
+		ThumbCacheSize:    200,
+		ThumbCacheSizeSet: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -335,8 +335,8 @@ func TestManager_Update_NotifiesSubscribers(t *testing.T) {
 	if calls != 1 {
 		t.Errorf("calls=%d want 1", calls)
 	}
-	if lastCfg == nil || lastCfg.ThumbSizeW != 200 {
-		t.Errorf("lastCfg.ThumbSizeW=%v", lastCfg)
+	if lastCfg == nil || lastCfg.ThumbCacheSize != 200 {
+		t.Errorf("lastCfg.ThumbCacheSize=%v", lastCfg)
 	}
 }
 
@@ -391,7 +391,6 @@ func TestDiffRequiresRestartKeepsServiceGraphsConsistent(t *testing.T) {
 	}
 
 	hot := cloneConfig(base)
-	hot.ThumbSizeW++
 	hot.ThumbCacheSize++
 	hot.CacheMaxAgeDays++
 	hot.AllowOsOpen = !hot.AllowOsOpen

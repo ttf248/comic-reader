@@ -304,8 +304,6 @@ func marshalConfig(cfg *Config) ([]byte, error) {
 	addKV("accessMode", scalarString(cfg.AccessMode))
 	addKV("accessToken", scalarString(cfg.AccessToken))
 	addKV("cacheDir", scalarString(cfg.CacheDir))
-	addKV("thumbSizeW", scalarInt(cfg.ThumbSizeW))
-	addKV("thumbSizeH", scalarInt(cfg.ThumbSizeH))
 	addKV("thumbCacheSize", scalarInt(cfg.ThumbCacheSize))
 	addKV("cacheMaxAgeDays", scalarInt(cfg.CacheMaxAgeDays))
 	addKV("cacheMaxSizeMB", scalarInt(int(cfg.CacheMaxSizeMB)))
@@ -366,12 +364,6 @@ func applyPatch(dst *Config, p *ConfigPatch) {
 	if p.CacheDirSet {
 		dst.CacheDir = p.CacheDir
 	}
-	if p.ThumbSizeWSet {
-		dst.ThumbSizeW = p.ThumbSizeW
-	}
-	if p.ThumbSizeHSet {
-		dst.ThumbSizeH = p.ThumbSizeH
-	}
 	if p.ThumbCacheSizeSet {
 		dst.ThumbCacheSize = p.ThumbCacheSize
 	}
@@ -412,7 +404,7 @@ func applyPatch(dst *Config, p *ConfigPatch) {
 //   - mediaRoots：路径安全中间件和扫描器可通过 Manager 热更新；扫描缓存会
 //     被 onUpdate 钩子清空，调用方应主动触发重新扫描（不视为需要重启）
 //
-// 其它字段（accessMode / accessToken / thumbSize* / cacheMaxAgeDays /
+// 其它字段（accessMode / accessToken / thumbCacheSize / cacheMaxAgeDays /
 // thumbCacheSize / allowOsOpen）可热生效。
 func diffRequiresRestart(old, neu *Config) []string {
 	var out []string

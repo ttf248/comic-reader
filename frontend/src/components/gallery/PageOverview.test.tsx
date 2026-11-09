@@ -20,8 +20,11 @@ vi.mock("react-virtuoso", () => ({
 }));
 
 const thumbUrl = vi.hoisted(() => vi.fn((id: string) => `/thumb/${id}`));
+const thumbSrcSet = vi.hoisted(() =>
+  vi.fn((id: string) => `/thumb/${id} 320w`),
+);
 
-vi.mock("../../api/thumbs", () => ({ thumbUrl }));
+vi.mock("../../api/thumbs", () => ({ thumbUrl, thumbSrcSet }));
 
 function renderOverview(props: Partial<React.ComponentProps<typeof PageOverview>> = {}) {
   const onJump = vi.fn();
