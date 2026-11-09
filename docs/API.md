@@ -339,6 +339,8 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 - `PUT /api/activity/batch`：body 为 `{ "activities": [...] }`，整批校验后一次原子落盘；单批最多 10000 条。
 - `DELETE /api/activity?...`：幂等删除单条；`DELETE /api/activity/all` 清空全部图片和视频活动。
 
+相同标识下，归一化后的位置与总数均未变化时保留原 `updated`，不写盘、不推进活动版本；单条写入响应返回实际保存的记录。批量请求也会跳过这些重复项，整批没有变化时不写盘。只有成功原子落盘后才确认有效变更。
+
 `/api/library/activity-summary`、`/api/library/dashboard` 与 `/api/library/unread` 均按漫画阅读活动判定未读：有图片的漫画相册看它的 `image` 活动，纯视频的漫画相册改以是否存在视频播放活动为准——播放过就不再计入未读，避免视频相册永久停留在未读列表。前者用于常驻导航，仪表盘用于首页，专用分页端点用于完整未读列表。
 
 未读与在读都属于漫画工作台的概念：照片目录下的相册不记录阅读进度，因此 `kind=photo` 时三个接口的未读计数恒为 0、`inProgress` 恒为空。仪表盘的 `inProgress` 只上报漫画相册的阅读页码。

@@ -1,3 +1,4 @@
+import { useImageProgressSync } from "../hooks/useImageProgressSync";
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -462,41 +463,17 @@ export default function Reader() {
       .catch(() => {});
   }, [pathParam, historyName, historyImageCount, queryClient, historyReady]);
 
-  // 防抖持久化阅读进度
-  //
-  // 这里不负责关闭信息面板：imageActivityPageIndex 在连续模式下取决于
-  // 「可见区末页」，面板开合会改变画布宽度 → 可见区重排 → 该值跟着变，
-  // 两者互相触发会让面板一打开就被关掉。关闭面板另由下面的 currentMediaId 驱动。
-  useEffect(() => {
-    // 视频的 currentTime 不是相册页码，写入独立的 video activity。
-    if (!imageActivityWritable || !pathParam) return;
-    const total = images.length;
-    const t = setTimeout(() => {
-      activityApi
-        .setImage(pathParam, imageActivityPageIndex, total)
-        .then(() => {
-          clearProgressFailure("save");
-          // 活动 API 会通知首页仪表盘刷新；这里同时让 Recents / Favorites
-          // 的批量活动和 Album 详情缓存失效，回到列表/详情时立刻看到新进度。
-          queryClient.invalidateQueries({
-            queryKey: ["activity-query", "image"],
-          });
-          queryClient.invalidateQueries({
-            queryKey: ["activity", "image", pathParam],
-          });
-        })
-        .catch(() => reportProgressFailure("save"));
-    }, 600);
-    return () => clearTimeout(t);
-  }, [
-    imageActivityPageIndex,
-    imageActivityWritable,
-    pathParam,
-    images.length,
-    queryClient,
-    clearProgressFailure,
-    reportProgressFailure,
-  ]);
+  const onImageSaved = useCallback(() => clearProgressFailure("save"), [clearProgressFailure]);
+  const onImageSaveFailed = useCallback(() => reportProgressFailure("save"), [reportProgressFailure]);
+  // 可见区末页可能随画布宽度改变；进度同步不负责关闭信息面板。
+  const imageProgress = useImageProgressSync({
+    albumId: pathParam,
+    pageIndex: imageActivityPageIndex,
+    pageCount: images.length,
+    enabled: imageActivityWritable,
+    onSaved: onImageSaved,
+    onSaveFailed: onImageSaveFailed,
+  });
 
   // 切换到另一张图片/另一个视频时关闭信息面板。
   //
@@ -538,14 +515,7 @@ export default function Reader() {
       }
       const progress = progressRef.current;
       if (!imageActivityWritable || progress.path !== pathParam) return;
-      await activityApi.setImage(progress.path, progress.index, progress.total);
-      queryClient.invalidateQueries({
-        queryKey: ["activity-query", "image"],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["activity", "image", pathParam],
-      });
-      clearProgressFailure("save");
+      await imageProgress.save(progress.path, progress.index, progress.total);
     } catch {
       reportProgressFailure("save");
     } finally {

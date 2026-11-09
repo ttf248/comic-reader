@@ -69,3 +69,32 @@ func TestActivityGetReturnsStableNotFoundCode(t *testing.T) {
 		t.Fatalf("unexpected error response: %#v", got)
 	}
 }
+
+func TestActivityRepeatedPutReturnsPersistedTimestamp(t *testing.T) {
+	app := newActivityHandlerApp(t)
+	put := func() string {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodPut, "/api/activity", bytes.NewBufferString(`{"albumId":"a_0000000000000000000001","mediaKind":"image","pageIndex":1,"pageCount":3}`))
+		req.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+		res, err := app.Test(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer res.Body.Close()
+		if res.StatusCode != 200 {
+			t.Fatalf("status=%d", res.StatusCode)
+		}
+		var got struct {
+			Updated string `json:"updated"`
+		}
+		if err := json.NewDecoder(res.Body).Decode(&got); err != nil {
+			t.Fatal(err)
+		}
+		return got.Updated
+	}
+	first := put()
+	second := put()
+	if first == "" || first != second {
+		t.Fatalf("timestamps %q != %q", first, second)
+	}
+}

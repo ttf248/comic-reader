@@ -33,8 +33,15 @@ it("活动变化同时失效未打开页面的阅读摘要，并保留静态库�
   const { client, wrapper } = setup();
   const keys = [
     libraryQueryKeys.activitySummary("photo"),
+    libraryQueryKeys.activitySummary("comic"),
     libraryQueryKeys.dashboard("photo"),
+    libraryQueryKeys.dashboard("comic"),
     libraryQueryKeys.unreadAlbums("photo"),
+    libraryQueryKeys.unreadAlbums("comic"),
+    ["activity-query", "image", ["a_one"]],
+    ["activity", "image", "a_one"],
+    ["library", "mode", "photo", "list", { kind: "photo" }],
+    ["library", "mode", "comic", "list", { kind: "comic" }],
   ];
   const staticKey = libraryQueryKeys.nodes(["a_one"]);
   for (const key of [...keys, staticKey]) client.setQueryData(key, {});

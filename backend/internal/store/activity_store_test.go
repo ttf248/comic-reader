@@ -260,3 +260,53 @@ func TestActivityStoreIsolatesUnsupportedVersionAndColdStarts(t *testing.T) {
 		t.Fatalf("unsupported activity backup missing: %v", matches)
 	}
 }
+
+func TestActivityRepeatedPayloadPreservesTimestampRevisionAndAvoidsDisk(t *testing.T) {
+	s, path := newTestActivityStore(t)
+	image := imageActivity(1, 1, 3)
+	video := models.Activity{AlbumID: testAlbumID(1), MediaKind: models.MediaKindVideo, ItemID: testFileID(1), PositionMS: 1000, DurationMS: 3000, Updated: image.Updated}
+	if err := s.SetBatch([]models.Activity{image, video}); err != nil {
+		t.Fatal(err)
+	}
+	revision := s.revision
+	// 让任何实际落盘失败，证明重复请求没有写文件，而非只保留内存值。
+	s.path = t.TempDir()
+	image.Updated = image.Updated.Add(time.Hour)
+	video.Updated = image.Updated
+	if err := s.SetBatch([]models.Activity{image, video}); err != nil {
+		t.Fatal(err)
+	}
+	got, _, _ := s.Get(image.Identity())
+	if s.revision != revision || !got.Updated.Equal(image.Updated.Add(-time.Hour)) {
+		t.Fatalf("no-op changed state: %+v revision=%d", got, s.revision)
+	}
+	image.PageIndex = 2
+	if err := s.Set(image); err == nil {
+		t.Fatal("changed payload must require successful persistence")
+	}
+	got, _, _ = s.Get(image.Identity())
+	if got.PageIndex != 1 || s.revision != revision {
+		t.Fatal("failed commit changed memory")
+	}
+	reopened := NewActivityStore(path)
+	disk, _, err := reopened.Get(image.Identity())
+	if err != nil || disk.PageIndex != 1 {
+		t.Fatalf("disk=%+v err=%v", disk, err)
+	}
+}
+
+func TestActivityBatchRepeatedIdentityUsesLatestPendingValue(t *testing.T) {
+	s, _ := newTestActivityStore(t)
+	first := imageActivity(1, 0, 3)
+	second := first
+	second.PageIndex = 1
+	third := second
+	third.Updated = third.Updated.Add(time.Hour)
+	if err := s.SetBatch([]models.Activity{first, second, third}); err != nil {
+		t.Fatal(err)
+	}
+	got, _, _ := s.Get(first.Identity())
+	if got.PageIndex != 1 || !got.Updated.Equal(second.Updated) || s.revision != 1 {
+		t.Fatalf("got=%+v revision=%d", got, s.revision)
+	}
+}

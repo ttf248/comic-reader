@@ -17,7 +17,7 @@ export const queryClient = new QueryClient({
       //
       // 只挡 404，不挡整个 4xx：分页失败会以 400 回来（游标失效之类），
       // 那是可以重试的，页面也靠重试把「后续媒体加载失败」这条提示
-      // 演出来（见 tests/e2e/smoke.spec.ts 的分页失败用例）。
+      // 演出来（见 tests/e2e/browse.spec.ts 的分页失败用例）。
       retry: (failureCount, error) => {
         if (error instanceof ApiError && error.status === 404) {
           return false

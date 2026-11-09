@@ -86,7 +86,7 @@ export function useMarkAlbumRead() {
   return useMutation<Activity, Error, { albumId: string; total: number }>({
     mutationFn: ({ albumId, total }) => {
       if (total <= 0) throw new Error("empty albums cannot be marked as read");
-      return activityApi.setImage(albumId, total - 1, total);
+      return activityApi.setImage(albumId, total - 1, total, "explicit");
     },
     onSuccess: (_data, { albumId }) =>
       invalidateImageActivities(queryClient, albumId),

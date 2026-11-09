@@ -147,6 +147,17 @@ func (s *ActivityStore) Set(activity models.Activity) error {
 
 // SetBatch 先校验整批数据，再仅执行一次原子落盘。
 func (s *ActivityStore) SetBatch(activities []models.Activity) error {
+	return s.setBatch(activities, nil)
+}
+
+// SetAndGet 在同一锁内提交并返回实际持久化的记录（包含 no-op 的原时间戳）。
+func (s *ActivityStore) SetAndGet(activity models.Activity) (models.Activity, error) {
+	var result models.Activity
+	err := s.setBatch([]models.Activity{activity}, &result)
+	return result, err
+}
+
+func (s *ActivityStore) setBatch(activities []models.Activity, result *models.Activity) error {
 	if len(activities) == 0 {
 		return nil
 	}
@@ -166,23 +177,29 @@ func (s *ActivityStore) SetBatch(activities []models.Activity) error {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	next := cloneActivityMap(s.items)
+	next := s.items
 	changed := false
 	for _, activity := range normalized {
 		key, _ := activity.Identity().Key()
-		if current, exists := next[key]; exists && current.Updated.After(activity.Updated) {
+		if current, exists := next[key]; exists && (current.Updated.After(activity.Updated) || sameActivityPayload(current, activity)) {
 			continue
+		}
+		if !changed {
+			next = cloneActivityMap(s.items)
 		}
 		next[key] = activity
 		changed = true
 	}
-	if !changed {
-		return nil
+	if changed {
+		if err := s.commitLocked(next); err != nil {
+			return err
+		}
+		s.revision++
 	}
-	if err := s.commitLocked(next); err != nil {
-		return err
+	if result != nil {
+		key, _ := normalized[len(normalized)-1].Identity().Key()
+		*result = s.items[key]
 	}
-	s.revision++
 	return nil
 }
 
@@ -346,4 +363,10 @@ func cloneActivityMap(source map[string]models.Activity) map[string]models.Activ
 		out[key] = activity
 	}
 	return out
+}
+
+// sameActivityPayload 忽略请求时间：相同进度不刷新排序、版本或磁盘文件。
+func sameActivityPayload(a, b models.Activity) bool {
+	return a.PageIndex == b.PageIndex && a.PageCount == b.PageCount &&
+		a.PositionMS == b.PositionMS && a.DurationMS == b.DurationMS && a.Status == b.Status
 }

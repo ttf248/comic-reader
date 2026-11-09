@@ -559,3 +559,22 @@ func TestManifestReportsPerKindCollectionCounts(t *testing.T) {
 			stats.PhotoCollectionCount, stats.ComicCollectionCount, stats.CollectionCount)
 	}
 }
+
+func TestEquivalentContentPolicyKeepsCatalogRevision(t *testing.T) {
+	f := newKindFixture(t)
+	before := f.catalog.Acquire().Revision()
+	after := f.catalog.SetContentKindPolicy(NewContentKindPolicy([]RootKind{
+		{Path: f.comicRoot, Kind: models.ContentKindComic},
+		{Path: filepath.Join(f.photoRoot, "."), Kind: models.ContentKindPhoto},
+	}))
+	if after != before {
+		t.Fatalf("equivalent root reorder invalidated catalog: %d -> %d", before, after)
+	}
+	changed := f.catalog.SetContentKindPolicy(NewContentKindPolicy([]RootKind{
+		{Path: f.comicRoot, Kind: models.ContentKindPhoto},
+		{Path: f.photoRoot, Kind: models.ContentKindPhoto},
+	}))
+	if changed <= after {
+		t.Fatal("changed kind did not publish")
+	}
+}

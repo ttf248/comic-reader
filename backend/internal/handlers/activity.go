@@ -65,10 +65,11 @@ func ActivityPutHandler(s *store.ActivityStore) fiber.Handler {
 		if err != nil {
 			return httputil.BadRequest(c, "invalid_activity", "activity values are invalid")
 		}
-		if err := s.Set(activity); err != nil {
+		stored, err := s.SetAndGet(activity)
+		if err != nil {
 			return activityInternalError(c)
 		}
-		return c.JSON(activity)
+		return c.JSON(stored)
 	}
 }
 

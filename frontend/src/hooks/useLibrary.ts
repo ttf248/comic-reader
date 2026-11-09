@@ -58,14 +58,19 @@ export function useLibraryManifest() {
 // 应用常驻层统一同步阅读派生缓存；画廊和其他页面也会修改未打开列表的状态。
 export function useLibraryActivitySync() {
   const queryClient = useQueryClient();
-  const { mode } = useAppMode();
   useEffect(() => {
     const refresh = () => {
       for (const queryKey of [
         libraryQueryKeys.activitySummary("photo"),
         libraryQueryKeys.activitySummary("comic"),
-        libraryQueryKeys.dashboard(mode),
-        libraryQueryKeys.unreadAlbums(mode),
+        libraryQueryKeys.dashboard("photo"),
+        libraryQueryKeys.dashboard("comic"),
+        libraryQueryKeys.unreadAlbums("photo"),
+        libraryQueryKeys.unreadAlbums("comic"),
+        ["activity-query", "image"],
+        ["activity", "image"],
+        ["library", "mode", "photo", "list"],
+        ["library", "mode", "comic", "list"],
       ]) {
         // 失效未挂载页面的缓存，但只立即重新获取当前有订阅的数据。
         void queryClient.invalidateQueries({ queryKey });
@@ -73,7 +78,7 @@ export function useLibraryActivitySync() {
     };
     window.addEventListener(ACTIVITY_CHANGED_EVENT, refresh);
     return () => window.removeEventListener(ACTIVITY_CHANGED_EVENT, refresh);
-  }, [queryClient, mode]);
+  }, [queryClient]);
 }
 
 // 当前模式的未读计数。未读只属于漫画工作台，照片侧恒为 0。

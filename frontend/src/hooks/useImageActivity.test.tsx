@@ -155,6 +155,7 @@ describe("useMarkAlbumRead", () => {
       "a_0000000000000000000001",
       11,
       12,
+      "explicit",
     );
   });
 

@@ -133,16 +133,6 @@ export default function Home() {
       }),
     );
   }, [setSortBy]);
-  const dashboardProgressByID = useMemo(
-    () =>
-      new Map(
-        (dashboard?.inProgress ?? []).map((progress) => [
-          progress.album.id,
-          progress,
-        ]),
-      ),
-    [dashboard],
-  );
   const startScan = useMutation({
     mutationFn: () => scanApi.start(),
     onSuccess: (r) => {
@@ -280,22 +270,7 @@ export default function Home() {
     [mode, view, query, sortBy, yearFilterActive, yearFilter, minImageCount],
   );
   const overview = useLibraryList(listQuery, !!manifest);
-  const filtered = useMemo(
-    () =>
-      overview.cards.map((card) => {
-        const progress = dashboardProgressByID.get(decodeFavPath(card.to));
-        return progress
-          ? {
-              ...card,
-              progress: {
-                index: progress.pageIndex,
-                total: progress.pageCount,
-              },
-            }
-          : card;
-      }),
-    [overview.cards, dashboardProgressByID],
-  );
+  const filtered = overview.cards;
   const yearGroups = useMemo(
     () => listYearGroups(overview.summary, listQuery),
     [overview.summary, listQuery],

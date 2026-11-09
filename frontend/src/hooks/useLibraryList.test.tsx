@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import { libraryApi, type LibraryListQuery } from "../api/library";
+import { activityApi } from "../api/activity";
 import { ApiError } from "../api/client";
 import { useLibraryList } from "./useLibraryList";
 import { listFixture } from "../test-library-list";
@@ -13,7 +14,17 @@ vi.mock("../api/library", async (original) => ({
   libraryApi: { overview: vi.fn() },
 }));
 
-beforeEach(() => vi.clearAllMocks());
+vi.mock("../api/activity", async (original) => ({
+  ...(await original<typeof import("../api/activity")>()),
+  activityApi: { queryImages: vi.fn() },
+}));
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(activityApi.queryImages).mockResolvedValue({
+    activities: [],
+    count: 0,
+  });
+});
 const node = (id: string) => ({
   id,
   kind: "album" as const,
@@ -94,4 +105,40 @@ it("筛选变化从第一页开始，过期游标丢弃旧分页链", async () =
       expect.any(AbortSignal),
     ),
   );
+});
+
+it("只查询已加载漫画的活动，保留已完成进度，不下载未加载项", async () => {
+  vi.mocked(libraryApi.overview).mockResolvedValueOnce(page("a_done", "next"));
+  vi.mocked(activityApi.queryImages).mockResolvedValue({
+    activities: [
+      {
+        albumId: "a_done",
+        mediaKind: "image",
+        pageIndex: 2,
+        pageCount: 3,
+        status: "completed",
+        updated: "2026-01-01T00:00:00Z",
+      },
+    ],
+    count: 1,
+  });
+  const { result } = setup({ kind: "comic" });
+  await waitFor(() =>
+    expect(result.current.cards[0]?.progress).toEqual({ index: 2, total: 3 }),
+  );
+  expect(activityApi.queryImages).toHaveBeenCalledTimes(1);
+  expect(activityApi.queryImages).toHaveBeenCalledWith(["a_done"]);
+  expect(libraryApi.overview).toHaveBeenCalledTimes(1);
+});
+it("照片页不查询漫画活动", async () => {
+  const photo = page("a_photo");
+  photo.page.items = photo.page.items.map((item) =>
+    item.kind === "smart"
+      ? item
+      : { ...item, node: { ...item.node, contentKind: "photo" } },
+  );
+  vi.mocked(libraryApi.overview).mockResolvedValueOnce(photo);
+  const { result } = setup({ kind: "photo" });
+  await waitFor(() => expect(result.current.cards).toHaveLength(1));
+  expect(activityApi.queryImages).not.toHaveBeenCalled();
 });

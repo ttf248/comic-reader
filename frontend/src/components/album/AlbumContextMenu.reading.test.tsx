@@ -138,7 +138,12 @@ it.each(["grid", "list"] as const)(
     expect(menu.getByRole("menuitem", { name: "取消已读完" })).toBeDisabled();
     fireEvent.click(menu.getByRole("menuitem", { name: "标记为已读完" }));
     await waitFor(() =>
-      expect(activityApi.setImage).toHaveBeenCalledWith("a_one", 0, 1),
+      expect(activityApi.setImage).toHaveBeenCalledWith(
+        "a_one",
+        0,
+        1,
+        "explicit",
+      ),
     );
     await waitFor(() =>
       expect(
@@ -164,7 +169,12 @@ it.each(["grid", "list"] as const)(
     expect(screen.getAllByRole("menu")).toHaveLength(1);
     fireEvent.click(screen.getByRole("menuitem", { name: "标记为已读完" }));
     await waitFor(() =>
-      expect(activityApi.setImage).toHaveBeenCalledWith("a_one", 2, 3),
+      expect(activityApi.setImage).toHaveBeenCalledWith(
+        "a_one",
+        2,
+        3,
+        "explicit",
+      ),
     );
   },
 );
@@ -176,7 +186,9 @@ it.each(["grid", "list"] as const)(
     const detailKey = ["activity", "image", "a_one"];
     client.setQueryData(detailKey, { pageIndex: 0, pageCount: 1 });
     expect(screen.getAllByRole("menu")).toHaveLength(1);
-    expect(screen.getByRole("menuitem", { name: "标记为已读完" })).toBeDisabled();
+    expect(
+      screen.getByRole("menuitem", { name: "标记为已读完" }),
+    ).toBeDisabled();
     fireEvent.click(screen.getByRole("menuitem", { name: "取消已读完" }));
     await waitFor(() =>
       expect(activityApi.removeImage).toHaveBeenCalledWith("a_one"),
@@ -200,7 +212,12 @@ it.each(["grid", "list"] as const)(
     expect(screen.getByRole("menuitem", { name: "收藏" })).toBeEnabled();
     fireEvent.click(screen.getByRole("menuitem", { name: "标记为已读完" }));
     await waitFor(() =>
-      expect(activityApi.setImage).toHaveBeenCalledWith("a_one", 0, 1),
+      expect(activityApi.setImage).toHaveBeenCalledWith(
+        "a_one",
+        0,
+        1,
+        "explicit",
+      ),
     );
   },
 );
@@ -221,16 +238,13 @@ it.each(["grid", "list"] as const)(
 );
 
 // 照片相册没有阅读进度：菜单里不该出现标记与取消标记。
-it.each(["grid", "list"] as const)(
-  "%s 照片相册不提供阅读标记",
-  (variant) => {
-    renderCards(variant, { contentKind: "photo" });
-    expect(screen.queryByRole("menuitem", { name: "标记为已读完" })).toBeNull();
-    expect(screen.queryByRole("menuitem", { name: "取消已读完" })).toBeNull();
-    expect(screen.getByRole("menuitem", { name: "收藏" })).toBeEnabled();
-    expect(activityApi.setImage).not.toHaveBeenCalled();
-  },
-);
+it.each(["grid", "list"] as const)("%s 照片相册不提供阅读标记", (variant) => {
+  renderCards(variant, { contentKind: "photo" });
+  expect(screen.queryByRole("menuitem", { name: "标记为已读完" })).toBeNull();
+  expect(screen.queryByRole("menuitem", { name: "取消已读完" })).toBeNull();
+  expect(screen.getByRole("menuitem", { name: "收藏" })).toBeEnabled();
+  expect(activityApi.setImage).not.toHaveBeenCalled();
+});
 
 it("标记失败提示错误，保留未读显示并允许重新操作", async () => {
   vi.mocked(activityApi.setImage).mockRejectedValueOnce(new Error("offline"));

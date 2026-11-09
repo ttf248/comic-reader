@@ -1,31 +1,16 @@
+import { ensureLibraryReady } from "./helpers/library";
 import { expect, test } from "@playwright/test";
-import { existsSync, mkdirSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import type {
   StatePreview,
   StateRestoreResult,
 } from "../../src/api/stateBackup";
 
-async function ready(request: import("@playwright/test").APIRequestContext) {
-  const config = (await (await request.get("/api/config")).json()) as {
-    mediaRoots: { path: string; kind: string }[];
-  };
-  const roots = config.mediaRoots.filter((root) => existsSync(root.path));
-  const saved = await request.put("/api/config", {
-    data: { mediaRoots: roots },
-  });
-  expect(saved.ok()).toBeTruthy();
-  if (!(await request.get("/api/library/manifest")).ok())
-    await request.post("/api/scans");
-  await expect
-    .poll(async () => (await request.get("/api/library/manifest")).status())
-    .toBe(200);
-}
-
 test("本机备份下载、仅恢复收藏、过期预览拒绝覆盖", async ({
   page,
   request,
 }) => {
-  await ready(request);
+  await ensureLibraryReady(request);
   const original = (await (
     await request.get("/api/admin/state/export")
   ).json()) as { version: number; favorites: string[]; history: unknown[] };
@@ -64,11 +49,11 @@ test("本机备份下载、仅恢复收藏、过期预览拒绝覆盖", async ({
     await expect(
       panel.getByRole("button", { name: "确认覆盖恢复" }),
     ).toBeVisible();
-    mkdirSync(".smoke/roadmap-backup", { recursive:true });
-    await page.setViewportSize({width:390,height:900});
+    mkdirSync(".smoke/roadmap-backup", { recursive: true });
+    await page.setViewportSize({ width: 390, height: 900 });
     await panel.scrollIntoViewIfNeeded();
-    await page.screenshot({path:".smoke/roadmap-backup/preview-390.png"});
-    await page.setViewportSize({width:1440,height:900});
+    await page.screenshot({ path: ".smoke/roadmap-backup/preview-390.png" });
+    await page.setViewportSize({ width: 1440, height: 900 });
     for (const category of [
       /最近访问 ·/,
       /服务端偏好 ·/,

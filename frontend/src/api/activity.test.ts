@@ -46,3 +46,35 @@ it("keepalive 补写成功后同样通知", async () => {
   await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(1));
   listener.mockClear();
 });
+
+it("图片卸载补写与重置保持顺序，相同在途补写共享请求", async () => {
+  let confirm!: (response: Response) => void;
+  const first = new Promise<Response>((resolve) => {
+    confirm = resolve;
+  });
+  const requests: string[] = [];
+  const fetchMock = vi.fn<typeof fetch>().mockImplementation((url, init) => {
+    requests.push(`${init?.method} ${String(url)}`);
+    if (requests.length === 1) return first;
+    return Promise.resolve(
+      new Response(JSON.stringify({ ok: true, removed: true })),
+    );
+  });
+  vi.stubGlobal("fetch", fetchMock);
+  const saved = activityApi.setImage("a_1", 2, 10);
+  activityApi.keepalive({
+    albumId: "a_1",
+    mediaKind: "image",
+    pageIndex: 2,
+    pageCount: 10,
+  });
+  const reset = activityApi.removeImage("a_1");
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(fetchMock.mock.calls[0][1]?.keepalive).toBe(true);
+  confirm(new Response(JSON.stringify({ ok: true })));
+  await Promise.all([saved, reset]);
+  expect(requests).toEqual([
+    "PUT /api/activity",
+    "DELETE /api/activity?albumId=a_1&mediaKind=image",
+  ]);
+});

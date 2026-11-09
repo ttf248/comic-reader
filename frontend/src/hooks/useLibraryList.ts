@@ -7,6 +7,8 @@ import {
   type LibraryListItem,
 } from "../api/library";
 import { useAppMode } from "./useAppMode";
+import { useImageActivities } from "./useImageActivity";
+import { decodeFavPath } from "../utils/path";
 import { nodeSummaryToCard, tagSummaryToCard } from "../utils/libraryCard";
 
 export function listItemToCard(item: LibraryListItem, query: LibraryListQuery) {
@@ -48,12 +50,40 @@ export function useLibraryList(query: LibraryListQuery, enabled = true) {
       void client.resetQueries({ queryKey: key, exact: true });
     }
   }, [result.error, client, key]);
-  const cards = useMemo(
+  const rawCards = useMemo(
     () =>
       result.data?.pages.flatMap((page) =>
         page.items.map((item) => listItemToCard(item, query)),
       ) ?? [],
     [result.data, query],
+  );
+  const progressIds = useMemo(
+    () =>
+      rawCards
+        .filter(
+          (card) => card.variant === "album" && card.contentKind === "comic",
+        )
+        .map((card) => decodeFavPath(card.to)),
+    [rawCards],
+  );
+  const { data: progress } = useImageActivities(progressIds, enabled && ready);
+  const cards = useMemo(
+    () =>
+      rawCards.map((card) => {
+        if (card.variant !== "album" || card.contentKind !== "comic")
+          return card;
+        const activity = progress?.[decodeFavPath(card.to)];
+        return activity
+          ? {
+              ...card,
+              progress: {
+                index: activity.pageIndex,
+                total: card.imageCount ?? 0,
+              },
+            }
+          : card;
+      }),
+    [rawCards, progress],
   );
   return {
     ...result,

@@ -1,4 +1,5 @@
 import { api } from "./client";
+import { afterImageActivityWrites } from "./activity";
 
 export const backupCategories = [
   "favorites",
@@ -43,15 +44,20 @@ export const stateBackupApi = {
     backup: unknown,
     categories: BackupCategory[],
     preview: StatePreview,
-  ) =>
-    api<StateRestoreResult>("/api/admin/state/import", {
-      method: "POST",
-      body: {
-        backup,
-        categories,
-        versions: preview.versions,
-        libraryRevision: preview.libraryRevision,
-      },
-      nonIdempotent: true,
-    }),
+  ) => {
+    const restore = () =>
+      api<StateRestoreResult>("/api/admin/state/import", {
+        method: "POST",
+        body: {
+          backup,
+          categories,
+          versions: preview.versions,
+          libraryRevision: preview.libraryRevision,
+        },
+        nonIdempotent: true,
+      });
+    return categories.includes("activities")
+      ? afterImageActivityWrites(restore)
+      : restore();
+  },
 };

@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"maps"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -169,6 +170,9 @@ func (c *ResourceCatalog) refreshCoversLocked(cache *ScanResultCache, covers *Co
 func (c *ResourceCatalog) SetContentKindPolicy(policy ContentKindPolicy) uint64 {
 	c.publishMu.Lock()
 	defer c.publishMu.Unlock()
+	if maps.Equal(c.contentPolicy.Roots, policy.Roots) {
+		return c.state.Load().revision
+	}
 	c.contentPolicy = policy
 	return c.republishLocked()
 }

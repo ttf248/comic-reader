@@ -1,4 +1,5 @@
 import { API_BASE, ApiError, api } from "./client";
+import { ImageActivityQueue } from "./imageActivityQueue";
 
 export const ACTIVITY_CHANGED_EVENT = "local-gallery:activity-changed";
 
@@ -79,13 +80,32 @@ export type ActivityInput =
       durationMs: number;
     };
 
+const imageWrites = new ImageActivityQueue((input) =>
+  withActivityChanged(
+    api<ImageActivity>("/api/activity", {
+      method: "PUT",
+      body: input,
+      keepalive: true,
+    }),
+  ),
+);
+
+// 恢复活动备份等外部写入也必须等待本会话已有进度，避免迟到覆盖。
+export function afterImageActivityWrites<T>(
+  action: () => Promise<T>,
+): Promise<T> {
+  return imageWrites.barrier(action);
+}
+
 export const activityApi = {
   removeImages: (albumIds: string[]) =>
-    withActivityChanged(
-      api<{ deleted: number }>("/api/activity/batch", {
-        method: "DELETE",
-        body: { albumIds },
-      }),
+    imageWrites.barrier(() =>
+      withActivityChanged(
+        api<{ deleted: number }>("/api/activity/batch", {
+          method: "DELETE",
+          body: { albumIds },
+        }),
+      ),
     ),
   get: (identity: ActivityIdentity) =>
     api<Activity>("/api/activity", {
@@ -107,18 +127,34 @@ export const activityApi = {
     }),
 
   set: (activity: ActivityInput) =>
-    withActivityChanged(
-      api<Activity>("/api/activity", { method: "PUT", body: activity }),
-      activity.mediaKind === "image",
-    ),
+    activity.mediaKind === "image"
+      ? imageWrites.progress(activity)
+      : api<Activity>("/api/activity", { method: "PUT", body: activity }),
 
-  setImage: (albumId: string, pageIndex: number, pageCount: number) =>
-    withActivityChanged(
-      api<ImageActivity>("/api/activity", {
-        method: "PUT",
-        body: { albumId, mediaKind: "image", pageIndex, pageCount },
-      }),
-    ),
+  setImage: (
+    albumId: string,
+    pageIndex: number,
+    pageCount: number,
+    intent: "progress" | "explicit" = "progress",
+  ) => {
+    const input = {
+      albumId,
+      mediaKind: "image" as const,
+      pageIndex,
+      pageCount,
+    };
+    return intent === "explicit"
+      ? imageWrites.barrier(() =>
+          withActivityChanged(
+            api<ImageActivity>("/api/activity", {
+              method: "PUT",
+              body: input,
+              keepalive: true,
+            }),
+          ),
+        )
+      : imageWrites.progress(input);
+  },
 
   setVideo: (
     albumId: string,
@@ -164,44 +200,60 @@ export const activityApi = {
   },
 
   setBatch: (activities: ActivityInput[]) =>
-    withActivityChanged(
-      api<{ ok: boolean; updated: number }>("/api/activity/batch", {
-        method: "PUT",
-        body: { activities },
-      }),
-      activities.some((activity) => activity.mediaKind === "image"),
+    imageWrites.barrier(() =>
+      withActivityChanged(
+        api<{ ok: boolean; updated: number }>("/api/activity/batch", {
+          method: "PUT",
+          body: { activities },
+        }),
+        activities.some((activity) => activity.mediaKind === "image"),
+      ),
     ),
 
-  remove: (identity: ActivityIdentity) =>
-    withActivityChanged(
-      api<{ ok: boolean; removed: boolean }>("/api/activity", {
-        method: "DELETE",
-        params: {
-          albumId: identity.albumId,
-          mediaKind: identity.mediaKind,
-          itemId: identity.itemId,
-        },
-      }),
-      identity.mediaKind === "image",
-    ),
+  remove: (identity: ActivityIdentity) => {
+    const remove = () =>
+      withActivityChanged(
+        api<{ ok: boolean; removed: boolean }>("/api/activity", {
+          method: "DELETE",
+          params: {
+            albumId: identity.albumId,
+            mediaKind: identity.mediaKind,
+            itemId: identity.itemId,
+          },
+        }),
+        identity.mediaKind === "image",
+      );
+    return identity.mediaKind === "image"
+      ? imageWrites.barrier(remove)
+      : remove();
+  },
 
   removeImage: (albumId: string) =>
-    withActivityChanged(
-      api<{ ok: boolean; removed: boolean }>("/api/activity", {
-        method: "DELETE",
-        params: { albumId, mediaKind: "image" },
-      }),
+    imageWrites.barrier(() =>
+      withActivityChanged(
+        api<{ ok: boolean; removed: boolean }>("/api/activity", {
+          method: "DELETE",
+          params: { albumId, mediaKind: "image" },
+        }),
+      ),
     ),
 
   clear: () =>
-    withActivityChanged(
-      api<{ ok: boolean; removed: number }>("/api/activity/all", {
-        method: "DELETE",
-      }),
+    imageWrites.barrier(() =>
+      withActivityChanged(
+        api<{ ok: boolean; removed: number }>("/api/activity/all", {
+          method: "DELETE",
+        }),
+      ),
     ),
 
-  // 页面卸载时的最后一次写入不等待响应；会话仍只通过 HttpOnly cookie 携带。
+  // 卸载补写也经过同一个写入者，避免旧请求越过显式操作；仅已确认响应
+  // 表示落盘完成。关闭浏览器时尚未发送的排队进度只能尽力保存。
   keepalive: (activity: ActivityInput) => {
+    if (activity.mediaKind === "image") {
+      void imageWrites.progress(activity).catch(() => {});
+      return;
+    }
     void fetch(`${API_BASE}/api/activity`, {
       method: "PUT",
       headers: {
