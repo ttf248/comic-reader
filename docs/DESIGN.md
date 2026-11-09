@@ -402,7 +402,9 @@ PowerShell 示例：`$env:LG_VIEWMODE = "list"` 后执行审计，结束用 `Rem
 - **增量扫描与文件监听**：配置更换媒体根后会自动全量扫描；普通文件变化仍需手动刷新，尚未提供增量扫描或监听。
 - **重复照片检测**：后端已有按需 sha256，但扫描期不采集，无法跨相册比对。
 - **有效活动变更的整文件重写**：同会话图片写入已串行合并，重复进度不写盘；实际页码或播放位置变化仍重写 `activity.json`，大库下的布局优化与迁移需另行评估。
-- **PWA / 离线**：`index.html` 没有 manifest 与 service worker，媒体请求也没有 `max-age`。
+- **PWA / 离线**：`index.html` 没有 manifest 与 service worker，装不成可安装的离线应用。
+  媒体请求的长期缓存已解决：渲染图 URL 带内容版本号，服务端回 immutable；
+  带内容哈希的静态产物也回 immutable。
 
 
 

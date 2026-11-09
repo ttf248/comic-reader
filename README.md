@@ -51,6 +51,8 @@ VSCode「运行和调试」里的“运行本机最新构建”也会在启动�
 
 其他平台可在仓库根目录执行 `pwsh -File scripts/build.ps1`，同样使用 `staticDir: "../frontend/dist"`，从 `backend/` 运行生成的 `../bin/local-gallery`。Windows 产物带 `.exe` 后缀。默认访问 `http://127.0.0.1:8080`。
 
+生产模式下后端同端口托管前端构建产物：文本类资源（html/js/css）按 `Accept-Encoding` 压缩，带内容哈希的 `/assets/*` 长期缓存（`immutable`），入口文件每次回源以便发新版后立即生效。
+
 发布包用户：在解压目录复制 `config.example.yaml` 为 `config.yaml`，设置媒体根并保留 `staticDir: "dist"`，从该目录运行 `local-gallery`（Windows 为 `local-gallery.exe`）。运行发布包无需 Go、Node.js 或 PowerShell。
 
 跨平台打包、手动 CI 与 Release 流程见 [构建与发布](./docs/RELEASE.md)。构建产物与运行时配置不入仓。

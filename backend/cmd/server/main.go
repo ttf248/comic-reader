@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/compress"
 
 	"github.com/tianlongxiang/local-gallery/internal/config"
 	"github.com/tianlongxiang/local-gallery/internal/handlers"
@@ -284,11 +285,11 @@ func main() {
 			LRUSize:    snapshot.ThumbCacheSize,
 			VideoCover: services.NewVideoCoverExtractor(services.VideoCoverOptions{
 				FFmpegPath: cfg.FFmpegPath,
-				Quality:   85, Timeout: 10 * time.Second,
+				Quality:    85, Timeout: 10 * time.Second,
 			}),
 			ImageConverter: services.NewImageConverter(services.ImageConverterOptions{
 				FFmpegPath: cfg.FFmpegPath,
-				Quality:   85, Timeout: 10 * time.Second,
+				Quality:    85, Timeout: 10 * time.Second,
 			}),
 		}); err != nil {
 			log.Printf("警告：缩略图服务热更新失败: %v", err)
@@ -382,32 +383,7 @@ func main() {
 	// ---- 静态资源托管（生产模式：同端口托管前端） ----
 	if staticDir != "" {
 		if info, err := os.Stat(staticDir); err == nil && info.IsDir() {
-			indexPath, _ := filepath.Abs(filepath.Join(staticDir, "index.html"))
-			// SPA fallback：先注册通配兜底（只对 GET/HEAD，且非 /api/，且静态文件不存在）
-			// 放到 Static 之前，避免 Static 内部对 404 也保留 200 状态码导致误判
-			app.Use(func(c *fiber.Ctx) error {
-				if c.Method() != fiber.MethodGet && c.Method() != fiber.MethodHead {
-					return c.Next()
-				}
-				p := c.Path()
-				if len(p) >= 5 && p[:5] == "/api/" {
-					return c.Next()
-				}
-				// 已经是 index.html 或根路径：交给 Static
-				rel := strings.TrimPrefix(p, "/")
-				if rel == "" {
-					return c.Next()
-				}
-				// 静态文件实际存在则交给 Static
-				filePath := filepath.Join(staticDir, filepath.FromSlash(rel))
-				if info, err := os.Stat(filePath); err == nil && !info.IsDir() {
-					return c.Next()
-				}
-				// 否则回退到 SPA index.html
-				c.Set("Content-Type", "text/html; charset=utf-8")
-				return c.SendFile(indexPath)
-			})
-			app.Static("/", staticDir)
+			registerStatic(app, staticDir)
 			log.Printf("  StaticDir: <configured> (已托管前端 + SPA fallback)")
 		} else {
 			log.Printf("  StaticDir: <configured> 不存在或不是目录，跳过静态托管")
@@ -504,4 +480,73 @@ func shutdownRuntime(
 		cacheErr = scanCache.Flush()
 	}
 	return errors.Join(scanErr, transcodeErr, cacheErr)
+}
+
+// isCompressiblePath 判断静态资源是否值得压缩。
+//
+// 按扩展名判断而不是按 Content-Type：压缩中间件在响应产生之前就要
+// 决定跳过与否，那时 Content-Type 还没定下来。
+//
+// 图片与字体本身已经是压缩格式，再压一遍几乎不省字节，只白费 CPU；
+// 文本类（html/js/css/json/svg/map）压缩率很高。
+func isCompressiblePath(path string) bool {
+	ext := strings.ToLower(filepath.Ext(path))
+	switch ext {
+	case ".html", ".htm", ".css", ".js", ".mjs", ".json", ".map",
+		".svg", ".xml", ".txt", ".webmanifest":
+		return true
+	}
+	return false
+}
+
+// registerStatic 挂上静态资源托管。
+//
+// 三件事：
+//   - 压缩：文本类资源（html/js/css/json/svg）走 brotli/gzip。
+//     这个中间件注册在 API 路由之后，因此不会碰 /api/ 下的媒体响应。
+//   - 缓存：Vite 产物的文件名带内容哈希，改版即换名，可以长期缓存；
+//     入口文件（index.html 与 SPA 回退）必须每次回源，否则发新版后
+//     用户拿到的仍是旧的入口文件。
+//   - SPA 回退：前端路由刷新后请求的路径在磁盘上不存在，回退到
+//     index.html 交给前端路由处理。
+func registerStatic(app *fiber.App, staticDir string) {
+	indexPath, _ := filepath.Abs(filepath.Join(staticDir, "index.html"))
+
+	app.Use(compress.New(compress.Config{
+		Level: compress.LevelDefault,
+		Next: func(c *fiber.Ctx) bool {
+			return !isCompressiblePath(c.Path())
+		},
+	}))
+
+	// SPA fallback：先注册通配兜底（只对 GET/HEAD，且非 /api/，且静态文件不存在）
+	// 放到 Static 之前，避免 Static 内部对 404 也保留 200 状态码导致误判
+	app.Use(func(c *fiber.Ctx) error {
+		if c.Method() != fiber.MethodGet && c.Method() != fiber.MethodHead {
+			return c.Next()
+		}
+		p := c.Path()
+		if len(p) >= 5 && p[:5] == "/api/" {
+			return c.Next()
+		}
+		if strings.HasPrefix(p, "/assets/") {
+			c.Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			c.Set("Cache-Control", "no-cache")
+		}
+		// 已经是 index.html 或根路径：交给 Static
+		rel := strings.TrimPrefix(p, "/")
+		if rel == "" {
+			return c.Next()
+		}
+		// 静态文件实际存在则交给 Static
+		filePath := filepath.Join(staticDir, filepath.FromSlash(rel))
+		if info, err := os.Stat(filePath); err == nil && !info.IsDir() {
+			return c.Next()
+		}
+		// 否则回退到 SPA index.html
+		c.Set("Content-Type", "text/html; charset=utf-8")
+		return c.SendFile(indexPath)
+	})
+	app.Static("/", staticDir)
 }
