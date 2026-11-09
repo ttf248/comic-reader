@@ -51,6 +51,29 @@ export interface CacheScopeClearResult {
   totalFreedBytes: number;
 }
 
+// 缓存重建任务的范围。
+export type CacheRebuildScope = "thumbs" | "previews";
+
+// 重建任务状态。与扫描任务同一套取值。
+export type CacheRebuildStatus =
+  | "pending"
+  | "running"
+  | "complete"
+  | "cancelled"
+  | "error";
+
+// 重建进度快照（SSE 的 data 与状态接口的响应体同形）。
+export interface CacheRebuildProgress {
+  jobId: string;
+  status: CacheRebuildStatus;
+  scopes: CacheRebuildScope[];
+  total: number;
+  done: number;
+  failed: number;
+  elapsedMs: number;
+  error?: string;
+}
+
 export const cacheApi = {
   stats: () => api<CacheStats>("/api/cache/stats"),
   // 统一清空入口(scope=thumbs|converted|previews|faststart|transcode|all)。
@@ -67,6 +90,25 @@ export const cacheApi = {
     api<CacheScopeClearResult>(`/api/cache/clear?scope=${scope}`, {
       method: "POST",
     }),
+  // 启动一次后台重建。已有任务在跑时返回同一个 jobId（reused=true）。
+  startRebuild: (scopes: CacheRebuildScope[], previewWidth?: number) =>
+    api<{
+      ok: boolean;
+      jobId: string;
+      reused: boolean;
+      scopes: CacheRebuildScope[];
+      previewWidth: number;
+    }>("/api/cache/rebuild", {
+      method: "POST",
+      body: JSON.stringify({ scopes, previewWidth }),
+    }),
+  rebuildStatus: (jobId: string) =>
+    api<CacheRebuildProgress>(`/api/cache/rebuild/${encodeURIComponent(jobId)}`),
+  cancelRebuild: (jobId: string) =>
+    api<{ ok: boolean; alreadyDone?: boolean }>(
+      `/api/cache/rebuild/${encodeURIComponent(jobId)}`,
+      { method: "DELETE" },
+    ),
 };
 
 // 把字节数格式化为 B / KB / MB / GB / TB。

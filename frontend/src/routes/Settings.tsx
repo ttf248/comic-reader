@@ -8,6 +8,7 @@ import ThemeSwitcher from "../components/common/ThemeSwitcher";
 import { useUIStore } from "../store/uiStore";
 import { libraryQueryKeys, useLibraryManifest } from "../hooks/useLibrary";
 import StateBackupPanel from "../components/settings/StateBackupPanel";
+import CacheRebuildPanel from "../components/settings/CacheRebuildPanel";
 import ServerConfigPanel from "../components/settings/ServerConfigPanel";
 import ScanWarnings from "../components/common/ScanWarnings";
 import { syncHistoryCache } from "../utils/historyCache";
@@ -654,6 +655,8 @@ export default function Settings() {
           </div>
           <ServerConfigPanel />
         </section>
+
+        <CacheRebuildPanel />
 
         <StateBackupPanel />
 

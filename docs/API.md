@@ -369,6 +369,15 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 - `GET /api/cache/stats`：返回脱敏缓存名称、占用和文件数。除总占用 `totalBytes` / `fileCount` 外，按子目录给出 `thumbs`（缩略图）、`converted`（HEIC/HEIF/TIFF 的整图转换产物）、`previews`（阅读器按宽度缩放的预览图）、`videoFaststart`、`videoTranscode` 五项细分；各子目录的 `bytes` 之和等于 `totalBytes`。子目录尚不存在时该项 `available=false`、`bytes`/`fileCount` 为 0。
 - `POST /api/thumbs/cleanup`
 - `POST /api/cache/clear?scope=thumbs|converted|previews|faststart|transcode|all`：统一清空入口，按 scope 删 thumbs / converted / previews / faststart / transcode 缓存中对应的一类；scope=all 同时清理五类派生缓存和视频元数据内存摘要。响应 `{ scope, thumbs?, converted?, previews?, faststart?, transcode?, totalDeleted, totalFreedBytes }`，未涉及的 scope 字段省略。删除数量与释放字节只统计磁盘文件，不包含内存摘要。
+- `POST /api/cache/rebuild`：启动一次后台重建，请求体 `{ scopes: ["thumbs","previews"], previewWidth?: number }`。响应 `{ ok, jobId, reused, scopes, previewWidth }`；已有任务在跑时复用它（`reused=true`）。范围只接受 `thumbs` 与 `previews`，其它值返回 `400 invalid_rebuild_scope`，空范围返回 `400 missing_rebuild_scope`。
+- `GET /api/cache/rebuild/:id`：返回重建进度快照 `{ jobId, status, scopes, total, done, failed, elapsedMs, error? }`。`status` 取 `pending` / `running` / `complete` / `cancelled` / `error`。未知 jobId 返回 `404 rebuild_not_found`。
+- `GET /api/cache/rebuild/:id/events`：重建进度的 SSE 流，事件名与任务状态同名（`pending`/`running`/`complete`/`cancelled`/`error`），data 为上述快照；终态事件后连接关闭，每 15 秒发一次注释心跳。
+- `DELETE /api/cache/rebuild/:id`：取消正在进行的重建。任务已结束时返回 `{ ok: true, alreadyDone: true }`。
+
+重建把渲染图与预览图提前算好，免得清空之后每次打开页面都要在请求里现算。
+缩略图档按用途取：相册封面额外生成最小档（320），其余照片只生成 640；预览图按
+`previewWidth`（缺省 1280，对齐到档位阶梯）生成。视频封面要靠 ffmpeg 抽帧，不参与
+批量重建。重建只覆盖派生缓存，不会碰 `state/`。
 - `POST /api/fs/open`：本机接口，body 为 `{ "id": "<resourceId>" }`。执行前按当前媒体根重新校验路径；根、集合和相册必须仍为目录，文件必须仍为普通文件。
 - `GET /api/admin/fs/open?path=<configuredPath>&allowConfig=1`：设置页专用，仅允许打开已配置路径且只接受回环请求。
 

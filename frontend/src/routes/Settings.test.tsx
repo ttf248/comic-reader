@@ -447,7 +447,13 @@ it("缓存占用列出预览图分类，并能单独清理", async () => {
   });
 
   renderSettings();
-  expect(await screen.findByText("预览图")).toBeInTheDocument();
+  // 「预览图」在页面里出现两处：缓存占用分类与重建范围勾选项。
+  // 这里要认的是占用分类，按角色取它的可访问名。
+  expect(
+    await screen.findByText("预览图", {
+      selector: "span.text-fg-muted.text-meta",
+    }),
+  ).toBeInTheDocument();
 
   fireEvent.click(screen.getByRole("button", { name: "清空 预览图 缓存" }));
   await waitFor(() =>

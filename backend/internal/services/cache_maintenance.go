@@ -23,6 +23,8 @@ func MaintainDerivedCache(ctx context.Context, layout CacheLayout, maxBytes int6
 		name     string
 		size     int64
 		modified time.Time
+		// temp 标记临时产物：它们不受保留天数与容量上限约束。
+		temp bool
 	}
 	var entries []entry
 	var total int64
@@ -46,19 +48,25 @@ func MaintainDerivedCache(ctx context.Context, layout CacheLayout, maxBytes int6
 			if !file.Type().IsRegular() {
 				continue
 			}
-			ext := ".mp4"
-			if scope == "thumbnails" || scope == "converted" || scope == "previews" {
-				ext = ".jpg"
-			}
 			name := file.Name()
-			if !strings.HasSuffix(name, ext) || !isThumbnailCacheFile(strings.TrimSuffix(name, ext)+".jpg") {
-				continue
+			// 临时产物（.tmp）永远没有保留价值：任务要么完成（已改名成正式
+			// 缓存），要么失败（就地作废）。它们不匹配任何缓存键，只能靠
+			// 这一条规则清掉。
+			isTemp := isCacheTempFile(name)
+			if !isTemp {
+				ext := ".mp4"
+				if scope == "thumbnails" || scope == "converted" || scope == "previews" {
+					ext = ".jpg"
+				}
+				if !strings.HasSuffix(name, ext) || !isThumbnailCacheFile(strings.TrimSuffix(name, ext)+".jpg") {
+					continue
+				}
 			}
 			info, err := file.Info()
 			if err != nil {
 				continue
 			}
-			entries = append(entries, entry{filepath.Join(scope, name), info.Size(), info.ModTime()})
+			entries = append(entries, entry{filepath.Join(scope, name), info.Size(), info.ModTime(), isTemp})
 			total += info.Size()
 		}
 	}
@@ -70,6 +78,14 @@ func MaintainDerivedCache(ctx context.Context, layout CacheLayout, maxBytes int6
 			return deleted, err
 		}
 		if now.Sub(item.modified) < 10*time.Minute {
+			continue
+		}
+		if item.temp {
+			// 临时产物不受保留天数与容量上限约束：十分钟后一律清掉。
+			if err := root.Remove(item.name); err == nil {
+				deleted++
+				total -= item.size
+			}
 			continue
 		}
 		old := maxAgeDays > 0 && item.modified.Before(now.AddDate(0, 0, -maxAgeDays))

@@ -79,6 +79,10 @@ type ThumbnailService struct {
 	cacheDir   string
 	maxAgeDays int
 	lruSize    int
+	// rootDir 是缓存根目录（state/ 与 derived/ 的父目录）。
+	// 早期版本把缩略图平铺在缓存根下，那批遗留文件没有任何代码路径
+	// 会去读或清理，只能靠清理动作顺带扫掉。
+	rootDir string
 	// convertedDir 存放"浏览器可直接显示"的整图转换结果（HEIC/TIFF 等）。
 	// 与缩略图分开存放，避免同一目录里混两种用途的文件。
 	convertedDir string
@@ -126,6 +130,10 @@ type ThumbnailOptions struct {
 	CacheDir   string // 必填
 	MaxAgeDays int    // 默认 30
 	LRUSize    int    // 默认 500
+
+	// RootDir 可选：缓存根目录。清理缩略图时顺带扫掉早期版本平铺在
+	// 根目录下的遗留 JPEG。
+	RootDir string
 
 	// ConvertedDir 可选：整图转换结果的缓存目录。
 	// 留空时复用 CacheDir 下的 converted 子目录。
@@ -189,6 +197,7 @@ func NewThumbnailService(opts ThumbnailOptions) (*ThumbnailService, error) {
 
 	return &ThumbnailService{
 		cacheDir:        opts.CacheDir,
+		rootDir:         opts.RootDir,
 		convertedDir:    convertedDir,
 		previewDir:      previewDir,
 		maxAgeDays:      days,
@@ -890,6 +899,16 @@ func (s *ThumbnailService) convertUnsupported(absPath string, width int) (image.
 	return s.imageConverter.Convert(absPath, width)
 }
 
+// isCacheTempFile 识别转码等流程留下的临时产物。
+//
+// 形如 `.c6a4e124….mp4-1618358982.tmp`：ffmpeg 输出到临时文件，再改名
+// 成正式缓存。任务被取消或进程被杀时临时文件留在原地 —— 它们既不是
+// 正式缓存（命名不匹配任何缓存键），又不会被容量维护清掉（本机实测
+// 攒下 1GB 以上的孤儿）。因此清理与容量维护都要单独认它们。
+func isCacheTempFile(name string) bool {
+	return strings.HasPrefix(name, ".") && strings.HasSuffix(strings.ToLower(name), ".tmp")
+}
+
 // isThumbnailCacheFile 只识别当前 ThumbnailService 按源路径 MD5 生成的 JPEG。
 // 它用于缓存统计与清理，避免误删目录中的非缓存文件。
 func isThumbnailCacheFile(name string) bool {
@@ -961,8 +980,47 @@ func (s *ThumbnailService) ClearThumbnails() (deleted int, freedBytes int64, err
 	if err != nil {
 		return deleted, freedBytes, err
 	}
+	if s.rootDir != "" {
+		legacyDeleted, legacyFreed, legacyErr := clearLegacyFlatCache(s.rootDir)
+		if legacyErr == nil {
+			deleted += legacyDeleted
+			freedBytes += legacyFreed
+		}
+	}
 	s.memCache.Purge()
 	return deleted, freedBytes, nil
+}
+
+// clearLegacyFlatCache 清掉早期版本平铺在缓存根目录下的缩略图。
+//
+// 那些文件来自 state/derived 布局之前的年代：没有任何代码路径会读它们
+// （键是按 derived/thumbnails 里的文件名算的），也不会被容量维护清掉
+// （维护只扫 derived/ 下的五个子目录）。留着就是纯占地方。
+func clearLegacyFlatCache(rootDir string) (int, int64, error) {
+	entries, err := os.ReadDir(rootDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, 0, nil
+		}
+		return 0, 0, err
+	}
+	deleted := 0
+	var freed int64
+	for _, e := range entries {
+		if e.IsDir() || !isThumbnailCacheFile(e.Name()) {
+			continue
+		}
+		path := filepath.Join(rootDir, e.Name())
+		var size int64
+		if fi, infoErr := e.Info(); infoErr == nil {
+			size = fi.Size()
+		}
+		if rmErr := os.Remove(path); rmErr == nil {
+			deleted++
+			freed += size
+		}
+	}
+	return deleted, freed, nil
 }
 
 // ClearConverted 删除整图转换缓存(HEIC/HEIF/TIFF 转 JPEG)并清空对应内存 LRU。
@@ -1010,7 +1068,7 @@ func clearCacheDir(dir string) (int, int64, error) {
 	deleted := 0
 	var freed int64
 	for _, e := range entries {
-		if e.IsDir() || !isThumbnailCacheFile(e.Name()) {
+		if e.IsDir() || (!isThumbnailCacheFile(e.Name()) && !isCacheTempFile(e.Name())) {
 			continue
 		}
 		path := filepath.Join(dir, e.Name())

@@ -208,6 +208,7 @@ func main() {
 
 	thumbs, err := services.NewThumbnailService(services.ThumbnailOptions{
 		CacheDir:       cacheLayout.ThumbnailDir,
+		RootDir:        cacheLayout.Root,
 		ConvertedDir:   cacheLayout.ConvertedDir,
 		PreviewDir:     cacheLayout.PreviewDir,
 		MaxAgeDays:     cfg.CacheMaxAgeDays,
@@ -219,6 +220,7 @@ func main() {
 		log.Fatalf("初始化缩略图服务失败: %v", err)
 	}
 	cacheStats := services.NewCacheStatsService(30 * time.Second)
+	cacheRebuild := services.NewCacheRebuildService(resourceCatalog, thumbs)
 	runner := services.NewAsyncScanRunner()
 	unreadIndex := services.NewUnreadLibraryIndex()
 	prefs := store.NewPrefsStore(cacheLayout.PreferencesPath)
@@ -337,6 +339,10 @@ func main() {
 	// Settings 页在"缓存占用"面板中按 scope 提供独立清理和一键全清。
 	api.Post("/cache/clear", handlers.CacheClearHandler(thumbs, faststart, transcode, videoInfo.ClearCache, cacheStats))
 	api.Get("/cache/stats", handlers.CacheStatsHandler(mgr, cacheStats))
+	api.Post("/cache/rebuild", handlers.CacheRebuildStartHandler(cacheRebuild))
+	api.Get("/cache/rebuild/:id", handlers.CacheRebuildStatusHandler(cacheRebuild))
+	api.Delete("/cache/rebuild/:id", handlers.CacheRebuildCancelHandler(cacheRebuild))
+	api.Get("/cache/rebuild/:id/events", handlers.CacheRebuildEventsHandler(cacheRebuild))
 	api.Get("/media/:id", resourceParam, handlers.MediaHandler(transcode, faststart, thumbs))
 	api.Get("/previews/:id", resourceParam, handlers.PreviewHandler(thumbs))
 	api.Get("/images/:id/info", resourceParam, handlers.ImageInfoHandler(resourceCatalog))
