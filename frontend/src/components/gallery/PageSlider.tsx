@@ -1,5 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { imageUrl } from "../../api/images";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
+import { thumbUrl } from "../../api/thumbs";
 import { shouldIgnoreShortcut } from "../../utils/shortcuts";
 
 interface Props {
@@ -42,15 +48,17 @@ export default function PageSlider({ total, index, onJump, images }: Props) {
   }, [safeIndex]);
 
   // 输入框挂载后聚焦并全选：直接敲数字即覆盖预填值。
-  useEffect(() => {
+  //
+  // 用 layout effect 且不等下一帧：useEffect + requestAnimationFrame 会把
+  // 选中推迟两拍，这中间进来的按键先落在输入框里，随后的 select() 又把它
+  // 选掉 —— 用户敲的「100」会变成「00」。layout effect 在 DOM 更新后的
+  // 同一个任务里跑完，按键不可能插在中间。
+  useLayoutEffect(() => {
     if (!editing) return;
-    const id = requestAnimationFrame(() => {
-      const el = inputRef.current;
-      if (!el) return;
-      el.focus();
-      el.select();
-    });
-    return () => cancelAnimationFrame(id);
+    const el = inputRef.current;
+    if (!el) return;
+    el.focus();
+    el.select();
   }, [editing]);
 
   // 全局快捷键：G 进入输入态（与 vim/git 习惯一致）
@@ -133,6 +141,7 @@ export default function PageSlider({ total, index, onJump, images }: Props) {
       {showStrip && (
         <div
           className="absolute -top-[110px] left-1/2 -translate-x-1/2 z-10 flex items-end gap-1.5 pointer-events-none"
+          data-testid="page-slider-strip"
           aria-hidden
         >
           {strip.map((i) => {
@@ -149,7 +158,10 @@ export default function PageSlider({ total, index, onJump, images }: Props) {
               >
                 {images[i] ? (
                   <img
-                    src={imageUrl(images[i])}
+                    /* 56×80 的缩略条拉的是原图：拖动页码时一次要拉
+                       5 张，一本漫画的原图动辄 5MB。这里取 320 档的
+                       渲染图，肉眼足够分辨页面内容。 */
+                    src={thumbUrl(images[i], undefined, 320)}
                     alt={`第 ${i + 1} 页`}
                     className="w-full h-full object-cover"
                     draggable={false}
@@ -203,6 +215,7 @@ export default function PageSlider({ total, index, onJump, images }: Props) {
         <div
           ref={trackRef}
           onPointerDown={onTrackPointerDown}
+          data-testid="page-slider-track"
           className="relative h-1 w-full bg-white/15 rounded-full cursor-pointer group-hover:h-1.5 transition-all"
         >
           <div

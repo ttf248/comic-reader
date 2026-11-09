@@ -91,6 +91,8 @@ pwsh -File scripts/install-ffmpeg.ps1
 | `frontend/` | `npm run test`                   | Vitest 单元/组件测试                   |
 | `frontend/` | `npm run build`                  | TypeScript 检查与生产构建              |
 | `frontend/` | `npm run test:e2e`               | 使用独立临时库启动真实全栈 E2E         |
+| `frontend/` | `npm run audit:size`             | 量首屏实际传输体积与请求数            |
+| `frontend/` | `npm run audit:size -- --dist`   | 只量构建产物首屏（CI 的守门线）       |
 | 仓库根      | `pwsh -File scripts/build.ps1`   | 全栈构建；也可使用 VSCode `build: all` |
 | 仓库根      | VSCode「运行本机最新构建」或 Windows `start.bat` | 构建本机前后端最新代码并启动 |
 

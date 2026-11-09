@@ -357,7 +357,7 @@ test("浏览器抽帧上传后封面可通过原资源 URL 显示", async ({ pag
     await route.fulfill({ response: result });
   });
   // 只模拟服务端封面未就绪；视频解码、canvas 抽帧、上传和最终 GET 均走真实流程。
-  await page.route(`**/api/thumbs/${fileId}`, async (route) => {
+  await page.route(thumbRoutePattern(fileId), async (route) => {
     if (route.request().method() === "HEAD" && !uploaded) {
       probes++;
       await route.fulfill({ status: 404 });
@@ -370,9 +370,10 @@ test("浏览器抽帧上传后封面可通过原资源 URL 显示", async ({ pag
   await page.clock.fastForward(21_000);
   await expect.poll(() => uploaded).toBe(true);
   const cover = page
-    .locator(`[data-virtuoso-scroller] img[src="/api/thumbs/${fileId}"]`)
+    .locator(`[data-virtuoso-scroller] img[src^="/api/thumbs/${fileId}"]`)
     .first();
-  await expect(cover).toHaveAttribute("src", `/api/thumbs/${fileId}`);
+  // 封面 URL 带档位与版本号（?w=…&v=…），这里只认它的路径部分。
+  await expect(cover).toHaveAttribute("src", new RegExp(`^/api/thumbs/${fileId}`));
   await expect
     .poll(() => cover.evaluate((image: HTMLImageElement) => image.naturalWidth))
     .toBeGreaterThan(0);
@@ -398,7 +399,7 @@ for (const albumName of ["sample-video-cover", "sample-mixed-cover"]) {
     const errors: string[] = [];
     let fail = true;
     page.on("pageerror", (error) => errors.push(error.message));
-    await page.route(`**/api/thumbs/${fileId}`, async (route) => {
+    await page.route(thumbRoutePattern(fileId), async (route) => {
       if (fail && route.request().method() === "HEAD")
         await route.abort("failed");
       else await route.continue();
@@ -419,7 +420,7 @@ for (const albumName of ["sample-video-cover", "sample-mixed-cover"]) {
     expect(errors).toEqual([]);
     fail = false;
     await page.keyboard.press("Enter");
-    const cover = grid.locator(`img[src="/api/thumbs/${fileId}"]`);
+    const cover = grid.locator(`img[src^="/api/thumbs/${fileId}"]`);
     await expect
       .poll(() =>
         cover.evaluate((image: HTMLImageElement) => image.naturalWidth),
@@ -449,7 +450,7 @@ test("视频封面按原始比例完整显示，不裁切也不补黑边", async
   // 限定在照片墙的网格里：侧栏的「接着看」也会显示同一本相册的封面缩略图，
   // 全页取第一个会取到侧栏那张，测的就不是网格里的视频封面了。
   const cover = page
-    .locator(`[data-virtuoso-scroller] img[src="/api/thumbs/${fileId}"]`)
+    .locator(`[data-virtuoso-scroller] img[src^="/api/thumbs/${fileId}"]`)
     .first();
   await expect(cover).toBeVisible();
   await expect
@@ -496,7 +497,7 @@ test("离开相册会取消浏览器抽帧且不继续上传封面", async ({ pa
       uploaded = true;
   });
   await page.clock.install();
-  await page.route(`**/api/thumbs/${fileId}`, async (route) => {
+  await page.route(thumbRoutePattern(fileId), async (route) => {
     probes++;
     await route.fulfill({ status: 404 });
   });
@@ -2601,4 +2602,18 @@ for (const source of ["home", "collection", "tag"] as const) {
       page.locator("[data-virtuoso-scroller]").first(),
     ).toBeAttached();
   });
+}
+
+/**
+ * 缩略图请求的匹配规则。
+ *
+ * 缩略图 URL 现在带档位与版本号（?w=…&v=…），glob 里的 `?` 是「任意一个
+ * 字符」而不是查询串的开头，匹配不到带参数的 URL。用正则既能匹配带参数的
+ * 形式，又不会误伤 /cover 上传与其它同名路径。
+ */
+function thumbRoutePattern(fileId: string) {
+  const path = `/api/thumbs/${fileId}`;
+  // 用 pathname 判定：查询串（?w=…&v=…）不影响 pathname，
+  // 而 /cover 上传的 pathname 仍然不同，不会误伤。
+  return (url: URL) => url.pathname === path;
 }

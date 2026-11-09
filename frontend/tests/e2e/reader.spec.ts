@@ -600,6 +600,27 @@ test("阅读器连续模式按视口宽度请求预览图，不发原图", async
   ).toHaveAttribute("src", /\/api\/previews\/.*\?w=\d+/);
 });
 
+test("阅读器页码缩略条用渲染图，不拉原图", async ({ page }) => {
+  const nodes = await scannedNodes(page.request);
+  const album = nodes.find((node) => node.name === "sample-paged-images");
+  expect(album).toBeDefined();
+
+  await page.goto(readerUrl(album!.id, `?index=0`));
+
+  // 按住页码进度条会浮出 5 张 56×80 的缩略图。它们原来拉的是原图：
+  // 一本漫画的原图动辄 5MB，拖一次就是几十 MB。
+  const track = page.getByTestId("page-slider-track").first();
+  const box = await track.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.move(box!.x + box!.width * 0.6, box!.y + box!.height / 2);
+  await page.mouse.down();
+
+  const strip = page.getByTestId("page-slider-strip").locator("img");
+  await expect(strip.first()).toBeVisible();
+  await expect(strip.first()).toHaveAttribute("src", /\/api\/thumbs\//);
+  await page.mouse.up();
+});
+
 // ==== UI 重设计新增的界面契约 ====
 //
 // 这次重设计把阅读器的核心操作（阅读模式 / 适配方式）从"…"菜单提到顶栏常驻，

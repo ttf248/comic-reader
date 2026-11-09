@@ -67,9 +67,13 @@ export default function ImageGallery({
     return Math.round(window.innerWidth * dpr);
   }, []);
 
-  // 预加载前后各 2 张
+  // 预加载前后各 1 张。
+  //
+  // 以前是前后各 2 张：单页模式下预取的是原图，手机照片 5MB+ 一张，
+  // 一次翻页就要预取 20MB，整本翻完是 GB 级流量。少取一张几乎察觉
+  // 不到延迟，却省掉一半流量。
   useEffect(() => {
-    const ranges = [index - 2, index - 1, index + 1, index + 2];
+    const ranges = [index - 1, index + 1];
     const usePreview = mode === "continuous";
     for (const i of ranges) {
       const p = images[i];

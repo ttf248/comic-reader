@@ -65,6 +65,13 @@ jobs:
         working-directory: frontend
         run: npm run test:e2e
 
+      - name: 前端首屏体积预算
+        if: runner.os == 'Linux'
+        working-directory: frontend
+        run: |
+          npm run build
+          node scripts/size-audit.mjs --dist
+
       - name: 构建可运行包
         if: runner.os == 'Linux'
         shell: pwsh
