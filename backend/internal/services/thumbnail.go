@@ -123,6 +123,33 @@ type ThumbnailService struct {
 	// （目前是 iPhone 的 HEIC/HEIF）。为 nil 或 ffmpeg 不可用时，
 	// 这类文件按"不支持的格式"处理（415），前端显示占位图。
 	imageConverter *ImageConverter
+
+	// decodeFailure 记录"这个文件解码不出来"（可选）。
+	//
+	// 图片头能读、像素数据却是坏的（截断的 JPEG 之类），只有真正解码
+	// 一次才暴露出来。回调里把它记进尺寸缓存，照片墙就能把这张图标成
+	// 「无法解码」，而不是让用户对着破图图标猜。
+	decodeFailure func(path string)
+}
+
+// SetDecodeFailureRecorder 设置解码失败的记录回调。
+//
+// 回调由调用方（通常是尺寸服务）在装配时注入，避免渲染服务反过来
+// 依赖尺寸服务。
+func (s *ThumbnailService) SetDecodeFailureRecorder(record func(path string)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.decodeFailure = record
+}
+
+// reportDecodeFailure 上报一次解码失败。
+func (s *ThumbnailService) reportDecodeFailure(path string) {
+	s.mu.RLock()
+	record := s.decodeFailure
+	s.mu.RUnlock()
+	if record != nil {
+		record(path)
+	}
 }
 
 // ThumbnailOptions 构造选项。
@@ -519,6 +546,9 @@ func (s *ThumbnailService) decodeForRender(absPath string, width int) (image.Ima
 			}
 			img = converted
 		} else {
+			// 文件本身坏了（截断的 JPEG、数据不全的码流）：记下来，
+			// 界面上把它标成「无法解码」。
+			s.reportDecodeFailure(absPath)
 			return nil, fmt.Errorf("decode: %w", err)
 		}
 	}

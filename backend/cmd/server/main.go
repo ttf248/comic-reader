@@ -219,6 +219,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("初始化缩略图服务失败: %v", err)
 	}
+	// 渲染时发现文件解码不出来（截断的 JPEG 之类），记进尺寸缓存：
+	// 照片墙据此把这些图标成「无法解码」。
+	thumbs.SetDecodeFailureRecorder(mediaDimensions.MarkUndecodable)
 	cacheStats := services.NewCacheStatsService(30 * time.Second)
 	cacheRebuild := services.NewCacheRebuildService(resourceCatalog, thumbs)
 	runner := services.NewAsyncScanRunner()

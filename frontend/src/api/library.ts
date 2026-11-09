@@ -126,6 +126,13 @@ export interface LibraryMediaItem {
   width?: number;
   height?: number;
   /**
+   * 文件解码不出来（扩展名说是 JPEG，内容却不是；像素数据还是截断的）。
+   *
+   * 服务端判定：图片头读不出来当场标，渲染时整张解码失败再补记。
+   * 界面上据此显示「无法解码」，而不是留一个破图图标让人猜。
+   */
+  undecodable?: boolean;
+  /**
    * 媒体内容版本号（源文件 mtime + size + 渲染算法版本）。
    * 前端把它拼进渲染图 URL，服务端据此回 immutable。
    */

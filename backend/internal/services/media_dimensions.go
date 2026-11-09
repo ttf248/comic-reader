@@ -12,6 +12,8 @@ import (
 	"sync"
 
 	lru "github.com/hashicorp/golang-lru/v2"
+
+	"github.com/tianlongxiang/local-gallery/internal/models"
 )
 
 // MediaDimensions 是一份媒体文件的原始像素尺寸。
@@ -23,6 +25,14 @@ type MediaDimensions struct {
 	Height int   `json:"height"`
 	Size   int64 `json:"size"`
 	MTime  int64 `json:"mtime"` // Unix 毫秒
+	// Undecodable 标记这份文件解码不出来：不是浏览器打不开的格式
+	// （HEIC/HEIF 由服务端转换），而是文件本身坏了 —— 扩展名说是 JPEG，
+	// 内容却不是；或者头能读、像素数据却是截断的。
+	//
+	// 两种来源：读图片头就失败（当场判定），以及渲染时整张解码失败
+	// （MarkUndecodable 补记）。界面上据此显示「无法解码」，而不是
+	// 让用户对着一个破图图标猜。
+	Undecodable bool `json:"undecodable,omitempty"`
 }
 
 // Known 表示这份尺寸是真实探测出来的，而不是「猜的」。
@@ -65,11 +75,12 @@ func NewMediaDimensionService(path string) (*MediaDimensionService, error) {
 
 // dimensionRecord 是磁盘缓存的一行。
 type dimensionRecord struct {
-	Path   string `json:"path"`
-	Width  int    `json:"width"`
-	Height int    `json:"height"`
-	Size   int64  `json:"size"`
-	MTime  int64  `json:"mtime"`
+	Path        string `json:"path"`
+	Width       int    `json:"width"`
+	Height      int    `json:"height"`
+	Size        int64  `json:"size"`
+	MTime       int64  `json:"mtime"`
+	Undecodable bool   `json:"undecodable,omitempty"`
 }
 
 // load 读取磁盘缓存。文件不存在或损坏时静默忽略：缓存丢了只是重新探测一次。
@@ -94,10 +105,11 @@ func (s *MediaDimensionService) load() {
 			continue
 		}
 		s.cache.Add(record.Path, MediaDimensions{
-			Width:  record.Width,
-			Height: record.Height,
-			Size:   record.Size,
-			MTime:  record.MTime,
+			Width:       record.Width,
+			Height:      record.Height,
+			Size:        record.Size,
+			MTime:       record.MTime,
+			Undecodable: record.Undecodable,
 		})
 	}
 }
@@ -120,25 +132,89 @@ func (s *MediaDimensionService) Dimensions(path string) MediaDimensions {
 	cached, ok := s.cache.Get(path)
 	s.mu.Unlock()
 	if ok && cached.Size == size && cached.MTime == mtime {
-		return cached
+		return s.withHeaderVerdict(path, cached)
 	}
 
 	dimensions := MediaDimensions{Size: size, MTime: mtime}
-	width, height := decodeImageDimensions(path)
+	width, height, headerOK := decodeImageDimensions(path)
 	dimensions.Width = width
 	dimensions.Height = height
+	// 图片头都读不出来：这个文件多半不是它声称的那种图片。需要转换的
+	// 格式（HEIC/HEIF/TIFF）不算 —— 它们由服务端转换，不该判成坏文件。
+	dimensions.Undecodable = !headerOK && !models.NeedsBrowserConversion(filepath.Base(path))
 
 	s.mu.Lock()
 	s.cache.Add(path, dimensions)
 	s.appendLocked(dimensionRecord{
-		Path:   path,
-		Width:  width,
-		Height: height,
-		Size:   size,
-		MTime:  mtime,
+		Path:        path,
+		Width:       width,
+		Height:      height,
+		Size:        size,
+		MTime:       mtime,
+		Undecodable: dimensions.Undecodable,
 	})
 	s.mu.Unlock()
 	return dimensions
+}
+
+// withHeaderVerdict 给尺寸记录补上"读不出图片头"的判定。
+//
+// 尺寸缓存早于「无法解码」这个标记，磁盘上的旧记录没有这一位：宽高都
+// 是 0 的记录就是读不出图片头，按同一规则补判即可，不必为此让整份
+// 缓存作废、重新探测全库。
+func (s *MediaDimensionService) withHeaderVerdict(path string, dimensions MediaDimensions) MediaDimensions {
+	if dimensions.Undecodable || dimensions.Known() {
+		return dimensions
+	}
+	if models.NeedsBrowserConversion(filepath.Base(path)) {
+		return dimensions
+	}
+	dimensions.Undecodable = true
+	return dimensions
+}
+
+// MarkUndecodable 记下"这个文件解码不出来"。
+//
+// 图片头能读、像素数据却是坏的（截断的 JPEG 之类），只有真正解码一次
+// 才暴露出来。渲染路径遇到这种失败会回调这里，记完之后照片墙就能把这
+// 张图标成「无法解码」，而不是让用户对着破图图标猜。
+//
+// 记录跟着文件走：文件被替换（大小或修改时间变了）后判定作废，下次
+// 重新探测。
+func (s *MediaDimensionService) MarkUndecodable(path string) {
+	if path == "" {
+		return
+	}
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		return
+	}
+	size := info.Size()
+	mtime := info.ModTime().UnixMilli()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cached, ok := s.cache.Get(path)
+	if ok && (cached.Size != size || cached.MTime != mtime) {
+		// 文件已经换了：这条判定针对的是旧内容，不作数。
+		return
+	}
+	dimensions := MediaDimensions{
+		Width:       cached.Width,
+		Height:      cached.Height,
+		Size:        size,
+		MTime:       mtime,
+		Undecodable: true,
+	}
+	s.cache.Add(path, dimensions)
+	s.appendLocked(dimensionRecord{
+		Path:        path,
+		Width:       dimensions.Width,
+		Height:      dimensions.Height,
+		Size:        size,
+		MTime:       mtime,
+		Undecodable: true,
+	})
 }
 
 // appendLocked 追加一条缓存记录。调用方必须已持有锁。
@@ -174,19 +250,22 @@ func (s *MediaDimensionService) Close() error {
 
 // decodeImageDimensions 读取图片头得到像素尺寸。
 //
+// 第三个返回值表示图片头是否读得出来：读不出来说明这个文件压根不是
+// 一张能解码的图片（扩展名说是 JPEG，内容却不是）。
+//
 // HEIC/HEIF 当前没有纯 Go 解码器（见 image_info.go 的说明），
 // 因此这两类文件返回 0，前端会退回默认比例。
-func decodeImageDimensions(path string) (int, int) {
+func decodeImageDimensions(path string) (int, int, bool) {
 	file, err := os.Open(path)
 	if err != nil {
-		return 0, 0
+		return 0, 0, false
 	}
 	defer file.Close()
 	config, _, err := image.DecodeConfig(file)
 	if err != nil {
-		return 0, 0
+		return 0, 0, false
 	}
-	return config.Width, config.Height
+	return config.Width, config.Height, true
 }
 
 // ErrMediaDimensionUnavailable 表示尺寸服务尚未初始化。

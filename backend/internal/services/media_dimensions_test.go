@@ -99,3 +99,74 @@ func TestMediaDimensionServiceRefreshesChangedFile(t *testing.T) {
 		t.Fatalf("dimensions after replace = %dx%d, want 20x80", got.Width, got.Height)
 	}
 }
+
+// 图片头读不出来的文件是坏文件：标成「无法解码」，界面上不画破图图标。
+func TestMediaDimensionServiceFlagsUnreadableHeader(t *testing.T) {
+	dir := t.TempDir()
+	broken := filepath.Join(dir, "broken.jpg")
+	if err := os.WriteFile(broken, []byte("not an image at all"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	service, err := NewMediaDimensionService(filepath.Join(dir, "dimensions.jsonl"))
+	if err != nil {
+		t.Fatalf("create service: %v", err)
+	}
+	got := service.Dimensions(broken)
+	if !got.Undecodable {
+		t.Fatal("读不出图片头的文件应标为无法解码")
+	}
+	if got.Known() {
+		t.Fatalf("坏文件不该有尺寸: %+v", got)
+	}
+
+	// 需要转换的格式（HEIC/HEIF/TIFF）不算坏：它们由服务端转换。
+	heic := filepath.Join(dir, "photo.heic")
+	if err := os.WriteFile(heic, []byte("not an image at all"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := service.Dimensions(heic); got.Undecodable {
+		t.Fatal("HEIC 由服务端转换，不该判为坏文件")
+	}
+}
+
+// 渲染时整张解码失败（头能读、像素数据是截断的）也要标出来，
+// 而且标记要跟着文件走：文件被替换后判定作废。
+func TestMediaDimensionServiceMarksUndecodable(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "photo.png")
+	writeTestPNG(t, path, 40, 30)
+	cachePath := filepath.Join(dir, "dimensions.jsonl")
+
+	service, err := NewMediaDimensionService(cachePath)
+	if err != nil {
+		t.Fatalf("create service: %v", err)
+	}
+	if got := service.Dimensions(path); got.Undecodable {
+		t.Fatal("正常图片不该被标为无法解码")
+	}
+
+	service.MarkUndecodable(path)
+	got := service.Dimensions(path)
+	if !got.Undecodable {
+		t.Fatal("补记之后应标为无法解码")
+	}
+	if got.Width != 40 || got.Height != 30 {
+		t.Fatalf("补记不该改掉已知尺寸: %+v", got)
+	}
+
+	// 标记要落盘：重启后仍然记得。
+	second, err := NewMediaDimensionService(cachePath)
+	if err != nil {
+		t.Fatalf("recreate service: %v", err)
+	}
+	if got := second.Dimensions(path); !got.Undecodable {
+		t.Fatal("标记应跨实例保留")
+	}
+
+	// 文件被替换后重新判定：换了一张好图就不该再标坏。
+	writeTestPNG(t, path, 60, 20)
+	if got := service.Dimensions(path); got.Undecodable {
+		t.Fatal("文件被替换后旧判定应作废")
+	}
+}

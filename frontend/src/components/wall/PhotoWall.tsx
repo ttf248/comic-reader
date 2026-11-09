@@ -6,11 +6,7 @@ import { useMediaGridPagination } from "../../hooks/useMediaGridPagination";
 import ThumbImage from "../common/ThumbImage";
 import VideoCoverImage from "../common/VideoCoverImage";
 import { PlayFilledIcon } from "../common/Icon";
-import {
-  layoutJustified,
-  tileRatio,
-  type WallTile,
-} from "./justifiedLayout";
+import { layoutJustified, tileRatio, type WallTile } from "./justifiedLayout";
 
 interface Props {
   /** 已加载的媒体项，顺序与服务端媒体索引一致。 */
@@ -177,6 +173,7 @@ export default function PhotoWall({
                         loading="lazy"
                         version={item.version}
                         displayWidth={tile.width}
+                        undecodable={item.undecodable}
                         className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
                       />
                     )}
@@ -186,7 +183,9 @@ export default function PhotoWall({
                       onContextMenu={(event) => onContextMenu?.(item, event)}
                       className="absolute inset-0 z-0 block h-full w-full cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"
                       title={item.name}
-                      aria-label={isVideo ? `播放 ${item.name}` : `查看 ${item.name}`}
+                      aria-label={
+                        isVideo ? `播放 ${item.name}` : `查看 ${item.name}`
+                      }
                     />
                     {/* 视频角标：光靠一枚 10px 的三角不够 —— 形状与颜色都
                         说不清这是什么，带上「视频」两个字才不依赖颜色辨认。

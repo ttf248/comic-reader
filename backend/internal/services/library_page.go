@@ -164,6 +164,10 @@ type LibraryMediaItem struct {
 	// 照片墙据此按真实宽高比排布，不必在浏览器里逐张探测。
 	Width  int `json:"width,omitempty"`
 	Height int `json:"height,omitempty"`
+	// Undecodable 标记这份文件解码不出来：文件本身坏了（扩展名说是
+	// JPEG，内容却不是；或者像素数据是截断的）。前端据此显示
+	// 「无法解码」，而不是留一个破图图标让人猜。
+	Undecodable bool `json:"undecodable,omitempty"`
 	// Version 是媒体文件的内容版本号（mtime + size + 渲染算法版本）。
 	// 前端把它拼进渲染图 URL，服务端据此回 immutable。
 	Version string `json:"version,omitempty"`

@@ -82,6 +82,7 @@ func AlbumMediaPageHandler(catalog *services.ResourceCatalog, dimensions *servic
 // enrichMediaDimensions 补齐一页媒体的像素尺寸。
 //
 // 尺寸是可选信息：探测失败时保持 0，前端会退回默认宽高比，不影响浏览。
+// 读不出图片头的文件另外标成「无法解码」：那是坏文件，不是尺寸未知。
 func enrichMediaDimensions(snapshot services.CatalogSnapshot, items []services.LibraryMediaItem, dimensions *services.MediaDimensionService) {
 	if dimensions == nil || len(items) == 0 {
 		return
@@ -97,6 +98,7 @@ func enrichMediaDimensions(snapshot services.CatalogSnapshot, items []services.L
 		size := dimensions.Dimensions(ref.AbsolutePath)
 		items[i].Width = size.Width
 		items[i].Height = size.Height
+		items[i].Undecodable = size.Undecodable
 	}
 }
 

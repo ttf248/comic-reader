@@ -193,6 +193,25 @@ func TestDecodePixelWeightUsesImageHeader(t *testing.T) {
 	}
 }
 
+// 解码失败要上报：图片头能读、像素数据却是坏的（截断的 JPEG），
+// 只有真正解码一次才暴露。上报之后界面上才能把它标成「无法解码」。
+func TestThumbnailReportsDecodeFailure(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "broken.jpg")
+	writeFakeJPEGHeader(t, path, 1600, 1200) // 头是真的，像素数据没有
+
+	svc := newTestService(t)
+	reported := ""
+	svc.SetDecodeFailureRecorder(func(p string) { reported = p })
+
+	if _, err := svc.GetOrCreate(path, 320); err == nil {
+		t.Fatal("解码失败应返回错误")
+	}
+	if reported != path {
+		t.Fatalf("reported = %q, want %q", reported, path)
+	}
+}
+
 // 超过预算的大图不能进进程内解码：加权信号量的容量就是预算，
 // 申请超过容量的权重会永远阻塞，整条渲染链路跟着挂死
 // （本机实测：6184×44767 的全景拼接把重建任务卡在最后一项）。

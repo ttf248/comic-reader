@@ -2371,6 +2371,24 @@ test("浏览器解不了的图片给出明确提示而不是破图", async ({ pa
   await expect(page.getByText("这张图片无法显示")).toBeVisible();
 });
 
+test("坏掉的图片在照片墙上标成「无法解码」", async ({ page, request }) => {
+  const nodes = await scannedNodes(request);
+  const album = nodes.find((node) => node.name === "sample-broken")!;
+  await page.goto(albumUrl(album));
+
+  // 扩展名说是 JPEG，内容却不是：服务端读图片头就判定"无法解码"，
+  // 照片墙上写明原因，而不是画一个破图图标让人猜。
+  const tile = page.getByRole("img", { name: "broken.jpg（无法解码）" });
+  await expect(tile).toBeVisible();
+  await expect(tile).toHaveAttribute("title", "无法解码");
+
+  // 打开大图预览同样说清楚，而不是空白。
+  await page
+    .getByRole("button", { name: "查看 broken.jpg", exact: true })
+    .click();
+  await expect(page.getByText("这张图片无法解码")).toBeVisible();
+});
+
 test("主页的视图筛选条紧贴在「库内一览」网格上方", async ({ page }) => {
   await page.goto("/");
   // 叶级目录两侧都叫「相册」：视图 chip 的名字用它。

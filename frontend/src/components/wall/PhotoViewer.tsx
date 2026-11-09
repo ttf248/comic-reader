@@ -455,6 +455,12 @@ export default function PhotoViewer({
             <div className="px-6 text-center text-body text-white/60">
               这张图片无法显示
             </div>
+          ) : current.undecodable ? (
+            // 服务端已判定这张图解码不出来：不去请求渲染图，
+            // 直接说清楚原因，别让人对着空白页猜。
+            <div className="px-6 text-center text-body text-white/60">
+              这张图片无法解码
+            </div>
           ) : (
             stageMeasured && (
               <img

@@ -52,6 +52,13 @@ try {
   # 会失败并返回 415。
   [System.IO.File]::WriteAllBytes((Join-Path $formatDir "photo.heic"), [System.Text.Encoding]::ASCII.GetBytes("not a decodable image"))
 
+  # 坏掉的 JPEG 单独放一个相册：扩展名说是 JPEG，内容却不是。服务端读
+  # 图片头就会判定"无法解码"，照片墙上应显示"无法解码"而不是破图图标。
+  # 单独放避免影响其它用例的图片序号。
+  $brokenDir = Join-Path (Join-Path $testRoot "media") "sample-broken"
+  New-Item -ItemType Directory -Path $brokenDir -Force | Out-Null
+  [System.IO.File]::WriteAllBytes((Join-Path $brokenDir "broken.jpg"), [System.Text.Encoding]::ASCII.GetBytes("not a decodable image"))
+
   # 标签和排序使用真实扫描素材；名称、目录修改时间及媒体业务日期故意不同序。
   $taggedSamples = @(
     @{ Name = "A"; Modified = "2023-01-01T00:00:00Z"; MediaModified = "2025-01-01T00:00:00Z" },

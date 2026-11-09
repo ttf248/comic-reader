@@ -20,4 +20,37 @@ describe("ThumbImage", () => {
     render(<ThumbImage fileId="f_1" alt="封面" />);
     expect(screen.getByAltText("封面").tagName).toBe("IMG");
   });
+
+  it("服务端判定无法解码时不发请求，直接写明原因", () => {
+    render(
+      <ThumbImage
+        fileId="f_broken"
+        alt="照片0067.jpg"
+        undecodable
+        displayWidth={320}
+      />,
+    );
+    // 不渲染 img：请求渲染图必然失败，没必要再打一次。
+    expect(screen.queryByAltText("照片0067.jpg")).toBeNull();
+    const placeholder = screen.getByRole("img", {
+      name: "照片0067.jpg（无法解码）",
+    });
+    expect(placeholder.tagName).not.toBe("IMG");
+    expect(screen.getByText("无法解码")).toBeInTheDocument();
+  });
+
+  it("小槽位不写文字，只留图标与无障碍说明", () => {
+    render(
+      <ThumbImage
+        fileId="f_broken"
+        alt="缩略图"
+        undecodable
+        displayWidth={48}
+      />,
+    );
+    expect(screen.queryByText("无法解码")).toBeNull();
+    expect(
+      screen.getByRole("img", { name: "缩略图（无法解码）" }),
+    ).toBeInTheDocument();
+  });
 });
