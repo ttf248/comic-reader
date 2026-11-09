@@ -33,6 +33,8 @@ node_modules/
 /frontend/dist/
 /frontend/build/
 /frontend/.vite/
+# Vite 加载 TS 配置时的临时文件（跑一次 dev 或 build 就会生成）
+/frontend/vite.config.ts.timestamp-*.mjs
 /artifacts/
 /frontend/coverage/
 /frontend/test-results/
