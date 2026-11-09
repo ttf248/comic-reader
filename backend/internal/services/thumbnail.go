@@ -460,10 +460,47 @@ func (s *ThumbnailService) generatePreview(absPath string, maxWidth int) ([]byte
 
 	// 与缩略图共用解码闸门：原图动辄几十 MB 解码缓冲，
 	// 不加预算的话一屏并发就能把内存顶高。
-	weight, err := decodePixelWeight(absPath)
+	img, err := s.decodeForRender(absPath, maxWidth)
 	if err != nil {
 		return nil, err
 	}
+
+	resized := resizeToWidth(img, maxWidth)
+	// JPEG 没有 alpha 通道，PNG 的透明区域要先压到白底，
+	// 否则透明像素会变成黑块（漫画线稿常见）。
+	flat := flattenOnWhite(resized)
+	buf, err := encodeJPEG(flat, previewJPEGQuality)
+	if err != nil {
+		return nil, fmt.Errorf("encode preview: %w", err)
+	}
+	return buf, nil
+}
+
+// decodeForRender 解码源图，必要时先缩到目标宽度。
+//
+// 缩略图与预览图共用这里的闸门与降级逻辑：
+//
+//   - 像素预算闸门：权重以百万像素计，容量就是预算本身。申请超过容量的
+//     权重会永远阻塞 —— 这张图把闸门占死，同进程里所有渲染请求都跟着
+//     挂起，HTTP 请求会一直不返回。
+//   - 并行槽位：限制同时解码的任务数。
+//
+// 超过预算的大图不进程内解码：277MP 的位图缓冲要 1GB 以上。改用 ffmpeg
+// 按目标宽度缩放后再解码，内存有界；ffmpeg 不可用时才退回进程内解码，
+// 权重已被压到闸门容量，至少不会把闸门占死。
+func (s *ThumbnailService) decodeForRender(absPath string, width int) (image.Image, error) {
+	weight, oversized, err := decodePixelWeight(absPath)
+	if err != nil {
+		return nil, err
+	}
+	if oversized {
+		if img, cerr := s.decodeViaConverter(absPath, width); cerr == nil {
+			return img, nil
+		}
+		// ffmpeg 不可用：继续走进程内解码。权重已经压到闸门容量，
+		// 这一次内存高一点，但请求不会永远挂着。
+	}
+
 	if err := s.decodePixels.Acquire(context.Background(), weight); err != nil {
 		return nil, fmt.Errorf("acquire decode budget: %w", err)
 	}
@@ -476,7 +513,7 @@ func (s *ThumbnailService) generatePreview(absPath string, maxWidth int) ([]byte
 	if err != nil {
 		if errors.Is(err, ErrUnsupportedFormat) {
 			// 纯 Go 解不了的格式（HEIC/HEIF）：交给 ffmpeg 转换后再缩放。
-			converted, cerr := s.convertUnsupported(absPath, maxWidth)
+			converted, cerr := s.convertUnsupported(absPath, width)
 			if cerr != nil {
 				return nil, ErrUnsupportedFormat
 			}
@@ -485,16 +522,20 @@ func (s *ThumbnailService) generatePreview(absPath string, maxWidth int) ([]byte
 			return nil, fmt.Errorf("decode: %w", err)
 		}
 	}
+	return img, nil
+}
 
-	resized := resizeToWidth(img, maxWidth)
-	// JPEG 没有 alpha 通道，PNG 的透明区域要先压到白底，
-	// 否则透明像素会变成黑块（漫画线稿常见）。
-	flat := flattenOnWhite(resized)
-	buf, err := encodeJPEG(flat, previewJPEGQuality)
-	if err != nil {
-		return nil, fmt.Errorf("encode preview: %w", err)
+// decodeViaConverter 用 ffmpeg 把图缩到目标宽度再解码。
+//
+// 供超预算的大图使用：进程内解码一张 277MP 的图要 1GB 以上的位图
+// 缓冲，ffmpeg 缩完再解码只有几十 MB。
+func (s *ThumbnailService) decodeViaConverter(absPath string, width int) (image.Image, error) {
+	if s.imageConverter == nil {
+		return nil, ErrImageConvertUnavailable
 	}
-	return buf, nil
+	s.imageSlots <- struct{}{}
+	defer func() { <-s.imageSlots }()
+	return s.imageConverter.ConvertToWidth(absPath, width)
 }
 
 // resizeToWidth 把图片等比缩放到不超过 maxWidth 宽（不放大）。
@@ -797,32 +838,9 @@ const jpegQuality = 85
 
 // generate 解码 → 缩放 → 编码为 JPEG。
 func (s *ThumbnailService) generate(absPath string, width int) ([]byte, error) {
-	// 先按像素预算排队，再占用并行槽位：像素预算是内存闸门，先拿到它
-	// 才不会让一堆大图同时进入解码阶段把内存顶高。
-	weight, err := decodePixelWeight(absPath)
+	img, err := s.decodeForRender(absPath, width)
 	if err != nil {
 		return nil, err
-	}
-	if err := s.decodePixels.Acquire(context.Background(), weight); err != nil {
-		return nil, fmt.Errorf("acquire decode budget: %w", err)
-	}
-	defer s.decodePixels.Release(weight)
-
-	s.imageSlots <- struct{}{}
-	defer func() { <-s.imageSlots }()
-
-	img, err := decodeImage(absPath)
-	if err != nil {
-		if errors.Is(err, ErrUnsupportedFormat) {
-			// 纯 Go 解不了的格式（目前是 HEIC/HEIF）：交给 ffmpeg 转换。
-			converted, cerr := s.convertUnsupported(absPath, width)
-			if cerr != nil {
-				return nil, ErrUnsupportedFormat
-			}
-			img = converted
-		} else {
-			return nil, fmt.Errorf("decode: %w", err)
-		}
 	}
 
 	// 缩放到目标宽度，保持比例（不裁剪、不填充、不放大）
@@ -837,31 +855,50 @@ func (s *ThumbnailService) generate(absPath string, width int) ([]byte, error) {
 	return buf, nil
 }
 
-// decodePixelWeight 读取图片头，返回该图的像素权重（单位：百万像素）。
+// decodePixelWeight 读取图片头，返回该图的像素权重（单位：百万像素）
+// 以及它是否超出解码预算。
 //
 // 只读文件头（不解码像素），代价可以忽略；拿到尺寸后既能作为并发
 // 内存预算的权重，也避免了大图把所有并行槽位一次性占满。
 //
+// 权重永远不超过预算本身：解码闸门是加权信号量，容量就是预算，一次
+// 申请超过容量的权重会永远阻塞 —— 这张图会把闸门占死，同进程里所有
+// 渲染请求（连同 HTTP 请求）都跟着挂起。本机实测过一张 6184×44767
+// 的全景拼接（277MP）把整条渲染链路卡住。
+//
 // 读不到图片头时返回保守的大图权重：宁可少并行，也不要因为未知尺寸
 // 的文件把内存打爆。
-func decodePixelWeight(absPath string) (int64, error) {
+func decodePixelWeight(absPath string) (weight int64, oversized bool, err error) {
 	f, err := os.Open(absPath)
 	if err != nil {
-		return 0, fmt.Errorf("open source: %w", err)
+		return 0, false, fmt.Errorf("open source: %w", err)
 	}
 	defer f.Close()
 	cfg, _, err := image.DecodeConfig(f)
 	if err != nil {
 		// 图片头读不出来不代表不能解码（例如部分流式格式），
 		// 这里不直接失败，交给后续解码给出真正的错误。
-		return thumbnailUnknownPixelWeight, nil
+		return thumbnailUnknownPixelWeight, false, nil
 	}
-	pixels := int64(cfg.Width) * int64(cfg.Height)
-	weight := (pixels + 999_999) / 1_000_000
+	weight, oversized = planDecodeWeight(int64(cfg.Width), int64(cfg.Height))
+	return weight, oversized, nil
+}
+
+// planDecodeWeight 由图片尺寸算出解码预算权重，以及是否超出预算。
+//
+// 超出预算的图不该进程内解码：277MP 的位图缓冲要 1GB 以上，而且它的
+// 权重超过闸门容量，Acquire 会永远阻塞。超预算的图改走 ffmpeg 缩放
+// 路径，内存有界。
+func planDecodeWeight(width, height int64) (weight int64, oversized bool) {
+	pixels := width * height
+	weight = (pixels + 999_999) / 1_000_000
 	if weight < 1 {
 		weight = 1
 	}
-	return weight, nil
+	if weight > thumbnailDecodePixelBudget {
+		return thumbnailDecodePixelBudget, true
+	}
+	return weight, false
 }
 
 // decodeImage 按扩展名选择解码器：

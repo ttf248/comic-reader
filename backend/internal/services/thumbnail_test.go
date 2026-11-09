@@ -155,21 +155,27 @@ func absInt(v int) int {
 func TestDecodePixelWeightUsesImageHeader(t *testing.T) {
 	dir := t.TempDir()
 	src := makeTestImage(t, dir, "big.jpg", 2000, 1500) // 3MP
-	weight, err := decodePixelWeight(src)
+	weight, oversized, err := decodePixelWeight(src)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if weight != 3 {
 		t.Errorf("weight=%d, want 3 (2000x1500 = 3MP)", weight)
 	}
+	if oversized {
+		t.Error("3MP 的图不该被判为超预算")
+	}
 
 	small := makeTestImage(t, dir, "small.jpg", 100, 100)
-	weight, err = decodePixelWeight(small)
+	weight, oversized, err = decodePixelWeight(small)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if weight != 1 {
 		t.Errorf("weight=%d, want 1", weight)
+	}
+	if oversized {
+		t.Error("小图不该被判为超预算")
 	}
 
 	// 非图片文件读不到头部：不能报错（解码阶段才给真正的错误），
@@ -178,12 +184,89 @@ func TestDecodePixelWeightUsesImageHeader(t *testing.T) {
 	if err := os.WriteFile(broken, []byte("not an image"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	weight, err = decodePixelWeight(broken)
+	weight, _, err = decodePixelWeight(broken)
 	if err != nil {
 		t.Fatalf("读不到图片头不应报错: %v", err)
 	}
 	if weight != thumbnailUnknownPixelWeight {
 		t.Errorf("weight=%d, want %d", weight, thumbnailUnknownPixelWeight)
+	}
+}
+
+// 超过预算的大图不能进进程内解码：加权信号量的容量就是预算，
+// 申请超过容量的权重会永远阻塞，整条渲染链路跟着挂死
+// （本机实测：6184×44767 的全景拼接把重建任务卡在最后一项）。
+func TestPlanDecodeWeightCapsOversizedImages(t *testing.T) {
+	weight, oversized := planDecodeWeight(6184, 44767)
+	if !oversized {
+		t.Error("277MP 的图应判为超预算")
+	}
+	if weight > thumbnailDecodePixelBudget {
+		t.Errorf("weight=%d 超过预算 %d，Acquire 会永远阻塞", weight, thumbnailDecodePixelBudget)
+	}
+
+	// 刚好在预算内的图按真实像素计权重。
+	weight, oversized = planDecodeWeight(4000, 4000) // 16MP
+	if oversized {
+		t.Error("16MP 的图不该被判为超预算")
+	}
+	if weight != 16 {
+		t.Errorf("weight=%d, want 16", weight)
+	}
+}
+
+// writeFakeJPEGHeader 写一个只带图片头的 JPEG：尺寸是真的，
+// 像素数据是假的。用来验证超大图的处理路径，不必真造一张 277MP 的图。
+//
+// 头里要有 SOI + SOF0 + SOS：image.DecodeConfig 读到 SOS 才返回配置，
+// 只给 SOF 会被判成「文件截断」。
+func writeFakeJPEGHeader(t *testing.T, path string, width, height int) {
+	t.Helper()
+	sof := []byte{
+		0x08, // 精度
+		byte(height >> 8), byte(height),
+		byte(width >> 8), byte(width),
+		0x03, // 分量数
+		0x01, 0x22, 0x00,
+		0x02, 0x11, 0x01,
+		0x03, 0x11, 0x01,
+	}
+	sos := []byte{
+		0x03,       // 扫描中的分量数
+		0x01, 0x00, // 分量 1：选择器 + 霍夫曼表
+		0x02, 0x11,
+		0x03, 0x11,
+		0x00, 0x3F, 0x00, // 谱选择 + 近似 + 逐点
+	}
+	var buf bytes.Buffer
+	buf.Write([]byte{0xFF, 0xD8}) // SOI
+	buf.Write([]byte{0xFF, 0xC0}) // SOF0
+	buf.Write([]byte{byte((len(sof)+2) >> 8), byte(len(sof) + 2)})
+	buf.Write(sof)
+	buf.Write([]byte{0xFF, 0xDA}) // SOS
+	buf.Write([]byte{byte((len(sos)+2) >> 8), byte(len(sos) + 2)})
+	buf.Write(sos)
+	if err := os.WriteFile(path, buf.Bytes(), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// 超大图（拼接全景）读图片头时就要被认出：它的像素权重超过解码闸门
+// 的容量，进程内解码会让 Acquire 永远阻塞。
+func TestDecodePixelWeightFlagsOversizedImage(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "panorama.jpg")
+	writeFakeJPEGHeader(t, path, 6184, 44767)
+
+	weight, oversized, err := decodePixelWeight(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !oversized {
+		t.Error("277MP 的图应判为超预算")
+	}
+	if weight > thumbnailDecodePixelBudget {
+		t.Errorf("weight=%d 超过预算 %d", weight, thumbnailDecodePixelBudget)
 	}
 }
 

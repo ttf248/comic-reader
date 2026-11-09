@@ -109,8 +109,31 @@ func (c *ImageConverter) ConvertJPEGBytes(absPath string, maxDim int) ([]byte, e
 	return out, err
 }
 
+// ConvertToWidth 把图片缩到指定宽度后解码回位图。
+//
+// 与 Convert 的区别：不按「装进 W×H 的框」缩放，而是锁定宽度、高度
+// 按比例自适应。超长全景（6184×44767）按框缩会把宽度压到三百多像素，
+// 锁定宽度才能得到能用的预览。
+func (c *ImageConverter) ConvertToWidth(absPath string, width int) (image.Image, error) {
+	if width <= 0 {
+		width = 640
+	}
+	filter := fmt.Sprintf("[0:v:0]scale=%d:-1[v]", width)
+	img, _, err := c.convertFilter(absPath, filter)
+	return img, err
+}
+
 // convert 统一执行 ffmpeg 转换：返回解码后的位图与原始 JPEG 字节。
 func (c *ImageConverter) convert(absPath string, scaleW, scaleH int) (image.Image, []byte, error) {
+	filter := fmt.Sprintf(
+		"[0:v:0]scale=%d:%d:force_original_aspect_ratio=decrease[v]",
+		scaleW, scaleH,
+	)
+	return c.convertFilter(absPath, filter)
+}
+
+// convertFilter 按给定的滤镜执行 ffmpeg 转换。
+func (c *ImageConverter) convertFilter(absPath, filter string) (image.Image, []byte, error) {
 	if !c.Available() {
 		return nil, nil, ErrImageConvertUnavailable
 	}
@@ -119,10 +142,6 @@ func (c *ImageConverter) convert(absPath string, scaleW, scaleH int) (image.Imag
 
 	// HEIF/AVIF 的码流由多个帧组成，ffmpeg 会把它当作"复杂滤镜图"，
 	// 因此这里必须用 -filter_complex + -map，-vf 会直接报错。
-	filter := fmt.Sprintf(
-		"[0:v:0]scale=%d:%d:force_original_aspect_ratio=decrease[v]",
-		scaleW, scaleH,
-	)
 	cmd := exec.CommandContext(ctx, c.ffmpegPath,
 		"-hide_banner",
 		"-loglevel", "error",
