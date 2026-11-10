@@ -17,14 +17,23 @@ import { useAppMode } from "./useAppMode";
  * 用户看得出出处、也回得去原来的位置。
  *
  * year / collection 两种取材会翻页，recent / random 一次给完整的一批。
+ *
+ * keepPrevious 让换查询时保留上一批内容：「换一批」要立刻换掉，而不是
+ * 先闪一下空墙。年份墙不用它 —— 换年份时留着上一年的照片，读起来是
+ * 另一年的内容。
  */
-export function useMediaFeed(query: MediaFeedQuery, enabled = true) {
+export function useMediaFeed(
+  query: MediaFeedQuery,
+  enabled = true,
+  options?: { keepPrevious?: boolean },
+) {
   const { ready } = useAppMode();
   const client = useQueryClient();
   const key = useMemo(
     () => ["library", "mode", query.kind, "feed", query] as const,
     [query],
   );
+  const keepPrevious = options?.keepPrevious ?? false;
   const result = useInfiniteQuery({
     queryKey: key,
     initialPageParam: undefined as string | undefined,
@@ -32,6 +41,9 @@ export function useMediaFeed(query: MediaFeedQuery, enabled = true) {
       libraryApi.mediaFeed(query, pageParam, signal).then((r) => r.page),
     getNextPageParam: (page) => page.nextCursor || undefined,
     enabled: ready && enabled,
+    placeholderData: keepPrevious
+      ? (previous) => previous as never
+      : undefined,
     retry: (count, error) =>
       !(
         error instanceof ApiError &&

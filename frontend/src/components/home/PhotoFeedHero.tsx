@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useMediaFeed } from "../../hooks/useMediaFeed";
 import { usePicks } from "../../hooks/usePicks";
 import { useUIStore } from "../../store/uiStore";
@@ -16,22 +16,29 @@ import { albumRoute } from "../../utils/path";
  *
  * 取的是随机相册而不是最近加入：随机才有「随手」的意思，连着几次
  * 进来看到的都是新的一批。
+ *
+ * 「换一批」换的是取材的种子而不是重新请求：同一个种子给同一批照片，
+ * 换种子才真的换得掉 —— 重新请求有可能再抽到同一批相册，等于没换。
  */
 export default function PhotoFeedHero() {
   const pushToast = useUIStore((s) => s.pushToast);
   const picks = usePicks();
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  // 种子带一个自增序号：连点两次「换一批」也不会撞回同一批。
+  const seedCounter = useRef(0);
 
+  const [seed, setSeed] = useState(() => `feed-${Date.now()}`);
   const feedQuery = useMemo(
-    () => ({ kind: "photo" as const, scope: "random" as const }),
-    [],
+    () => ({ kind: "photo" as const, scope: "random" as const, seed }),
+    [seed],
   );
-  const feed = useMediaFeed(feedQuery);
+  // 换批次时保留上一批照片：新一批到达之前墙上不闪空。
+  const feed = useMediaFeed(feedQuery, true, { keepPrevious: true });
 
   const reshuffle = useCallback(() => {
-    // 重新取一批：查询键不变，靠重新请求换一批随机相册。
-    void feed.refetch();
-  }, [feed]);
+    seedCounter.current += 1;
+    setSeed(`feed-${Date.now()}-${seedCounter.current}`);
+  }, []);
 
   const togglePick = useCallback(
     (id: string) => {
@@ -42,6 +49,8 @@ export default function PhotoFeedHero() {
     [picks, pushToast],
   );
 
+  const refreshing = feed.isFetching && feed.items.length > 0;
+
   return (
     <section className="page-shell pt-9" data-testid="photo-feed-hero">
       <div className="section-heading">
@@ -50,11 +59,12 @@ export default function PhotoFeedHero() {
         <button
           type="button"
           onClick={reshuffle}
-          className="chip ml-auto"
+          disabled={refreshing}
+          className="chip ml-auto disabled:opacity-60"
           title="换一批照片"
         >
           <ShuffleIcon size={12} />
-          <span>换一批</span>
+          <span>{refreshing ? "换一批…" : "换一批"}</span>
         </button>
       </div>
 

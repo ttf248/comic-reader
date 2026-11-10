@@ -1,9 +1,14 @@
 package services
 
 import (
+	crand "crypto/rand"
+	"crypto/sha256"
+	"encoding/binary"
 	"errors"
+	"math/rand/v2"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/tianlongxiang/local-gallery/internal/models"
 )
@@ -32,6 +37,12 @@ type MediaFeedQuery struct {
 	Scope  MediaFeedScope
 	Year   string
 	Parent string
+	// Seed 是随机取材的种子。
+	//
+	// 「换一批」要保证换出来的确实换掉了：纯随机会撞车，种子让服务端
+	// 按可复现的方式取材 —— 同一个种子给同一批照片，不同种子给不同的
+	// 一批。只有 scope=random 用它。
+	Seed string
 }
 
 // FeedMediaItem 是跨相册的照片条目：媒体字段加上它来自哪本相册。
@@ -78,10 +89,7 @@ type MediaFeedPage struct {
 //
 // 首页的照片墙要一眼看见多种内容：相册太多会显得杂乱，太少又只剩一种
 // 口味。取 8 本、每本 12 张交错排布，墙上大约是一百来张照片的两三行。
-const (
-	mediaFeedAlbumCount = 8
-	mediaFeedPerAlbum   = 12
-)
+const mediaFeedPerAlbum = 12
 
 // Normalize 校验并收口照片流请求参数。
 func (q *MediaFeedQuery) Normalize() error {
@@ -93,8 +101,13 @@ func (q *MediaFeedQuery) Normalize() error {
 		// 这两种取材方式不带条件：年份与集合由服务端挑。
 		q.Year = ""
 		q.Parent = ""
+		if q.Scope != MediaFeedRandom {
+			// 种子只对随机取材有意义。
+			q.Seed = ""
+		}
 	case MediaFeedYear:
 		q.Parent = ""
+		q.Seed = ""
 		if q.Year == "" {
 			return ErrInvalidMediaFeedQuery
 		}
@@ -106,6 +119,7 @@ func (q *MediaFeedQuery) Normalize() error {
 		}
 	case MediaFeedCollection:
 		q.Year = ""
+		q.Seed = ""
 		q.Parent = strings.TrimSpace(q.Parent)
 		if q.Parent == "" {
 			return ErrInvalidMediaFeedQuery
@@ -130,7 +144,7 @@ func PageMediaFeed(snapshot CatalogSnapshot, q MediaFeedQuery, cursor string, li
 	index := snapshot.state.library
 
 	if q.Scope == MediaFeedRecent || q.Scope == MediaFeedRandom {
-		albums, items := composeFeedAlbums(index, q, limit)
+		albums, items := composeFeedAlbums(index, q, limit, snapshot.Revision())
 		return MediaFeedPage{
 			LibraryPage: LibraryPage[FeedMediaItem]{
 				Revision: snapshot.Revision(), Items: items, Total: len(items),
@@ -374,17 +388,12 @@ func interleaveFeedItems(albums []mediaFeedAlbum, start, end int) []FeedMediaIte
 //
 // 交错而不是一本接一本：连着看一本相册的头几张，墙上就只剩一种口味。
 // 轮流取能保证墙面上始终有多种内容。
-func composeFeedAlbums(index *libraryPageIndex, q MediaFeedQuery, limit int) ([]FeedAlbumRef, []FeedMediaItem) {
+func composeFeedAlbums(index *libraryPageIndex, q MediaFeedQuery, limit int, revision uint64) ([]FeedAlbumRef, []FeedMediaItem) {
 	kind := models.NormalizeContentKind(string(q.Kind))
 	albums := []LibraryNodeSummary{}
+	rnd := newFeedRandomizer(q.Seed, revision)
 	if q.Scope == MediaFeedRandom {
-		indexes, err := randomLibraryIndexes(len(index.albumIndexesByKind[kind]), mediaFeedAlbumCount)
-		if err != nil {
-			return nil, nil
-		}
-		for _, position := range indexes {
-			albums = append(albums, index.albums[index.albumIndexesByKind[kind][position]])
-		}
+		albums = selectFeedAlbums(index, kind, mediaFeedAlbumCount, rnd)
 	} else {
 		for _, position := range index.recentAlbumIndexesByKind[kind] {
 			if len(albums) >= mediaFeedAlbumCount {
@@ -399,27 +408,18 @@ func composeFeedAlbums(index *libraryPageIndex, q MediaFeedQuery, limit int) ([]
 		if len(media) == 0 {
 			continue
 		}
-		start := 0
+		picked := media
 		if q.Scope == MediaFeedRandom {
-			if offset, err := randomLibraryIndex(len(media)); err == nil {
-				start = offset
-			}
-		}
-		// 起点太靠后就往前挪，保证每本相册都能凑够同样的张数。
-		if start > len(media)-mediaFeedPerAlbum {
-			start = len(media) - mediaFeedPerAlbum
-		}
-		if start < 0 {
-			start = 0
-		}
-		end := start + mediaFeedPerAlbum
-		if end > len(media) {
-			end = len(media)
+			// 等距取样，不取连续的一段：一本相册的前十二张常常是同一场
+			// 活动的连拍，摊在墙上读起来像卡带。
+			picked = spreadSample(media, mediaFeedPerAlbum, rnd)
+		} else if len(media) > mediaFeedPerAlbum {
+			picked = media[:mediaFeedPerAlbum]
 		}
 		takes = append(takes, mediaFeedAlbum{
 			id:    album.ID,
 			name:  album.DisplayName,
-			media: media[start:end],
+			media: picked,
 		})
 	}
 	refs := make([]FeedAlbumRef, 0, len(takes))
@@ -455,4 +455,167 @@ func composeFeedAlbums(index *libraryPageIndex, q MediaFeedQuery, limit int) ([]
 		items = items[:limit]
 	}
 	return refs, items
+}
+
+// 一年里最多取几本相册。
+//
+// 照片流一次掺入 8 本：相册太多会显得杂乱，太少又只剩一种口味。
+const mediaFeedAlbumCount = 8
+
+// 同一个年份桶里最多取几本。
+//
+// 一年散在好几本相册里，全取就是同一种口味；每个年份给两三本，批次
+// 里的年份因此能拉开。
+const mediaFeedPerYearBucket = 2
+
+// feedRandomizer 是照片流取材时用的随机源。
+//
+// 有种子时用可复现的伪随机：同一个种子给同一批照片，「换一批」因此
+// 一定换得掉。没有种子时用加密随机，取样与从前一样不可预期。
+type feedRandomizer struct {
+	rnd *rand.Rand
+}
+
+// newFeedRandomizer 按种子取材用的随机源。
+//
+// 种子混进库版本号：扫描之后库变了，同一个种子给出的批次也跟着变 ——
+// 否则「换一批」可能换出一批已经不在库里的照片。
+func newFeedRandomizer(seed string, revision uint64) *feedRandomizer {
+	var state uint64
+	if seed != "" {
+		sum := sha256.Sum256([]byte(seed + "|" + strconv.FormatUint(revision, 10)))
+		state = binary.LittleEndian.Uint64(sum[:8])
+	} else {
+		var buf [8]byte
+		if _, err := crand.Read(buf[:]); err != nil {
+			state = uint64(time.Now().UnixNano())
+		} else {
+			state = binary.LittleEndian.Uint64(buf[:])
+		}
+	}
+	return &feedRandomizer{rnd: rand.New(rand.NewPCG(state, state^0x9E3779B97F4A7C15))}
+}
+
+// intn 返回 [0, n) 里的一个随机整数。
+func (r *feedRandomizer) intn(n int) int {
+	if n <= 0 {
+		return 0
+	}
+	return r.rnd.IntN(n)
+}
+
+// shuffle 就地打乱一个切片。
+func (r *feedRandomizer) shuffle(values []int) {
+	r.rnd.Shuffle(len(values), func(i, j int) {
+		values[i], values[j] = values[j], values[i]
+	})
+}
+
+// float64 返回 [0, 1) 里的随机数。
+func (r *feedRandomizer) float64() float64 {
+	return r.rnd.Float64()
+}
+
+// selectFeedAlbums 按年份分散地挑相册。
+//
+// 纯随机会撞：一次抽到七八本同一年、同一场活动的相册，墙上就只剩一种
+// 口味。按年份分桶后轮流取，一批照片因此来自不同的年份、不同的场景。
+//
+// 库里只有一两年时第一轮就挑不满，第二轮不设上限补齐 —— 分 buckets 是
+// 为了丰富，不是为了少给照片。
+func selectFeedAlbums(index *libraryPageIndex, kind models.ContentKind, count int, rnd *feedRandomizer) []LibraryNodeSummary {
+	positions := index.albumIndexesByKind[kind]
+	if len(positions) == 0 || count <= 0 {
+		return nil
+	}
+	buckets := map[int][]int{}
+	for _, position := range positions {
+		year := albumYearBucket(index.albums[position])
+		buckets[year] = append(buckets[year], position)
+	}
+	keys := make([]int, 0, len(buckets))
+	for key := range buckets {
+		keys = append(keys, key)
+	}
+	rnd.shuffle(keys)
+
+	picked := make([]int, 0, count)
+	used := make(map[int]bool, count)
+	// 第一轮：每个年份桶最多取几本，年份之间轮流取。
+	for _, key := range keys {
+		list := buckets[key]
+		rnd.shuffle(list)
+		taken := 0
+		for _, position := range list {
+			if taken >= mediaFeedPerYearBucket || len(picked) >= count {
+				break
+			}
+			picked = append(picked, position)
+			used[position] = true
+			taken++
+		}
+	}
+	// 第二轮：年份不够分时补齐。
+	for _, key := range keys {
+		if len(picked) >= count {
+			break
+		}
+		for _, position := range buckets[key] {
+			if len(picked) >= count {
+				break
+			}
+			if used[position] {
+				continue
+			}
+			picked = append(picked, position)
+			used[position] = true
+		}
+	}
+	albums := make([]LibraryNodeSummary, 0, len(picked))
+	for _, position := range picked {
+		albums = append(albums, index.albums[position])
+	}
+	return albums
+}
+
+// albumYearBucket 把相册归到年份桶。
+//
+// 优先用业务日期（拍摄时间 > 目录名 > 修改时间），取不到就用名字里的
+// 年份；都没有时归到「年份未知」那一桶（0）。
+func albumYearBucket(album LibraryNodeSummary) int {
+	if !album.Date.IsZero() {
+		return album.Date.Year()
+	}
+	if found := queryYearPattern.FindString(album.Name); found != "" {
+		if year, err := strconv.Atoi(found); err == nil {
+			return year
+		}
+	}
+	return 0
+}
+
+// spreadSample 在一本相册里等距取 count 张。
+//
+// 连续的一段往往是同一场活动连拍（十几张几乎一样的照片），摊在墙上
+// 读起来像卡带。等距抽样把整本相册的跨度摊开：同一本相册贡献的是它
+// 各个时段的样子，而不是一个瞬间的连续帧。起点带一点随机相位，
+// 否则每次都从同一个位置开始取。
+func spreadSample(media []LibraryMediaItem, count int, rnd *feedRandomizer) []LibraryMediaItem {
+	if count <= 0 {
+		return nil
+	}
+	if len(media) <= count {
+		return media
+	}
+	step := float64(len(media)) / float64(count)
+	offset := rnd.float64() * step
+	picked := make([]LibraryMediaItem, 0, count)
+	for i := 0; i < count; i++ {
+		position := int(offset + float64(i)*step)
+		if position >= len(media) {
+			position = len(media) - 1
+		}
+		picked = append(picked, media[position])
+	}
+	return picked
 }

@@ -131,6 +131,9 @@ func LibraryMediaFeedHandler(catalog *services.ResourceCatalog, dimensions *serv
 			Scope:  services.MediaFeedScope(strings.TrimSpace(c.Query("scope"))),
 			Year:   strings.TrimSpace(c.Query("year")),
 			Parent: strings.TrimSpace(c.Query("parent")),
+			// 种子只对随机取材有意义：「换一批」换一个种子，服务端因此
+			// 给出一批确实不同的照片。
+			Seed: strings.TrimSpace(c.Query("seed")),
 		}
 		snapshot := requestCatalogSnapshot(c, catalog)
 		page, err := services.PageMediaFeed(snapshot, query, c.Query("cursor"), limit)

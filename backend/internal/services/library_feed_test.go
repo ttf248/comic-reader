@@ -2,7 +2,9 @@ package services
 
 import (
 	"errors"
+	"fmt"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
@@ -281,6 +283,123 @@ func TestMediaFeedRecentAndRandomReturnBoundedAlbums(t *testing.T) {
 		}
 		assertNoAbsolutePathInJSON(t, page)
 	}
+}
+
+func TestMediaFeedRandomSeedIsReproducibleAndChangesWithSeed(t *testing.T) {
+	fixture := newMediaFeedFixture(t)
+	snapshot := fixture.catalog.Acquire()
+	fetch := func(seed string) MediaFeedPage {
+		page, err := PageMediaFeed(snapshot, MediaFeedQuery{
+			Kind: LibraryKindPhoto, Scope: MediaFeedRandom, Seed: seed,
+		}, "", 200)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return page
+	}
+	first := fetch("seed-1")
+	again := fetch("seed-1")
+	other := fetch("seed-2")
+
+	ids := func(page MediaFeedPage) []string {
+		out := make([]string, 0, len(page.Items))
+		for _, item := range page.Items {
+			out = append(out, item.ID)
+		}
+		return out
+	}
+	// 同一个种子给同一批照片：可复现是「换一批能换掉」的前提。
+	if !reflect.DeepEqual(ids(first), ids(again)) {
+		t.Fatalf("same seed gave different batches:\n%v\n%v", ids(first), ids(again))
+	}
+	// 不同种子给不同的批次。
+	if reflect.DeepEqual(ids(first), ids(other)) {
+		t.Fatalf("different seeds gave the same batch: %v", ids(first))
+	}
+}
+
+// 随机取材要分散：年份不同的相册各占一部分，同一本相册里的照片也不
+// 该是连着的一段。
+func TestMediaFeedRandomSpreadsAcrossAlbumsAndYears(t *testing.T) {
+	catalog := newSpreadFeedFixture(t)
+	snapshot := catalog.Acquire()
+	page, err := PageMediaFeed(snapshot, MediaFeedQuery{
+		Kind: LibraryKindPhoto, Scope: MediaFeedRandom, Seed: "spread",
+	}, "", 200)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Albums) < 2 {
+		t.Fatalf("albums = %d, want several albums", len(page.Albums))
+	}
+	// 同一本相册不能连着贡献一整段照片：交错排列时相邻的两张来自不同
+	// 相册，墙上因此始终有多种内容。
+	for i := 1; i < len(page.Items); i++ {
+		if page.Items[i].AlbumID == page.Items[i-1].AlbumID {
+			t.Fatalf("items %d and %d come from the same album %s", i-1, i, page.Items[i].AlbumID)
+		}
+	}
+	// 一本相册里取出的照片要跨遍整本，不是开头那一段。
+	biggest := ""
+	for _, ref := range page.Albums {
+		if ref.Count >= mediaFeedPerAlbum {
+			biggest = ref.ID
+			break
+		}
+	}
+	if biggest == "" {
+		t.Fatalf("no album contributed a full sample: %+v", page.Albums)
+	}
+	var picked []int
+	for _, item := range page.Items {
+		if item.AlbumID == biggest {
+			picked = append(picked, item.Index)
+		}
+	}
+	if len(picked) < mediaFeedPerAlbum {
+		t.Fatalf("album contributed %d photos, want %d", len(picked), mediaFeedPerAlbum)
+	}
+	if picked[len(picked)-1]-picked[0] < mediaFeedPerAlbum {
+		t.Fatalf("album photos are contiguous: %v", picked)
+	}
+}
+
+// newSpreadFeedFixture 造一个能看出分散度的库：
+//
+//	root/2024年/album-2024   40 张（年份 2024）
+//	root/2023年/album-2023   40 张（年份 2023）
+//	root/2022年/album-2022   40 张（年份 2022）
+//	root/2021年/album-2021   40 张（年份 2021）
+func newSpreadFeedFixture(t *testing.T) *ResourceCatalog {
+	t.Helper()
+	root := t.TempDir()
+	albums := []models.Album{}
+	for _, year := range []int{2021, 2022, 2023, 2024} {
+		dir := filepath.Join(root, fmt.Sprintf("%d年", year))
+		files := make([]string, 0, 40)
+		for i := 0; i < 40; i++ {
+			files = append(files, filepath.Join(dir, fmt.Sprintf("IMG_%d%02d%02d_%06d.jpg", year, 1+i%12, 1+i%28, i)))
+		}
+		albums = append(albums, models.Album{
+			Type: "album", Path: dir, Name: fmt.Sprintf("%d年", year), DisplayName: fmt.Sprintf("%d年", year),
+			SourceRoot: root, SourceName: filepath.Base(root),
+			ImageFiles: files, ImageCount: len(files),
+			CoverImage: files[0], CoverKind: "image",
+			ContentKind: string(models.ContentKindPhoto),
+			ModTime:    time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC),
+		})
+	}
+	result := &models.ScanResult{
+		Roots: []string{root}, Albums: albums,
+		AlbumCount: len(albums),
+		ScannedAt:  time.Date(2025, 2, 2, 0, 0, 0, 0, time.UTC), Duration: 1,
+	}
+	catalog := NewResourceCatalog()
+	catalog.SetContentKindPolicy(NewContentKindPolicy([]RootKind{
+		{Path: root, Kind: models.ContentKindPhoto},
+	}))
+	catalog.Publish(result, []string{root})
+	return catalog
 }
 
 func TestMediaFeedRejectsInvalidQueries(t *testing.T) {

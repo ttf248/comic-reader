@@ -188,6 +188,13 @@ export interface MediaFeedQuery {
   year?: string;
   /** scope=collection 时必填：集合的资源 ID。 */
   parent?: string;
+  /**
+   * scope=random 时的取材种子。
+   *
+   * 同一个种子给同一批照片，不同种子给不同的批次 —— 「换一批」因此
+   * 一定换得掉，而不是碰运气看服务端抽到哪几本。
+   */
+  seed?: string;
 }
 
 /**
