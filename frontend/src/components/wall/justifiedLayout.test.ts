@@ -57,6 +57,13 @@ describe("layoutJustified", () => {
     expect(rows[0].tileHeight).toBeLessThanOrEqual(options.targetHeight);
   });
 
+  it("末行与上面的行一样高，不矮一截", () => {
+    const rows = layoutJustified(tiles(7), options);
+    const last = rows[rows.length - 1];
+    const previous = rows[rows.length - 2];
+    expect(last.tileHeight).toBeCloseTo(previous.tileHeight, 5);
+  });
+
   it("单张竖图不会顶满屏幕", () => {
     const rows = layoutJustified([{ id: "tall", ratio: 0.4 }], {
       containerWidth: 1200,

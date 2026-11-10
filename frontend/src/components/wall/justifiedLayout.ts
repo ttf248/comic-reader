@@ -80,6 +80,8 @@ export function layoutJustified(
   const rows: WallRow[] = [];
   let current: WallTile[] = [];
   let sumRatio = 0;
+  // 上一行的高度：末行按它收，末行才不会比上面的行矮一截。
+  let previousHeight = targetHeight;
 
   const flush = (isLast: boolean) => {
     if (current.length === 0) return;
@@ -88,7 +90,8 @@ export function layoutJustified(
     let height = clamp(natural, minHeight, maxHeight);
     if (isLast) {
       // 末行不为了填满宽度而放大：一张图撑满整行看起来像加载失败。
-      height = Math.min(height, targetHeight);
+      // 但也不该比上面那几行矮一截 —— 高度一致，末行只是没铺满宽度。
+      height = Math.min(height, previousHeight);
     }
     // 夹取后仍可能与容器宽度有出入（极端比例），这里统一按实际宽度回缩，
     // 保证任何一行都不会溢出容器。
@@ -96,6 +99,7 @@ export function layoutJustified(
     if (total > containerWidth && total > 0) {
       height = (containerWidth - gaps) / sumRatio;
     }
+    previousHeight = height;
     rows.push({
       key: `row-${rows.length}-${current[0].id}`,
       height: height + gap,
