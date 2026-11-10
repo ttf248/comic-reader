@@ -78,6 +78,7 @@ export default function PhotoSelectionBar({
           {pickedCount > 0 && (
             <span className="text-fg-muted"> · {pickedCount} 张在精选</span>
           )}
+          {busy && <span className="text-fg-muted"> · 正在提交…</span>}
         </span>
         <span className="mx-1 h-5 w-px bg-border" aria-hidden="true" />
         {showAdd && (

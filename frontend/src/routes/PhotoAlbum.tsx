@@ -286,29 +286,45 @@ export default function PhotoAlbum({ album }: Props) {
     [selection],
   );
 
-  const addSelectedToPicks = useCallback(() => {
-    const ids = Object.values(usePhotoSelectionStore.getState().entries).map(
-      (entry) => entry.id,
-    );
-    if (ids.length === 0) return;
-    void addPicks(ids)
-      .then(() =>
-        pushToast({ kind: "success", message: `已把 ${ids.length} 张加入精选` }),
-      )
-      .catch(() => pushToast({ kind: "error", message: "加入精选失败" }));
-  }, [addPicks, pushToast]);
+  // 提交期间锁住选择：连按两下「加入精选」不必发两次请求。
+  const runPickAction = useCallback(
+    (action: "add" | "remove") => {
+      const state = usePhotoSelectionStore.getState();
+      if (state.busy) return;
+      const ids = Object.values(state.entries).map((entry) => entry.id);
+      if (ids.length === 0) return;
+      state.setBusy(true);
+      const write = action === "add" ? addPicks(ids) : removePicks(ids);
+      void write
+        .then(() =>
+          pushToast({
+            kind: "success",
+            message:
+              action === "add"
+                ? `已把 ${ids.length} 张加入精选`
+                : `已把 ${ids.length} 张移出精选`,
+          }),
+        )
+        .catch(() =>
+          pushToast({
+            kind: "error",
+            message: action === "add" ? "加入精选失败" : "移出精选失败",
+          }),
+        )
+        .finally(() => usePhotoSelectionStore.getState().setBusy(false));
+    },
+    [addPicks, pushToast, removePicks],
+  );
 
-  const removeSelectedFromPicks = useCallback(() => {
-    const ids = Object.values(usePhotoSelectionStore.getState().entries).map(
-      (entry) => entry.id,
-    );
-    if (ids.length === 0) return;
-    void removePicks(ids)
-      .then(() =>
-        pushToast({ kind: "success", message: `已把 ${ids.length} 张移出精选` }),
-      )
-      .catch(() => pushToast({ kind: "error", message: "移出精选失败" }));
-  }, [pushToast, removePicks]);
+  const addSelectedToPicks = useCallback(
+    () => runPickAction("add"),
+    [runPickAction],
+  );
+
+  const removeSelectedFromPicks = useCallback(
+    () => runPickAction("remove"),
+    [runPickAction],
+  );
 
   const compareSelected = useCallback(() => {
     const entries = Object.values(usePhotoSelectionStore.getState().entries);

@@ -16,7 +16,7 @@ import PhotoSelectionBar from "../components/wall/PhotoSelectionBar";
 import ContextMenu from "../components/album/ContextMenu";
 import EmptyState from "../components/common/EmptyState";
 import { FolderIcon, GridIcon, PickIcon, UncheckIcon } from "../components/common/Icon";
-import { albumRoute } from "../utils/path";
+import { albumRoute, homeRoute } from "../utils/path";
 import { photoCopy } from "../utils/workbench";
 
 /**
@@ -116,16 +116,18 @@ export default function Picks() {
   );
 
   const removeSelectedFromPicks = useCallback(() => {
-    const ids = Object.values(usePhotoSelectionStore.getState().entries).map(
-      (entry) => entry.id,
-    );
+    const state = usePhotoSelectionStore.getState();
+    if (state.busy) return;
+    const ids = Object.values(state.entries).map((entry) => entry.id);
     if (ids.length === 0) return;
+    state.setBusy(true);
     void picks
       .remove(ids)
       .then(() =>
         pushToast({ kind: "success", message: `已把 ${ids.length} 张移出精选` }),
       )
-      .catch(() => pushToast({ kind: "error", message: "移出精选失败" }));
+      .catch(() => pushToast({ kind: "error", message: "移出精选失败" }))
+      .finally(() => usePhotoSelectionStore.getState().setBusy(false));
   }, [picks, pushToast]);
 
   const compareSelected = useCallback(() => {
@@ -243,6 +245,16 @@ export default function Picks() {
             title={copy.picksEmpty}
             description="在照片墙里把满意的照片加入精选，它们会聚到这里。"
             icon={<PickIcon size={20} />}
+            /* 空态要给一条能走的路：精选是在照片墙里挑出来的，
+               按钮直接把人送到照片库。 */
+            action={
+              <button
+                className="btn btn-outline"
+                onClick={() => navigate(homeRoute("photo"))}
+              >
+                去照片库
+              </button>
+            }
           />
         ) : (
           <PhotoWall
