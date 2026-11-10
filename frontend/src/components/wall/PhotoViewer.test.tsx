@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LibraryMediaItem } from "../../api/library";
 import PhotoViewer from "./PhotoViewer";
@@ -146,6 +147,24 @@ describe("大图预览的精选与对比", () => {
     );
 
     expect(screen.getByText(/共 403 张/)).toBeInTheDocument();
+  });
+
+  it("给了相册地址时，标题是可点回那本的链接", () => {
+    render(
+      <MemoryRouter>
+        <PhotoViewer
+          items={items}
+          index={0}
+          albumName="2012年"
+          albumHref="/photo/albums/a_1"
+          onIndexChange={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    const link = screen.getByRole("link", { name: "2012年" });
+    expect(link).toHaveAttribute("href", "/photo/albums/a_1");
   });
 });
 

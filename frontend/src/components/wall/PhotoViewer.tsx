@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import {
   useCallback,
   useEffect,
@@ -39,6 +40,13 @@ interface Props {
   index: number;
   /** 相册名，用于标题与信息。 */
   albumName: string;
+  /**
+   * 回到相册的地址。
+   *
+   * 精选页的照片来自不同相册，标题只说「这是哪本里的」还不够 ——
+   * 点一下能回到那本才接得上。给了地址时标题变成链接。
+   */
+  albumHref?: string;
   /**
    * 相册里的媒体总数。
    *
@@ -85,6 +93,7 @@ export default function PhotoViewer({
   items,
   index,
   albumName,
+  albumHref,
   totalCount,
   onIndexChange,
   onClose,
@@ -445,10 +454,21 @@ export default function PhotoViewer({
         </button>
         <div className="min-w-0 flex-1">
           {/* 相册名用衬线：与照片工作台的标题同一套字体，
-              大图预览也是这个工作台的一部分。 */}
-          <div className="truncate font-display text-label font-semibold text-white/95">
-            {albumName}
-          </div>
+              大图预览也是这个工作台的一部分。
+              精选页的照片来自不同相册，标题给出去处，并可点回那本。 */}
+          {albumHref ? (
+            <Link
+              to={albumHref}
+              title={`回到相册「${albumName}」`}
+              className="block truncate font-display text-label font-semibold text-white/95 underline decoration-white/30 underline-offset-4 transition-colors hover:decoration-white/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+            >
+              {albumName}
+            </Link>
+          ) : (
+            <div className="truncate font-display text-label font-semibold text-white/95">
+              {albumName}
+            </div>
+          )}
           <div className="text-meta tabular-nums text-white/55">
             第 {index + 1} 张 · 共 {totalCount ?? items.length} 张
           </div>

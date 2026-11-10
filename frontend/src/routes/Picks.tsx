@@ -356,6 +356,8 @@ export default function Picks() {
           /* 精选页的照片来自不同相册：标题给当前这张的出处，
              用户才知道自己看的是哪本里挑出来的。 */
           albumName={items[viewerIndex].albumName || title}
+          /* 精选页的照片来自不同相册：标题点一下就回到那本。 */
+          albumHref={albumRoute("photo", items[viewerIndex].albumId)}
           totalCount={total}
           onIndexChange={(index) => setViewerIndex(index)}
           onClose={() => setViewerIndex(null)}
