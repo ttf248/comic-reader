@@ -83,9 +83,10 @@ export default function Picks() {
     () => Object.values(selection),
     [selection],
   );
+  const isPicked = picks.isPicked;
   const selectedPickedCount = useMemo(
-    () => selectedEntries.filter((entry) => picks.isPicked(entry.id)).length,
-    [selectedEntries, picks],
+    () => selectedEntries.filter((entry) => isPicked(entry.id)).length,
+    [isPicked, selectedEntries],
   );
 
   const toSelectionEntry = useCallback((item: PickItem): PhotoSelectionEntry => ({
@@ -102,17 +103,20 @@ export default function Picks() {
   const toggleSelect = useCallback(
     (item: PickItem) => {
       const state = usePhotoSelectionStore.getState();
-      const ok = state.toggle(toSelectionEntry(item));
-      if (!ok && !usePhotoSelectionStore.getState().entries[item.id]) {
+      if (state.busy) return;
+      // 返回 false 有两种原因：已经在上限上，或者正忙。
+      // 只有前者值得提示，后者不该打扰用户。
+      if (!state.toggle(toSelectionEntry(item)) && !state.entries[item.id]) {
         pushToast({ kind: "info", message: "最多选择 2,000 张，请减少范围" });
       }
     },
     [pushToast, toSelectionEntry],
   );
 
+  // 读订阅到的选择集合而不是 store 的当前值：勾选变化时墙要重画。
   const isSelected = useCallback(
-    (id: string) => Boolean(usePhotoSelectionStore.getState().entries[id]),
-    [],
+    (id: string) => Boolean(selection[id]),
+    [selection],
   );
 
   const removeSelectedFromPicks = useCallback(() => {
