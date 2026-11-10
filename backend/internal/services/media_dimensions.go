@@ -59,6 +59,10 @@ type MediaDimensionService struct {
 	mu    sync.Mutex
 	cache *lru.Cache[string, MediaDimensions]
 	path  string
+	// pending 是已探测、还没落盘的记录。一页两百张照片就是两百条，
+	// 逐条刷盘等于两百次 fsync —— 实测一页要两秒，翻年墙时非常明显。
+	// 攒成一批写，一次 fsync 就够。
+	pending []dimensionRecord
 }
 
 // NewMediaDimensionService 创建尺寸缓存服务并载入已有派生缓存。
@@ -145,7 +149,7 @@ func (s *MediaDimensionService) Dimensions(path string) MediaDimensions {
 
 	s.mu.Lock()
 	s.cache.Add(path, dimensions)
-	s.appendLocked(dimensionRecord{
+	s.pending = append(s.pending, dimensionRecord{
 		Path:        path,
 		Width:       width,
 		Height:      height,
@@ -153,8 +157,57 @@ func (s *MediaDimensionService) Dimensions(path string) MediaDimensions {
 		MTime:       mtime,
 		Undecodable: dimensions.Undecodable,
 	})
+	// 攒到一定量就自己落盘：调用方忘了刷也不会把内存吃满。
+	needFlush := len(s.pending) >= dimensionFlushThreshold
 	s.mu.Unlock()
+	if needFlush {
+		s.Flush()
+	}
 	return dimensions
+}
+
+// dimensionFlushThreshold 是待落盘记录的攒批上限。
+//
+// 超过它就自己落盘：调用方忘了刷也不会把内存吃满。
+const dimensionFlushThreshold = 4096
+
+// Flush 把待落盘的尺寸记录一次写完。
+//
+// 派生缓存丢几条不影响正确性（下次重新探测），但延迟刷盘会在进程被杀时
+// 留下半行 JSON。因此仍然刷盘，只是攒成一批：一次写、一次 fsync，
+// 而不是每条一次。
+func (s *MediaDimensionService) Flush() {
+	s.mu.Lock()
+	records := s.pending
+	s.pending = nil
+	s.mu.Unlock()
+	if len(records) == 0 {
+		return
+	}
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
+		return
+	}
+	buffer := make([]byte, 0, len(records)*96)
+	for _, record := range records {
+		data, err := json.Marshal(record)
+		if err != nil {
+			continue
+		}
+		buffer = append(buffer, data...)
+		buffer = append(buffer, '\n')
+	}
+	if len(buffer) == 0 {
+		return
+	}
+	file, err := os.OpenFile(s.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	if err != nil {
+		return
+	}
+	defer file.Close()
+	if _, err := file.Write(buffer); err != nil {
+		return
+	}
+	_ = file.Sync()
 }
 
 // withHeaderVerdict 给尺寸记录补上"读不出图片头"的判定。
@@ -207,7 +260,7 @@ func (s *MediaDimensionService) MarkUndecodable(path string) {
 		Undecodable: true,
 	}
 	s.cache.Add(path, dimensions)
-	s.appendLocked(dimensionRecord{
+	s.pending = append(s.pending, dimensionRecord{
 		Path:        path,
 		Width:       dimensions.Width,
 		Height:      dimensions.Height,
@@ -217,34 +270,9 @@ func (s *MediaDimensionService) MarkUndecodable(path string) {
 	})
 }
 
-// appendLocked 追加一条缓存记录。调用方必须已持有锁。
-//
-// 每次写入都打开并立即关闭文件：Windows 上长期持有派生缓存文件的句柄会让
-// 「清空缓存」无法删除它，测试的临时目录清理也会失败。新尺寸只在第一次
-// 遇到文件时产生，额外的开关文件开销远低于一次图片头解码。
-func (s *MediaDimensionService) appendLocked(record dimensionRecord) {
-	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
-		return
-	}
-	data, err := json.Marshal(record)
-	if err != nil {
-		return
-	}
-	file, err := os.OpenFile(s.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		return
-	}
-	defer file.Close()
-	if _, err := file.Write(append(data, '\n')); err != nil {
-		return
-	}
-	// 每条都刷盘：派生缓存丢几条不影响正确性，但延迟刷盘会在进程被杀时
-	// 留下半行 JSON。刷盘成本远低于一次解码。
-	_ = file.Sync()
-}
-
 // Close 释放资源。派生缓存不需要常驻句柄，这里只是保持调用方接口完整。
 func (s *MediaDimensionService) Close() error {
+	s.Flush()
 	return nil
 }
 

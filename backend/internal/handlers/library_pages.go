@@ -85,6 +85,9 @@ func AlbumMediaPageHandler(catalog *services.ResourceCatalog, dimensions *servic
 //
 // 尺寸是可选信息：探测失败时保持 0，前端会退回默认宽高比，不影响浏览。
 // 读不出图片头的文件另外标成「无法解码」：那是坏文件，不是尺寸未知。
+//
+// 新探测到的尺寸在页末一次性落盘：逐条刷盘的话，一页两百张照片就是
+// 两百次 fsync，翻年墙时每页要等两秒。
 func enrichMediaDimensions(snapshot services.CatalogSnapshot, items []services.LibraryMediaItem, dimensions *services.MediaDimensionService) {
 	if dimensions == nil || len(items) == 0 {
 		return
@@ -92,6 +95,7 @@ func enrichMediaDimensions(snapshot services.CatalogSnapshot, items []services.L
 	for i := range items {
 		enrichMediaDimension(snapshot, &items[i], dimensions)
 	}
+	dimensions.Flush()
 }
 
 // enrichMediaDimension 补齐一份媒体的像素尺寸。
@@ -142,6 +146,11 @@ func LibraryMediaFeedHandler(catalog *services.ResourceCatalog, dimensions *serv
 		}
 		for i := range page.Items {
 			enrichMediaDimension(snapshot, &page.Items[i].LibraryMediaItem, dimensions)
+		}
+		// 新探测到的尺寸攒批落盘：逐条刷盘的话，一页两百张照片就是
+		// 两百次 fsync，翻年墙时每页要等两秒。
+		if dimensions != nil {
+			dimensions.Flush()
 		}
 		markFeedPicks(picks, page.Items)
 		setLibraryRevisionETag(c, snapshot.Revision())
@@ -406,6 +415,9 @@ func LibraryOnThisDayHandler(catalog *services.ResourceCatalog, dimensions *serv
 				continue
 			}
 			enrichMediaDimension(snapshot, &photo.LibraryMediaItem, dimensions)
+		}
+		if dimensions != nil {
+			dimensions.Flush()
 		}
 		setLibraryRevisionETag(c, snapshot.Revision())
 		return c.JSON(fiber.Map{"ok": true, "page": page})

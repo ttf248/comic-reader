@@ -118,6 +118,7 @@ func enrichPickDimensions(snapshot services.CatalogSnapshot, items []services.Pi
 		items[i].Height = size.Height
 		items[i].Undecodable = size.Undecodable
 	}
+	dimensions.Flush()
 }
 
 // markPicks 给一页媒体标记是否在精选中。

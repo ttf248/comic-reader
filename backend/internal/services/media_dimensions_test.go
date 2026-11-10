@@ -156,6 +156,9 @@ func TestMediaDimensionServiceMarksUndecodable(t *testing.T) {
 	}
 
 	// 标记要落盘：重启后仍然记得。
+	//
+	// 落盘是攒批的（一页两百条一次写一次刷盘），所以这里要显式刷一次。
+	service.Flush()
 	second, err := NewMediaDimensionService(cachePath)
 	if err != nil {
 		t.Fatalf("recreate service: %v", err)
