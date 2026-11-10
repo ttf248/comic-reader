@@ -14,8 +14,8 @@ import {
 } from "../store/photoSelectionStore";
 import {
   usePhotoStore,
-  WALL_DENSITY_HEIGHT,
   WALL_DENSITY_LABEL,
+  wallTargetHeight,
   type WallDensity,
 } from "../store/photoStore";
 import PhotoWall from "../components/wall/PhotoWall";
@@ -53,8 +53,11 @@ interface Props {
   album: LibraryNodeSummary;
 }
 
-/** 每档密度用多少个小方块示意疏密。 */
-const DENSITY_GRID: Record<WallDensity, { cols: number; rows: number }> = {
+/** 每档手动密度用多少个小方块示意疏密。 */
+const DENSITY_GRID: Record<
+  Exclude<WallDensity, "auto">,
+  { cols: number; rows: number }
+> = {
   compact: { cols: 5, rows: 4 },
   cozy: { cols: 4, rows: 3 },
   large: { cols: 3, rows: 2 },
@@ -66,7 +69,7 @@ const DENSITY_GRID: Record<WallDensity, { cols: number; rows: number }> = {
  * 原来的 S / M / L 三个字母要求读者先建立「字母 = 档位」的对应关系，
  * 而档位名（密集 / 标准 / 宽松）已经写在提示里；图形直接说出疏密。
  */
-function DensityGlyph({ level }: { level: WallDensity }) {
+function DensityGlyph({ level }: { level: Exclude<WallDensity, "auto"> }) {
   const { cols, rows } = DENSITY_GRID[level];
   const cell = 16 / cols;
   const gap = 1.2;
@@ -91,6 +94,46 @@ function DensityGlyph({ level }: { level: WallDensity }) {
           />
         )),
       )}
+    </svg>
+  );
+}
+
+/**
+ * 自适应档位的示意：屏幕里几块大小不一。
+ *
+ * 手动档位用「方块多寡」说疏密，自适应没有固定疏密 —— 它跟着照片
+ * 数量与视口变。画一块大小不一的版面，比再添一个疏密格子更贴切。
+ */
+function AutoDensityGlyph() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width={15}
+      height={15}
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect
+        x={0.9}
+        y={1.9}
+        width={14.2}
+        height={12.2}
+        rx={2}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.1}
+        opacity={0.55}
+      />
+      <rect x={2.8} y={3.6} width={5.8} height={8.8} rx={0.8} fill="currentColor" />
+      <rect
+        x={9.7}
+        y={3.6}
+        width={3.5}
+        height={5.2}
+        rx={0.8}
+        fill="currentColor"
+        opacity={0.6}
+      />
     </svg>
   );
 }
@@ -478,7 +521,8 @@ export default function PhotoAlbum({ album }: Props) {
               <div className="hidden items-center gap-2 md:flex">
                 <span className="text-meta text-fg-subtle">密度</span>
                 <div className="flex items-center overflow-hidden rounded-md border border-border bg-bg-subtle/40 text-meta">
-                  {(["compact", "cozy", "large"] as const).map((key) => (
+                  {(["auto", "compact", "cozy", "large"] as const).map(
+                    (key) => (
                     <button
                       key={key}
                       type="button"
@@ -498,9 +542,14 @@ export default function PhotoAlbum({ album }: Props) {
                     >
                       {/* 密度用排布示意，不写 S/M/L 三个字母：
                           字母要读者先知道它对应哪一档，图形直接说「疏 / 密」。 */}
-                      <DensityGlyph level={key} />
+                      {key === "auto" ? (
+                        <AutoDensityGlyph />
+                      ) : (
+                        <DensityGlyph level={key} />
+                      )}
                     </button>
-                  ))}
+                    ),
+                  )}
                 </div>
               </div>
 
@@ -593,7 +642,7 @@ export default function PhotoAlbum({ album }: Props) {
           <PhotoWall
             items={mediaItems}
             total={total}
-            targetHeight={WALL_DENSITY_HEIGHT[density]}
+            targetHeight={wallTargetHeight(density)}
             hasNextPage={mediaQuery.hasNextPage ?? false}
             isLoadingMore={mediaQuery.isFetchingNextPage}
             onLoadMore={loadMore}

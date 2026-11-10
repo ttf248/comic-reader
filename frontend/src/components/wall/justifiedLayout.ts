@@ -145,6 +145,108 @@ export function tileRatio(
   return DEFAULT_TILE_RATIO;
 }
 
+/**
+ * 自适应密度的候选行高，从密到疏。
+ *
+ * 步子不均匀：密集的一头密得多（那里照片多、屏幕装不下），稀疏的一头
+ * 稀疏（照片少时一行两张就够，再疏就成了幻灯片）。
+ */
+const AUTO_DENSITY_LADDER = [
+  110, 130, 150, 175, 200, 230, 260, 295, 335, 380, 430, 490,
+];
+
+/**
+ * 自适应模式下整面墙最多占几屏。
+ *
+ * 超过两屏就不是「一眼看完」了：用户要滚动才看得全，照片墙的卖点
+ * （铺满当下这一屏）就没了。
+ */
+const AUTO_MAX_SCREENS = 2;
+
+export interface AutoLayoutOptions {
+  /** 可用宽度（像素）。 */
+  containerWidth: number;
+  /** 可用高度（像素）：一屏能放下多少。 */
+  containerHeight: number;
+  /** 图片之间的间距（像素）。 */
+  gap: number;
+  /**
+   * 密度下限（像素）。
+   *
+   * 自适应只会让照片更大，不会更密：照片多的时候保持浏览密度，
+   * 照片少的时候才把画面让给每一张。
+   */
+  minTargetHeight: number;
+  /**
+   * 密度上限（像素）：一行至少要放得下两张照片。
+   *
+   * 窄屏上这一条说了算：容器只有三百多像素宽时，行高再大就变成
+   * 一行一张，手机相册会退化成一列照片列表。
+   */
+  maxTargetHeight?: number;
+}
+
+/**
+ * 按数量、比例与视口算出自适应模式下的目标行高。
+ *
+ * 做法是试排：每一档候选行高都真排一遍，看这面墙有多高、每张照片
+ * 平均有多大，然后在「放得下」的档位里挑照片最大的那一档。
+ *
+ * 为什么不直接用公式：行高决定一行放几张，而一行的实际高度由这一行
+ * 的比例和容器宽度决定 —— 行高与墙高不是线性关系，算不出闭式解。
+ * 真排一遍才准，代价也只是几次数组扫描。
+ */
+export function autoTargetHeight(
+  tiles: readonly WallTile[],
+  options: AutoLayoutOptions,
+): number {
+  const { containerWidth, containerHeight, gap, minTargetHeight } = options;
+  const floor = Math.max(1, Math.round(minTargetHeight));
+  const ceiling = Math.max(floor, Math.round(options.maxTargetHeight ?? Infinity));
+  if (containerWidth <= 0 || containerHeight <= 0 || tiles.length === 0) {
+    return floor;
+  }
+  const candidates = AUTO_DENSITY_LADDER.filter(
+    (height) => height >= floor && height <= ceiling,
+  );
+  if (candidates.length === 0) return floor;
+  const budget = containerHeight * AUTO_MAX_SCREENS;
+  // 一档都放不下时（照片很多）退回密度下限：那才是浏览密度，
+  // 稀疏档只会让人多滚几十屏。
+  let best = floor;
+  let bestArea = -1;
+  for (const target of candidates) {
+    const rows = layoutJustified(tiles, {
+      containerWidth,
+      targetHeight: target,
+      gap,
+    });
+    let wallHeight = 0;
+    for (const row of rows) wallHeight += row.height;
+    // 这一档太疏：整面墙超过两屏，它就不算「一屏看完」。
+    if (wallHeight > budget) continue;
+    const area = averageTileArea(rows);
+    if (area > bestArea) {
+      bestArea = area;
+      best = target;
+    }
+  }
+  return best;
+}
+
+/** 一面墙里照片的平均面积。 */
+function averageTileArea(rows: WallRow[]): number {
+  let area = 0;
+  let count = 0;
+  for (const row of rows) {
+    for (const tile of row.tiles) {
+      area += tile.width * row.tileHeight;
+      count += 1;
+    }
+  }
+  return count === 0 ? 0 : area / count;
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }

@@ -1,20 +1,32 @@
 import { useMemo, type MouseEvent } from "react";
 import { Virtuoso, type ListRange } from "react-virtuoso";
 import type { LibraryMediaItem } from "../../api/library";
-import { useElementWidth } from "../../hooks/useElementWidth";
+import { useElementSize } from "../../hooks/useElementSize";
 import { useMediaGridPagination } from "../../hooks/useMediaGridPagination";
 import ThumbImage from "../common/ThumbImage";
 import VideoCoverImage from "../common/VideoCoverImage";
 import { CheckIcon, PickIcon, PlayFilledIcon, PlusIcon } from "../common/Icon";
-import { layoutJustified, tileRatio, type WallTile } from "./justifiedLayout";
+import {
+  autoTargetHeight,
+  layoutJustified,
+  tileRatio,
+  type WallTile,
+} from "./justifiedLayout";
 
 interface Props<T extends LibraryMediaItem = LibraryMediaItem> {
   /** 已加载的媒体项，顺序与服务端媒体索引一致。 */
   items: T[];
   /** 图片与视频合计的服务端总数。 */
   total: number;
-  /** 目标行高（像素）。 */
-  targetHeight: number;
+  /**
+   * 目标行高（像素）。
+   *
+   * 不传就是自适应：按数量、比例与视口算出该用多疏的行高。手动密度
+   * 传固定值，自适应不会覆盖它 —— 用户明确选过的东西不该被改回去。
+   */
+  targetHeight?: number;
+  /** 自适应模式的密度下限：自适应不会比这一档更密。 */
+  minTargetHeight?: number;
   hasNextPage: boolean;
   isLoadingMore: boolean;
   onLoadMore: () => void;
@@ -23,6 +35,13 @@ interface Props<T extends LibraryMediaItem = LibraryMediaItem> {
     item: T,
     event: MouseEvent<HTMLButtonElement>,
   ) => void;
+  /**
+   * 照片的出处标签（跨相册的墙上才有意义）。
+   *
+   * 返回所属相册名时，悬停信息层显示相册名而不是文件名：用户在年份
+   * 墙这类跨相册的墙上想知道的是「这张出自哪本」。
+   */
+  albumLabel?: (item: T) => string | undefined;
   /** 是否处于多选模式。多选时点击照片改为勾选，不再打开大图。 */
   selecting?: boolean;
   /** 某张照片是否已被勾选。 */
@@ -63,18 +82,20 @@ export default function PhotoWall<T extends LibraryMediaItem = LibraryMediaItem>
   items,
   total,
   targetHeight,
+  minTargetHeight = 210,
   hasNextPage,
   isLoadingMore,
   onLoadMore,
   onOpen,
   onContextMenu,
+  albumLabel,
   selecting = false,
   isSelected,
   onToggleSelect,
   isPicked,
   onTogglePick,
 }: Props<T>) {
-  const { ref: containerRef, width } = useElementWidth<HTMLDivElement>();
+  const { ref: containerRef, width, height } = useElementSize<HTMLDivElement>();
 
   const rangeChanged = useMediaGridPagination({
     loadedCount: items.length,
@@ -98,14 +119,34 @@ export default function PhotoWall<T extends LibraryMediaItem = LibraryMediaItem>
     return list;
   }, [items, total]);
 
+  // 窄屏的上下限：容器只有三百多像素宽时，「标准」的行高放得下一张就放
+  // 不下第二张，一百多张照片要滚几十屏；反过来行高太大也会退化成
+  // 一行一张的列表。
+  const narrowBound = width > 0 ? Math.max(96, Math.round(width / 3.2)) : 0;
+  // 自适应只在「更疏」的方向上动：照片少时把画面让给每一张，照片多时
+  // 保持浏览密度，不因为自适应反而变得更挤。
+  const autoFloor = Math.min(minTargetHeight, narrowBound || minTargetHeight);
+  const effectiveHeight = useMemo(() => {
+    if (targetHeight !== undefined) {
+      return effectiveTargetHeight(targetHeight, width);
+    }
+    return autoTargetHeight(tiles, {
+      containerWidth: width,
+      containerHeight: height,
+      gap: GAP,
+      minTargetHeight: autoFloor,
+      maxTargetHeight: narrowBound || undefined,
+    });
+  }, [tiles, width, height, targetHeight, autoFloor, narrowBound]);
+
   const rows = useMemo(
     () =>
       layoutJustified(tiles, {
         containerWidth: width,
-        targetHeight: effectiveTargetHeight(targetHeight, width),
+        targetHeight: effectiveHeight,
         gap: GAP,
       }),
-    [tiles, width, targetHeight],
+    [tiles, width, effectiveHeight],
   );
 
   const itemIndex = useMemo(() => {
@@ -131,7 +172,7 @@ export default function PhotoWall<T extends LibraryMediaItem = LibraryMediaItem>
           style={{ height: "100%" }}
           overscan={600}
           increaseViewportBy={{ top: 600, bottom: 600 }}
-          defaultItemHeight={targetHeight + GAP}
+          defaultItemHeight={effectiveHeight + GAP}
           computeItemKey={(_index, row) => row.key}
           rangeChanged={handleRangeChanged}
           itemContent={(_index, row) => (
@@ -164,6 +205,8 @@ export default function PhotoWall<T extends LibraryMediaItem = LibraryMediaItem>
                   item.height > 0;
                 const picked = isPicked?.(item.id) ?? false;
                 const selected = isSelected?.(item.id) ?? false;
+                // 跨相册的墙上，照片的出处比文件名更值得说。
+                const sourceLabel = albumLabel?.(item);
                 return (
                   // 触发层是覆盖在封面之上的独立按钮：视频封面自带「重试」
                   // 按钮，把它包进 <button> 会产生嵌套按钮（无效 HTML，
@@ -204,7 +247,7 @@ export default function PhotoWall<T extends LibraryMediaItem = LibraryMediaItem>
                       }}
                       onContextMenu={(event) => onContextMenu?.(item, event)}
                       className="absolute inset-0 z-0 block h-full w-full cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"
-                      title={item.name}
+                      title={sourceLabel ? `${sourceLabel} · ${item.name}` : item.name}
                       aria-label={
                         isVideo ? `播放 ${item.name}` : `查看 ${item.name}`
                       }
@@ -287,6 +330,10 @@ export default function PhotoWall<T extends LibraryMediaItem = LibraryMediaItem>
                         照片墙是浏览页，光靠缩略图看不出「这是什么」；
                         尺寸来自服务端已带的 width / height，不用另发请求。
 
+                        跨相册的墙（年份、精选）显示相册名而不是文件名：
+                        那里的照片来自不同的本，用户先要知道自己看的是
+                        哪一本里的哪一张。
+
                         背板用共享的 .scrim-bottom：文字所在的整段保持
                         88% 黑，往上才淡出。原先那层 from-black/85 的渐变
                         在明亮封面上只压到约 52%，白字对比度掉到 4.3:1
@@ -296,7 +343,7 @@ export default function PhotoWall<T extends LibraryMediaItem = LibraryMediaItem>
                       className="pointer-events-none absolute inset-x-0 bottom-0 z-0 flex items-end justify-between gap-2 px-2.5 pb-2 pt-9 scrim-bottom opacity-0 transition-opacity duration-200 group-hover:opacity-100"
                     >
                       <span className="truncate text-meta text-white">
-                        {item.name}
+                        {sourceLabel || item.name}
                       </span>
                       {hasSize && (
                         <span className="shrink-0 text-badge tabular-nums text-white/80">

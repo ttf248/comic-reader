@@ -55,8 +55,8 @@ vi.mock("react-virtuoso", () => ({
   },
 }));
 
-vi.mock("../../hooks/useElementWidth", () => ({
-  useElementWidth: () => ({ ref: { current: null }, width: 1200 }),
+vi.mock("../../hooks/useElementSize", () => ({
+  useElementSize: () => ({ ref: { current: null }, width: 1200, height: 800 }),
 }));
 
 vi.mock("../common/ThumbImage", () => ({

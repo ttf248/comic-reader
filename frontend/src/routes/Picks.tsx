@@ -8,7 +8,7 @@ import {
   usePhotoSelectionStore,
   type PhotoSelectionEntry,
 } from "../store/photoSelectionStore";
-import { usePhotoStore, WALL_DENSITY_HEIGHT } from "../store/photoStore";
+import { usePhotoStore, wallTargetHeight } from "../store/photoStore";
 import PhotoWall from "../components/wall/PhotoWall";
 import PhotoViewer from "../components/wall/PhotoViewer";
 import PhotoCompare, { type CompareItem } from "../components/wall/PhotoCompare";
@@ -264,7 +264,7 @@ export default function Picks() {
           <PhotoWall
             items={items}
             total={total}
-            targetHeight={WALL_DENSITY_HEIGHT[density]}
+            targetHeight={wallTargetHeight(density)}
             hasNextPage={query.hasNextPage ?? false}
             isLoadingMore={query.isFetchingNextPage}
             onLoadMore={loadMore}

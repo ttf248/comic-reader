@@ -60,10 +60,11 @@ vi.mock("../common/PropertiesDialog", () => ({ default: () => null }));
 
 // 列表视图的列数由可用宽度决定（每列至少 420px），测试里直接给宽度。
 const elementWidth = vi.hoisted(() => ({ width: 0 }));
-vi.mock("../../hooks/useElementWidth", () => ({
-  useElementWidth: () => ({
+vi.mock("../../hooks/useElementSize", () => ({
+  useElementSize: () => ({
     ref: { current: null },
     width: elementWidth.width,
+    height: 800,
   }),
 }));
 

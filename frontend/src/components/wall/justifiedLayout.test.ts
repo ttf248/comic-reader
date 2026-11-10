@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  autoTargetHeight,
   DEFAULT_TILE_RATIO,
   layoutJustified,
   tileRatio,
@@ -93,5 +94,87 @@ describe("tileRatio", () => {
   it("尺寸未知时退回默认比例", () => {
     expect(tileRatio({ kind: "image" })).toBe(DEFAULT_TILE_RATIO);
     expect(tileRatio(undefined)).toBe(DEFAULT_TILE_RATIO);
+  });
+});
+
+
+describe("autoTargetHeight", () => {
+  const auto = {
+    containerWidth: 1200,
+    containerHeight: 800,
+    gap: 8,
+    minTargetHeight: 210,
+  };
+
+  it("照片少时把行高抬上去，让每张占更多画面", () => {
+    const height = autoTargetHeight(tiles(5), auto);
+    expect(height).toBeGreaterThan(auto.minTargetHeight);
+  });
+
+  it("照片多时保持密度下限，不因为自适应反而更挤", () => {
+    const height = autoTargetHeight(tiles(400), auto);
+    expect(height).toBe(auto.minTargetHeight);
+  });
+
+  it("挑中的档位排出来的墙不超过两屏", () => {
+    const height = autoTargetHeight(tiles(12), auto);
+    const rows = layoutJustified(tiles(12), {
+      containerWidth: auto.containerWidth,
+      targetHeight: height,
+      gap: auto.gap,
+    });
+    const wall = rows.reduce((sum, row) => sum + row.height, 0);
+    expect(wall).toBeLessThanOrEqual(auto.containerHeight * 2);
+  });
+
+  it("照片少时每张比密度下限更大", () => {
+    const height = autoTargetHeight(tiles(5), auto);
+    const rows = layoutJustified(tiles(5), {
+      containerWidth: auto.containerWidth,
+      targetHeight: height,
+      gap: auto.gap,
+    });
+    const dense = layoutJustified(tiles(5), {
+      containerWidth: auto.containerWidth,
+      targetHeight: auto.minTargetHeight,
+      gap: auto.gap,
+    });
+    const area = (list: typeof rows) =>
+      list.reduce(
+        (sum, row) =>
+          sum +
+          row.tiles.reduce(
+            (inner, tile) => inner + tile.width * row.tileHeight,
+            0,
+          ),
+        0,
+      );
+    expect(area(rows)).toBeGreaterThan(area(dense));
+  });
+
+  it("容器尺寸无效时退回密度下限", () => {
+    expect(autoTargetHeight(tiles(5), { ...auto, containerWidth: 0 })).toBe(
+      auto.minTargetHeight,
+    );
+    expect(autoTargetHeight(tiles(5), { ...auto, containerHeight: 0 })).toBe(
+      auto.minTargetHeight,
+    );
+    expect(autoTargetHeight([], auto)).toBe(auto.minTargetHeight);
+  });
+
+  it("窄屏上不会退化成一行一张", () => {
+    const height = autoTargetHeight(tiles(5), {
+      ...auto,
+      containerWidth: 360,
+      containerHeight: 700,
+      minTargetHeight: 96,
+      maxTargetHeight: 112,
+    });
+    const rows = layoutJustified(tiles(5), {
+      containerWidth: 360,
+      targetHeight: height,
+      gap: auto.gap,
+    });
+    expect(rows[0].tiles.length).toBeGreaterThanOrEqual(2);
   });
 });

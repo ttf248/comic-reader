@@ -343,7 +343,7 @@ export default function Settings() {
         <Section title="照片" icon={<ImageIcon size={13} />}>
           <Row label="照片墙密度">
             <div className="flex items-center border border-border rounded-md overflow-hidden bg-bg-subtle/40">
-              {(["compact", "cozy", "large"] as const).map((key) => (
+              {(["auto", "compact", "cozy", "large"] as const).map((key) => (
                 <button
                   key={key}
                   onClick={() => setDensity(key)}

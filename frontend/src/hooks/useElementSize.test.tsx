@@ -1,7 +1,7 @@
 import { act, render, screen } from "@testing-library/react";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { useElementWidth } from "./useElementWidth";
+import { useElementSize } from "./useElementSize";
 
 // jsdom 不实现 ResizeObserver；这里补一个最小的，只记录被观察的元素。
 class FakeResizeObserver {
@@ -22,7 +22,7 @@ class FakeResizeObserver {
 }
 
 function Probe({ mount }: { mount: boolean }) {
-  const { ref, width } = useElementWidth<HTMLDivElement>();
+  const { ref, width } = useElementSize<HTMLDivElement>();
   return (
     <div>
       {mount ? <div ref={ref} data-testid="target" /> : null}
@@ -33,7 +33,7 @@ function Probe({ mount }: { mount: boolean }) {
 
 function Later() {
   const [mount, setMount] = useState(false);
-  const { ref, width } = useElementWidth<HTMLDivElement>();
+  const { ref, width } = useElementSize<HTMLDivElement>();
   return (
     <div>
       <button type="button" onClick={() => setMount(true)}>
@@ -45,7 +45,7 @@ function Later() {
   );
 }
 
-describe("useElementWidth", () => {
+describe("useElementSize", () => {
   it("元素首帧就在时量得到宽度", () => {
     vi.stubGlobal("ResizeObserver", FakeResizeObserver);
     const spy = vi

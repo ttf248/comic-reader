@@ -16,7 +16,7 @@ import AlbumContextMenu from "./AlbumContextMenu";
 import PropertiesDialog from "../common/PropertiesDialog";
 import { useFavorites } from "../../hooks/useFavorites";
 import { useAppMode } from "../../hooks/useAppMode";
-import { useElementWidth } from "../../hooks/useElementWidth";
+import { useElementSize } from "../../hooks/useElementSize";
 import { favoriteResourceId } from "../../utils/path";
 import { coverRatioForMode } from "../../utils/workbench";
 import { useUIStore, type ViewMode } from "../../store/uiStore";
@@ -122,7 +122,7 @@ export default function AlbumGrid({
   // 列表视图的列数由可用宽度决定：断点只能给出「这一档几列」，
   // 侧栏一折叠、窗口一拖，行宽就变了。行宽才是要紧的那个量 ——
   // 标题与右侧数字之间留出一大片空白，读起来像两张互不相干的表。
-  const { ref: widthRef, width: listWidth } = useElementWidth<HTMLDivElement>();
+  const { ref: widthRef, width: listWidth } = useElementSize<HTMLDivElement>();
 
   const { favorites } = useFavorites();
 
