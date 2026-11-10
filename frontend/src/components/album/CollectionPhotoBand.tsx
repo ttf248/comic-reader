@@ -58,6 +58,7 @@ export default function CollectionPhotoBand({
         items={items}
         targetHeight={200}
         maxRows={2}
+        compactOnNarrow
         albumLabel={(item) => item.albumName}
         onOpen={(_item, index) => setViewerIndex(index)}
       />

@@ -23,6 +23,13 @@ interface Props<T extends LibraryMediaItem = LibraryMediaItem> {
   onOpen?: (item: T, index: number) => void;
   /** 照片的出处标签：跨相册的墙用它说明这张出自哪本。 */
   albumLabel?: (item: T) => string | undefined;
+  /**
+   * 窄屏上只留一行。
+   *
+   * 手机上一行就是两三百像素高的大照片，两行就把下面要看的相册网格
+   * 顶到很下面去了。
+   */
+  compactOnNarrow?: boolean;
   className?: string;
 }
 
@@ -42,6 +49,7 @@ export default function PhotoStrip<T extends LibraryMediaItem = LibraryMediaItem
   maxRows,
   onOpen,
   albumLabel,
+  compactOnNarrow = false,
   className = "",
 }: Props<T>) {
   const { ref, width } = useElementSize<HTMLDivElement>();
@@ -65,12 +73,16 @@ export default function PhotoStrip<T extends LibraryMediaItem = LibraryMediaItem
   }, [tiles, width, targetHeight, maxRows]);
 
   return (
-    <div ref={ref} className={className}>
+    <div
+      ref={ref}
+      className={`photo-strip${compactOnNarrow ? " photo-strip--compact" : ""} ${className}`}
+    >
       {width > 0 &&
-        rows.map((row) => (
+        rows.map((row, rowIndex) => (
           <div
             key={row.key}
-            className="flex items-start"
+            data-row={rowIndex}
+            className="photo-strip__row flex items-start"
             style={{ gap: GAP, paddingBottom: GAP }}
           >
             {row.tiles.map((tile) => {

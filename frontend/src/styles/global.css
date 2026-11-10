@@ -403,6 +403,13 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
+  /* 窄屏上的照片带只留一行：手机上一行就是两三百像素高的大照片，
+     两行会把下面要看的相册网格顶到很下面。 */
+  @media (max-width: 639px) {
+    .photo-strip--compact .photo-strip__row[data-row="1"] {
+      display: none;
+    }
+  }
   .section-heading {
     display: flex;
     align-items: baseline;
