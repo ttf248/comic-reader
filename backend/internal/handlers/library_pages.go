@@ -58,7 +58,7 @@ func LibraryChildrenPageHandler(catalog *services.ResourceCatalog) fiber.Handler
 //
 // 返回项带原始像素尺寸：照片墙要按真实宽高比排布，服务端读一次图片头
 // 并缓存，比让浏览器逐张探测更省事也更稳。视频没有像素尺寸，保持 0。
-func AlbumMediaPageHandler(catalog *services.ResourceCatalog, dimensions *services.MediaDimensionService) fiber.Handler {
+func AlbumMediaPageHandler(catalog *services.ResourceCatalog, dimensions *services.MediaDimensionService, picks *store.PickStore) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		limit, ok := parseLibraryPageLimit(c)
 		if !ok {
@@ -74,6 +74,8 @@ func AlbumMediaPageHandler(catalog *services.ResourceCatalog, dimensions *servic
 			return writeLibraryPageError(c, err, snapshot.Revision())
 		}
 		enrichMediaDimensions(snapshot, page.Items, dimensions)
+		// 精选是照片级状态，照片墙的每一格都要知道自己是不是精选。
+		markPicks(picks, page.Items)
 		setLibraryRevisionETag(c, snapshot.Revision())
 		return c.JSON(fiber.Map{"ok": true, "page": page})
 	}

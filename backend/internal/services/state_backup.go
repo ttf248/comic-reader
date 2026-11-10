@@ -34,14 +34,17 @@ type BackupCover struct {
 
 // StateBackup 只包含可移交的用户状态，不导出配置、令牌或扫描缓存。
 type StateBackup struct {
-	Version          int                   `json:"version"`
-	ExportedAt       time.Time             `json:"exportedAt"`
-	Favorites        []string              `json:"favorites"`
-	History          []models.HistoryEntry `json:"history"`
-	Preferences      *BackupPreferences    `json:"preferences"`
-	Activities       []models.Activity     `json:"activities"`
-	Covers           []BackupCover         `json:"covers"`
-	UnresolvedCovers int                   `json:"unresolvedCovers,omitempty"`
+	Version    int                   `json:"version"`
+	ExportedAt time.Time             `json:"exportedAt"`
+	Favorites  []string              `json:"favorites"`
+	History    []models.HistoryEntry `json:"history"`
+	Preferences *BackupPreferences   `json:"preferences"`
+	Activities []models.Activity     `json:"activities"`
+	Covers     []BackupCover         `json:"covers"`
+	// Picks 是照片级精选的文件 ID。旧备份没有这一项，恢复时按空精选处理；
+	// 它与相册级收藏是两份数据，恢复其中一份不动另一份。
+	Picks []string `json:"picks,omitempty"`
+	UnresolvedCovers int `json:"unresolvedCovers,omitempty"`
 }
 type BackupPreview struct {
 	Versions        map[string]string `json:"versions"`
@@ -62,6 +65,7 @@ type backupSnapshot struct {
 	prefs      models.Prefs
 	activities []models.Activity
 	covers     map[string]CoverOverride
+	picks      []string
 	catalog    CatalogSnapshot
 }
 
@@ -70,6 +74,7 @@ type StateBackupService struct {
 	Prefs        *store.PrefsStore
 	Activities   *store.ActivityStore
 	Covers       *CoverOverrideStore
+	Picks        *store.PickStore
 	Catalog      *ResourceCatalog
 	ScanCache    *ScanResultCache
 	ValidatePath func(string) (string, error)
@@ -85,7 +90,7 @@ func (s *StateBackupService) snapshot() (backupSnapshot, error) {
 	if err != nil {
 		return backupSnapshot{}, err
 	}
-	return backupSnapshot{prefs: p, activities: a, covers: s.Covers.Snapshot(), catalog: s.Catalog.Acquire()}, nil
+	return backupSnapshot{prefs: p, activities: a, covers: s.Covers.Snapshot(), picks: s.Picks.Get(), catalog: s.Catalog.Acquire()}, nil
 }
 func backupDigest(value interface{}) string {
 	data, _ := json.Marshal(value)
@@ -93,11 +98,11 @@ func backupDigest(value interface{}) string {
 	return hex.EncodeToString(sum[:])
 }
 func (state backupSnapshot) versions() map[string]string {
-	return map[string]string{"preferences": backupDigest(state.prefs), "activities": backupDigest(state.activities), "covers": backupDigest(state.covers)}
+	return map[string]string{"preferences": backupDigest(state.prefs), "activities": backupDigest(state.activities), "covers": backupDigest(state.covers), "picks": backupDigest(state.picks)}
 }
 func (state backupSnapshot) export() StateBackup {
 	p := state.prefs
-	backup := StateBackup{Version: 1, ExportedAt: time.Now().UTC(), Favorites: append([]string{}, p.Favorites...), History: append([]models.HistoryEntry{}, p.History...), Activities: state.activities, Covers: []BackupCover{}, Preferences: &BackupPreferences{p.MaxRecent, p.AutoSwitchAlbum, p.ShowSwitchNotif, p.Theme, p.SidebarCollapsed, p.AppMode}}
+	backup := StateBackup{Version: 1, ExportedAt: time.Now().UTC(), Favorites: append([]string{}, p.Favorites...), History: append([]models.HistoryEntry{}, p.History...), Activities: state.activities, Covers: []BackupCover{}, Picks: append([]string{}, state.picks...), Preferences: &BackupPreferences{p.MaxRecent, p.AutoSwitchAlbum, p.ShowSwitchNotif, p.Theme, p.SidebarCollapsed, p.AppMode}}
 	for album, cover := range state.covers {
 		aid := state.catalog.ExternalID(album, ResourceAlbum)
 		fid := state.catalog.ExternalID(cover.File, ResourceFile)
@@ -158,6 +163,14 @@ func ValidateStateBackup(backup StateBackup) error {
 		}
 		seen[cover.AlbumID] = true
 	}
+	// 精选是可选字段：旧备份没有它，恢复时按空精选处理。
+	seen = map[string]bool{}
+	for _, id := range backup.Picks {
+		if !models.IsFileID(id) || seen[id] {
+			return ErrInvalidBackup
+		}
+		seen[id] = true
+	}
 	return nil
 }
 
@@ -203,7 +216,7 @@ func (s *StateBackupService) Preview(backup StateBackup) (BackupPreview, error) 
 		return BackupPreview{}, err
 	}
 	_, skipped := s.coverPaths(state.catalog, backup.Covers)
-	preview := BackupPreview{Versions: state.versions(), LibraryRevision: state.catalog.Revision(), Ready: state.catalog.Ready(), Counts: map[string]int{"favorites": len(backup.Favorites), "history": len(backup.History), "preferences": 1, "activities": len(backup.Activities), "covers": len(backup.Covers)}, Missing: map[string]int{}, SkippedCovers: skipped}
+	preview := BackupPreview{Versions: state.versions(), LibraryRevision: state.catalog.Revision(), Ready: state.catalog.Ready(), Counts: map[string]int{"favorites": len(backup.Favorites), "history": len(backup.History), "preferences": 1, "activities": len(backup.Activities), "covers": len(backup.Covers), "picks": len(backup.Picks)}, Missing: map[string]int{}, SkippedCovers: skipped}
 	missing := func(id string) bool { _, ok := state.catalog.Lookup(id); return !ok }
 	for _, id := range backup.Favorites {
 		if strings.HasPrefix(id, "smart:") {
@@ -228,6 +241,11 @@ func (s *StateBackupService) Preview(backup StateBackup) (BackupPreview, error) 
 			preview.Missing["activities"]++
 		}
 	}
+	for _, id := range backup.Picks {
+		if missing(id) {
+			preview.Missing["picks"]++
+		}
+	}
 	return preview, nil
 }
 
@@ -237,7 +255,7 @@ func (s *StateBackupService) Restore(backup StateBackup, categories []string, ve
 	}
 	selected := map[string]bool{}
 	for _, category := range categories {
-		if selected[category] || (category != "favorites" && category != "history" && category != "preferences" && category != "activities" && category != "covers") {
+		if selected[category] || (category != "favorites" && category != "history" && category != "preferences" && category != "activities" && category != "covers" && category != "picks") {
 			return RestoreResult{}, ErrInvalidBackup
 		}
 		selected[category] = true
@@ -307,7 +325,7 @@ func (s *StateBackupService) Restore(backup StateBackup, categories []string, ve
 		return RestoreResult{}, err
 	}
 	result := RestoreResult{Completed: []string{}, Pending: []string{}}
-	order := []string{"favorites", "history", "preferences", "activities", "covers"}
+	order := []string{"favorites", "history", "preferences", "activities", "covers", "picks"}
 	fail := func(category string, err error) (RestoreResult, error) {
 		result.Failed = category
 		result.Code = "state_restore_failed"
@@ -373,6 +391,13 @@ func (s *StateBackupService) Restore(backup StateBackup, categories []string, ve
 		result.Completed = append(result.Completed, "covers")
 		delete(selected, "covers")
 
+	}
+	if selected["picks"] {
+		if err = s.Picks.Replace(backup.Picks); err != nil {
+			return fail("picks", err)
+		}
+		result.Completed = append(result.Completed, "picks")
+		delete(selected, "picks")
 	}
 	return result, nil
 }

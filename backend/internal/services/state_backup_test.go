@@ -32,7 +32,7 @@ func newBackupFixture(t *testing.T) (*StateBackupService, string, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := &StateBackupService{Prefs: store.NewPrefsStore(layout.PreferencesPath), Activities: store.NewActivityStore(layout.ActivityPath), Covers: NewCoverOverrideStore(layout.CoverOverridesPath), Catalog: catalog, BackupDir: StateBackupDirectory(layout), ValidatePath: func(path string) (string, error) { _, err := os.Stat(path); return path, err }}
+	s := &StateBackupService{Prefs: store.NewPrefsStore(layout.PreferencesPath), Activities: store.NewActivityStore(layout.ActivityPath), Covers: NewCoverOverrideStore(layout.CoverOverridesPath), Picks: store.NewPickStore(layout.PicksPath), Catalog: catalog, BackupDir: StateBackupDirectory(layout), ValidatePath: func(path string) (string, error) { _, err := os.Stat(path); return path, err }}
 	id := catalog.ExternalID(album, ResourceAlbum)
 	if _, err := s.Prefs.AddFavorite(id); err != nil {
 		t.Fatal(err)
@@ -79,6 +79,53 @@ func TestStateBackupExportAndSelectedRestore(t *testing.T) {
 	result, err = s.Restore(backup, []string{"preferences", "activities", "covers"}, preview.Versions, preview.LibraryRevision)
 	if err != nil || result.Failed != "" || len(result.Completed) != 3 {
 		t.Fatalf("full restore: %+v %v", result, err)
+	}
+}
+
+func TestStateBackupRestoresPicksIndependently(t *testing.T) {
+	s, _, root := newBackupFixture(t)
+	fileID := s.Catalog.ExternalID(filepath.Join(root, "作品 C++ 100%", "page.jpg"), ResourceFile)
+	if _, err := s.Picks.Batch([]string{fileID}, true); err != nil {
+		t.Fatal(err)
+	}
+	backup, err := s.Export()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(backup.Picks) != 1 || backup.Picks[0] != fileID {
+		t.Fatalf("backup lost picks: %+v", backup.Picks)
+	}
+	// 精选被清空后，按类别恢复能把它们带回来。
+	if _, err := s.Picks.Batch([]string{fileID}, false); err != nil {
+		t.Fatal(err)
+	}
+	preview, err := s.Preview(backup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.Counts["picks"] != 1 {
+		t.Fatalf("unexpected preview counts: %+v", preview.Counts)
+	}
+	result, err := s.Restore(backup, []string{"picks"}, preview.Versions, preview.LibraryRevision)
+	if err != nil || result.Failed != "" || len(result.Completed) != 1 {
+		t.Fatalf("restore picks: %+v %v", result, err)
+	}
+	if got := s.Picks.Get(); len(got) != 1 || got[0] != fileID {
+		t.Fatalf("picks not restored: %v", got)
+	}
+	// 恢复精选不动收藏：两份数据互不覆盖。
+	p, _ := s.Prefs.Get()
+	if len(p.Favorites) != 1 {
+		t.Fatalf("favorites changed by picks restore: %v", p.Favorites)
+	}
+}
+
+func TestStateBackupRejectsInvalidPicks(t *testing.T) {
+	s, _, _ := newBackupFixture(t)
+	backup, _ := s.Export()
+	backup.Picks = []string{"a_AAAAAAAAAAAAAAAAAAAAAA"}
+	if _, err := s.Preview(backup); !errors.Is(err, ErrInvalidBackup) {
+		t.Fatalf("album id accepted as pick: %v", err)
 	}
 }
 

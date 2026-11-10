@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -168,6 +169,9 @@ type LibraryMediaItem struct {
 	// JPEG，内容却不是；或者像素数据是截断的）。前端据此显示
 	// 「无法解码」，而不是留一个破图图标让人猜。
 	Undecodable bool `json:"undecodable,omitempty"`
+	// Picked 标记这张照片在精选里。它是用户数据而不是目录数据，
+	// 因此由请求期按当前精选集合标记，不进索引。
+	Picked bool `json:"picked,omitempty"`
 	// Version 是媒体文件的内容版本号（mtime + size + 渲染算法版本）。
 	// 前端把它拼进渲染图 URL，服务端据此回 immutable。
 	Version string `json:"version,omitempty"`
@@ -275,6 +279,11 @@ type libraryPageIndex struct {
 	// 用途过滤只需要在已物化的切片上做一次稳定筛选，不必另存一份摘要。
 	albumIndexesByKind map[models.ContentKind][]int
 	kindAlbumCounts    map[models.ContentKind]int
+	// mediaByFile 是「文件 ID → 它在哪本相册的第几项」的反查表。
+	// 精选是照片级的用户数据，只知道文件 ID 是不够的：精选页还要说得出
+	// 这张照片属于哪本相册，用户才能从精选回到原来的位置。
+	// 存下标而不是副本，避免为大库再留一份媒体摘要。
+	mediaByFile map[string]libraryMediaRef
 	// recentAlbumIndexesByKind 是按用途分桶的「最近加入」下标表。
 	// 它在索引构建期按业务日期排好一次，请求期只切片，
 	// 不再每请求重排全库。
@@ -294,6 +303,15 @@ type onThisDayEntry struct {
 	date string
 }
 
+// libraryMediaRef 指向某个文件在相册媒体列表里的位置。
+type libraryMediaRef struct {
+	albumID string
+	index   int
+	// virtual 标记它来自「本目录媒体」虚拟相册。同一份文件可能同时出现在
+	// 虚拟相册与真实相册里，反查时优先用真实相册。
+	virtual bool
+}
+
 func buildLibraryPageIndex(state *resourceCatalogState) *libraryPageIndex {
 	index := &libraryPageIndex{
 		children:                 make(map[string][]LibraryNodeSummary),
@@ -305,6 +323,7 @@ func buildLibraryPageIndex(state *resourceCatalogState) *libraryPageIndex {
 		tagAlbums:                make(map[string][]LibraryNodeSummary),
 		albumIndexesByKind:       make(map[models.ContentKind][]int),
 		kindAlbumCounts:          make(map[models.ContentKind]int),
+		mediaByFile:              make(map[string]libraryMediaRef),
 		recentAlbumIndexesByKind: make(map[models.ContentKind][]int),
 		kindCollectionCounts:     make(map[models.ContentKind]int),
 		onThisDay:                make(map[string][]onThisDayEntry),
@@ -355,6 +374,21 @@ func buildLibraryPageIndex(state *resourceCatalogState) *libraryPageIndex {
 			kindIndexes[source.kind]++
 		}
 		index.media[id] = items
+		for itemIndex, source := range sources {
+			existing, exists := index.mediaByFile[source.id]
+			if !exists {
+				index.mediaByFile[source.id] = libraryMediaRef{albumID: id, index: itemIndex, virtual: album.Virtual}
+				continue
+			}
+			// 同一份文件可能同时出现在真实相册与「本目录媒体」虚拟相册里。
+			// 优先真实相册；两本都是虚拟相册时取 ID 较小的一本 ——
+			// 判定必须与 map 遍历顺序无关，否则同一个精选每次刷新
+			// 可能落在不同的相册上。
+			if (existing.virtual && !album.Virtual) ||
+				(existing.virtual == album.Virtual && id < existing.albumID) {
+				index.mediaByFile[source.id] = libraryMediaRef{albumID: id, index: itemIndex, virtual: album.Virtual}
+			}
+		}
 	}
 	for id, collection := range state.collections {
 		index.nodes[id] = collectionSummary(state, collection)
@@ -649,6 +683,82 @@ func PageAlbumMedia(snapshot CatalogSnapshot, albumID, cursor string, limit int)
 	return LibraryPage[LibraryMediaItem]{
 		Revision: snapshot.Revision(), Items: items, Total: len(media), NextCursor: next,
 	}, nil
+}
+
+// PickItem 是精选列表里的一项：一张照片，加上它所属相册的定位信息。
+//
+// 精选是跨相册的：用户在 A 相册选了一张，在 B 相册又选了两张，
+// 精选页把它们摆在一起。回到原相册的入口靠这里的 AlbumID ——
+// 只给文件 ID 的话，用户看到一张照片却不知道它是从哪儿选出来的。
+type PickItem struct {
+	LibraryMediaItem
+	// AlbumID 是这张照片所属的相册资源 ID。
+	AlbumID string `json:"albumId"`
+	// AlbumName 是所属相册的展示名。
+	AlbumName string `json:"albumName"`
+}
+
+// PagePicks 分页返回精选照片。
+//
+// pickIDs 是用户精选的文件 ID，最近加入在前。这里按当前目录解析：
+// 文件被移出媒体库后它就不再出现在精选页 —— 精选说的是「库里的照片」，
+// 不是对磁盘路径的承诺，因此不需要单独的清理动作。
+//
+// scope 里带精选自身的版本：精选一变，旧的翻页游标立即失效，
+// 免得新加入的照片把已经翻过的页顶走一格。
+func PagePicks(snapshot CatalogSnapshot, pickIDs []string, picksRevision uint64, cursor string, limit int) (LibraryPage[PickItem], error) {
+	scope := "picks:" + strconv.FormatUint(picksRevision, 10)
+	offset, err := pageOffset(snapshot, cursor, scope)
+	if err != nil {
+		return LibraryPage[PickItem]{}, err
+	}
+	if !snapshot.Ready() || snapshot.state == nil || snapshot.state.library == nil {
+		return LibraryPage[PickItem]{}, ErrLibraryNotReady
+	}
+	items := resolvePickItems(snapshot, pickIDs)
+	start, end, next, err := pageBounds(snapshot.Revision(), scope, cursor != "", offset, len(items), limit)
+	if err != nil {
+		return LibraryPage[PickItem]{}, err
+	}
+	return LibraryPage[PickItem]{
+		Revision: snapshot.Revision(), Items: items[start:end], Total: len(items), NextCursor: next,
+	}, nil
+}
+
+// resolvePickItems 把精选的文件 ID 解析成可展示的媒体项。
+//
+// 解析不出来的（文件已被移出媒体库）和不属于照片侧的条目直接略过：
+// 精选页是照片工作台的页面，漫画册不该混进来。
+func resolvePickItems(snapshot CatalogSnapshot, pickIDs []string) []PickItem {
+	library := snapshot.state.library
+	items := make([]PickItem, 0, len(pickIDs))
+	for _, id := range pickIDs {
+		ref, ok := library.mediaByFile[id]
+		if !ok {
+			continue
+		}
+		media := library.media[ref.albumID]
+		if ref.index < 0 || ref.index >= len(media) {
+			continue
+		}
+		node, ok := library.nodes[ref.albumID]
+		if !ok || node.ContentKind != string(LibraryKindPhoto) {
+			continue
+		}
+		item := media[ref.index]
+		item.Picked = true
+		if item.Version == "" && item.sourcePath != "" {
+			if version, verr := MediaVersion(item.sourcePath); verr == nil {
+				item.Version = version
+			}
+		}
+		items = append(items, PickItem{
+			LibraryMediaItem: item,
+			AlbumID:          ref.albumID,
+			AlbumName:        node.DisplayName,
+		})
+	}
+	return items
 }
 
 // ResolveLibraryNodes 按调用方给定顺序批量解析相册或集合摘要。不存在、已过期

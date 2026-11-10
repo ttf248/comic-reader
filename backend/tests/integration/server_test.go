@@ -130,6 +130,7 @@ func newHarness(t *testing.T) *harness {
 	runner.SetCatalog(catalog)
 	prefsStore := store.NewPrefsStore(prefs)
 	activityStore := store.NewActivityStore(cacheLayout.ActivityPath)
+	pickStore := store.NewPickStore(cacheLayout.PicksPath)
 
 	api := app.Group("/api")
 	api.Get("/health", func(c *fiber.Ctx) error {
@@ -154,7 +155,10 @@ func newHarness(t *testing.T) *harness {
 	if err != nil {
 		t.Fatalf("create media dimension service: %v", err)
 	}
-	api.Get("/albums/:id/media", handlers.AlbumMediaPageHandler(catalog, dimensions))
+	api.Get("/albums/:id/media", handlers.AlbumMediaPageHandler(catalog, dimensions, pickStore))
+	api.Get("/picks", handlers.PicksListHandler(pickStore))
+	api.Post("/picks/batch", handlers.PicksBatchHandler(pickStore))
+	api.Get("/picks/media", handlers.PicksMediaPageHandler(catalog, pickStore, dimensions))
 	api.Get("/tags", handlers.LibraryTagsPageHandler(catalog))
 	api.Get("/tags/:tag/albums", handlers.TagAlbumsPageHandler(catalog))
 	api.Get("/search", handlers.SearchHandler(catalog))

@@ -228,6 +228,8 @@ func main() {
 	unreadIndex := services.NewUnreadLibraryIndex()
 	prefs := store.NewPrefsStore(cacheLayout.PreferencesPath)
 	activities := store.NewActivityStore(cacheLayout.ActivityPath)
+	// 照片级精选：与相册级收藏分开存，两份数据互不覆盖。
+	picks := store.NewPickStore(cacheLayout.PicksPath)
 	if err := activities.Load(); err != nil {
 		log.Fatalf("加载媒体活动状态失败: %v", err)
 	}
@@ -327,7 +329,7 @@ func main() {
 	api.Delete("/library", handlers.ScanCacheClearHandler(scanCache, resourceCatalog, runner))
 	resourceParam := middleware.ResourceParam(resourceCatalog, safetyState)
 	api.Get("/albums/random", handlers.LibraryRandomAlbumHandler(resourceCatalog, activities, unreadIndex))
-	api.Get("/albums/:id/media", handlers.AlbumMediaPageHandler(resourceCatalog, mediaDimensions))
+	api.Get("/albums/:id/media", handlers.AlbumMediaPageHandler(resourceCatalog, mediaDimensions, picks))
 	// 自定义封面：用户可在阅读器内手动设置/清除每本相册的封面。
 	// file 必须是 path 子路径 + 真实存在的文件；越权请求会被 400 拒绝。
 	api.Put("/albums/:id/cover", resourceParam, handlers.AlbumSetCoverHandler(scanCache, coverOverrides, resourceCatalog))
@@ -363,7 +365,7 @@ func main() {
 	api.Post("/admin/fs/directories", middleware.LoopbackOnly(), handlers.DirectoriesHandler())
 
 	// 配置读写
-	backupService := &services.StateBackupService{Prefs: prefs, Activities: activities, Covers: coverOverrides, Catalog: resourceCatalog, ScanCache: scanCache, ValidatePath: safetyState.Validate, BackupDir: services.StateBackupDirectory(cacheLayout)}
+	backupService := &services.StateBackupService{Prefs: prefs, Activities: activities, Covers: coverOverrides, Picks: picks, Catalog: resourceCatalog, ScanCache: scanCache, ValidatePath: safetyState.Validate, BackupDir: services.StateBackupDirectory(cacheLayout)}
 	api.Get("/admin/state/export", middleware.LoopbackOnly(), handlers.StateExportHandler(backupService))
 	api.Post("/admin/state/import/preview", middleware.LoopbackOnly(), handlers.StatePreviewHandler(backupService))
 	api.Post("/admin/state/import", middleware.LoopbackOnly(), handlers.StateImportHandler(backupService))
@@ -381,6 +383,11 @@ func main() {
 	api.Get("/history", handlers.HistoryListHandler(prefs))
 	api.Post("/history", handlers.HistoryAddHandler(prefs))
 	api.Delete("/history", handlers.HistoryClearHandler(prefs))
+
+	// 照片级精选（与上面的相册级收藏是两份数据）
+	api.Get("/picks", handlers.PicksListHandler(picks))
+	api.Post("/picks/batch", handlers.PicksBatchHandler(picks))
+	api.Get("/picks/media", handlers.PicksMediaPageHandler(resourceCatalog, picks, mediaDimensions))
 	api.Get("/activity", handlers.ActivityGetHandler(activities))
 	api.Put("/activity", handlers.ActivityPutHandler(activities))
 	api.Delete("/activity", handlers.ActivityDeleteHandler(activities))

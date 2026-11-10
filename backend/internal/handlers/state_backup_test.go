@@ -17,7 +17,7 @@ import (
 
 func TestStateBackupHTTPValidationAndPreferencesWithoutMedia(t *testing.T) {
 	dir := t.TempDir()
-	service := &services.StateBackupService{Prefs: store.NewPrefsStore(filepath.Join(dir, "prefs.json")), Activities: store.NewActivityStore(filepath.Join(dir, "activity.json")), Covers: services.NewCoverOverrideStore(filepath.Join(dir, "covers.json")), Catalog: services.NewResourceCatalog(), BackupDir: filepath.Join(dir, "backups")}
+	service := &services.StateBackupService{Prefs: store.NewPrefsStore(filepath.Join(dir, "prefs.json")), Activities: store.NewActivityStore(filepath.Join(dir, "activity.json")), Covers: services.NewCoverOverrideStore(filepath.Join(dir, "covers.json")), Picks: store.NewPickStore(filepath.Join(dir, "picks.json")), Catalog: services.NewResourceCatalog(), BackupDir: filepath.Join(dir, "backups")}
 	app := fiber.New()
 	app.Get("/export", middleware.LoopbackOnly(), StateExportHandler(service))
 	app.Post("/preview", middleware.LoopbackOnly(), StatePreviewHandler(service))

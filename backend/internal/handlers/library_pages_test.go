@@ -60,7 +60,7 @@ func TestLibraryPageHandlersCursorStatusAndResponseShape(t *testing.T) {
 	app.Get("/api/library/activity-summary", LibraryActivitySummaryHandler(catalog, activities, unreadIndex))
 	app.Get("/api/library/dashboard", LibraryHomeDashboardHandler(catalog, activities, unreadIndex))
 	app.Get("/api/library/unread", LibraryUnreadAlbumsPageHandler(catalog, activities, unreadIndex))
-	app.Get("/api/albums/:id/media", AlbumMediaPageHandler(catalog, dimensions))
+	app.Get("/api/albums/:id/media", AlbumMediaPageHandler(catalog, dimensions, store.NewPickStore(filepath.Join(t.TempDir(), "picks.json"))))
 	app.Get("/api/tags", LibraryTagsPageHandler(catalog))
 	app.Get("/api/tags/:tag/albums", TagAlbumsPageHandler(catalog))
 	app.Get("/api/search", SearchHandler(catalog))
