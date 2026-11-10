@@ -472,6 +472,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
   - `recent` —— 取最近加入的几本相册里的照片。
   - `random` —— 取随机几本相册里的照片。
 - `limit` 沿用分页默认值与上限，`cursor` 是不透明游标，绑定取材条件与库 revision。`year` 与 `collection` 分页；`recent` 与 `random` 一次返回整批，不分页。
-- 响应 `{ok:true,page:{revision,items,total,nextCursor?,albums}}`。`items` 是媒体字段加上 `albumId` / `albumName`；`albums` 是这一页涉及的相册 `{id,name,count}`。
+- 响应 `{ok:true,page:{revision,items,total,nextCursor?,albums,sources}}`。`items` 是媒体字段加上 `albumId` / `albumName`；`albums` 是这一页涉及的相册 `{id,name,count}`；`sources` 是取材范围里被选中的节点 `{id,name,kind}` —— 年份对应的那几个集合，或集合页的那一个集合。
+- `scope=collection` 的照片按相册轮流排列（第 0 轮取每本相册的第 1 张，第 1 轮取每本的第 2 张……）：连着看一本相册的头几张，看到的只是这一本，轮流取之后每一本都露得出来。
 - `recent` 与 `random` 会把几本相册的照片交错排布：连着看一本相册的头几张，墙上就只剩一种口味。
 - 非法取材条件返回 `400 invalid_media_feed`；集合 ID 不存在返回 `404 resource_not_found`，类型不对返回 `400 invalid_resource_kind`。响应不携带本机绝对路径。

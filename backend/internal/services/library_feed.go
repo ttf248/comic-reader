@@ -54,12 +54,24 @@ type FeedAlbumRef struct {
 	Count int `json:"count"`
 }
 
+// FeedSource 是取材范围里被选中的节点：年份对应的那几个集合，
+// 或者集合页的那一个集合。
+type FeedSource struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	// Kind 是节点类型："album" 或 "collection"。
+	Kind string `json:"kind"`
+}
+
 // MediaFeedPage 是照片流的一页：照片条目 + 这些照片来自哪些相册。
 type MediaFeedPage struct {
 	LibraryPage[FeedMediaItem]
 	// Albums 是这一页涉及的相册。年份页据此告诉用户「这些照片来自哪几本」，
 	// 也让前端能把照片与它的原相册对应起来。
 	Albums []FeedAlbumRef `json:"albums"`
+	// Sources 是取材范围里被选中的节点。年份页据此把「这一年的照片来自
+	// 哪个集合」说清楚，也给出回到那个集合的入口。
+	Sources []FeedSource `json:"sources"`
 }
 
 // 照片流一次掺入几本相册、每本取几张。
@@ -123,11 +135,12 @@ func PageMediaFeed(snapshot CatalogSnapshot, q MediaFeedQuery, cursor string, li
 			LibraryPage: LibraryPage[FeedMediaItem]{
 				Revision: snapshot.Revision(), Items: items, Total: len(items),
 			},
-			Albums: albums,
+			Albums:  albums,
+			Sources: []FeedSource{},
 		}, nil
 	}
 
-	albums, err := mediaFeedAlbums(snapshot, index, q)
+	albums, sources, err := mediaFeedAlbums(snapshot, index, q)
 	if err != nil {
 		return MediaFeedPage{}, err
 	}
@@ -144,7 +157,7 @@ func PageMediaFeed(snapshot CatalogSnapshot, q MediaFeedQuery, cursor string, li
 	if err != nil {
 		return MediaFeedPage{}, err
 	}
-	items := sliceFeedItems(albums, start, end)
+	items := sliceFeedItems(albums, start, end, q.Scope == MediaFeedCollection)
 	for i := range items {
 		if items[i].sourcePath == "" {
 			continue
@@ -161,7 +174,8 @@ func PageMediaFeed(snapshot CatalogSnapshot, q MediaFeedQuery, cursor string, li
 		LibraryPage: LibraryPage[FeedMediaItem]{
 			Revision: snapshot.Revision(), Items: items, Total: total, NextCursor: next,
 		},
-		Albums: refs,
+		Albums:  refs,
+		Sources: sources,
 	}, nil
 }
 
@@ -173,24 +187,34 @@ type mediaFeedAlbum struct {
 }
 
 // mediaFeedAlbums 按请求范围算出参与照片流的相册及其顺序。
-func mediaFeedAlbums(snapshot CatalogSnapshot, index *libraryPageIndex, q MediaFeedQuery) ([]mediaFeedAlbum, error) {
+//
+// 第二个返回值是被选中的范围节点：年份对应的那几个集合，或集合页的
+// 那一个集合。年份页要靠它说清「这一年的照片来自哪里」。
+func mediaFeedAlbums(snapshot CatalogSnapshot, index *libraryPageIndex, q MediaFeedQuery) ([]mediaFeedAlbum, []FeedSource, error) {
 	switch q.Scope {
 	case MediaFeedCollection:
 		ref, exists := snapshot.state.byID[q.Parent]
 		if !exists {
-			return nil, ErrLibraryResourceNotFound
+			return nil, nil, ErrLibraryResourceNotFound
 		}
 		if ref.Kind != ResourceCollection {
-			return nil, ErrLibraryResourceWrongKind
+			return nil, nil, ErrLibraryResourceWrongKind
 		}
-		return mediaFeedAlbumsUnder(index, q.Parent, q.Kind), nil
+		node, ok := index.nodes[q.Parent]
+		if !ok {
+			return nil, nil, ErrLibraryResourceNotFound
+		}
+		sources := []FeedSource{{ID: node.ID, Name: node.DisplayName, Kind: node.Kind}}
+		return mediaFeedAlbumsUnder(index, q.Parent, q.Kind), sources, nil
 	case MediaFeedYear:
 		nodes := mediaFeedScopeNodes(snapshot, index, q.Kind)
 		albums := []mediaFeedAlbum{}
+		sources := []FeedSource{}
 		for _, node := range nodes {
 			if !mediaFeedYearMatch(node, q.Year) {
 				continue
 			}
+			sources = append(sources, FeedSource{ID: node.ID, Name: node.DisplayName, Kind: node.Kind})
 			if node.Kind == string(ResourceCollection) {
 				albums = append(albums, mediaFeedAlbumsUnder(index, node.ID, q.Kind)...)
 				continue
@@ -201,9 +225,9 @@ func mediaFeedAlbums(snapshot CatalogSnapshot, index *libraryPageIndex, q MediaF
 			}
 			albums = append(albums, mediaFeedAlbum{id: node.ID, name: node.DisplayName, media: media})
 		}
-		return albums, nil
+		return albums, sources, nil
 	default:
-		return nil, ErrInvalidMediaFeedQuery
+		return nil, nil, ErrInvalidMediaFeedQuery
 	}
 }
 
@@ -274,8 +298,15 @@ func mediaFeedAlbumsUnder(index *libraryPageIndex, collectionID string, kind Lib
 //
 // 序列是若干本相册的媒体首尾相接而成，偏移量先落到相册、再落到相册内
 // 的下标，不必为整条序列再复制一份。
-func sliceFeedItems(albums []mediaFeedAlbum, start, end int) []FeedMediaItem {
+//
+// interleave 为真时改成轮流取：第 0 轮取每本相册的第 1 张，第 1 轮取
+// 每本的第 2 张…… 连着看一本相册的头几张，看到的只是这一本；轮流取
+// 之后每一本都露得出来，集合页的照片带才真的代表「这里有什么」。
+func sliceFeedItems(albums []mediaFeedAlbum, start, end int, interleave bool) []FeedMediaItem {
 	items := make([]FeedMediaItem, 0, end-start)
+	if interleave {
+		return interleaveFeedItems(albums, start, end)
+	}
 	offset := 0
 	for _, album := range albums {
 		count := len(album.media)
@@ -302,6 +333,39 @@ func sliceFeedItems(albums []mediaFeedAlbum, start, end int) []FeedMediaItem {
 			})
 		}
 		offset += count
+	}
+	return items
+}
+
+// interleaveFeedItems 按「轮流取」排出序列中的一段。
+//
+// 从头走到目标位置：不预先物化整条序列，翻页时多算一点，
+// 换来的是不为大集合再留一份完整副本。
+func interleaveFeedItems(albums []mediaFeedAlbum, start, end int) []FeedMediaItem {
+	items := make([]FeedMediaItem, 0, end-start)
+	seen := 0
+	for round := 0; seen < end; round++ {
+		progressed := false
+		for _, album := range albums {
+			if round >= len(album.media) {
+				continue
+			}
+			progressed = true
+			if seen >= start {
+				items = append(items, FeedMediaItem{
+					LibraryMediaItem: album.media[round],
+					AlbumID:          album.id,
+					AlbumName:        album.name,
+				})
+			}
+			seen++
+			if seen >= end {
+				break
+			}
+		}
+		if !progressed {
+			break
+		}
 	}
 	return items
 }

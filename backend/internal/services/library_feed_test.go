@@ -162,6 +162,28 @@ func TestMediaFeedYearScopePagesAcrossAlbums(t *testing.T) {
 	}
 }
 
+func TestMediaFeedYearScopeReportsItsSources(t *testing.T) {
+	fixture := newMediaFeedFixture(t)
+	snapshot := fixture.catalog.Acquire()
+	page, err := PageMediaFeed(snapshot, MediaFeedQuery{
+		Kind: LibraryKindPhoto, Scope: MediaFeedYear, Year: "2024",
+	}, "", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 年份页靠它说清「这一年的照片来自哪个集合」，也靠它回到那个集合。
+	if len(page.Sources) != 1 {
+		t.Fatalf("sources = %+v", page.Sources)
+	}
+	source := page.Sources[0]
+	if source.ID != fixture.collectionID || source.Kind != "collection" {
+		t.Fatalf("source = %+v", source)
+	}
+	if source.Name != "2024年" {
+		t.Fatalf("source name = %q", source.Name)
+	}
+}
+
 func TestMediaFeedOtherYearKeepsUndatedAlbums(t *testing.T) {
 	fixture := newMediaFeedFixture(t)
 	snapshot := fixture.catalog.Acquire()
@@ -200,6 +222,28 @@ func TestMediaFeedCollectionScopeReturnsInnerAlbums(t *testing.T) {
 	}
 	if page.Total != 4 {
 		t.Fatalf("total = %d, want 4", page.Total)
+	}
+}
+
+func TestMediaFeedCollectionScopeInterleavesAlbums(t *testing.T) {
+	fixture := newMediaFeedFixture(t)
+	snapshot := fixture.catalog.Acquire()
+	page, err := PageMediaFeed(snapshot, MediaFeedQuery{
+		Kind: LibraryKindPhoto, Scope: MediaFeedCollection, Parent: fixture.collectionID,
+	}, "", 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(page.Items) != 4 {
+		t.Fatalf("items = %d, want 4", len(page.Items))
+	}
+	// 轮流取：前几张来自不同的相册，集合页的照片带才代表「里面有什么」。
+	albums := map[string]bool{}
+	for _, item := range page.Items {
+		albums[item.AlbumID] = true
+	}
+	if len(albums) < 2 {
+		t.Fatalf("albums = %+v, want several", albums)
 	}
 }
 
