@@ -56,6 +56,20 @@ export interface LibraryManifest {
 export interface LibraryOnThisDayItem extends LibraryNodeSummary {
   /** 命中的那一天，"YYYY-MM-DD"。 */
   matchedDate: string;
+  /**
+   * 真正拍于那一天的那一张照片。
+   *
+   * 它的日期证据是文件名里推断出的拍摄时间：服务端给不出这一张时
+   * 这里是空的，界面上就不摆照片 —— 宁可少一张，也不拿相册的通用
+   * 封面冒充「那天拍的那张」。
+   */
+  photo?: LibraryOnThisDayPhoto;
+}
+
+/** 「那年今日」命中的那一张照片。 */
+export interface LibraryOnThisDayPhoto extends LibraryMediaItem {
+  /** 这张照片的拍摄日期，"YYYY-MM-DD"。 */
+  date: string;
 }
 
 export interface LibraryNodeSummary {

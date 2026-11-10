@@ -558,9 +558,13 @@ export default function PhotoViewer({
               {albumName}
             </div>
           )}
-          <div className="text-meta tabular-nums text-white/55">
-            第 {index + 1} 张 · 共 {totalCount ?? items.length} 张
-          </div>
+          {/* 位置读数只在能翻的时候出现：一张照片时说「第 1 张 ·
+              共 1 张」是废话，界面上只留相册名。 */}
+          {items.length > 1 && (
+            <div className="text-meta tabular-nums text-white/55">
+              第 {index + 1} 张 · 共 {totalCount ?? items.length} 张
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-1">
           {/* 相册级收藏：这颗星说的是「这一本值得留着」。 */}

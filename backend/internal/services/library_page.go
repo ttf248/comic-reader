@@ -876,6 +876,20 @@ type LibraryOnThisDayItem struct {
 	LibraryNodeSummary
 	// MatchedDate 是命中的那一天，"YYYY-MM-DD"。
 	MatchedDate string `json:"matchedDate"`
+	// Photo 是真正拍于那一天的那一张。
+	//
+	// 它的日期证据是文件名里推断出的拍摄时间，与相册 CaptureDates
+	// 同一口径：相册说「这一天拍过」，这里要给出「这一张」。取不到时
+	// 为空 —— 宁可少给一张，也不拿相册的通用封面冒充「那天拍的那张」。
+	Photo *LibraryOnThisDayPhoto `json:"photo,omitempty"`
+}
+
+// LibraryOnThisDayPhoto 是「那年今日」真正命中的那一张照片。
+type LibraryOnThisDayPhoto struct {
+	LibraryMediaItem
+	// Date 是这张照片的拍摄日期，"YYYY-MM-DD"。它是这一条命中的
+	// 唯一依据：界面上展示的必须是这一天拍的那张本身。
+	Date string `json:"date"`
 }
 
 // PageOnThisDay 返回往年同一天（同一个月-日）拍过照的相册。
@@ -915,9 +929,11 @@ func PageOnThisDay(snapshot CatalogSnapshot, kind LibraryKindScope, month, day i
 			continue
 		}
 		seen[album.ID] = true
+		matched := entry.date[:4] + "-" + entry.date[4:6] + "-" + entry.date[6:8]
 		items = append(items, LibraryOnThisDayItem{
 			LibraryNodeSummary: cloneNodeSummary(album),
-			MatchedDate:        entry.date[:4] + "-" + entry.date[4:6] + "-" + entry.date[6:8],
+			MatchedDate:        matched,
+			Photo:              onThisDayPhoto(snapshot.state.library, album.ID, entry.date),
 		})
 	}
 	total := len(items)
@@ -929,6 +945,42 @@ func PageOnThisDay(snapshot CatalogSnapshot, kind LibraryKindScope, month, day i
 		Items:    items,
 		Total:    total,
 	}, nil
+}
+
+// onThisDayPhoto 找出这本相册里真正拍于那一天的那一张。
+//
+// 拍摄时间只从文件名推断，与相册 CaptureDates 同一口径：相册说「这一天
+// 拍过」，这里要给出「这一张」。图片优先 —— 同一天里既有照片又有视频
+// 时，先给照片；只有视频时才退回去给视频。
+//
+// 相册的媒体按文件名自然排序，同一天的文件挨在一起，因此一般扫到第
+// 几张就命中，不必翻完整本。
+func onThisDayPhoto(index *libraryPageIndex, albumID, date string) *LibraryOnThisDayPhoto {
+	media := index.media[albumID]
+	var fallback *LibraryOnThisDayPhoto
+	for i := range media {
+		item := media[i]
+		captured := captureFromFileName(item.Name)
+		if captured.IsZero() || captured.Format("20060102") != date {
+			continue
+		}
+		photo := &LibraryOnThisDayPhoto{
+			LibraryMediaItem: item,
+			Date:             date[:4] + "-" + date[4:6] + "-" + date[6:8],
+		}
+		if item.sourcePath != "" {
+			if version, err := MediaVersion(item.sourcePath); err == nil {
+				photo.Version = version
+			}
+		}
+		if item.Kind == "image" {
+			return photo
+		}
+		if fallback == nil {
+			fallback = photo
+		}
+	}
+	return fallback
 }
 
 func PageLibraryTags(snapshot CatalogSnapshot, kind LibraryKindScope, cursor string, limit int) (LibraryPage[LibraryTagSummary], error) {

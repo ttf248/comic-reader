@@ -295,6 +295,72 @@ func assertHandlerBodyHasNoAbsolutePath(t *testing.T, body io.ReadCloser) {
 	visit(decoded)
 }
 
+func TestLibraryOnThisDayHandlerReturnsTheMatchingPhoto(t *testing.T) {
+	root := t.TempDir()
+	albumPath := filepath.Join(root, "album")
+	year := time.Now().Year() - 1
+	// 文件名里带着拍摄日期：这一张就是「那天拍的那张」。
+	matching := filepath.Join(albumPath, fmt.Sprintf("IMG_%d1107_101500.jpg", year))
+	other := filepath.Join(albumPath, fmt.Sprintf("IMG_%d1108_101500.jpg", year))
+	result := &models.ScanResult{
+		Roots: []string{root}, AlbumCount: 1,
+		Albums: []models.Album{{
+			Type: "album", Path: albumPath, Name: "album", SourceRoot: root,
+			ImageFiles: []string{other, matching}, ImageCount: 2,
+			CoverImage: other, CoverKind: "image",
+			CaptureDates: []string{fmt.Sprintf("%d1107", year)},
+		}},
+	}
+	catalog := services.NewResourceCatalog()
+	catalog.SetContentKindPolicy(services.NewContentKindPolicy([]services.RootKind{
+		{Path: root, Kind: models.ContentKindPhoto},
+	}))
+	catalog.Publish(result, []string{root})
+
+	app := fiber.New()
+	app.Get("/api/library/on-this-day", LibraryOnThisDayHandler(catalog, nil))
+
+	resp, err := app.Test(httptest.NewRequest("GET", "/api/library/on-this-day?kind=photo&month=11&day=7", nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resp.StatusCode != fiber.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status=%d body=%s", resp.StatusCode, body)
+	}
+	var payload struct {
+		Page struct {
+			Items []struct {
+				MatchedDate string `json:"matchedDate"`
+				Photo       *struct {
+					Name string `json:"name"`
+					Date string `json:"date"`
+				} `json:"photo"`
+			} `json:"items"`
+		} `json:"page"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	if len(payload.Page.Items) != 1 {
+		t.Fatalf("page=%+v, want one item", payload.Page)
+	}
+	photo := payload.Page.Items[0].Photo
+	if photo == nil {
+		t.Fatal("photo is nil, want the photo taken that day")
+	}
+	if photo.Name != filepath.Base(matching) {
+		t.Fatalf("photo name=%q, want the one shot on 11-07", photo.Name)
+	}
+	wantDate := fmt.Sprintf("%d-11-07", year)
+	if photo.Date != wantDate {
+		t.Fatalf("photo date=%q, want %s", photo.Date, wantDate)
+	}
+	if payload.Page.Items[0].MatchedDate != wantDate {
+		t.Fatalf("matchedDate=%q, want %s", payload.Page.Items[0].MatchedDate, wantDate)
+	}
+}
+
 func TestLibraryOnThisDayHandlerMatchesEarlierYearsOnly(t *testing.T) {
 	root := t.TempDir()
 	albumPath := filepath.Join(root, "album")
@@ -319,7 +385,7 @@ func TestLibraryOnThisDayHandlerMatchesEarlierYearsOnly(t *testing.T) {
 	catalog.Publish(result, []string{root})
 
 	app := fiber.New()
-	app.Get("/api/library/on-this-day", LibraryOnThisDayHandler(catalog))
+	app.Get("/api/library/on-this-day", LibraryOnThisDayHandler(catalog, nil))
 
 	resp, err := app.Test(httptest.NewRequest("GET", "/api/library/on-this-day?kind=photo&month=11&day=7", nil))
 	if err != nil {
@@ -336,6 +402,11 @@ func TestLibraryOnThisDayHandlerMatchesEarlierYearsOnly(t *testing.T) {
 				ID          string `json:"id"`
 				Name        string `json:"name"`
 				MatchedDate string `json:"matchedDate"`
+				Photo       *struct {
+					ID   string `json:"id"`
+					Name string `json:"name"`
+					Date string `json:"date"`
+				} `json:"photo"`
 			} `json:"items"`
 		} `json:"page"`
 	}
@@ -352,6 +423,11 @@ func TestLibraryOnThisDayHandlerMatchesEarlierYearsOnly(t *testing.T) {
 	}
 	if payload.Page.Items[0].Name != "album" {
 		t.Fatalf("name=%q, want album", payload.Page.Items[0].Name)
+	}
+	// 这本相册的文件名里没有拍摄日期：给不出「哪一张拍于那天」的证据，
+	// 就不给照片 —— 不拿相册的通用封面冒充那一天拍的那张。
+	if payload.Page.Items[0].Photo != nil {
+		t.Fatalf("photo=%+v, want none without filename date evidence", payload.Page.Items[0].Photo)
 	}
 
 	// 非法月日要报错，而不是悄悄给一个空列表。

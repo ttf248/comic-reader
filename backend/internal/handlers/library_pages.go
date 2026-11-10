@@ -364,8 +364,9 @@ func LibraryRecentHandler(catalog *services.ResourceCatalog) fiber.Handler {
 // LibraryOnThisDayHandler 返回往年同一天拍过照的相册。
 //
 // month 与 day 缺省时取服务端当天；它只认拍摄日期（来自文件名推断），
-// 没有拍摄时间的相册不进这个列表。
-func LibraryOnThisDayHandler(catalog *services.ResourceCatalog) fiber.Handler {
+// 没有拍摄时间的相册不进这个列表。每条还带上真正拍于那一天的那一张
+// 照片：界面展示的是那张照片本身，不是相册的通用封面。
+func LibraryOnThisDayHandler(catalog *services.ResourceCatalog, dimensions *services.MediaDimensionService) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		limit, ok := parseLibraryPageLimit(c)
 		if !ok {
@@ -395,6 +396,13 @@ func LibraryOnThisDayHandler(catalog *services.ResourceCatalog) fiber.Handler {
 		page, err := services.PageOnThisDay(snapshot, kind, month, day, limit)
 		if err != nil {
 			return writeLibraryPageError(c, err, snapshot.Revision())
+		}
+		for i := range page.Items {
+			photo := page.Items[i].Photo
+			if photo == nil {
+				continue
+			}
+			enrichMediaDimension(snapshot, &photo.LibraryMediaItem, dimensions)
 		}
 		setLibraryRevisionETag(c, snapshot.Revision())
 		return c.JSON(fiber.Map{"ok": true, "page": page})
