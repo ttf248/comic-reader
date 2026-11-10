@@ -179,6 +179,26 @@
   .home-serendipity .hero-panel__feature {
     flex: 0 0 auto;
   }
+  /* 「接着看」的主角与队列。照片侧这块面板独占一行，主角右边空着
+     一大片时队列就该挪过来填上：挤在一行里，面板的高度也就回到
+     「一块展品」该有的样子。 */
+  .resume-body {
+    display: flex;
+    flex-direction: column;
+  }
+  @media (min-width: 1280px) {
+    .resume-body {
+      display: grid;
+      grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+      gap: clamp(16px, 2vw, 32px);
+      align-items: start;
+    }
+    .resume-body > .resume-queue {
+      grid-template-columns: minmax(0, 1fr);
+      border-top: none;
+      padding-top: 4px;
+    }
+  }
   .hero-panel__title {
     margin-top: 12px;
     /* 展示字号：随视口缩放，两端是唯一的硬编码。 */
@@ -677,6 +697,10 @@
   /* 标题块：眉标 · 标题 · 计数 · 动作。整块收在页面左缘，
      动作不再被甩到屏幕最右 —— 那样它读起来像页脚的杂项，
      而不是「收藏这一组」的动作。 */
+  /* 没有封面时标题块独占一行：网格只剩一列，标题不再缩在一条窄带里。 */
+  .detail-head--plain {
+    grid-template-columns: minmax(0, 1fr);
+  }
   .detail-head__body {
     display: flex;
     flex-direction: column;

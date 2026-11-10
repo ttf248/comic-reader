@@ -45,42 +45,47 @@ export default function ResumeHero({ cards }: Props) {
           {cards.length} {copy.resumeCountLabel}
         </span>
       </div>
-      <div className="hero-panel__feature">
-        <Link
-          to={featured.to}
-          className="hero-cover hero-cover--print"
-          aria-label={`${copy.resumeButton}「${featured.displayTitle ?? featured.title}」`}
-        >
-          <Cover card={featured} large />
-        </Link>
-        <div className="min-w-0">
-          <p className="hero-panel__muted">{copy.resumeHint}</p>
-          <h3 className="hero-panel__title line-clamp-2">
-            {featured.displayTitle ?? featured.title}
-          </h3>
-          <p className="hero-panel__muted mt-3 tabular-nums">
-            {mediaCountLabel(featured)}
-            {featured.lastSeenAt && (
-              <>
-                {" · "}
-                {copy.resumeLastSeenLabel} {timeAgo(featured.lastSeenAt)}
-              </>
-            )}
-          </p>
-          <div className="mt-5">
-            <Link to={featured.to} className="btn btn-primary">
-              {copy.resumeButton} <ArrowRightLineIcon size={14} />
-            </Link>
+      {/* 主角与队列并排：这一块独占一行（照片侧首屏只剩它一块），
+          主角右边空着一大片时，队列就该挪过来填上，而不是掉到下一行
+          把面板拉高。 */}
+      <div className="resume-body">
+        <div className="hero-panel__feature">
+          <Link
+            to={featured.to}
+            className="hero-cover hero-cover--print"
+            aria-label={`${copy.resumeButton}「${featured.displayTitle ?? featured.title}」`}
+          >
+            <Cover card={featured} large />
+          </Link>
+          <div className="min-w-0">
+            <p className="hero-panel__muted">{copy.resumeHint}</p>
+            <h3 className="hero-panel__title line-clamp-2">
+              {featured.displayTitle ?? featured.title}
+            </h3>
+            <p className="hero-panel__muted mt-3 tabular-nums">
+              {mediaCountLabel(featured)}
+              {featured.lastSeenAt && (
+                <>
+                  {" · "}
+                  {copy.resumeLastSeenLabel} {timeAgo(featured.lastSeenAt)}
+                </>
+              )}
+            </p>
+            <div className="mt-5">
+              <Link to={featured.to} className="btn btn-primary">
+                {copy.resumeButton} <ArrowRightLineIcon size={14} />
+              </Link>
+            </div>
           </div>
         </div>
+        {rest.length > 0 && (
+          <div className="resume-queue mini-queue">
+            {rest.map((card) => (
+              <ResumeQueueItem key={card.id} card={card} />
+            ))}
+          </div>
+        )}
       </div>
-      {rest.length > 0 && (
-        <div className="resume-queue mini-queue">
-          {rest.map((card) => (
-            <ResumeQueueItem key={card.id} card={card} />
-          ))}
-        </div>
-      )}
       {cards.length > 4 && (
         <Link
           to={recentsRoute("photo")}

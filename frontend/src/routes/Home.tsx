@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { useSearchStore } from "../store/searchStore";
@@ -18,12 +18,8 @@ import { useLibraryList, listYearGroups } from "../hooks/useLibraryList";
 import YearTimeline from "../components/home/YearTimeline";
 import SeriesTimeline from "../components/home/SeriesTimeline";
 import { ContinueHero, UnreadHero } from "../components/home/HomeHeroes";
-import {
-  RecentlyAddedHero,
-  SerendipityHero,
-} from "../components/home/PhotoHeroes";
 import ResumeHero from "../components/home/ResumeHero";
-import { useSerendipityAlbum } from "../hooks/useSerendipityAlbum";
+import PhotoFeedHero from "../components/home/PhotoFeedHero";
 import OnThisDaySection from "../components/home/OnThisDaySection";
 import { useUIStore } from "../store/uiStore";
 import { useAppMode } from "../hooks/useAppMode";
@@ -43,7 +39,6 @@ import {
   useLibraryDashboard,
   useLibraryManifest,
   useOnThisDayAlbums,
-  useLibraryRecentAlbums,
 } from "../hooks/useLibrary";
 import { nodeSummaryToCard } from "../utils/libraryCard";
 import {
@@ -79,7 +74,6 @@ export default function Home() {
   const yearFilter = useSearchStore((s) => s.yearFilter);
   const setYearFilter = useSearchStore((s) => s.setYearFilter);
   const setMinImageCount = useSearchStore((s) => s.setMinImageCount);
-  const setSortBy = useSearchStore((s) => s.setSortBy);
   const viewMode = useUIStore((s) => s.viewMode);
 
   // 收藏数按当前工作台算：照片工作台的「N 收藏」不该把漫画收藏算进去。
@@ -98,10 +92,6 @@ export default function Home() {
     [dashboard, isComic],
   );
   const unreadCount = isComic ? (dashboard?.unreadCount ?? 0) : 0;
-  // 照片侧的首屏专区：接着看 + 最近加入 + 随手看看。它们与漫画侧的
-  // 「继续阅读 / 未读」一一对应，但内容完全不同：漫画有进度与已读，
-  // 照片只有「上次打开过哪本」。
-  const recentAlbums = useLibraryRecentAlbums(mode, 8, !isComic);
   // 「那年今日」只在照片侧成立：漫画没有拍摄时间。
   const today = new Date();
   const onThisDay = useOnThisDayAlbums(
@@ -112,27 +102,9 @@ export default function Home() {
     !isComic,
   );
   const onThisDayItems = onThisDay.data?.page.items ?? [];
-  const serendipity = useSerendipityAlbum(!isComic);
   // 「接着看」的数据是访问历史：照片相册其实一直在记，只是原先只有
   // 「最近浏览」页在用。
   const resumeCards = useHistoryCards(mode, !isComic).cards;
-  const recentItems = useMemo(
-    () => recentAlbums.data?.page.items ?? [],
-    [recentAlbums.data],
-  );
-  const recentTotal = recentAlbums.data?.page.total ?? recentItems.length;
-  // 「最近加入」的「全部」：把首页网格按业务日期排好并滚过去。
-  // 这一区讲的是「最近加入」，点进去却是「最近看」，说的与做的不一致；
-  // 现在它落到同一个口径的排序上 —— 照片侧的排序条上写「按拍摄时间」。
-  const showAllRecent = useCallback(() => {
-    setSortBy("added");
-    requestAnimationFrame(() =>
-      gridRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      }),
-    );
-  }, [setSortBy]);
   const startScan = useMutation({
     mutationFn: () => scanApi.start(),
     onSuccess: (r) => {
@@ -266,6 +238,9 @@ export default function Home() {
       sort: sortBy,
       year: yearFilterActive ? String(yearFilter) : undefined,
       minImageCount,
+      // 年份索引那一排已经把按年份归组的集合讲清楚了，网格里不再
+      // 重复摆一遍：同一批内容摆两处，用户只会以为看错了。
+      excludeYearTargets: true,
     }),
     [mode, view, query, sortBy, yearFilterActive, yearFilter, minImageCount],
   );
@@ -527,60 +502,27 @@ export default function Home() {
           </div>
         )}
 
-      {/* 照片侧的首屏专区：与漫画侧的「继续阅读 / 未读」位置对齐，
-          内容却是照片自己的 —— 接着看、最近加入与随手看看。
+      {/* 照片侧的首屏：先是一面照片墙，再是「接着看」。
 
-          文档顺序就是阅读顺序，宽屏与窄屏一致：
-          有浏览记录时是「接着看 → 随手看看 → 最近加入」（宽屏第一行
-          两块、第二行最近加入通栏）；没有记录时换成「最近加入 →
-          随手看看」，同样是先宽后窄。此前两者的顺序在宽窄屏之间
-          会翻转，同一份内容换个宽度就读法不同。 */}
-      {hasContent &&
-        !isComic &&
-        (resumeCards.length > 0 ||
-          recentItems.length > 0 ||
-          serendipity.albums.length > 0) && (
-          <div className="page-shell">
-            <div
-              className={`home-overview${
-                resumeCards.length > 0 ? " home-overview--with-resume" : ""
-              }`}
-            >
-              {resumeCards.length > 0 ? (
-                <>
-                  <ResumeHero cards={resumeCards} />
-                  <SerendipityHero
-                    albums={serendipity.albums}
-                    isLoading={serendipity.isLoading}
-                    onReshuffle={serendipity.reshuffle}
-                  />
-                  {recentItems.length > 0 && (
-                    <RecentlyAddedHero
-                      items={recentItems}
-                      total={recentTotal}
-                      onShowAll={showAllRecent}
-                    />
-                  )}
-                </>
-              ) : (
-                <>
-                  {recentItems.length > 0 && (
-                    <RecentlyAddedHero
-                      items={recentItems}
-                      total={recentTotal}
-                      onShowAll={showAllRecent}
-                    />
-                  )}
-                  <SerendipityHero
-                    albums={serendipity.albums}
-                    isLoading={serendipity.isLoading}
-                    onReshuffle={serendipity.reshuffle}
-                  />
-                </>
-              )}
+          早先这里是三块关于照片的说明（接着看 / 随手看看 / 最近加入），
+          照片本身只是它们面板里的一张小封面 —— 首页第一眼看不见照片。
+          现在第一屏就是照片：随手抽一批跨相册的照片铺成墙，「接着看」
+          退到照片墙下面，因为它说的是「回到上次那本」，不是「看照片」。
+
+          「最近加入」不再单独占一节：它与下方网格是同一批内容，网格
+          按「按加入」排序就是它，不必在一屏里摆两遍。 */}
+      {hasContent && !isComic && (
+        <>
+          <PhotoFeedHero />
+          {resumeCards.length > 0 && (
+            <div className="page-shell pt-9">
+              <div className="home-overview">
+                <ResumeHero cards={resumeCards} />
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </>
+      )}
 
       {/* === 索引条 ===
           漫画多一条「作品」索引：漫画常常不以年份命名，一部作品横跨
@@ -608,8 +550,8 @@ export default function Home() {
         <section className="page-shell pt-9">
           <div className="section-heading">
             <span className="section-index">{pad(sectionNo.year)}</span>
-            <h2 className="section-title">时间线</h2>
-            <span className="section-meta">按年份浏览</span>
+            <h2 className="section-title">按年份浏览</h2>
+            <span className="section-meta">看这一年的照片</span>
           </div>
           <YearTimeline groups={yearGroups} gridRef={gridRef} />
         </section>

@@ -49,6 +49,31 @@ vi.mock("../hooks/useImageActivity", () => ({
 vi.mock("../components/home/YearTimeline", () => ({
   default: () => <div data-testid="year-timeline" />,
 }));
+// 照片墙走真实接口：这里换成固定的一份，首页用例不依赖网络。
+vi.mock("../hooks/useMediaFeed", () => ({
+  useMediaFeed: () => ({
+    items: [
+      {
+        id: "f_1",
+        kind: "image",
+        name: "1.jpg",
+        index: 0,
+        kindIndex: 0,
+        albumId: "a_1",
+        albumName: "第一本",
+      },
+    ],
+    albums: [],
+    sources: [],
+    total: 1,
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+    fetchNextPage: vi.fn(),
+    hasNextPage: false,
+    isFetchingNextPage: false,
+  }),
+}));
 vi.mock("../components/home/HomeHeroes", () => ({
   // rightSlot 是真实组件的右栏（只有一本在读时，首页把「未读」塞进去），
   // 占位组件也要渲染它，否则 DOM 顺序断言会漏掉未读区的位置。
@@ -226,6 +251,28 @@ it("筛选条紧贴在「库内一览」网格上方，不被英雄区 / 时间�
       hero.compareDocumentPosition(chip) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
   }
+});
+
+// 照片侧的首屏：第一眼是照片，不是关于照片的说明。
+it("照片工作台首屏先摆照片墙，再摆「接着看」", async () => {
+  useAppModeStore.setState({ preference: "photo", hydrated: true });
+  vi.mocked(historyApi.list).mockResolvedValue({
+    history: [
+      {
+        albumId: "a_1",
+        name: "2023年测试相册",
+        imageCount: 3,
+        openedAt: "2024-05-01T00:00:00Z",
+      },
+    ],
+  });
+  renderHome();
+  await waitFor(() => expect(screen.getByTestId("resume-hero")).toBeTruthy());
+  const wall = screen.getByTestId("photo-feed-hero");
+  const resume = screen.getByTestId("resume-hero");
+  expect(
+    wall.compareDocumentPosition(resume) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
 });
 
 it("只有一本在读时阅读区和发现区独立呈现", async () => {
