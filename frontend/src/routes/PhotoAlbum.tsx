@@ -5,8 +5,13 @@ import type { LibraryMediaItem, LibraryNodeSummary } from "../api/library";
 import { albumsApi } from "../api/albums";
 import { useAlbumMedia } from "../hooks/useLibrary";
 import { useFavorites } from "../hooks/useFavorites";
+import { usePicks } from "../hooks/usePicks";
 import { useAlbumActions } from "../hooks/useAlbumActions";
 import { useUIStore } from "../store/uiStore";
+import {
+  usePhotoSelectionStore,
+  type PhotoSelectionEntry,
+} from "../store/photoSelectionStore";
 import {
   usePhotoStore,
   WALL_DENSITY_HEIGHT,
@@ -15,6 +20,8 @@ import {
 } from "../store/photoStore";
 import PhotoWall from "../components/wall/PhotoWall";
 import PhotoViewer from "../components/wall/PhotoViewer";
+import PhotoCompare, { type CompareItem } from "../components/wall/PhotoCompare";
+import PhotoSelectionBar from "../components/wall/PhotoSelectionBar";
 import ContextMenu, { type AnyMenuItem } from "../components/album/ContextMenu";
 import PropertiesDialog from "../components/common/PropertiesDialog";
 import Popover, {
@@ -23,6 +30,7 @@ import Popover, {
 } from "../components/common/Popover";
 import {
   ArrowUpRightIcon,
+  CheckIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   ImageIcon,
@@ -31,7 +39,9 @@ import {
   GridIcon,
   InfoIcon,
   MoreHorizontalIcon,
+  SelectIcon,
   StarIcon,
+  UncheckIcon,
 } from "../components/common/Icon";
 import { fileManagerErrorMessage } from "../utils/fileManager";
 import { useSafeBack } from "../utils/navigation";
@@ -119,6 +129,37 @@ export default function PhotoAlbum({ album }: Props) {
   } | null>(null);
   const [propertiesFileId, setPropertiesFileId] = useState<string | null>(null);
 
+  // 精选：照片级的标记，与相册级收藏是两份数据。
+  const {
+    isPicked,
+    mergeServerFlags,
+    toggle: togglePickState,
+    add: addPicks,
+    remove: removePicks,
+  } = usePicks();
+  // 并排对比：先放一张进「待对比」，再对另一张按 C 就并排打开。
+  const [comparePin, setComparePin] = useState<CompareItem | null>(null);
+  const [comparePair, setComparePair] = useState<
+    [CompareItem, CompareItem] | null
+  >(null);
+
+  // 多选：作用域是这一本相册，换一本相册选择就清空。
+  const selectionScope = `album:${album.id}`;
+  const selection = usePhotoSelectionStore((s) => s.entries);
+  const selectionActive = usePhotoSelectionStore((s) => s.active);
+  const selectionBusy = usePhotoSelectionStore((s) => s.busy);
+  useEffect(() => {
+    usePhotoSelectionStore.getState().ensureScope(selectionScope);
+  }, [selectionScope]);
+  const selectedEntries = useMemo(
+    () => Object.values(selection),
+    [selection],
+  );
+  const selectedPickedCount = useMemo(
+    () => selectedEntries.filter((entry) => isPicked(entry.id)).length,
+    [isPicked, selectedEntries],
+  );
+
   const title = album.virtual
     ? album.location || album.displayName || album.name
     : album.displayName || album.name;
@@ -196,6 +237,123 @@ export default function PhotoAlbum({ album }: Props) {
       )
       .catch(() => pushToast({ kind: "error", message: "操作失败" }));
   }, [album.id, isFavorite, pushToast, toggleFav]);
+
+  // 服务端在媒体项上标了精选：集合还没回来时先把这些并进去，
+  // 免得照片先画出来、精选标记过一会儿才补上。
+  useEffect(() => {
+    mergeServerFlags(mediaItems);
+  }, [mediaItems, mergeServerFlags]);
+
+  const togglePick = useCallback(
+    (item: LibraryMediaItem) => {
+      void togglePickState(item.id).catch(() =>
+        pushToast({ kind: "error", message: "精选操作失败" }),
+      );
+    },
+    [pushToast, togglePickState],
+  );
+
+  const toSelectionEntry = useCallback(
+    (item: LibraryMediaItem): PhotoSelectionEntry => ({
+      id: item.id,
+      name: item.name,
+      albumId: album.id,
+      albumName: title,
+      kind: item.kind,
+      version: item.version,
+      width: item.width,
+      height: item.height,
+    }),
+    [album.id, title],
+  );
+
+  const toggleSelect = useCallback(
+    (item: LibraryMediaItem) => {
+      const state = usePhotoSelectionStore.getState();
+      if (state.busy) return;
+      // 返回 false 有两种原因：已经在上限上，或者正忙。
+      // 只有前者值得提示，后者不该打扰用户。
+      if (!state.toggle(toSelectionEntry(item)) && !state.entries[item.id]) {
+        pushToast({ kind: "info", message: "最多选择 2,000 张，请减少范围" });
+      }
+    },
+    [pushToast, toSelectionEntry],
+  );
+
+  // 读订阅到的选择集合而不是 store 的当前值：勾选变化时墙要重画。
+  const isSelected = useCallback(
+    (id: string) => Boolean(selection[id]),
+    [selection],
+  );
+
+  const addSelectedToPicks = useCallback(() => {
+    const ids = Object.values(usePhotoSelectionStore.getState().entries).map(
+      (entry) => entry.id,
+    );
+    if (ids.length === 0) return;
+    void addPicks(ids)
+      .then(() =>
+        pushToast({ kind: "success", message: `已把 ${ids.length} 张加入精选` }),
+      )
+      .catch(() => pushToast({ kind: "error", message: "加入精选失败" }));
+  }, [addPicks, pushToast]);
+
+  const removeSelectedFromPicks = useCallback(() => {
+    const ids = Object.values(usePhotoSelectionStore.getState().entries).map(
+      (entry) => entry.id,
+    );
+    if (ids.length === 0) return;
+    void removePicks(ids)
+      .then(() =>
+        pushToast({ kind: "success", message: `已把 ${ids.length} 张移出精选` }),
+      )
+      .catch(() => pushToast({ kind: "error", message: "移出精选失败" }));
+  }, [pushToast, removePicks]);
+
+  const compareSelected = useCallback(() => {
+    const entries = Object.values(usePhotoSelectionStore.getState().entries);
+    if (entries.length !== 2) return;
+    const [left, right] = entries;
+    setComparePair([
+      {
+        id: left.id,
+        name: left.name,
+        version: left.version,
+        width: left.width,
+        height: left.height,
+        albumName: left.albumName,
+      },
+      {
+        id: right.id,
+        name: right.name,
+        version: right.version,
+        width: right.width,
+        height: right.height,
+        albumName: right.albumName,
+      },
+    ]);
+  }, []);
+
+  const toggleComparePin = useCallback(
+    (item: LibraryMediaItem) => {
+      const current: CompareItem = {
+        id: item.id,
+        name: item.name,
+        version: item.version,
+        width: item.width,
+        height: item.height,
+        albumName: title,
+      };
+      setComparePin((prev) => {
+        if (prev && prev.id !== current.id) {
+          setComparePair([prev, current]);
+          return null;
+        }
+        return prev ? null : current;
+      });
+    },
+    [title],
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -291,8 +449,8 @@ export default function PhotoAlbum({ album }: Props) {
               </div>
             </div>
 
-            {/* 右侧操作收成一组：密度切换、收藏、更多。
-                组内用 hairline 分隔，读起来是一个工具条而不是三个孤立按钮。
+            {/* 右侧操作收成一组：多选、密度切换、收藏、更多。
+                组内用 hairline 分隔，读起来是一个工具条而不是几个孤立按钮。
 
                 收藏与「更多」在窄屏也留着：窄屏上右键菜单用不了，
                 没有这一组，这一页就再也点不到「收藏」「复制链接」
@@ -327,6 +485,33 @@ export default function PhotoAlbum({ album }: Props) {
                   ))}
                 </div>
               </div>
+
+              {/* 多选：批量加入精选、并排对比都从这里进。
+                  它必须在窄屏也在 —— 触摸设备没有右键菜单，
+                  批量挑选只能靠这个按钮。
+
+                  放在密度控件之后：密度是「怎么看」，多选与收藏是
+                  「对这一本做什么」，两组不是一件事。 */}
+              <button
+                type="button"
+                onClick={() => {
+                  // 同一个按钮进出多选：再按一次就退出，
+                  // 不必另找一个「退出」的入口。
+                  const state = usePhotoSelectionStore.getState();
+                  if (state.active) state.clear();
+                  else state.start();
+                }}
+                className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus ${
+                  selectionActive
+                    ? "bg-brand/15 text-brand"
+                    : "text-fg-muted hover:bg-bg-subtle hover:text-fg"
+                }`}
+                title={selectionActive ? "退出选择" : "选择照片"}
+                aria-label={selectionActive ? "退出选择" : "选择照片"}
+                aria-pressed={selectionActive}
+              >
+                <SelectIcon size={15} />
+              </button>
 
               <button
                 type="button"
@@ -395,6 +580,11 @@ export default function PhotoAlbum({ album }: Props) {
             isLoadingMore={mediaQuery.isFetchingNextPage}
             onLoadMore={loadMore}
             onOpen={onOpen}
+            selecting={selectionActive}
+            isSelected={isSelected}
+            onToggleSelect={toggleSelect}
+            isPicked={isPicked}
+            onTogglePick={togglePick}
             onContextMenu={(item, event) => {
               event.preventDefault();
               event.currentTarget.focus({ preventScroll: true });
@@ -403,6 +593,18 @@ export default function PhotoAlbum({ album }: Props) {
           />
         )}
       </div>
+
+      {selectionActive && (
+        <PhotoSelectionBar
+          selected={selectedEntries}
+          pickedCount={selectedPickedCount}
+          onAddPicks={addSelectedToPicks}
+          onRemovePicks={removeSelectedFromPicks}
+          onCompare={compareSelected}
+          onExit={() => usePhotoSelectionStore.getState().clear()}
+          busy={selectionBusy}
+        />
+      )}
 
       {contextMenu && (
         <ContextMenu
@@ -413,6 +615,17 @@ export default function PhotoAlbum({ album }: Props) {
               id: "open",
               label: "查看大图",
               icon: <GridIcon size={12} />,
+            },
+            {
+              id: "pick",
+              label: isPicked(contextMenu.item.id)
+                ? "移出精选"
+                : "加入精选",
+              icon: isPicked(contextMenu.item.id) ? (
+                <UncheckIcon size={12} />
+              ) : (
+                <CheckIcon size={12} />
+              ),
             },
             {
               id: "copy",
@@ -443,6 +656,10 @@ export default function PhotoAlbum({ album }: Props) {
             if (id === "open") {
               const index = mediaItems.findIndex((it) => it.id === item.id);
               if (index >= 0) onOpen(item, index);
+              return;
+            }
+            if (id === "pick") {
+              togglePick(item);
               return;
             }
             if (id === "cover") {
@@ -478,12 +695,39 @@ export default function PhotoAlbum({ album }: Props) {
           items={mediaItems}
           index={viewerIndex}
           albumName={title}
+          totalCount={total}
           onIndexChange={(index) => setViewerIndex(index)}
           onClose={() => setViewerIndex(null)}
           isFavorite={isFavorite}
           onToggleFavorite={toggleFavorite}
           onSetCover={() => void setCover()}
           hasCustomCover={album.hasCustomCover}
+          isPicked={isPicked(mediaItems[viewerIndex]?.id ?? "")}
+          onTogglePick={() => {
+            const item = mediaItems[viewerIndex];
+            if (item) togglePick(item);
+          }}
+          comparePinned={comparePin?.id === mediaItems[viewerIndex]?.id}
+          compareOpen={comparePair !== null}
+          onToggleCompare={() => {
+            const item = mediaItems[viewerIndex];
+            if (item) toggleComparePin(item);
+          }}
+        />
+      )}
+
+      {comparePair && (
+        <PhotoCompare
+          left={comparePair[0]}
+          right={comparePair[1]}
+          leftPicked={isPicked(comparePair[0].id)}
+          rightPicked={isPicked(comparePair[1].id)}
+          onClose={() => setComparePair(null)}
+          onSwap={() =>
+            setComparePair((prev) =>
+              prev ? [prev[1], prev[0]] : prev,
+            )
+          }
         />
       )}
     </div>

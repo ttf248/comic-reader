@@ -140,6 +140,10 @@ export interface PhotoCopy extends WorkbenchCopy {
   resumeLastSeenLabel: string;
   /** 「接着看」队列项的计数说明。 */
   resumeCountLabel: string;
+  /** 精选页的标题。 */
+  picksTitle: string;
+  /** 精选页的空态。 */
+  picksEmpty: string;
 }
 
 const PHOTO: PhotoCopy = {
@@ -180,6 +184,8 @@ const PHOTO: PhotoCopy = {
   resumeButton: "接着看",
   resumeLastSeenLabel: "上次浏览",
   resumeCountLabel: "本相册",
+  picksTitle: "精选照片",
+  picksEmpty: "还没有精选照片",
 };
 
 const COMIC: ComicCopy = {

@@ -162,9 +162,65 @@ it("点击图片把对应条目交给上层打开", () => {
   expect(onOpen).toHaveBeenCalledWith(items[0], 0);
 });
 
+it("精选角标与相册级收藏是两种标记：形状与文案都不同", () => {
+  const onTogglePick = vi.fn();
+  render(
+    <PhotoWall
+      items={items}
+      total={3}
+      targetHeight={200}
+      hasNextPage={false}
+      isLoadingMore={false}
+      onLoadMore={() => {}}
+      onOpen={() => {}}
+      isPicked={(id) => id === "f_1"}
+      onTogglePick={onTogglePick}
+    />,
+  );
+
+  // 精选用「圆圈 + 勾」，与收藏的星标不是同一件东西。
+  const picked = screen.getByRole("button", { name: "把 1.jpg 移出精选" });
+  expect(picked).toHaveAttribute("aria-pressed", "true");
+  const unpicked = screen.getByRole("button", { name: "把 2.jpg 加入精选" });
+  expect(unpicked).toHaveAttribute("aria-pressed", "false");
+
+  fireEvent.click(unpicked);
+  expect(onTogglePick).toHaveBeenCalledWith(items[1]);
+});
+
+it("多选模式下点击照片是勾选，不是打开大图", () => {
+  const onOpen = vi.fn();
+  const onToggleSelect = vi.fn();
+  render(
+    <PhotoWall
+      items={items}
+      total={3}
+      targetHeight={200}
+      hasNextPage={false}
+      isLoadingMore={false}
+      onLoadMore={() => {}}
+      onOpen={onOpen}
+      selecting
+      isSelected={(id) => id === "f_2"}
+      onToggleSelect={onToggleSelect}
+    />,
+  );
+
+  fireEvent.click(screen.getByRole("button", { name: "查看 1.jpg" }));
+  expect(onToggleSelect).toHaveBeenCalledWith(items[0]);
+  expect(onOpen).not.toHaveBeenCalled();
+
+  // 勾选框用方形：精选角标是圆的，两个标记不能长得一样。
+  const checkbox = screen.getByRole("checkbox", { name: "选择「2.jpg」" });
+  expect(checkbox).toHaveAttribute("aria-checked", "true");
+  // 多选时精选角标让位，不与勾选框叠在一起。
+  expect(
+    screen.queryByRole("button", { name: "把 1.jpg 加入精选" }),
+  ).not.toBeInTheDocument();
+});
+
 // 窄屏上照片墙必须排得下两张：手机相册是一屏两三张，不是一屏一张。
-describe("照片墙的目标行高", () => {
-  it("宽屏时用密度设定值，不受宽度限制", () => {
+describe("照片墙的目标行高", () => {  it("宽屏时用密度设定值，不受宽度限制", () => {
     expect(effectiveTargetHeight(210, 1120)).toBe(210);
   });
 

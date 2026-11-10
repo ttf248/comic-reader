@@ -23,9 +23,11 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   CloseIcon,
+  DoublePageIcon,
   FullscreenIcon,
   InfoIcon,
   MinusIcon,
+  PickIcon,
   PlusIcon,
   StarIcon,
 } from "../common/Icon";
@@ -37,12 +39,35 @@ interface Props {
   index: number;
   /** 相册名，用于标题与信息。 */
   albumName: string;
+  /**
+   * 相册里的媒体总数。
+   *
+   * 不传就用已加载的条目数 —— 但照片墙是分页加载的，只报已加载的
+   * 数量会与页头那个「403 张」对不上：同一本相册在两处报两个数，
+   * 用户只会以为其中一个是错的。
+   */
+  totalCount?: number;
   onIndexChange: (index: number) => void;
   onClose: () => void;
   isFavorite?: boolean;
   onToggleFavorite?: () => void;
   onSetCover?: () => void;
   hasCustomCover?: boolean;
+  /** 这张照片是否在精选里。 */
+  isPicked?: boolean;
+  /** 把这张照片加入 / 移出精选。 */
+  onTogglePick?: () => void;
+  /** 这张照片是否已经放进「待对比」的那一格。 */
+  comparePinned?: boolean;
+  /** 放进待对比 / 与待对比的那张并排。 */
+  onToggleCompare?: () => void;
+  /**
+   * 并排对比是否正开在这层之上。
+   *
+   * 两层浮层不抢同一个键：对比开着的时候，预览不响应翻页与 Esc ——
+   * 否则按一次 Esc 会把两层一起收掉。
+   */
+  compareOpen?: boolean;
 }
 
 const MIN_ZOOM = 1;
@@ -60,12 +85,18 @@ export default function PhotoViewer({
   items,
   index,
   albumName,
+  totalCount,
   onIndexChange,
   onClose,
   isFavorite,
   onToggleFavorite,
   onSetCover,
   hasCustomCover,
+  isPicked,
+  onTogglePick,
+  comparePinned,
+  onToggleCompare,
+  compareOpen = false,
 }: Props) {
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -233,6 +264,9 @@ export default function PhotoViewer({
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (shouldIgnoreShortcut(event)) return;
+      // 并排对比开在这层之上时，预览不接按键：Esc 归对比，
+      // 翻页也不该在看不见的预览里发生。
+      if (compareOpen) return;
       switch (event.key) {
         case "Escape":
           event.preventDefault();
@@ -292,13 +326,37 @@ export default function PhotoViewer({
             return next;
           });
           break;
+        case "p":
+        case "P":
+          // 精选这一张：照片级的事，与相册级的收藏不是一回事。
+          if (!onTogglePick) break;
+          event.preventDefault();
+          onTogglePick();
+          break;
+        case "c":
+        case "C":
+          if (!onToggleCompare) break;
+          event.preventDefault();
+          onToggleCompare();
+          break;
         default:
           break;
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [applyZoom, go, items.length, onClose, onIndexChange, showInfo, zoom]);
+  }, [
+    applyZoom,
+    compareOpen,
+    go,
+    items.length,
+    onClose,
+    onIndexChange,
+    onToggleCompare,
+    onTogglePick,
+    showInfo,
+    zoom,
+  ]);
 
   if (!current) return null;
 
@@ -390,19 +448,58 @@ export default function PhotoViewer({
             {albumName}
           </div>
           <div className="text-meta tabular-nums text-white/55">
-            第 {index + 1} 张 · 共 {items.length} 张
+            第 {index + 1} 张 · 共 {totalCount ?? items.length} 张
           </div>
         </div>
         <div className="flex items-center gap-1">
+          {/* 相册级收藏：这颗星说的是「这一本值得留着」。 */}
           {onToggleFavorite && (
             <button
               type="button"
               onClick={onToggleFavorite}
               className="inline-flex h-9 w-9 items-center justify-center rounded-md text-white/80 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
-              title={isFavorite ? "取消收藏" : "收藏"}
-              aria-label={isFavorite ? "取消收藏" : "收藏"}
+              title={isFavorite ? "取消收藏这本相册" : "收藏这本相册"}
+              aria-label={isFavorite ? "取消收藏这本相册" : "收藏这本相册"}
             >
               <StarIcon size={15} filled={isFavorite} />
+            </button>
+          )}
+          {/* 照片级精选：这个勾说的是「这一张值得留着」。
+              与上面的星标形状与颜色都不同，两件事不该看着像一件。 */}
+          {onTogglePick && (
+            <button
+              type="button"
+              onClick={onTogglePick}
+              aria-pressed={isPicked}
+              className={`inline-flex h-9 w-9 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
+                isPicked
+                  ? "bg-white/20 text-white"
+                  : "text-white/80 hover:bg-white/10 hover:text-white"
+              }`}
+              title={isPicked ? "移出精选 (P)" : "加入精选 (P)"}
+              aria-label={isPicked ? "把这张移出精选" : "把这张加入精选"}
+            >
+              <PickIcon size={16} />
+            </button>
+          )}
+          {onToggleCompare && (
+            <button
+              type="button"
+              onClick={onToggleCompare}
+              aria-pressed={comparePinned}
+              className={`inline-flex h-9 w-9 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 ${
+                comparePinned
+                  ? "bg-white/20 text-white"
+                  : "text-white/80 hover:bg-white/10 hover:text-white"
+              }`}
+              title={
+                comparePinned
+                  ? "已放进对比，换一张按 C 即可并排"
+                  : "放进对比 (C)"
+              }
+              aria-label="放进并排对比"
+            >
+              <DoublePageIcon size={15} />
             </button>
           )}
           {onSetCover && (

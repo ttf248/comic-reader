@@ -50,6 +50,16 @@ export function favoritesRoute(mode: AppMode): string {
 }
 
 /**
+ * 精选照片页。
+ *
+ * 精选只属于照片工作台：它是照片级的挑选，漫画那边有阅读进度与
+ * 已读状态，不需要另一套「这一张值得留着」。
+ */
+export function picksRoute(): string {
+  return `${MODE_PREFIX.photo}/picks`;
+}
+
+/**
  * 未读页只在漫画工作台存在。
  *
  * 它没有模式参数：照片侧根本没有这个页面，路由表里也不注册。

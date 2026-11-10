@@ -5,6 +5,7 @@ import {
   HomeIcon,
   ClockIcon,
   StarIcon,
+  PickIcon,
   SettingsIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -21,7 +22,7 @@ import { useHistoryCards } from "../../hooks/useHistory";
 import { useAppMode } from "../../hooks/useAppMode";
 import { useMediaQuery, WIDE_LAYOUT_QUERY } from "../../hooks/useMediaQuery";
 import { libraryApi } from "../../api/library";
-import { albumRoute, favoritesRoute, homeRoute, recentsRoute, unreadRoute } from "../../utils/path";
+import { albumRoute, favoritesRoute, homeRoute, picksRoute, recentsRoute, unreadRoute } from "../../utils/path";
 import RenditionImage from "../common/RenditionImage";
 import { nodeSummaryToCard } from "../../utils/libraryCard";
 import type { CardData } from "../album/AlbumGrid";
@@ -58,6 +59,7 @@ const PHOTO_GROUP: NavEntry[] = [
   { to: homeRoute("photo"), label: "照片库", Icon: HomeIcon },
   { to: recentsRoute("photo"), label: "最近浏览", Icon: ClockIcon },
   { to: favoritesRoute("photo"), label: "收藏照片", Icon: StarIcon },
+  { to: picksRoute(), label: "精选照片", Icon: PickIcon },
 ];
 
 const COMIC_GROUP: NavEntry[] = [

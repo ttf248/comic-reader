@@ -15,6 +15,7 @@ import type { AppMode } from "./api/library";
 const Home = lazy(() => import("./routes/Home"));
 const Recents = lazy(() => import("./routes/Recents"));
 const Favorites = lazy(() => import("./routes/Favorites"));
+const Picks = lazy(() => import("./routes/Picks"));
 const Unread = lazy(() => import("./routes/Unread"));
 const Album = lazy(() => import("./routes/Album"));
 const Tag = lazy(() => import("./routes/Tag"));
@@ -73,6 +74,8 @@ export default function App() {
             )}
             {/* 未读只属于漫画工作台：照片侧没有这个页面，路由表里也不注册。 */}
             <Route path="/comic/unread" element={lazyPage(Unread)} />
+            {/* 精选只属于照片工作台：它是照片级的挑选，与漫画的阅读进度无关。 */}
+            <Route path="/photo/picks" element={lazyPage(Picks)} />
             <Route path="/settings" element={lazyPage(Settings)} />
           </Route>
           {/* 漫画阅读器：/comic/read/<album id>。它不在 AppShell 下，

@@ -421,6 +421,20 @@ export const SHORTCUTS: Shortcut[] = [
     group: "photo",
   },
   {
+    id: "photoPick",
+    label: "P",
+    description: "精选 / 取消精选这张照片",
+    combo: "p",
+    group: "photo",
+  },
+  {
+    id: "photoCompare",
+    label: "C",
+    description: "放进并排对比 / 与待对比的那张并排",
+    combo: "c",
+    group: "photo",
+  },
+  {
     id: "photoClose",
     label: "Esc",
     description: "关闭预览，回到照片墙",
@@ -446,6 +460,19 @@ export function shouldIgnoreShortcut(event: KeyboardEvent): boolean {
     target.closest(
       'button, a[href], summary, [role="button"], [role="link"]',
     ) !== null
+  );
+}
+
+/**
+ * 页面上是否开着模态浮层。
+ *
+ * 浮层开着时 Esc 归浮层自己：大图预览、并排对比都各有一层，
+ * 两层浮层抢同一个键会出现「关掉对比，顺手把背后的多选也关了」。
+ */
+export function hasOpenModal(): boolean {
+  if (typeof document === "undefined") return false;
+  return (
+    document.querySelector('[role="dialog"][aria-modal="true"]') !== null
   );
 }
 

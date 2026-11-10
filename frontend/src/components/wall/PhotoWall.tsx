@@ -5,12 +5,12 @@ import { useElementWidth } from "../../hooks/useElementWidth";
 import { useMediaGridPagination } from "../../hooks/useMediaGridPagination";
 import ThumbImage from "../common/ThumbImage";
 import VideoCoverImage from "../common/VideoCoverImage";
-import { PlayFilledIcon } from "../common/Icon";
+import { CheckIcon, PickIcon, PlayFilledIcon, PlusIcon } from "../common/Icon";
 import { layoutJustified, tileRatio, type WallTile } from "./justifiedLayout";
 
-interface Props {
+interface Props<T extends LibraryMediaItem = LibraryMediaItem> {
   /** 已加载的媒体项，顺序与服务端媒体索引一致。 */
-  items: LibraryMediaItem[];
+  items: T[];
   /** 图片与视频合计的服务端总数。 */
   total: number;
   /** 目标行高（像素）。 */
@@ -18,11 +18,21 @@ interface Props {
   hasNextPage: boolean;
   isLoadingMore: boolean;
   onLoadMore: () => void;
-  onOpen: (item: LibraryMediaItem, index: number) => void;
+  onOpen: (item: T, index: number) => void;
   onContextMenu?: (
-    item: LibraryMediaItem,
+    item: T,
     event: MouseEvent<HTMLButtonElement>,
   ) => void;
+  /** 是否处于多选模式。多选时点击照片改为勾选，不再打开大图。 */
+  selecting?: boolean;
+  /** 某张照片是否已被勾选。 */
+  isSelected?: (id: string) => boolean;
+  /** 勾选 / 取消勾选一张照片。 */
+  onToggleSelect?: (item: T) => void;
+  /** 某张照片是否在精选里。 */
+  isPicked?: (id: string) => boolean;
+  /** 把一张照片加入 / 移出精选。 */
+  onTogglePick?: (item: T) => void;
 }
 
 const GAP = 10;
@@ -49,7 +59,7 @@ export function effectiveTargetHeight(
  * 与漫画阅读器彻底分开：这里没有页码、没有双页、没有阅读进度，
  * 只有「平铺浏览 → 点开大图」这一条路径。
  */
-export default function PhotoWall({
+export default function PhotoWall<T extends LibraryMediaItem = LibraryMediaItem>({
   items,
   total,
   targetHeight,
@@ -58,7 +68,12 @@ export default function PhotoWall({
   onLoadMore,
   onOpen,
   onContextMenu,
-}: Props) {
+  selecting = false,
+  isSelected,
+  onToggleSelect,
+  isPicked,
+  onTogglePick,
+}: Props<T>) {
   const { ref: containerRef, width } = useElementWidth<HTMLDivElement>();
 
   const rangeChanged = useMediaGridPagination({
@@ -147,6 +162,8 @@ export default function PhotoWall({
                   typeof item.height === "number" &&
                   item.width > 0 &&
                   item.height > 0;
+                const picked = isPicked?.(item.id) ?? false;
+                const selected = isSelected?.(item.id) ?? false;
                 return (
                   // 触发层是覆盖在封面之上的独立按钮：视频封面自带「重试」
                   // 按钮，把它包进 <button> 会产生嵌套按钮（无效 HTML，
@@ -179,7 +196,12 @@ export default function PhotoWall({
                     )}
                     <button
                       type="button"
-                      onClick={() => onOpen(item, index)}
+                      onClick={() => {
+                        // 多选模式下点击是勾选，不是打开：那一轮用户在做
+                        // 「挑出几张」，不是在「看这一张」。
+                        if (selecting && onToggleSelect) onToggleSelect(item);
+                        else onOpen(item, index);
+                      }}
                       onContextMenu={(event) => onContextMenu?.(item, event)}
                       className="absolute inset-0 z-0 block h-full w-full cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"
                       title={item.name}
@@ -196,6 +218,70 @@ export default function PhotoWall({
                         <PlayFilledIcon size={10} />
                         <span>视频</span>
                       </span>
+                    )}
+                    {/* 精选角标：黑底白勾，与相册级收藏的琥珀色星标
+                        形状与颜色都不同 —— 一个说「这张要留」，一个说
+                        「这本要留」，两件事不该看着像一件。
+
+                        未精选时不常驻：满墙都是圆点会把照片本身挤掉，
+                        悬停才浮出来加号。已精选的则一直挂着。
+
+                        按钮本身有 28px 见方，视觉上的圆点仍是 20px：
+                        角标再小也得够得着，触摸设备上 20px 的目标
+                        几乎点不中。 */}
+                    {onTogglePick && !selecting && (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onTogglePick(item);
+                        }}
+                        aria-pressed={picked}
+                        aria-label={picked ? `把 ${item.name} 移出精选` : `把 ${item.name} 加入精选`}
+                        title={picked ? "移出精选" : "加入精选"}
+                        className={`absolute left-0 top-0 z-10 grid h-7 w-7 place-items-center rounded-full transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${
+                          picked ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                        }`}
+                      >
+                        <span className="grid h-5 w-5 place-items-center rounded-full bg-black/70 text-white ring-1 ring-white/25 backdrop-blur">
+                          {picked ? (
+                            <PickIcon size={12} />
+                          ) : (
+                            <PlusIcon size={11} />
+                          )}
+                        </span>
+                      </button>
+                    )}
+                    {/* 多选时的勾选框占同一个角：那一轮用户在做批量操作，
+                        精选角标让位，避免两个圆点叠在一起。
+
+                        形状刻意用方框：精选角标是圆的（那是照片的常驻
+                        标记），勾选框是方的（那是这一轮的操作状态）。
+                        形状与配色都分开，用户不会把「这张在精选里」和
+                        「这张被勾上了」看成同一件事。 */}
+                    {selecting && onToggleSelect && (
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onToggleSelect(item);
+                        }}
+                        role="checkbox"
+                        aria-checked={selected}
+                        aria-label={`选择「${item.name}」`}
+                        title={selected ? "取消选择" : "选择"}
+                        className="absolute left-0 top-0 z-10 grid h-7 w-7 place-items-center rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                      >
+                        <span
+                          className={`grid h-5 w-5 place-items-center rounded-sm ring-1 transition-colors ${
+                            selected
+                              ? "bg-brand text-brand-contrast ring-brand"
+                              : "bg-black/25 text-white ring-white/60"
+                          }`}
+                        >
+                          {selected && <CheckIcon size={12} />}
+                        </span>
+                      </button>
                     )}
                     {/* 悬停信息层：文件名与像素尺寸。
                         照片墙是浏览页，光靠缩略图看不出「这是什么」；

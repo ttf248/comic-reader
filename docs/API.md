@@ -88,11 +88,11 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 三个端点均经过现有访问门禁与回环限制，响应 `Cache-Control: no-store`，错误不包含底层文件路径。
 
-- `GET /api/admin/state/export` 下载 v1 JSON：`version`、`exportedAt`、`favorites`、`history`、`preferences`、`activities`、`covers`。`preferences` 仅为服务端偏好字段；`covers` 每项为 `{albumId,itemId}`。不含配置、令牌、扫描缓存或浏览器本机阅读偏好。当前库无法解析的旧封面不导出，`unresolvedCovers` 报告数量，恢复目录后可再次导出。
+- `GET /api/admin/state/export` 下载 v1 JSON：`version`、`exportedAt`、`favorites`、`history`、`preferences`、`activities`、`covers`、`picks`。`preferences` 仅为服务端偏好字段；`covers` 每项为 `{albumId,itemId}`。不含配置、令牌、扫描缓存或浏览器本机阅读偏好。当前库无法解析的旧封面不导出，`unresolvedCovers` 报告数量，恢复目录后可再次导出。
 - `POST /api/admin/state/import/preview` 请求 `{backup}`，返回 `versions`、`libraryRevision`、`ready`、分类 `counts`、`missing` 与 `skippedCovers`。未知字段、损坏 JSON、非 v1 版本、非法或重复 ID 均返回 `400 invalid_state_backup`。设置页文件上限 32 MiB，接口含 JSON 包装上限 34 MiB，超限返回 `413 state_backup_too_large`。
-- `POST /api/admin/state/import` 请求 `{backup,categories,versions,libraryRevision}`；类别为 `favorites/history/preferences/activities/covers`。`versions` 来自预览，是当前状态摘要，不是授权凭据。相关状态变化返回 `409 state_changed`；库变化或恢复封面时库未就绪返回 `409 library_not_ready`，均需重新预览。
+- `POST /api/admin/state/import` 请求 `{backup,categories,versions,libraryRevision}`；类别为 `favorites/history/preferences/activities/covers/picks`。`versions` 来自预览，是当前状态摘要，不是授权凭据。相关状态变化返回 `409 state_changed`；库变化或恢复封面时库未就绪返回 `409 library_not_ready`，均需重新预览。
 
-覆盖前先在 `state/backups/` 保存同格式的恢复前 JSON 与仅服务端可见的完整内部封面映射；创建失败时不写入任何类别。收藏、历史和偏好共享文件，在一次锁内合并提交并保留未选类别；随后依次恢复活动与封面，每个文件原子落盘。响应 `{completed,failed?,pending,code?,skippedCovers}`，失败后停止后续类别。已经完成的写入不因其他类别失败回滚，客户端不得自动重放恢复请求。
+覆盖前先在 `state/backups/` 保存同格式的恢复前 JSON 与仅服务端可见的完整内部封面映射；创建失败时不写入任何类别。收藏、历史和偏好共享文件，在一次锁内合并提交并保留未选类别；随后依次恢复活动、封面与精选，每个文件原子落盘。精选单独一个类别：恢复精选不动收藏，恢复收藏也不动精选。响应 `{completed,failed?,pending,code?,skippedCovers}`，失败后停止后续类别。已经完成的写入不因其他类别失败回滚，客户端不得自动重放恢复请求。
 
 失效收藏、历史与活动保留供原有清理功能处理；封面须通过当前根、链接组件、相册成员与普通文件校验，失效项跳过。偏好中的 `maxRecent` 若会裁剪未选历史，或所选历史超过当前/所选偏好上限，返回 `400 history_limit_conflict`，需选择匹配的历史与偏好，不能静默丢失记录。首版适用于相同媒体根身份和相对路径，暂不提供目录迁移映射。
 
@@ -158,7 +158,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 - `GET /api/library/on-this-day?month=11&day=07&limit=20`：往年同一天（同月同日）拍过照的相册。`month` / `day` 缺省时取服务端当天；只认拍摄日期（`dateSource=filename`），没有拍摄时间的相册不在其中；今年的照片不算「往年」。同一本相册只出现一次，取它最近的一次命中。每项在相册摘要之外多给 `matchedDate`（命中的那一天，`YYYY-MM-DD`）—— 相册自己的 `date` 是「最有代表性的那一天」，未必等于命中的那一天。
 - `GET /api/library/:rootOrCollectionId/children?limit=60&cursor=...`：分页返回直属相册与子集合摘要。相册与集合都继承所属目录的属性，因此都参与 `kind` 过滤；属性不匹配的目录返回空页。集合摘要的 `albumCount` 恒为全部后代。
 - `GET /api/albums/random?scope=unread&count=3`：随机返回相册摘要列表；只在该属性的相册里抽取，`scope=unread` 时进一步只从未保存阅读活动的相册中抽取。`count` 缺省 1、范围 1–12，越界返回 `400 invalid_random_count`；抽出的相册互不相同，候选不足 `count` 时返回全部。没有匹配相册返回 `404 no_matching_album`。
-- `GET /api/albums/:albumId/media?limit=60&cursor=...`：按统一自然顺序返回媒体；`index` 是相册内总序号，`kindIndex` 是图片或视频各自序号。图片项另带 `width` / `height`（原始像素宽高，未知时为 0），照片墙据此按真实宽高比排布，不必在浏览器里逐张探测。媒体流与工作台模式无关。
+- `GET /api/albums/:albumId/media?limit=60&cursor=...`：按统一自然顺序返回媒体；`index` 是相册内总序号，`kindIndex` 是图片或视频各自序号。图片项另带 `width` / `height`（原始像素宽高，未知时为 0），照片墙据此按真实宽高比排布，不必在浏览器里逐张探测。媒体流与工作台模式无关。媒体项另带 `picked: true`，表示这张照片在精选里（精选是照片级的用户数据，见「精选」一节）。
 - 图片项还可能带 `undecodable: true`：这个文件解码不出来 —— 扩展名说是 JPEG，内容却不是，或者像素数据是截断的。判定有两个来源：读图片头就失败（当场判定），以及渲染时整张解码失败（补记，随文件版本走，文件被替换后判定作废）。需要服务端转换的格式（HEIC/HEIF/TIFF）不算坏文件，不带这个标记。界面据此显示「无法解码」。
 - `POST /api/library/nodes/query`：body 为 `{ "ids": ["a_...", "c_..."] }`，按输入顺序批量解析相册/集合摘要；单批最多 500 项，失效 ID 返回在 `missing` 中。直达链接、收藏与最近浏览都靠它解析摘要，**不受工作台模式影响**。
 - `GET /api/tags?limit=60&cursor=...`：分页返回标签摘要。每个标签的 `albumCount` 按 `kind` 指定的属性重算，该属性下没有相册的标签整个不出现。
@@ -364,6 +364,30 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 数值非法返回 `400 invalid_activity_identity` / `400 invalid_activity`；持久化不可用返回
 `500 activity_unavailable`。前端只把明确的 `activity_not_found` 当作新记录，其他错误
 不会开放自动写入，避免恢复失败时覆盖已有位置。
+
+## 精选（照片级）
+
+精选与相册级收藏是两份数据、两种语义：收藏标记「这一本值得留着」（相册、集合或智能标签），
+精选标记「这一张值得留着」（单个媒体文件）。两者互不覆盖，也不会互相清理 ——
+「清理失效收藏」不会动精选，移出精选也不会动收藏。精选单独存放在
+`<cacheDir>/state/picks.json`，上限 5000 条。
+
+精选只属于照片工作台：照片墙与精选页都是照片侧的界面，漫画那边有阅读进度与已读状态，
+不需要另一套「这一张值得留着」。
+
+- `GET /api/picks`：返回 `{ "ok": true, "picks": ["f_..."], "total": 3, "revision": 7 }`。
+  `picks` 是精选的文件 ID，最近加入的排在最前面；`revision` 在每次成功写入后递增。
+- `POST /api/picks/batch`：body 为 `{ "ids": ["f_..."], "action": "add" | "remove" }`，
+  响应 `{ "ok": true, "updated": 2, "total": 5, "revision": 8 }`。加入是幂等的，
+  移出对本来就不在精选里的条目没有影响；`updated` 是实际变化的条数。单批最多 1000 项，
+  标识不是合法文件 ID 时返回 `400 invalid_picks_batch`，超过上限返回 `400 pick_limit`。
+- `GET /api/picks/media?limit=60&cursor=...`：分页返回精选照片本身，跨相册。
+  每项是媒体项加上 `albumId` 与 `albumName`（它属于哪本相册），并带 `picked: true`。
+  文件被移出媒体库后它自然从这一页消失：精选说的是「库里的照片」，不是对磁盘路径的承诺。
+  漫画相册里的文件不进这一页。
+
+精选页的分页游标作用域里带精选自身的 `revision`：精选一变，旧的游标立即返回
+`400 invalid_cursor`，客户端从第一页重取。这样新加入的照片不会把已经翻过的页顶走一格。
 
 ## 缓存与系统操作
 

@@ -328,6 +328,40 @@ export const ShuffleIcon = (p: IconProps) => (
   </svg>
 )
 
+/** 交换：左右两支反向箭头 */
+export const ArrowsIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M4 9h13" />
+    <path d="m14 6 3 3-3 3" />
+    <path d="M20 15H7" />
+    <path d="m10 12-3 3 3 3" />
+  </svg>
+)
+
+/** 精选：圆圈里的勾。照片墙上的精选角标就是它。 */
+export const PickIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="m8.2 12.3 2.6 2.6 5-5.4" />
+  </svg>
+)
+
+/** 取消标记：圆圈加斜杠。精选角标是「圆圈 + 勾」，去掉它就是这个。 */
+export const UncheckIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="m6.5 6.5 11 11" />
+  </svg>
+)
+
+/** 多选：方框里一个小方块 */
+export const SelectIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <rect x="3.5" y="3.5" width="17" height="17" rx="2.5" />
+    <rect x="8" y="8" width="8" height="8" rx="1.5" fill="currentColor" stroke="none" />
+  </svg>
+)
+
 /** 未读 / 新内容:四角星 + 中心点,代表"新" */
 export const SparkleIcon = (p: IconProps) => (
   <svg {...base(p)}>

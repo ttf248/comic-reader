@@ -54,6 +54,101 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
+describe("大图预览的精选与对比", () => {
+  it("P 键切换这张照片的精选", () => {
+    const onTogglePick = vi.fn();
+    render(
+      <PhotoViewer
+        items={items}
+        index={0}
+        albumName="测试相册"
+        onIndexChange={vi.fn()}
+        onClose={vi.fn()}
+        isPicked={false}
+        onTogglePick={onTogglePick}
+      />,
+    );
+
+    fireEvent.keyDown(window, { key: "p" });
+    expect(onTogglePick).toHaveBeenCalledTimes(1);
+  });
+
+  it("C 键放进对比", () => {
+    const onToggleCompare = vi.fn();
+    render(
+      <PhotoViewer
+        items={items}
+        index={0}
+        albumName="测试相册"
+        onIndexChange={vi.fn()}
+        onClose={vi.fn()}
+        onToggleCompare={onToggleCompare}
+      />,
+    );
+
+    fireEvent.keyDown(window, { key: "c" });
+    expect(onToggleCompare).toHaveBeenCalledTimes(1);
+  });
+
+  it("并排对比开在上层时，预览不接按键：两层浮层不抢同一个键", () => {
+    const onClose = vi.fn();
+    const onIndexChange = vi.fn();
+    render(
+      <PhotoViewer
+        items={items}
+        index={0}
+        albumName="测试相册"
+        onIndexChange={onIndexChange}
+        onClose={onClose}
+        compareOpen
+      />,
+    );
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    expect(onClose).not.toHaveBeenCalled();
+    expect(onIndexChange).not.toHaveBeenCalled();
+  });
+
+  it("相册级收藏与照片级精选是两种标记，标题各说各的", () => {
+    render(
+      <PhotoViewer
+        items={items}
+        index={0}
+        albumName="测试相册"
+        onIndexChange={vi.fn()}
+        onClose={vi.fn()}
+        isFavorite
+        onToggleFavorite={vi.fn()}
+        isPicked
+        onTogglePick={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByRole("button", { name: "取消收藏这本相册" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "把这张移出精选" }),
+    ).toBeInTheDocument();
+  });
+
+  it("总数报相册里的总数，不报已加载的条目数", () => {
+    render(
+      <PhotoViewer
+        items={items}
+        index={0}
+        albumName="测试相册"
+        totalCount={403}
+        onIndexChange={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/共 403 张/)).toBeInTheDocument();
+  });
+});
+
 // 面板开着时 Esc 先收面板：两层浮层分得清，不必连按两次才能退出预览。
 describe("大图预览的 Esc", () => {
   it("信息面板开着时，Esc 只关面板，预览还在", async () => {
