@@ -110,6 +110,72 @@ func TestLibraryQueryCollectionTagAndValidation(t *testing.T) {
 	}
 }
 
+// 年份归组的代表节点（那些按年份命名的集合）在首页由年份索引讲，
+// 列表里不再重复摆一遍。
+func TestLibraryQueryExcludesYearTargetsOnlyInPlainBrowse(t *testing.T) {
+	f := newLibraryPageFixture(t)
+	snapshot := f.catalog.Acquire()
+	q := LibraryQuery{Kind: LibraryKindComic, View: "all", Sort: "name"}
+	base, err := PageLibraryQuery(snapshot, q, nil, "", 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if base.Total != 4 {
+		t.Fatalf("baseline total = %d, want 4", base.Total)
+	}
+	// 夹具里没有带年份的节点，排除不改变任何东西。
+	q.ExcludeYearTargets = true
+	page, err := PageLibraryQuery(snapshot, q, nil, "", 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Total != base.Total {
+		t.Fatalf("excluded total = %d, want %d", page.Total, base.Total)
+	}
+	// 搜索时必须找得到：排除只在没有别的条件时生效。
+	q.Query = "album"
+	found, err := PageLibraryQuery(snapshot, q, nil, "", 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if found.Total == 0 {
+		t.Fatalf("search with exclude found nothing: %+v", found)
+	}
+}
+
+// 带年份的节点：排除后列表里不再有它，年份分组仍在。
+func TestLibraryQueryExcludesYearTargets(t *testing.T) {
+	root := t.TempDir()
+	yearPath := filepath.Join(root, "2024年")
+	otherPath := filepath.Join(root, "其它")
+	mk := func(path, name string, images int) models.Album {
+		return models.Album{Type: "album", Path: path, Name: name, SourceRoot: root, ImageCount: images}
+	}
+	albums := []models.Album{mk(yearPath, "2024年", 3), mk(otherPath, "其它", 2)}
+	catalog := NewResourceCatalog()
+	catalog.SetContentKindPolicy(NewContentKindPolicy([]RootKind{{Path: root, Kind: models.ContentKindPhoto}}))
+	catalog.Publish(&models.ScanResult{Roots: []string{root}, Albums: albums, AlbumCount: 2}, []string{root})
+	snapshot := catalog.Acquire()
+
+	page, err := PageLibraryQuery(snapshot, LibraryQuery{Kind: LibraryKindPhoto, ExcludeYearTargets: true}, nil, "", 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Total != 1 {
+		t.Fatalf("total = %d, want 1", page.Total)
+	}
+	if page.Items[0].Node.Name != "其它" {
+		t.Fatalf("kept = %q", page.Items[0].Node.Name)
+	}
+	if len(page.Years) != 2 {
+		t.Fatalf("years = %+v", page.Years)
+	}
+	// 媒体总量跟着列表走，不报被去掉的那部分。
+	if page.ImageTotal != 2 {
+		t.Fatalf("imageTotal = %d, want 2", page.ImageTotal)
+	}
+}
+
 func TestLibraryQueryCachedPagesAreIndependent(t *testing.T) {
 	f := newLibraryPageFixture(t)
 	q := LibraryQuery{Kind: LibraryKindComic, Tag: "旅行"}

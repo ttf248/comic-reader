@@ -456,6 +456,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 - `kind=photo|comic` 必填；`parent` 指定根/集合，`tag` 指定标签，两者互斥，均省略时查询首页各根直属节点与智能标签（首页隐藏虚拟相册）。标签放查询参数，由框架解码一次，字面 `+`、`%xx` 由客户端编码保留。
 - `view=all|album|collection|smart`，默认 `all`；`q` 匹配标题和标签；`year=1900..2099|other` 按标题提取年份；`minImageCount` 非负且只约束相册。
 - `sort=name|count|added|recent|viewed` 默认 `name`，依次为自然名称、数量降序、业务日期降序、修改时间降序、相册访问时间降序。同值按名称及稳定 ID 排列。
+- `excludeYearTargets=1` 把按年份归组的代表节点从列表里去掉。首页的年份索引直接给照片墙看，那些集合不必在列表里再出现一次：同一批内容摆两处，用户只会以为看错了。只在顶层范围生效；一旦带搜索词或年份筛选，列表仍给出全部命中。
 - `limit` 沿用分页默认值与上限，`cursor` 是不透明游标，绑定全部查询条件、库 revision，以及 `viewed` 排序使用的历史快照。变更后返回现有 `invalid_cursor` 或 `stale_cursor`，客户端清空分页链重取首屏。非法筛选返回 `400 invalid_library_query`。
 - 响应 `{ok:true,page:{revision,items,total,nextCursor?,counts,scopeCounts,years,series,imageTotal,videoTotal,latestModified,completedCount}}`。`items` 是 `{kind:"album"|"collection",node:节点摘要}` 或 `{kind:"smart",tag:标签摘要}`；`counts` 在应用所有其他筛选但尚未应用 `view` 时计数；`scopeCounts`、`years`、`series` 和媒体总量来自未筛选的完整作用域，不随已加载页数变化。
 - `years` 每项包含年份、直属项数、图片/视频总量、代表入口与封面；`series` 包含作品 ID、名称、卷数与封面；`completedCount` 是漫画标签全部成员中的已读数。响应不携带本机绝对路径。

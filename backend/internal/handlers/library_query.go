@@ -28,7 +28,17 @@ func LibraryQueryHandler(catalog *services.ResourceCatalog, prefs *store.PrefsSt
 				return httputil.BadRequest(c, "invalid_library_query", "invalid minimum image count")
 			}
 		}
-		q := services.LibraryQuery{Kind: kind, Parent: c.Query("parent"), Tag: c.Query("tag"), View: c.Query("view"), Query: c.Query("q"), Year: c.Query("year"), MinImageCount: minimum, Sort: c.Query("sort")}
+		q := services.LibraryQuery{
+			Kind:               kind,
+			Parent:             c.Query("parent"),
+			Tag:                c.Query("tag"),
+			View:               c.Query("view"),
+			Query:              c.Query("q"),
+			Year:               c.Query("year"),
+			MinImageCount:      minimum,
+			Sort:               c.Query("sort"),
+			ExcludeYearTargets: c.Query("excludeYearTargets") == "1" || c.Query("excludeYearTargets") == "true",
+		}
 		if err := q.Normalize(); err != nil {
 			return httputil.BadRequest(c, "invalid_library_query", "invalid list query")
 		}

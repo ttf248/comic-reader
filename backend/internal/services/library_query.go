@@ -26,6 +26,12 @@ type LibraryQuery struct {
 	Year          string           `json:"year,omitempty"`
 	MinImageCount int              `json:"minImageCount"`
 	Sort          string           `json:"sort"`
+	// ExcludeYearTargets 把按年份归组的代表节点从列表里去掉。
+	//
+	// 首页的年份索引直接给照片墙看，那些集合不必在列表里再出现一次：
+	// 同一批内容摆两处，用户只会以为看错了。只有顶层范围生效 ——
+	// 集合页里的子项不该被年份分组抹掉，搜索时也要找得到它们。
+	ExcludeYearTargets bool `json:"excludeYearTargets,omitempty"`
 }
 
 var ErrInvalidLibraryQuery = errors.New("invalid library query")
@@ -185,6 +191,12 @@ func PageLibraryQuery(snapshot CatalogSnapshot, q LibraryQuery, history []models
 	for _, group := range years {
 		result.Years = append(result.Years, *group)
 	}
+	// 年份索引已经把那些集合讲清楚了，列表里不再重复摆一遍。
+	// 只在「没有别的条件」的浏览视图里这么做：一旦用户在搜索或按年份
+	// 筛选，列表就该老老实实给出全部命中。
+	if q.ExcludeYearTargets && q.Parent == "" && q.Tag == "" && q.Year == "" && q.Query == "" {
+		items, result.ImageTotal, result.VideoTotal = withoutYearTargets(items, result.ImageTotal, result.VideoTotal, years)
+	}
 	sort.Slice(result.Years, func(i, j int) bool {
 		a, b := result.Years[i].Year, result.Years[j].Year
 		return a != nil && (b == nil || *a > *b)
@@ -319,6 +331,39 @@ func sliceLibraryQuery(snapshot CatalogSnapshot, result LibraryQueryPage, scope,
 	}
 	result.Series = append([]LibraryQuerySeries{}, result.Series...)
 	return result, nil
+}
+
+// withoutYearTargets 去掉各年份分组的代表节点，并重算媒体总量。
+//
+// 「其他」那一桶不算年份：它的成员是普通相册与散图，留在列表里。
+// 去掉之后列表空了就把东西放回去 —— 空列表比重复更糟。
+func withoutYearTargets(items []LibraryQueryItem, imageTotal, videoTotal int, years map[string]*LibraryQueryYear) ([]LibraryQueryItem, int, int) {
+	targets := map[string]bool{}
+	for _, group := range years {
+		if group.Year == nil || group.Target.Node == nil {
+			continue
+		}
+		targets[group.Target.Node.ID] = true
+	}
+	if len(targets) == 0 {
+		return items, imageTotal, videoTotal
+	}
+	kept := make([]LibraryQueryItem, 0, len(items))
+	keptImages, keptVideos := 0, 0
+	for _, item := range items {
+		if item.Node != nil && targets[item.Node.ID] {
+			continue
+		}
+		kept = append(kept, item)
+		if item.Node != nil {
+			keptImages += item.Node.ImageCount
+			keptVideos += item.Node.VideoCount
+		}
+	}
+	if len(kept) == 0 {
+		return items, imageTotal, videoTotal
+	}
+	return kept, keptImages, keptVideos
 }
 
 func historyForSort(sort string, history []models.HistoryEntry) []models.HistoryEntry {
