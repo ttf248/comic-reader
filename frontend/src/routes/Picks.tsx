@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { picksApi, type PickItem } from "../api/picks";
 import { usePicks } from "../hooks/usePicks";
@@ -12,8 +13,10 @@ import PhotoWall from "../components/wall/PhotoWall";
 import PhotoViewer from "../components/wall/PhotoViewer";
 import PhotoCompare, { type CompareItem } from "../components/wall/PhotoCompare";
 import PhotoSelectionBar from "../components/wall/PhotoSelectionBar";
+import ContextMenu from "../components/album/ContextMenu";
 import EmptyState from "../components/common/EmptyState";
-import { PickIcon } from "../components/common/Icon";
+import { FolderIcon, GridIcon, PickIcon, UncheckIcon } from "../components/common/Icon";
+import { albumRoute } from "../utils/path";
 import { photoCopy } from "../utils/workbench";
 
 /**
@@ -28,6 +31,7 @@ import { photoCopy } from "../utils/workbench";
 export default function Picks() {
   const copy = photoCopy();
   const pushToast = useUIStore((s) => s.pushToast);
+  const navigate = useNavigate();
   const density = usePhotoStore((s) => s.density);
   const picks = usePicks();
 
@@ -36,6 +40,12 @@ export default function Picks() {
   const [comparePair, setComparePair] = useState<
     [CompareItem, CompareItem] | null
   >(null);
+  // 右键菜单：精选页的照片来自不同相册，用户常要跳回原来那本看看上下文。
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    item: PickItem;
+  } | null>(null);
 
   const query = useInfiniteQuery({
     queryKey: ["picks", "media"],
@@ -143,6 +153,8 @@ export default function Picks() {
   }, []);
 
   const toggleComparePin = useCallback((item: PickItem) => {
+    // 视频没有可并排的画面：对比只对图片开放。
+    if (item.kind === "video") return;
     const current: CompareItem = {
       id: item.id,
       name: item.name,
@@ -250,9 +262,62 @@ export default function Picks() {
                 .toggle(item.id)
                 .catch(() => pushToast({ kind: "error", message: "精选操作失败" }));
             }}
+            onContextMenu={(item, event) => {
+              event.preventDefault();
+              event.currentTarget.focus({ preventScroll: true });
+              setContextMenu({ x: event.clientX, y: event.clientY, item });
+            }}
           />
         )}
       </div>
+
+      {contextMenu && (
+        <ContextMenu
+          x={contextMenu.x}
+          y={contextMenu.y}
+          items={[
+            {
+              id: "open",
+              label: "查看大图",
+              icon: <GridIcon size={12} />,
+            },
+            {
+              id: "album",
+              label: "在相册中打开",
+              icon: <FolderIcon size={12} />,
+            },
+            {
+              id: "unpick",
+              label: "移出精选",
+              icon: <UncheckIcon size={12} />,
+            },
+          ]}
+          onSelect={(id) => {
+            const item = contextMenu.item;
+            setContextMenu(null);
+            if (id === "open") {
+              const index = items.findIndex((it) => it.id === item.id);
+              if (index >= 0) setViewerIndex(index);
+              return;
+            }
+            if (id === "album") {
+              navigate(albumRoute("photo", item.albumId));
+              return;
+            }
+            if (id === "unpick") {
+              void picks
+                .remove([item.id])
+                .then(() =>
+                  pushToast({ kind: "success", message: "已移出精选" }),
+                )
+                .catch(() =>
+                  pushToast({ kind: "error", message: "移出精选失败" }),
+                );
+            }
+          }}
+          onClose={() => setContextMenu(null)}
+        />
+      )}
 
       {selectionActive && (
         <PhotoSelectionBar

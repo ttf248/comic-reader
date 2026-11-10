@@ -336,6 +336,8 @@ export default function PhotoAlbum({ album }: Props) {
 
   const toggleComparePin = useCallback(
     (item: LibraryMediaItem) => {
+      // 视频没有可并排的画面：对比只对图片开放。
+      if (item.kind === "video") return;
       const current: CompareItem = {
         id: item.id,
         name: item.name,

@@ -765,6 +765,24 @@
     margin-top: 0;
   }
 
+  /* --- 照片墙的精选角标 ---
+     悬停才浮出来：满墙常驻圆点会把照片本身挤掉。
+     但触摸设备没有悬停 —— Tailwind 的 hover 变体只在
+     (hover: hover) and (pointer: fine) 下生效，手机上它根本不触发，
+     角标于是永远藏着，「加入精选」在手机上就没了入口。
+     因此这个显隐自己管：触摸设备上常驻。 */
+  .wall-pick-reveal {
+    opacity: 1;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .wall-pick-reveal {
+      opacity: 0;
+    }
+    .group:hover .wall-pick-reveal {
+      opacity: 1;
+    }
+  }
+
   /* --- 相册条：照片墙顶部的相册身份条 ---
      不带封面（封面就是墙本身），但保留标题的字面量级，
      让相册页和集合页看起来是同一套语言。 */

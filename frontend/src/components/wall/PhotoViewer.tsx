@@ -335,7 +335,8 @@ export default function PhotoViewer({
           break;
         case "c":
         case "C":
-          if (!onToggleCompare) break;
+          // 视频没有可并排的画面：对比只对图片开放。
+          if (!onToggleCompare || isVideo) break;
           event.preventDefault();
           onToggleCompare();
           break;
@@ -349,6 +350,7 @@ export default function PhotoViewer({
     applyZoom,
     compareOpen,
     go,
+    isVideo,
     items.length,
     onClose,
     onIndexChange,
@@ -482,7 +484,7 @@ export default function PhotoViewer({
               <PickIcon size={16} />
             </button>
           )}
-          {onToggleCompare && (
+          {onToggleCompare && !isVideo && (
             <button
               type="button"
               onClick={onToggleCompare}
