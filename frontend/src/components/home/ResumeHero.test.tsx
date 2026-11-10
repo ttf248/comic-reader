@@ -50,7 +50,7 @@ describe("照片工作台的「接着看」专区", () => {
     expect(screen.queryByTestId("resume-hero")).toBeNull();
   });
 
-  it("其余最近看过的相册以紧凑行列出", () => {
+  it("其余最近看过的相册排成一排小方照", () => {
     renderHero(
       <ResumeHero
         cards={[
@@ -61,6 +61,26 @@ describe("照片工作台的「接着看」专区", () => {
     );
     expect(screen.getByText("海边")).toBeInTheDocument();
     expect(screen.getByText("2 本相册")).toBeInTheDocument();
+    // 队列是展陈墙上的一排次级展品，不是一列三行 —— 一列三行只占住
+    // 面板的右上角，中间与右下都空着。
+    expect(document.querySelector(".resume-shelf")).toBeTruthy();
+    expect(document.querySelector(".resume-queue")).toBeNull();
+  });
+
+  it("还有几本最近看过的出口写在标题行，不飘在面板底下", () => {
+    renderHero(
+      <ResumeHero
+        cards={[
+          card(),
+          card({ id: "a_2", title: "海边", to: "/photo/albums/a_2" }),
+          card({ id: "a_3", title: "山里", to: "/photo/albums/a_3" }),
+          card({ id: "a_4", title: "公司", to: "/photo/albums/a_4" }),
+          card({ id: "a_5", title: "路上", to: "/photo/albums/a_5" }),
+        ]}
+      />,
+    );
+    const link = screen.getByRole("link", { name: /还有 1 本最近看过/ });
+    expect(link).toHaveAttribute("href", "/photo/recents");
   });
 
   it("不出现漫画侧的进度措辞", () => {

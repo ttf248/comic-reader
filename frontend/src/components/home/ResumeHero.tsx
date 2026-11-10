@@ -37,6 +37,9 @@ export default function ResumeHero({ cards }: Props) {
       data-testid="resume-hero"
       aria-labelledby="resume-heading"
     >
+      {/* 标题行右侧是「还有几本」的出口：它说的是这一段的总量，
+          放在这里而不是面板底部 —— 底部左侧空着、右侧飘着一行字，
+          读起来像漏排。 */}
       <div className="flex items-center gap-3 flex-wrap">
         <h2 id="resume-heading" className="section-title">
           {copy.resumeTitle}
@@ -44,10 +47,19 @@ export default function ResumeHero({ cards }: Props) {
         <span className="hero-panel__muted tabular-nums">
           {cards.length} {copy.resumeCountLabel}
         </span>
+        {cards.length > 4 && (
+          <Link
+            to={recentsRoute("photo")}
+            className="hero-panel__muted ml-auto inline-flex items-center gap-1.5 min-h-7 hover:text-fg transition-colors"
+          >
+            还有 {cards.length - 4} 本最近看过 <ArrowRightLineIcon size={12} />
+          </Link>
+        )}
       </div>
-      {/* 主角与队列并排：这一块独占一行（照片侧首屏只剩它一块），
-          主角右边空着一大片时，队列就该挪过来填上，而不是掉到下一行
-          把面板拉高。 */}
+      {/* 主角与最近看过的其余相册并排：主角右边空着一大片时，
+          队列就该挪过来填上，而不是掉到下一行把面板拉高。
+          队列排成一排小方照（展陈墙上的次级展品），而不是一列
+          三行 —— 一列三行只占住面板的右上角，中间与右下都空着。 */}
       <div className="resume-body">
         <div className="hero-panel__feature">
           <Link
@@ -67,7 +79,11 @@ export default function ResumeHero({ cards }: Props) {
               {featured.lastSeenAt && (
                 <>
                   {" · "}
-                  {copy.resumeLastSeenLabel} {timeAgo(featured.lastSeenAt)}
+                  {/* 「上次浏览 刚刚」整体不断行：窄屏上它会断在
+                      「览」与「刚」之间，读起来像两个词。 */}
+                  <span className="whitespace-nowrap">
+                    {copy.resumeLastSeenLabel} {timeAgo(featured.lastSeenAt)}
+                  </span>
                 </>
               )}
             </p>
@@ -79,51 +95,46 @@ export default function ResumeHero({ cards }: Props) {
           </div>
         </div>
         {rest.length > 0 && (
-          <div className="resume-queue mini-queue">
+          <div className="resume-shelf">
             {rest.map((card) => (
-              <ResumeQueueItem key={card.id} card={card} />
+              <ResumeShelfItem key={card.id} card={card} />
             ))}
           </div>
         )}
       </div>
-      {cards.length > 4 && (
-        <Link
-          to={recentsRoute("photo")}
-          className="hero-panel__muted inline-flex items-center gap-2 self-end mt-4 min-h-7"
-        >
-          还有 {cards.length - 4} 本最近看过 <ArrowRightLineIcon size={12} />
-        </Link>
-      )}
     </section>
   );
 }
 
-function ResumeQueueItem({ card }: { card: CardData }) {
+/**
+ * 队列里的一本相册：一张小方照加两行说明。
+ *
+ * 照片侧展示的是一本相册，缩略图不能小成邮票 —— 48px 的方照读起来
+ * 像一排图标，不像「看过的相册」。
+ */
+function ResumeShelfItem({ card }: { card: CardData }) {
   const copy = photoCopy();
+  const label = card.displayTitle ?? card.title;
   return (
     <Link
       to={card.to}
-      className="mini-queue__item"
-      aria-label={`${copy.resumeButton}「${card.displayTitle ?? card.title}」`}
+      className="resume-shelf__item group"
+      aria-label={`${copy.resumeButton}「${label}」`}
     >
-      {/* 队列项也是一张小照片：展陈墙上不摆邮票大小的缩略图，
-          那读起来像一排图标，不像一排看过的相册。 */}
-      <span className="mini-queue__cover">
+      <span className="resume-shelf__cover">
         <Cover card={card} />
       </span>
-      <span className="min-w-0">
-        <span className="block truncate text-body font-medium">
-          {card.displayTitle ?? card.title}
-        </span>
-        <span className="hero-panel__muted block mt-1 tabular-nums truncate">
-          {mediaCountCompact(card)}
-          {card.lastSeenAt && (
-            <>
-              {" · "}
-              {timeAgo(card.lastSeenAt)}
-            </>
-          )}
-        </span>
+      <span className="mt-2 block truncate text-body font-medium text-fg transition-colors group-hover:text-brand-ink">
+        {label}
+      </span>
+      <span className="hero-panel__muted mt-0.5 block truncate text-meta tabular-nums">
+        {mediaCountCompact(card)}
+        {card.lastSeenAt && (
+          <>
+            {" · "}
+            <span className="whitespace-nowrap">{timeAgo(card.lastSeenAt)}</span>
+          </>
+        )}
       </span>
     </Link>
   );

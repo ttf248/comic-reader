@@ -98,47 +98,11 @@
   .home-overview > :only-child {
     grid-column: 1 / -1;
   }
-  /* 照片侧首屏的两栏骨架（只在分两栏的断点生效）。
-     宽屏：第一行「接着看」+「随手看看」，第二行「最近加入」通栏 ——
-     四张方照横贯一行更像一面展陈墙，也不用把窄栏挤成两行。
-     窄屏只有一栏，按文档顺序单列排下，与宽屏的阅读顺序一致。
-
-     因此文档顺序固定为「接着看 → 随手看看 → 最近加入」；没有浏览
-     记录时换成「最近加入 → 随手看看」，同样先宽后窄。宽屏与窄屏
-     的阅读顺序必须一致，否则同一份内容在不同宽度下读法不同。 */
-  @media (min-width: 1280px) {
-    /* 照片侧的两块首屏面板等宽。
-       漫画侧「继续阅读」要放下进度轨道与队列，给宽一点；照片侧的
-       「接着看」只有一本主角 + 三本队列，1.5 倍宽会让主角那一行右侧
-       空出一大片，队列也拉不满，整块读起来是半张空纸。
-
-       这条规则必须待在这个断点里：单列规则（max-width: 1279px）
-       的特异性更低，放在外面会把窄屏压成两栏 —— 窄屏上两块面板
-       并排，标题会被挤成一列竖排的字。 */
-    :root[data-mode="photo"] .home-overview {
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    }
-    .home-overview--with-resume > .home-resume {
-      grid-column: 1;
-      grid-row: 1;
-    }
-    .home-overview--with-resume > .home-serendipity {
-      grid-column: 2;
-      grid-row: 1;
-    }
-    .home-overview--with-resume > .home-recent {
-      grid-column: 1 / -1;
-      grid-row: 2;
-    }
-    .home-overview:not(.home-overview--with-resume) > .home-recent {
-      grid-column: 1;
-      grid-row: 1;
-    }
-    .home-overview:not(.home-overview--with-resume) > .home-serendipity {
-      grid-column: 2;
-      grid-row: 1;
-    }
-  }
+  /* 照片侧首屏现在只有「接着看」一块面板，漫画侧是「继续阅读 +
+     未读」两块；`home-overview` 的两栏骨架因此只服务漫画侧。
+     照片侧的面板是唯一子元素，`.home-overview > :only-child`
+     让它通栏 —— 面板里有主角与一排次级展品，挤成半栏会读不出
+     展陈墙的节奏。 */
   /* 首屏专区面板：每个工作台内部只有一种面板 —— 照片侧是白展板，
      漫画侧是暖纸。此前「接着看 / 随手看看」与「最近加入」各用一种
      底色，两个工作台自己就不成套；这里统一从 --panel-* 读。 */
@@ -174,11 +138,6 @@
        视线要跨很远才能找到右边的按钮。 */
     max-width: 900px;
   }
-  /* 「随手看看」的主角块不跟着面板一起长高：候选行紧跟在它下面，
-     面板底部剩下的空当是留白，而不是夹在主角与候选之间的夹缝。 */
-  .home-serendipity .hero-panel__feature {
-    flex: 0 0 auto;
-  }
   /* 「接着看」的主角与队列。照片侧这块面板独占一行，主角右边空着
      一大片时队列就该挪过来填上：挤在一行里，面板的高度也就回到
      「一块展品」该有的样子。 */
@@ -189,14 +148,11 @@
   @media (min-width: 1280px) {
     .resume-body {
       display: grid;
-      grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+      /* 主角与队列并排。队列那一列给得比主角宽：它摆的是一排方照，
+         窄一截就每张都小一号，与主角那枚裱框差得太远。 */
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
       gap: clamp(16px, 2vw, 32px);
       align-items: start;
-    }
-    .resume-body > .resume-queue {
-      grid-template-columns: minmax(0, 1fr);
-      border-top: none;
-      padding-top: 4px;
     }
   }
   .hero-panel__title {
@@ -316,55 +272,33 @@
   .hero-queue__remove:focus-visible {
     opacity: 1;
   }
-  /* 首屏面板下方的一排小图：展陈墙上的小照片。
-     「接着看」的队列与「随手看看」的候选共用这一套语言 ——
-     漫画侧的队列是一排小书脊（hero-queue__cover），照片这边换成方照。
-     48px 而不是 40px：邮票大小的缩略图读起来像一排图标，
-     不像「看过的相册」。 */
-  .mini-queue {
+  /* 「接着看」的次级展品：一排小方照。
+     它们与主角那枚裱好的方照是同一套展陈语言 —— 挂在同一面墙上，
+     主件裱框、次件裸挂。排成一排而不是一列：一列三行只占住面板的
+     右上角，中间与右下都空着，一块展品读起来像半张空纸。 */
+  .resume-shelf {
     display: grid;
-    gap: 8px 16px;
-    border-top: 1px solid var(--border);
-    padding-top: 18px;
-  }
-  .resume-queue {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: clamp(12px, 1.4vw, 20px);
+    align-content: start;
   }
-  .serendipity-candidates {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .mini-queue__item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    min-width: 0;
-    padding: 4px;
-    margin: -4px;
-    border-radius: var(--radius-media);
-    transition: background var(--dur);
-  }
-  .mini-queue__item:hover {
-    background: var(--bg-subtle);
-  }
-  .mini-queue__cover {
+  .resume-shelf__item {
     display: block;
-    /* 48px 而不是 56px：三列并排时每列只剩一百来像素，
-       56px 的缩略图把计数挤到放不下「10 个视频 · 刚刚」，
-       时刻被截成「刚…」。缩两像素，一行就完整了。 */
-    width: 48px;
-    height: 48px;
-    flex-shrink: 0;
+    min-width: 0;
+  }
+  .resume-shelf__cover {
+    display: block;
+    aspect-ratio: 1 / 1;
     overflow: hidden;
     border-radius: var(--radius-media);
     background: var(--bg-media);
+    /* 网格里的照片墙也用这一道浅投影：照片与照片之间要有边界，
+       裸挂的方照才不会糊成一片。 */
+    box-shadow: 0 1px 2px rgb(0 0 0 / 18%);
+    transition: box-shadow var(--dur);
   }
-  /* 窄屏：队列改成一列。三列并排时每列只剩一百来像素，
-     标题被截成「存…」，计数被折成三行。 */
-  @media (max-width: 639px) {
-    .resume-queue,
-    .serendipity-candidates {
-      grid-template-columns: minmax(0, 1fr);
-    }
+  .resume-shelf__item:hover .resume-shelf__cover {
+    box-shadow: 0 6px 18px rgb(0 0 0 / 28%);
   }
   /* 面板里的卡片墙：两列是默认，四列才像一面照片墙。 */
   .hero-grid {
@@ -388,14 +322,18 @@
     }
   }
   /* 「那年今日」：往年同一天拍过照的那几本，一排六本像一面小墙。 */
+  /* 「那年今日」的照片带：卡片按命中数铺开，行始终是满的。
+     固定六列时，四条命中就在行尾留下两列空白，一段关于回忆的
+     入口读起来像缺了东西。auto-fit 让空轨道收起来，照片因此
+     摊满整行；上限 260px 免得只命中一条时那张照片铺满半屏。 */
   .on-this-day__grid {
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(160px, 260px));
     gap: 18px 14px;
   }
   @media (max-width: 1279px) {
     .on-this-day__grid {
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(150px, 220px));
     }
   }
   @media (max-width: 639px) {
