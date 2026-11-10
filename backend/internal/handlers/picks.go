@@ -137,3 +137,18 @@ func markPicks(picks *store.PickStore, items []services.LibraryMediaItem) {
 		items[i].Picked = flags[i]
 	}
 }
+
+// markFeedPicks 给一页跨相册的照片标记是否在精选中。
+func markFeedPicks(picks *store.PickStore, items []services.FeedMediaItem) {
+	if picks == nil || len(items) == 0 {
+		return
+	}
+	ids := make([]string, len(items))
+	for i := range items {
+		ids[i] = items[i].ID
+	}
+	flags := picks.Contains(ids)
+	for i := range items {
+		items[i].Picked = flags[i]
+	}
+}

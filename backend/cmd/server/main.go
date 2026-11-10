@@ -319,6 +319,9 @@ func main() {
 	api.Delete("/scans/:id", handlers.AsyncScanCancelHandler(runner))
 	api.Get("/library/overview", handlers.LibraryQueryHandler(resourceCatalog, prefs, activities))
 	api.Get("/library/manifest", handlers.LibraryManifestHandler(resourceCatalog))
+	// 照片流要排在 /library/:id/children 之前：那条是带参数的路由，
+	// 静态段先注册才不会落到参数路由上。
+	api.Get("/library/media-feed", handlers.LibraryMediaFeedHandler(resourceCatalog, mediaDimensions, picks))
 	api.Get("/library/:id/children", handlers.LibraryChildrenPageHandler(resourceCatalog))
 	api.Post("/library/nodes/query", handlers.LibraryNodesQueryHandler(resourceCatalog))
 	api.Get("/library/recent", handlers.LibraryRecentHandler(resourceCatalog))

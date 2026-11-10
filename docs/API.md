@@ -459,3 +459,18 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 - `limit` 沿用分页默认值与上限，`cursor` 是不透明游标，绑定全部查询条件、库 revision，以及 `viewed` 排序使用的历史快照。变更后返回现有 `invalid_cursor` 或 `stale_cursor`，客户端清空分页链重取首屏。非法筛选返回 `400 invalid_library_query`。
 - 响应 `{ok:true,page:{revision,items,total,nextCursor?,counts,scopeCounts,years,series,imageTotal,videoTotal,latestModified,completedCount}}`。`items` 是 `{kind:"album"|"collection",node:节点摘要}` 或 `{kind:"smart",tag:标签摘要}`；`counts` 在应用所有其他筛选但尚未应用 `view` 时计数；`scopeCounts`、`years`、`series` 和媒体总量来自未筛选的完整作用域，不随已加载页数变化。
 - `years` 每项包含年份、直属项数、图片/视频总量、代表入口与封面；`series` 包含作品 ID、名称、卷数与封面；`completedCount` 是漫画标签全部成员中的已读数。响应不携带本机绝对路径。
+
+### 跨相册照片流
+
+`GET /api/library/media-feed` 返回跨相册的照片序列：每张照片带它来自哪本相册，用户不必先认准是哪一本才能看到那些照片。
+
+- `kind=photo|comic` 必填，与其它列表接口同义。
+- `scope` 必填，决定从哪里取材：
+  - `year` —— 取某个年份下各相册的照片。`year` 必填，取 `1900..2099` 或 `other`（没有年份的那一桶）。年份口径与 `overview` 的年份分组一致：取直属节点名里第一处 `19xx` / `20xx`；年份分组里的集合会展开成它内部的所有相册，集合里的散图（"本目录媒体"）也算在其中。
+  - `collection` —— 取某个集合内部所有相册的照片，`parent` 必填且必须是集合 ID。
+  - `recent` —— 取最近加入的几本相册里的照片。
+  - `random` —— 取随机几本相册里的照片。
+- `limit` 沿用分页默认值与上限，`cursor` 是不透明游标，绑定取材条件与库 revision。`year` 与 `collection` 分页；`recent` 与 `random` 一次返回整批，不分页。
+- 响应 `{ok:true,page:{revision,items,total,nextCursor?,albums}}`。`items` 是媒体字段加上 `albumId` / `albumName`；`albums` 是这一页涉及的相册 `{id,name,count}`。
+- `recent` 与 `random` 会把几本相册的照片交错排布：连着看一本相册的头几张，墙上就只剩一种口味。
+- 非法取材条件返回 `400 invalid_media_feed`；集合 ID 不存在返回 `404 resource_not_found`，类型不对返回 `400 invalid_resource_kind`。响应不携带本机绝对路径。

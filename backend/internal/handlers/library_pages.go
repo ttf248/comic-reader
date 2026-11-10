@@ -90,17 +90,59 @@ func enrichMediaDimensions(snapshot services.CatalogSnapshot, items []services.L
 		return
 	}
 	for i := range items {
-		if items[i].Kind != "image" {
-			continue
-		}
-		ref, ok := snapshot.Lookup(items[i].ID)
+		enrichMediaDimension(snapshot, &items[i], dimensions)
+	}
+}
+
+// enrichMediaDimension 补齐一份媒体的像素尺寸。
+func enrichMediaDimension(snapshot services.CatalogSnapshot, item *services.LibraryMediaItem, dimensions *services.MediaDimensionService) {
+	if dimensions == nil || item.Kind != "image" {
+		return
+	}
+	ref, ok := snapshot.Lookup(item.ID)
+	if !ok {
+		return
+	}
+	size := dimensions.Dimensions(ref.AbsolutePath)
+	item.Width = size.Width
+	item.Height = size.Height
+	item.Undecodable = size.Undecodable
+}
+
+// LibraryMediaFeedHandler 分页返回跨相册的照片流。
+//
+// 推荐路由：GET /api/library/media-feed。
+//
+// scope 决定从哪里取材：year 取某一年下各相册的照片，collection 取一个
+// 集合内部的照片，recent / random 取几本相册的照片。每张照片都带它
+// 所属的相册，用户能看得出出处、也回得去原相册。
+func LibraryMediaFeedHandler(catalog *services.ResourceCatalog, dimensions *services.MediaDimensionService, picks *store.PickStore) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		limit, ok := parseLibraryPageLimit(c)
 		if !ok {
-			continue
+			return nil
 		}
-		size := dimensions.Dimensions(ref.AbsolutePath)
-		items[i].Width = size.Width
-		items[i].Height = size.Height
-		items[i].Undecodable = size.Undecodable
+		kind, ok := parseLibraryKind(c)
+		if !ok {
+			return nil
+		}
+		query := services.MediaFeedQuery{
+			Kind:   kind,
+			Scope:  services.MediaFeedScope(strings.TrimSpace(c.Query("scope"))),
+			Year:   strings.TrimSpace(c.Query("year")),
+			Parent: strings.TrimSpace(c.Query("parent")),
+		}
+		snapshot := requestCatalogSnapshot(c, catalog)
+		page, err := services.PageMediaFeed(snapshot, query, c.Query("cursor"), limit)
+		if err != nil {
+			return writeLibraryPageError(c, err, snapshot.Revision())
+		}
+		for i := range page.Items {
+			enrichMediaDimension(snapshot, &page.Items[i].LibraryMediaItem, dimensions)
+		}
+		markFeedPicks(picks, page.Items)
+		setLibraryRevisionETag(c, snapshot.Revision())
+		return c.JSON(fiber.Map{"ok": true, "page": page})
 	}
 }
 
@@ -459,6 +501,8 @@ func writeLibraryPageError(c *fiber.Ctx, err error, revision uint64) error {
 		return httputil.NotFound(c, "no_matching_album", "no album matches this request")
 	case errors.Is(err, services.ErrInvalidOnThisDay):
 		return httputil.BadRequest(c, "invalid_on_this_day", "month and day must be a valid calendar date")
+	case errors.Is(err, services.ErrInvalidMediaFeedQuery):
+		return httputil.BadRequest(c, "invalid_media_feed", "media feed scope or parameters are invalid")
 	default:
 		return httputil.Internal(c, "library_page_failed", "unable to build library page")
 	}
