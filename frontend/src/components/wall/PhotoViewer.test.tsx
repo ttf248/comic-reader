@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LibraryMediaItem } from "../../api/library";
@@ -280,5 +280,75 @@ describe("大图预览的连续浏览", () => {
       />,
     );
     expect(screen.getByRole("button", { name: "下一张" })).toBeDisabled();
+  });
+
+  it("连按「下一张」每一下都翻一张，不被上一拍的序号吞掉", () => {
+    const onIndexChange = vi.fn();
+    const many = Array.from({ length: 10 }, (_, i) => ({
+      id: `f_${i}`,
+      kind: "image" as const,
+      name: `${i}.jpg`,
+      index: i,
+      kindIndex: i,
+    })) as LibraryMediaItem[];
+    render(
+      <PhotoViewer
+        items={many}
+        index={0}
+        albumName="测试相册"
+        onIndexChange={onIndexChange}
+        onClose={vi.fn()}
+      />,
+    );
+    // 一次 act 里连按五次：中间不重渲染，序号还停在 props 上。
+    // 按 props 算的话，五次都会算成同一张，照片在原地不动。
+    act(() => {
+      for (let i = 0; i < 5; i += 1) {
+        fireEvent.keyDown(window, { key: "ArrowRight" });
+      }
+    });
+    expect(onIndexChange.mock.calls.map((call) => call[0])).toEqual([
+      1, 2, 3, 4, 5,
+    ]);
+  });
+
+  it("按住不放时，页到了就一次翻过按过的那几次", async () => {
+    const onIndexChange = vi.fn();
+    const onLoadMore = vi.fn();
+    const { rerender } = render(
+      <PhotoViewer
+        items={items}
+        index={0}
+        albumName="测试相册"
+        hasNextPage
+        onLoadMore={onLoadMore}
+        onIndexChange={onIndexChange}
+        onClose={vi.fn()}
+      />,
+    );
+    // 在已加载的末尾连按三次：第一次还在范围内，后两次要等下一页。
+    act(() => {
+      for (let i = 0; i < 3; i += 1) {
+        fireEvent.keyDown(window, { key: "ArrowRight" });
+      }
+    });
+    expect(onIndexChange.mock.calls.map((call) => call[0])).toEqual([1]);
+    expect(onLoadMore).toHaveBeenCalled();
+
+    // 下一页到了：那两次按键一次性补上。
+    rerender(
+      <PhotoViewer
+        items={[...items, ...page]}
+        index={1}
+        albumName="测试相册"
+        hasNextPage
+        onLoadMore={onLoadMore}
+        onIndexChange={onIndexChange}
+        onClose={vi.fn()}
+      />,
+    );
+    await waitFor(() =>
+      expect(onIndexChange.mock.calls.map((call) => call[0])).toEqual([1, 3]),
+    );
   });
 });

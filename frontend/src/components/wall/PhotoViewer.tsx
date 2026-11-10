@@ -105,6 +105,15 @@ const ZOOM_STEP = 1.25;
 const PRELOAD_AHEAD = 3;
 
 /**
+ * 最多记住多少次「下一张」等着补。
+ *
+ * 按住不放时用户可能按上百次 —— 上限要留得住这些次数，否则按住不放
+ * 翻到分页边界就会「吃掉」一截按键。真正补多少由已加载的条目决定：
+ * 没有那么多照片就补那么多。
+ */
+const MAX_PENDING_ADVANCE = 1000;
+
+/**
  * 照片模式的沉浸式大图预览。
  *
  * 与漫画阅读器刻意分开：这里没有页码概念、没有双页、没有 RTL，
@@ -161,16 +170,25 @@ export default function PhotoViewer({
   } | null>(null);
   const swipeRef = useRef<{ x: number; y: number } | null>(null);
 
-  // 跨页连续浏览的三件状态。
+  // 跨页连续浏览的几件状态。
   //
   // loadedCount 是上一次看到的已加载条数：条目变多说明新的一页到了。
-  // pendingAdvance 记着「用户已经按了下一张，但那一页还没到」——
-  // 页到了就自动接上去，用户不必再按一次。
+  // pending 是用户已经按了「下一张」多少次、但那些位置还没加载出来 ——
+  // 页到了就一次性补上，用户不必一张张再按。
   // requesting 记着「已经请求过了」：预加载与用户按键可能同时触发，
   // 不记一笔就会发两次同样的请求。
   const loadedCountRef = useRef(items.length);
-  const pendingAdvanceRef = useRef(false);
+  const pendingRef = useRef(0);
   const requestingRef = useRef(false);
+  // 当前应该在第几张。
+  //
+  // 连按「下一张」时 props 里的 index 还没跟上（一次按键只改一次状态，
+  // 渲染要等这一拍结束）：按 props 算会把好几次按键算成同一张，
+  // 照片就在原地不动。这里记的是「已经翻到哪儿」，按键时立刻记账。
+  const indexRef = useRef(index);
+  // 最近一次向上层要的位置：用来分辨「这个序号是我们要的」与
+  // 「上层把位置换到别处了」。
+  const requestedIndexRef = useRef(index);
 
   const current = items[index];
   const isVideo = current?.kind === "video";
@@ -249,34 +267,60 @@ export default function PhotoViewer({
   const go = useCallback(
     (delta: number) => {
       if (items.length === 0) return;
-      const next = index + delta;
+      // 按「已经翻到哪儿」算，不是按 props：连按的时候 props 还没跟上。
+      const current = indexRef.current;
+      const next = current + delta;
       if (next < 0) return;
       if (next < items.length) {
         // 已加载的范围内：直接换。
-        pendingAdvanceRef.current = false;
+        indexRef.current = next;
+        requestedIndexRef.current = next;
+        pendingRef.current = 0;
         onIndexChange(next);
         return;
       }
-      // 已到已加载的末尾：去取下一页，取到后自动接上这一张。
+      // 已到已加载的末尾：记下这一次「下一张」，并去取下一页。
+      //
+      // 记的是次数而不是「待处理」：按住不放时用户按了十几次，
+      // 页到了就该一次翻过那十几张，而不是只走一张。
       if (delta > 0) {
-        pendingAdvanceRef.current = true;
+        pendingRef.current = Math.min(
+          pendingRef.current + delta,
+          MAX_PENDING_ADVANCE,
+        );
         requestMore();
       }
     },
-    [index, items.length, onIndexChange, requestMore],
+    [items.length, onIndexChange, requestMore],
   );
 
-  // 新的一页到了：解锁请求，并兑现「已经按过下一张」。
+  // 新的一页到了：解锁请求，并兑现「用户已经按过的那几次」。
   useEffect(() => {
     if (items.length <= loadedCountRef.current) return;
-    const previous = loadedCountRef.current;
     loadedCountRef.current = items.length;
     requestingRef.current = false;
-    if (pendingAdvanceRef.current) {
-      pendingAdvanceRef.current = false;
-      onIndexChange(Math.min(previous, items.length - 1));
-    }
+    if (pendingRef.current <= 0) return;
+    const available = items.length - 1 - indexRef.current;
+    const advance = Math.min(pendingRef.current, Math.max(0, available));
+    pendingRef.current -= advance;
+    if (advance <= 0) return;
+    const next = indexRef.current + advance;
+    indexRef.current = next;
+    requestedIndexRef.current = next;
+    onIndexChange(next);
   }, [items.length, onIndexChange]);
+
+  // 位置以 props 为准，除非父组件给的就是我们要的那一张。
+  //
+  // 连按的时候 props 只追到最近一次渲染，ref 里记的可能是更靠后的
+  // 位置；这时不能被 props 拉回去。父组件把序号换到别处（重新定位）
+  // 时才跟回去。
+  useEffect(() => {
+    if (index !== requestedIndexRef.current) {
+      indexRef.current = index;
+    }
+    requestedIndexRef.current = index;
+  }, [index]);
 
   // 预加载：离末尾还有三张时就先把下一页取来，翻到末尾时不必等。
   useEffect(() => {
@@ -388,10 +432,14 @@ export default function PhotoViewer({
           break;
         case "Home":
           event.preventDefault();
+          indexRef.current = 0;
+          requestedIndexRef.current = 0;
           onIndexChange(0);
           break;
         case "End":
           event.preventDefault();
+          indexRef.current = items.length - 1;
+          requestedIndexRef.current = items.length - 1;
           onIndexChange(items.length - 1);
           break;
         case "+":

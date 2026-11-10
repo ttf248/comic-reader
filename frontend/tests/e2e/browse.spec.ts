@@ -2611,6 +2611,142 @@ test("列表只取首屏，真实后端分页与筛选保留完整计数", async
     .toBe(2);
 });
 
+test("年度照片墙的大图预览能跨页连续翻，不停在已加载的末尾", async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(120_000);
+  await scannedNodes(request, "photo");
+  await page.goto("/photo/years/2024");
+
+  // 墙上是这一年的五百多张照片。
+  const tile = page.locator('button[aria-label^="查看"]').first();
+  await expect(tile).toBeVisible();
+  await tile.click();
+
+  const viewer = page.getByRole("dialog", { name: /大图预览/ });
+  await expect(viewer).toBeVisible();
+  // 总数报的是这一年的全部照片，不是已加载的那一段。
+  const total = await viewer
+    .locator("div")
+    .filter({ hasText: /^第 \d+ 张 · 共 \d+ 张$/ })
+    .first()
+    .innerText();
+  expect(total).toMatch(/共 (\d+) 张/);
+  const totalCount = Number(/共 (\d+) 张/.exec(total)![1]);
+  expect(totalCount).toBeGreaterThan(400);
+
+  // 连按「下一张」跨过两个分页边界（200 与 400）。
+  await page.keyboard.press("ArrowRight");
+  for (let i = 0; i < 430; i += 1) {
+    await page.keyboard.press("ArrowRight");
+  }
+  await expect
+    .poll(async () => {
+      const text = await viewer
+        .locator("div")
+        .filter({ hasText: /^第 \d+ 张 · 共 \d+ 张$/ })
+        .first()
+        .innerText();
+      return Number(/第 (\d+) 张/.exec(text)![1]);
+    }, { timeout: 30_000 })
+    .toBeGreaterThan(400);
+
+  // 翻过边界之后仍然能继续往后翻：末尾不是死的。
+  await page.keyboard.press("ArrowRight");
+  await page.waitForTimeout(300);
+  const after = await viewer
+    .locator("div")
+    .filter({ hasText: /^第 \d+ 张 · 共 \d+ 张$/ })
+    .first()
+    .innerText();
+  expect(Number(/第 (\d+) 张/.exec(after)![1])).toBeGreaterThan(400);
+});
+
+test("年份墙的照片带回原相册，连续翻页也不串", async ({ page, request }) => {
+  await scannedNodes(request, "photo");
+  await page.goto("/photo/years/2024");
+  const tile = page.locator('button[aria-label^="查看"]').first();
+  await tile.click();
+  const viewer = page.getByRole("dialog", { name: /大图预览/ });
+  await expect(viewer).toBeVisible();
+  // 标题是当前这张的出处，并且是链接：看完能回到那本相册。
+  const title = viewer.getByRole("link");
+  await expect(title).toBeVisible();
+  const href = await title.getAttribute("href");
+  expect(href).toMatch(/^\/photo\/albums\//);
+});
+
+test("首页「那年今日」摆的是当天那张照片，并能回到原相册", async ({
+  page,
+  request,
+}) => {
+  await scannedNodes(request, "photo");
+  await page.goto("/photo");
+
+  const section = page.getByTestId("on-this-day-section");
+  await expect(section).toBeVisible();
+  // 这一段摆的是照片卡，不是相册卡：相册的通用封面回答不了
+  // 「往年这天我拍到了什么」。
+  const photo = section.getByTestId("on-this-day-photo").first();
+  await expect(photo).toBeVisible();
+
+  await photo.getByRole("button").click();
+  const viewer = page.getByRole("dialog", { name: /大图预览/ });
+  await expect(viewer).toBeVisible();
+  const title = viewer.getByRole("link");
+  await expect(title).toBeVisible();
+  await title.click();
+  await expect(page).toHaveURL(/\/photo\/albums\//);
+});
+
+test("首页「随手看看」换一批换掉的是照片本身", async ({ page, request }) => {
+  await scannedNodes(request, "photo");
+
+  // 服务端侧：两个种子给出的是不同的一批相册。
+  //
+  // 这条断言不依赖素材的规模 —— 临时库里多为只有一两张照片的小相册，
+  // 同一本相册每次都被整本取走，照片本身会重合；换的是哪几本相册
+  // 才是「换一批」的实质。
+  const albumSets = async (seed: string) => {
+    const response = await request.get(
+      `/api/library/media-feed?kind=photo&scope=random&seed=${seed}`,
+    );
+    const body = (await response.json()) as {
+      page: { albums: Array<{ id: string }> };
+    };
+    return body.page.albums.map((album) => album.id).sort();
+  };
+  const first = await albumSets("e2e-seed-1");
+  const second = await albumSets("e2e-seed-2");
+  expect(first.length).toBeGreaterThan(1);
+  expect(second).not.toEqual(first);
+
+  // 界面侧：点「换一批」之后墙上换了一批照片。
+  await page.goto("/photo");
+  const wall = page.getByTestId("photo-feed-hero");
+  await expect(wall).toBeVisible();
+
+  // 按图片的资源 ID 比对：素材里各本相册的照片都叫 page-N.png，
+  // 文件名会撞车，资源 ID 不会。
+  const ids = async () =>
+    wall.locator("img").evaluateAll((images) =>
+      images
+        .map((image) => (image.getAttribute("src") ?? "").replace(/^.*\/api\//, ""))
+        .filter(Boolean),
+    );
+  await expect.poll(async () => (await ids()).length).toBeGreaterThan(3);
+  const before = await ids();
+
+  await wall.getByRole("button", { name: /换一批/ }).click();
+  await expect
+    .poll(async () => {
+      const after = await ids();
+      return after.join("|") === before.join("|");
+    }, { timeout: 20_000 })
+    .toBe(false);
+});
+
 test("分页浏览明暗主题与四个断点实际截图", async ({ page, request }) => {
   test.setTimeout(90_000);
   await page.emulateMedia({ reducedMotion: "reduce" });

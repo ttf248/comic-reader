@@ -68,6 +68,28 @@ try {
     [System.IO.File]::WriteAllBytes($yearImage, $pngBytes)
   }
 
+  # 年份墙下的多半本相册：验证大图预览能跨页连续翻。
+  # 一年有五百多张照片时，预览必须能翻过已加载的末尾继续取下一页，
+  # 而不是停在第一页的两百张。
+  # 它放在媒体根的直属层，名字带年份：年份墙按名字归桶，墙上的照片
+  # 因此来自这一年的两本相册。放成目录而不是子目录，「2024年」仍是
+  # 一本相册（既有用例依赖它的资源 ID 是相册而不是集合）。
+  $wallAlbumDir = Join-Path (Join-Path $testRoot "media") "2024年照片墙"
+  New-Item -ItemType Directory -Path $wallAlbumDir -Force | Out-Null
+  1..520 | ForEach-Object {
+    $wallImage = Join-Path $wallAlbumDir ("page-{0:D4}.png" -f $_)
+    [System.IO.File]::WriteAllBytes($wallImage, $pngBytes)
+  }
+
+  # 往年今天的照片：文件名里的月日就是今天（年份取去年），
+  # 首页「那年今日」因此能摆出那一天真正拍的那一张。
+  $today = Get-Date
+  $lastYear = $today.Year - 1
+  $onThisDayDir = Join-Path (Join-Path $testRoot "media") "zz-当年今日"
+  New-Item -ItemType Directory -Path $onThisDayDir -Force | Out-Null
+  $onThisDayImage = Join-Path $onThisDayDir ("IMG_{0}{1:D2}{2:D2}_120000.png" -f $lastYear, $today.Month, $today.Day)
+  [System.IO.File]::WriteAllBytes($onThisDayImage, $pngBytes)
+
   # 标签和排序使用真实扫描素材；名称、目录修改时间及媒体业务日期故意不同序。
   $taggedSamples = @(
     @{ Name = "A"; Modified = "2023-01-01T00:00:00Z"; MediaModified = "2025-01-01T00:00:00Z" },
