@@ -29,6 +29,9 @@ export default function YearPhotos() {
   const picks = usePicks();
 
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  // 关掉大图预览后，墙要回到刚才看的那张：跨相册连续翻了几百张之后，
+  // 墙还停在顶上等于让用户自己滚回去找。
+  const [focusIndex, setFocusIndex] = useState<number | null>(null);
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -151,12 +154,16 @@ export default function YearPhotos() {
             hasNextPage={feed.hasNextPage ?? false}
             isLoadingMore={feed.isFetchingNextPage}
             onLoadMore={loadMore}
-            onOpen={(_item, index) => setViewerIndex(index)}
+            onOpen={(_item, index) => {
+              setFocusIndex(null);
+              setViewerIndex(index);
+            }}
             /* 跨相册的墙：照片要说出自己出自哪本相册，
                用户才知道自己看的是哪一本里的哪一张。 */
             albumLabel={(item) => item.albumName}
             isPicked={picks.isPicked}
             onTogglePick={(item) => togglePick(item.id)}
+            scrollToIndex={focusIndex}
             onContextMenu={(item, event) => {
               event.preventDefault();
               event.currentTarget.focus({ preventScroll: true });
@@ -192,7 +199,10 @@ export default function YearPhotos() {
             setContextMenu(null);
             if (id === "open") {
               const index = items.findIndex((it) => it.id === menu.itemId);
-              if (index >= 0) setViewerIndex(index);
+              if (index >= 0) {
+                setFocusIndex(null);
+                setViewerIndex(index);
+              }
               return;
             }
             if (id === "album") {
@@ -212,8 +222,17 @@ export default function YearPhotos() {
           /* 标题点一下就回到那本：这是「看年份」与「看相册」之间的桥。 */
           albumHref={albumRoute("photo", items[viewerIndex].albumId)}
           totalCount={total}
+          /* 连续浏览：翻到已加载的末尾就自动接下一页，
+             这一年有几千张时不必回到墙上继续。 */
+          hasNextPage={feed.hasNextPage ?? false}
+          isLoadingMore={feed.isFetchingNextPage}
+          loadMoreError={feed.isFetchNextPageError}
+          onLoadMore={loadMore}
           onIndexChange={(index) => setViewerIndex(index)}
-          onClose={() => setViewerIndex(null)}
+          onClose={() => {
+            setFocusIndex(viewerIndex);
+            setViewerIndex(null);
+          }}
           isPicked={picks.isPicked(items[viewerIndex].id)}
           onTogglePick={() => togglePick(items[viewerIndex].id)}
         />

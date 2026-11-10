@@ -164,6 +164,8 @@ export default function PhotoAlbum({ album }: Props) {
   const total = mediaQuery.data?.pages[0]?.total ?? mediaItems.length;
 
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  // 关掉大图预览后回到刚才看的那张。
+  const [focusIndex, setFocusIndex] = useState<number | null>(null);
   // 右键菜单：照片墙上的图片同样能查看属性、在文件管理器中定位。
   const [contextMenu, setContextMenu] = useState<{
     x: number;
@@ -232,6 +234,9 @@ export default function PhotoAlbum({ album }: Props) {
   }, [mediaQuery]);
 
   const onOpen = useCallback((item: LibraryMediaItem, index: number) => {
+    // 打开前先把「回到哪张」清掉：关掉预览时重新对一次位置，
+    // 同一张照片看了又看也能滚回去。
+    setFocusIndex(null);
     if (item.kind === "video") {
       // 视频在大图预览里播放，位置与图片共用同一套切换逻辑。
       setViewerIndex(index);
@@ -652,6 +657,7 @@ export default function PhotoAlbum({ album }: Props) {
             onToggleSelect={toggleSelect}
             isPicked={isPicked}
             onTogglePick={togglePick}
+            scrollToIndex={focusIndex}
             onContextMenu={(item, event) => {
               event.preventDefault();
               event.currentTarget.focus({ preventScroll: true });
@@ -763,8 +769,17 @@ export default function PhotoAlbum({ album }: Props) {
           index={viewerIndex}
           albumName={title}
           totalCount={total}
+          /* 连续浏览：相册里的照片是分页取的，翻到已加载的末尾时
+             自动接下一页，而不是停在两百张。 */
+          hasNextPage={mediaQuery.hasNextPage ?? false}
+          isLoadingMore={mediaQuery.isFetchingNextPage}
+          loadMoreError={mediaQuery.isFetchNextPageError}
+          onLoadMore={loadMore}
           onIndexChange={(index) => setViewerIndex(index)}
-          onClose={() => setViewerIndex(null)}
+          onClose={() => {
+            setFocusIndex(viewerIndex);
+            setViewerIndex(null);
+          }}
           isFavorite={isFavorite}
           onToggleFavorite={toggleFavorite}
           onSetCover={() => void setCover()}

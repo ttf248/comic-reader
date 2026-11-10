@@ -1,5 +1,5 @@
-import { useMemo, type MouseEvent } from "react";
-import { Virtuoso, type ListRange } from "react-virtuoso";
+import { useEffect, useMemo, useRef, type MouseEvent } from "react";
+import { Virtuoso, type ListRange, type VirtuosoHandle } from "react-virtuoso";
 import type { LibraryMediaItem } from "../../api/library";
 import { useElementSize } from "../../hooks/useElementSize";
 import { useMediaGridPagination } from "../../hooks/useMediaGridPagination";
@@ -52,6 +52,14 @@ interface Props<T extends LibraryMediaItem = LibraryMediaItem> {
   isPicked?: (id: string) => boolean;
   /** 把一张照片加入 / 移出精选。 */
   onTogglePick?: (item: T) => void;
+  /**
+   * 要滚到的条目下标。
+   *
+   * 大图预览翻到第几百张再关掉时，墙还停在顶上：用户得自己滚回去找。
+   * 给出这个下标，墙就把刚才看的那张带回视野中央 —— 关掉预览仍然
+   * 知道自己停在哪儿。
+   */
+  scrollToIndex?: number | null;
 }
 
 const GAP = 10;
@@ -94,8 +102,13 @@ export default function PhotoWall<T extends LibraryMediaItem = LibraryMediaItem>
   onToggleSelect,
   isPicked,
   onTogglePick,
+  scrollToIndex = null,
 }: Props<T>) {
   const { ref: containerRef, width, height } = useElementSize<HTMLDivElement>();
+  const virtuosoRef = useRef<VirtuosoHandle | null>(null);
+  // 记住上一次处理过的下标：同一个下标不重复滚，避免用户手动滚了墙
+  // 之后又被拉回去。
+  const handledScrollRef = useRef<number | null>(null);
 
   const rangeChanged = useMediaGridPagination({
     loadedCount: items.length,
@@ -155,6 +168,23 @@ export default function PhotoWall<T extends LibraryMediaItem = LibraryMediaItem>
     return map;
   }, [tiles]);
 
+  // 滚到指定条目：条目下标先换算成行下标，虚拟列表按行滚。
+  useEffect(() => {
+    if (scrollToIndex === null || scrollToIndex === undefined) {
+      // 没有目标时把记录清掉：下次给同一个下标仍然要滚（同一张照片
+      // 看了又看，位置得重新对回去）。
+      handledScrollRef.current = null;
+      return;
+    }
+    if (handledScrollRef.current === scrollToIndex) return;
+    const rowIndex = rows.findIndex((row) =>
+      row.tiles.some((tile) => itemIndex.get(tile.id) === scrollToIndex),
+    );
+    if (rowIndex < 0) return;
+    handledScrollRef.current = scrollToIndex;
+    virtuosoRef.current?.scrollToIndex({ index: rowIndex, align: "center" });
+  }, [scrollToIndex, rows, itemIndex]);
+
   const handleRangeChanged = (range: ListRange) => {
     const start = rows[range.startIndex]?.tiles[0]?.id;
     const end = rows[range.endIndex]?.tiles.at(-1)?.id;
@@ -168,6 +198,7 @@ export default function PhotoWall<T extends LibraryMediaItem = LibraryMediaItem>
     <div ref={containerRef} className="h-full min-h-0">
       {width > 0 && (
         <Virtuoso
+          ref={virtuosoRef}
           data={rows}
           style={{ height: "100%" }}
           overscan={600}

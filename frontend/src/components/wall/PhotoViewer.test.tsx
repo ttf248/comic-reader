@@ -192,3 +192,93 @@ describe("大图预览的 Esc", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
+
+// 跨相册连续浏览：年度照片墙有几千张，预览不能停在已加载的那一段。
+describe("大图预览的连续浏览", () => {
+  const page = [
+    { id: "f_3", kind: "image", name: "c.jpg", index: 2, kindIndex: 2 },
+    { id: "f_4", kind: "image", name: "d.jpg", index: 3, kindIndex: 3 },
+  ] as LibraryMediaItem[];
+
+  it("翻到已加载的末尾时去取下一页，取到后自动接上这一张", async () => {
+    const onLoadMore = vi.fn();
+    const onIndexChange = vi.fn();
+    const { rerender } = render(
+      <PhotoViewer
+        items={items}
+        index={1}
+        albumName="测试相册"
+        hasNextPage
+        onLoadMore={onLoadMore}
+        onIndexChange={onIndexChange}
+        onClose={vi.fn()}
+      />,
+    );
+
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    expect(onLoadMore).toHaveBeenCalled();
+
+    // 下一页到了：自动接到第一张新照片上，用户不必再按一次。
+    rerender(
+      <PhotoViewer
+        items={[...items, ...page]}
+        index={1}
+        albumName="测试相册"
+        hasNextPage
+        onLoadMore={onLoadMore}
+        onIndexChange={onIndexChange}
+        onClose={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(onIndexChange).toHaveBeenCalledWith(2));
+  });
+
+  it("取页失败时给一个重试的手柄，已加载的内容仍可翻", () => {
+    const onLoadMore = vi.fn();
+    render(
+      <PhotoViewer
+        items={items}
+        index={0}
+        albumName="测试相册"
+        hasNextPage
+        loadMoreError
+        onLoadMore={onLoadMore}
+        onIndexChange={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("后续照片加载失败")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "重试" }));
+    expect(onLoadMore).toHaveBeenCalled();
+  });
+
+  it("还有下一页时下一张不灰：灰掉等于告诉用户后面没有了", () => {
+    render(
+      <PhotoViewer
+        items={items}
+        index={1}
+        albumName="测试相册"
+        hasNextPage
+        onLoadMore={vi.fn()}
+        onIndexChange={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "下一张" })).toBeEnabled();
+  });
+
+  it("确实没有下一页时下一张才灰", () => {
+    render(
+      <PhotoViewer
+        items={items}
+        index={1}
+        albumName="测试相册"
+        hasNextPage={false}
+        onIndexChange={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole("button", { name: "下一张" })).toBeDisabled();
+  });
+});

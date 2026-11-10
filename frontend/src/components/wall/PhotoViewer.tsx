@@ -57,6 +57,20 @@ interface Props {
   totalCount?: number;
   onIndexChange: (index: number) => void;
   onClose: () => void;
+  /**
+   * 还有下一页可取。
+   *
+   * 大图预览原本只能在「已经加载进来的那一段」里翻：年度照片墙有几千张，
+   * 但墙是分页加载的，翻到已加载的末尾就走不动了 —— 用户以为照片只有
+   * 这么些。给了这三个属性，预览就能在末尾自动接上下一页。
+   */
+  hasNextPage?: boolean;
+  /** 正在取下一页。 */
+  isLoadingMore?: boolean;
+  /** 取下一页失败：已加载的内容仍可浏览，但要给一个重试的手柄。 */
+  loadMoreError?: boolean;
+  /** 取下一页。 */
+  onLoadMore?: () => void;
   isFavorite?: boolean;
   onToggleFavorite?: () => void;
   onSetCover?: () => void;
@@ -83,6 +97,14 @@ const MAX_ZOOM = 6;
 const ZOOM_STEP = 1.25;
 
 /**
+ * 离末尾还剩几张时开始预加载下一页。
+ *
+ * 三张足够盖住一次取页的往返：用户连按几下「下一张」时，页面多半已经
+ * 在路上了。再多就是白白多取一页，用户未必看得到。
+ */
+const PRELOAD_AHEAD = 3;
+
+/**
  * 照片模式的沉浸式大图预览。
  *
  * 与漫画阅读器刻意分开：这里没有页码概念、没有双页、没有 RTL，
@@ -97,6 +119,10 @@ export default function PhotoViewer({
   totalCount,
   onIndexChange,
   onClose,
+  hasNextPage = false,
+  isLoadingMore = false,
+  loadMoreError = false,
+  onLoadMore,
   isFavorite,
   onToggleFavorite,
   onSetCover,
@@ -134,6 +160,17 @@ export default function PhotoViewer({
     moved: boolean;
   } | null>(null);
   const swipeRef = useRef<{ x: number; y: number } | null>(null);
+
+  // 跨页连续浏览的三件状态。
+  //
+  // loadedCount 是上一次看到的已加载条数：条目变多说明新的一页到了。
+  // pendingAdvance 记着「用户已经按了下一张，但那一页还没到」——
+  // 页到了就自动接上去，用户不必再按一次。
+  // requesting 记着「已经请求过了」：预加载与用户按键可能同时触发，
+  // 不记一笔就会发两次同样的请求。
+  const loadedCountRef = useRef(items.length);
+  const pendingAdvanceRef = useRef(false);
+  const requestingRef = useRef(false);
 
   const current = items[index];
   const isVideo = current?.kind === "video";
@@ -201,15 +238,67 @@ export default function PhotoViewer({
     [clampPan],
   );
 
+  // 要下一页：已经在请求中就不再发一次。
+  const requestMore = useCallback(() => {
+    if (!onLoadMore || !hasNextPage) return;
+    if (requestingRef.current) return;
+    requestingRef.current = true;
+    onLoadMore();
+  }, [hasNextPage, onLoadMore]);
+
   const go = useCallback(
     (delta: number) => {
       if (items.length === 0) return;
-      const next = Math.max(0, Math.min(items.length - 1, index + delta));
-      if (next === index) return;
-      onIndexChange(next);
+      const next = index + delta;
+      if (next < 0) return;
+      if (next < items.length) {
+        // 已加载的范围内：直接换。
+        pendingAdvanceRef.current = false;
+        onIndexChange(next);
+        return;
+      }
+      // 已到已加载的末尾：去取下一页，取到后自动接上这一张。
+      if (delta > 0) {
+        pendingAdvanceRef.current = true;
+        requestMore();
+      }
     },
-    [index, items.length, onIndexChange],
+    [index, items.length, onIndexChange, requestMore],
   );
+
+  // 新的一页到了：解锁请求，并兑现「已经按过下一张」。
+  useEffect(() => {
+    if (items.length <= loadedCountRef.current) return;
+    const previous = loadedCountRef.current;
+    loadedCountRef.current = items.length;
+    requestingRef.current = false;
+    if (pendingAdvanceRef.current) {
+      pendingAdvanceRef.current = false;
+      onIndexChange(Math.min(previous, items.length - 1));
+    }
+  }, [items.length, onIndexChange]);
+
+  // 预加载：离末尾还有三张时就先把下一页取来，翻到末尾时不必等。
+  useEffect(() => {
+    if (!hasNextPage || !onLoadMore) return;
+    if (items.length === 0) return;
+    if (index < items.length - PRELOAD_AHEAD) return;
+    requestMore();
+  }, [hasNextPage, onLoadMore, index, items.length, requestMore]);
+
+  // 取页失败：解锁请求，让用户再按一次「下一张」就能重试，
+  // 而不是卡在末尾只能去点那枚重试按钮。
+  useEffect(() => {
+    if (loadMoreError) requestingRef.current = false;
+  }, [loadMoreError]);
+
+  // 下一张的图先解一遍：翻页时直接显示，不等网络。
+  useEffect(() => {
+    const next = items[index + 1];
+    if (!next || next.kind !== "image" || !stageMeasured) return;
+    const image = new Image();
+    image.src = previewUrl(next.id, previewWidth, next.version);
+  }, [items, index, previewWidth, stageMeasured]);
 
   // 切换照片时复位缩放与位移：新图不应该带着上一张的放大状态出现。
   useEffect(() => {
@@ -612,7 +701,32 @@ export default function PhotoViewer({
       {/* 底栏：上一张 / 下一张与缩放。
           控件收进一枚半透明药丸：一排散落的图标悬在黑底上像几枚
           掉出来的按键，药丸把它们收成一件工具。 */}
-      <footer className="relative flex h-14 shrink-0 items-center justify-center px-3 sm:px-5">
+      <footer className="relative flex h-14 shrink-0 items-center justify-center gap-3 px-3 sm:px-5">
+        {/* 取下一页的反馈：翻到末尾时用户会等，这一栏告诉他「正在取」，
+            失败时给一个重试的手柄，而不是让下一张按钮灰着不动。 */}
+        <div
+          className="flex items-center gap-2 text-meta"
+          aria-live="polite"
+          data-testid="photo-viewer-more"
+        >
+          {loadMoreError ? (
+            <>
+              <span className="text-white/70">后续照片加载失败</span>
+              <button
+                type="button"
+                onClick={() => {
+                  requestingRef.current = false;
+                  requestMore();
+                }}
+                className="rounded-md bg-white/15 px-2.5 py-1 text-white transition-colors hover:bg-white/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+              >
+                重试
+              </button>
+            </>
+          ) : isLoadingMore ? (
+            <span className="text-white/70">正在加载下一张…</span>
+          ) : null}
+        </div>
         <div className="inline-flex items-center gap-1 rounded-full bg-white/10 p-1 backdrop-blur-sm ring-1 ring-white/10">
           <button
             type="button"
@@ -627,7 +741,9 @@ export default function PhotoViewer({
           <button
             type="button"
             onClick={() => go(1)}
-            disabled={index >= items.length - 1}
+            /* 还有下一页时不能灰：灰掉等于告诉用户「后面没有了」，
+               而事实是还没取。 */
+            disabled={index >= items.length - 1 && !hasNextPage}
             className="inline-flex h-9 w-9 items-center justify-center rounded-full text-white/85 transition-colors hover:bg-white/15 disabled:opacity-30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
             title="下一张 (→)"
             aria-label="下一张"

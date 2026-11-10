@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { forwardRef, type ReactNode } from "react";
 import type { ListRange } from "react-virtuoso";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import PhotoWall, { effectiveTargetHeight } from "./PhotoWall";
@@ -14,6 +14,7 @@ interface MockRow {
 const virtuoso = vi.hoisted(() => ({
   overscan: 0,
   increaseViewportBy: { top: 0, bottom: 0 },
+  scrollToIndex: vi.fn(),
 }));
 
 const pagination = vi.hoisted(() => ({ rangeChanged: vi.fn() }));
@@ -23,36 +24,48 @@ vi.mock("../../hooks/useMediaGridPagination", () => ({
 }));
 
 vi.mock("react-virtuoso", () => ({
-  Virtuoso: ({
-    data,
-    itemContent,
-    rangeChanged,
-    overscan,
-    increaseViewportBy,
-  }: {
-    data: MockRow[];
-    itemContent: (index: number, row: MockRow) => ReactNode;
-    rangeChanged: (range: ListRange) => void;
-    overscan: number;
-    increaseViewportBy: { top: number; bottom: number };
-  }) => {
-    virtuoso.overscan = overscan;
-    virtuoso.increaseViewportBy = increaseViewportBy;
-    return (
-      <>
-        <button
-          onClick={() => rangeChanged({ startIndex: 0, endIndex: data.length - 1 })}
-        >
-          滚动到末行
-        </button>
-        {data.map((row, index) => (
-          <div key={row.key} data-testid="wall-row">
-            {itemContent(index, row)}
-          </div>
-        ))}
-      </>
-    );
-  },
+  Virtuoso: forwardRef(
+    (
+      {
+        data,
+        itemContent,
+        rangeChanged,
+        overscan,
+        increaseViewportBy,
+      }: {
+        data: MockRow[];
+        itemContent: (index: number, row: MockRow) => ReactNode;
+        rangeChanged: (range: ListRange) => void;
+        overscan: number;
+        increaseViewportBy: { top: number; bottom: number };
+      },
+      ref: React.ForwardedRef<{
+        scrollToIndex: (options: unknown) => void;
+      }>,
+    ) => {
+      virtuoso.overscan = overscan;
+      virtuoso.increaseViewportBy = increaseViewportBy;
+      if (ref && typeof ref !== "function") {
+        ref.current = { scrollToIndex: virtuoso.scrollToIndex };
+      }
+      return (
+        <>
+          <button
+            onClick={() =>
+              rangeChanged({ startIndex: 0, endIndex: data.length - 1 })
+            }
+          >
+            滚动到末行
+          </button>
+          {data.map((row, index) => (
+            <div key={row.key} data-testid="wall-row">
+              {itemContent(index, row)}
+            </div>
+          ))}
+        </>
+      );
+    },
+  ),
 }));
 
 vi.mock("../../hooks/useElementSize", () => ({
@@ -75,6 +88,7 @@ const items = [
 beforeEach(() => {
   virtuoso.overscan = 0;
   virtuoso.increaseViewportBy = { top: 0, bottom: 0 };
+  virtuoso.scrollToIndex.mockClear();
   pagination.rangeChanged.mockClear();
 });
 

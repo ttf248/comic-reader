@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import { forwardRef, type ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
 import YearPhotos from "./YearPhotos";
@@ -35,23 +36,28 @@ vi.mock("../hooks/useMediaFeed", () => ({
 
 // 虚拟列表在 jsdom 里没有尺寸：换成直接渲染全部行。
 vi.mock("react-virtuoso", () => ({
-  Virtuoso: ({
-    data,
-    itemContent,
-  }: {
-    data: {
-      key: string;
-      height: number;
-      tileHeight: number;
-      tiles: { id: string; ratio: number; width: number }[];
-    }[];
-    itemContent: (index: number, row: never) => React.ReactNode;
-  }) => (
-    <>
-      {data.map((row, index) => (
-        <div key={row.key}>{itemContent(index, row as never)}</div>
-      ))}
-    </>
+  Virtuoso: forwardRef(
+    (
+      {
+        data,
+        itemContent,
+      }: {
+        data: {
+          key: string;
+          height: number;
+          tileHeight: number;
+          tiles: { id: string; ratio: number; width: number }[];
+        }[];
+        itemContent: (index: number, row: never) => ReactNode;
+      },
+      _ref: unknown,
+    ) => (
+      <>
+        {data.map((row, index) => (
+          <div key={row.key}>{itemContent(index, row as never)}</div>
+        ))}
+      </>
+    ),
   ),
 }));
 
