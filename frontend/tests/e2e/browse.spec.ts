@@ -2675,6 +2675,18 @@ test("年份墙的照片带回原相册，连续翻页也不串", async ({ page,
   await expect(title).toBeVisible();
   const href = await title.getAttribute("href");
   expect(href).toMatch(/^\/photo\/albums\//);
+
+  // 跨到另一本相册：标题跟着换，链接也指向那本。
+  // 年份墙下的照片来自好几本相册（散图相册 + 连拍相册），
+  // 翻过去不能还指着上一本。
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.press("ArrowRight");
+  await expect
+    .poll(async () => (await title.innerText()).trim(), { timeout: 10_000 })
+    .not.toBe("2024年");
+  const switchedHref = await title.getAttribute("href");
+  expect(switchedHref).toMatch(/^\/photo\/albums\//);
+  expect(switchedHref).not.toBe(href);
 });
 
 test("首页「那年今日」摆的是当天那张照片，并能回到原相册", async ({
