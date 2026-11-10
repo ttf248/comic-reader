@@ -12,6 +12,7 @@ import { syncHistoryCache } from "../utils/historyCache";
 import { useUIStore } from "../store/uiStore";
 import AlbumGrid from "../components/album/AlbumGrid";
 import AlbumGridSkeleton from "../components/album/AlbumGridSkeleton";
+import CollectionPhotoBand from "../components/album/CollectionPhotoBand";
 import YearTimeline from "../components/home/YearTimeline";
 import { type AlbumLike, type CollectionLike } from "../utils/albumGrouping";
 import EmptyState from "../components/common/EmptyState";
@@ -401,23 +402,24 @@ function CollectionHead({
           </>
         )}
       </div>
-      <div className="detail-head">
-        <div
-          className={`detail-head__cover${
-            isComic ? " detail-head__cover--book" : " detail-head__cover--print"
-          }`}
-        >
-          <CardCover
-            data={{
-              variant: "collection",
-              title: detail.name,
-              coverPath: detail.coverImage,
-              coverVersion: detail.coverImageVersion,
-              covers: detail.coverImages,
-              coverVersions: detail.coverImageVersions,
-            }}
-          />
-        </div>
+      {/* 照片侧不再摆那张裱起来的封面拼贴：它占着一百多像素高，说
+          的却只是「这里有照片」—— 下面那条照片带说得更准。漫画侧的
+          封面是书脊与厚度，仍是这一页的锚点，保留。 */}
+      <div className={`detail-head${isComic ? "" : " detail-head--plain"}`}>
+        {isComic && (
+          <div className="detail-head__cover detail-head__cover--book">
+            <CardCover
+              data={{
+                variant: "collection",
+                title: detail.name,
+                coverPath: detail.coverImage,
+                coverVersion: detail.coverImageVersion,
+                covers: detail.coverImages,
+                coverVersions: detail.coverImageVersions,
+              }}
+            />
+          </div>
+        )}
         <div className="detail-head__body min-w-0">
           <p className="page-eyebrow">
             {isComic ? "作品" : "集合"}
@@ -560,6 +562,14 @@ function CollectionView({
         onBack={onBack}
       />
       <div className="flex-1 min-h-0 overflow-auto">
+        {/* 照片带先于筛选条：筛选条只管下面那张网格，夹在照片带与
+            网格之间会让它离自己控制的东西太远。 */}
+        {detail.contentKind === "photo" && (
+          <CollectionPhotoBand
+            collectionId={detail.path}
+            collectionName={detail.name}
+          />
+        )}
         <ListFilterBar
           totalCount={list.summary?.total ?? 0}
           showMinImageFilter={false}
