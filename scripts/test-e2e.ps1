@@ -59,6 +59,15 @@ try {
   New-Item -ItemType Directory -Path $brokenDir -Force | Out-Null
   [System.IO.File]::WriteAllBytes((Join-Path $brokenDir "broken.jpg"), [System.Text.Encoding]::ASCII.GetBytes("not a decodable image"))
 
+  # 带年份的相册：年份索引与年份照片墙要有一条真实链路可测，
+  # 它放在媒体根的直属层，年份分组才认得出。
+  $yearDir = Join-Path (Join-Path $testRoot "media") "2024年"
+  New-Item -ItemType Directory -Path $yearDir -Force | Out-Null
+  1..2 | ForEach-Object {
+    $yearImage = Join-Path $yearDir "page-$_.png"
+    [System.IO.File]::WriteAllBytes($yearImage, $pngBytes)
+  }
+
   # 标签和排序使用真实扫描素材；名称、目录修改时间及媒体业务日期故意不同序。
   $taggedSamples = @(
     @{ Name = "A"; Modified = "2023-01-01T00:00:00Z"; MediaModified = "2025-01-01T00:00:00Z" },

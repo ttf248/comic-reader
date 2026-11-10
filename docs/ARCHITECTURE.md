@@ -163,11 +163,11 @@ SIGINT/SIGTERM 触发停止接收连接、取消扫描/转码并强制刷新扫�
 - 收藏里的智能标签按名解析（`POST /api/tags/query`），接口同时给出两侧的册数：客户端据此区分「这个标签在库里不存在」（失效，可清理）与「它只属于另一侧」（不可见，但不是失效）。把两者混为一谈会导致用户在另一侧点一次「清理失效收藏」就删掉自己的收藏。
 - 阅读器整屏脱离 AppShell，侧栏不可见，顶部提供工作台 chip 切模式（切模式即离开阅读器回到外壳）。
 - 模式也决定视觉基调：`<html data-mode>` 由 `WorkbenchModeProvider` 写入，CSS token 按 `:root[data-theme][data-mode]` 组合覆盖（`--brand*` / `--feature-bg` / `--mode-tint`），画布与文字保持中性灰阶。封面画幅同样按侧取默认值（照片 1:1、漫画 2:3），见 `utils/workbench.ts` 的 `coverRatioForMode`。
-- 首页首屏专区按侧各成一套：漫画是「继续阅读 / 未读」，照片是「接着看 / 最近加入 / 随手看看」。照片侧的数据源是 `GET /api/library/recent?kind=photo`（按业务日期倒序的最近相册）与 `GET /api/albums/random?kind=photo&count=3`（随手三本候选，服务端保证互不相同），组件在 `components/home/PhotoHeroes.tsx`，随机结果由 `hooks/useSerendipityAlbum.ts` 用「种子」做查询键换取。
+- 首页首屏按侧各成一套：漫画是「继续阅读 / 未读」两块面板，照片是「随手看看」的跨相册照片墙加「接着看」一块面板。照片墙的数据源是 `GET /api/library/media-feed?kind=photo&scope=random`（随机几本相册的照片，服务端交错排列），组件在 `components/home/PhotoFeedHero.tsx` 与 `components/wall/PhotoStrip.tsx`（只铺给定张数、不滚动的静态照片条），翻页由 `hooks/useMediaFeed.ts` 负责。
 - 照片侧的「接着看」与漫画侧的「继续阅读」对称，数据源不同：漫画读的是阅读进度，照片读的是访问历史。`hooks/useHistory.ts` 的 `useHistoryCards` 把 `GET /api/history` 与 `POST /api/library/nodes/query` 合成按侧收敛的卡片列表，组件 `components/home/ResumeHero.tsx`（首页首屏专区）、侧栏的「继续」区与「最近浏览」页共用它。它额外返回 `resolvedCount`（仍存在于媒体库里的访问记录条数），用来区分「这一侧没有记录」与「访问过的相册全被移出媒体库」——两者的提示语不同，后者才提「相册可能已移动」。
 - 措辞与计数单位的唯一真相源是 `utils/workbench.ts` 的词表（`workbenchCopy(mode)`），两侧共用组件从**卡片自身的** `contentKind` 取词，而不是从当前工作台取：一张卡永远知道自己属于照片还是漫画，取不到时按照片兜底。照片说「张 / 本 / 浏览」，漫画说「页 / 卷 / 阅读」。
 - 「那年今日」的下标表在发布期建好：把各相册从文件名推断出的拍摄日期按月-日归桶（`library_page.go` 的 `onThisDay`），请求期只按属性与年份过滤。它靠拍摄时间成立，因此只在照片侧有意义 —— 漫画侧不出现这一段。
-- 索引维度按侧分：照片按年份（`components/home/YearTimeline.tsx`），漫画按作品（`components/home/SeriesTimeline.tsx`，集合即作品）。两者共用 `components/home/Timeline.tsx` 的视觉骨架。
+- 索引维度按侧分：照片按年份（`components/home/YearTimeline.tsx`），漫画按作品（`components/home/SeriesTimeline.tsx`，集合即作品）。两者共用 `components/home/Timeline.tsx` 的视觉骨架。照片侧年份卡的主操作是打开年份照片墙（`routes/YearPhotos.tsx`，`/photo/years/<年份>`）：`GET /api/library/media-feed?kind=photo&scope=year&year=<年份>` 按年份归组取出各相册的照片，每张带 `albumId` / `albumName`，大图预览的标题可点回原相册。
 
 ### 查询、导航与网格
 
@@ -204,7 +204,7 @@ SIGINT/SIGTERM 触发停止接收连接、取消扫描/转码并强制刷新扫�
 - `useVideoActivity` 收拢视频恢复、节流保存与卸载补写，回调通过 ref 转发以避免查询重启；视频播放状态保持独立。活动写入由应用级 `useLibraryActivitySync` 统一失效首页、计数与未读缓存。
 - 收藏/历史/偏好写入成功后先将服务端确认结果写共享查询缓存，再后台刷新，后续 GET 失败不能复活已删除记录或回退新设置。切换收藏读取当前缓存，首次查询未确认不盲写；清理失效项只过滤已知缓存，不凭移除清单构造空列表。
 - 首页、集合与标签相册使用 `useLibraryList` 无限分页，服务端 `library_query.go` 统一筛选与排序。每个不可变库快照拥有最多 16 个查询结果的 LRU，翻页复用结果；游标同时绑定查询与历史排序快照。年份/作品索引和统计独立于已加载页数。请求取消、后续页重试和游标失效后的整链重取由 hook 处理。阅读器上下文携带查询及后续游标，在已加载边界补页，卸载/换卷取消请求；失败提示返回列表刷新，不混用旧顺序。
-- 列表排序共用一套口径：「按拍摄时间」（照片侧）/「按加入时间」（漫画侧）用业务日期（拍摄时间 > 文件夹名日期 > 修改时间），与首页「最近加入」专区、后端 `albumMoreRecent` 相同；缺业务日期时退回修改时间。首页、集合、标签由服务端执行；收藏与最近等有界列表继续使用 `utils/cardSorting.ts`。
+- 列表排序共用一套口径：「按拍摄时间」（照片侧）/「按加入时间」（漫画侧）用业务日期（拍摄时间 > 文件夹名日期 > 修改时间），与后端 `albumMoreRecent` 相同；缺业务日期时退回修改时间。首页、集合、标签由服务端执行；收藏与最近等有界列表继续使用 `utils/cardSorting.ts`。首页的「库内一览」默认不再重复摆年份归组的那些集合（`library_query.go` 的 `excludeYearTargets`），搜索或按年份筛选时仍给出全部命中。
 - 最近与收藏分别处理查询失败、资源失效和筛选无结果，保留已加载卡片。“最近看”只在需要排序时读历史，按 `openedAt` 降序，同时间或未访问按名称；历史确认结果同时同步 `history` 与已存在的 `prefs.history`。
 - 访问记录使用真实相册名称和图片总数，只依赖相册身份，不随媒体分页重复记录；视频数量不替代图片总数。可点击星标与链接分离，星标使用共享 mutation，不为每张卡订阅完整收藏列表。
 

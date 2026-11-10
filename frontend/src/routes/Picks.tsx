@@ -269,6 +269,9 @@ export default function Picks() {
             isLoadingMore={query.isFetchingNextPage}
             onLoadMore={loadMore}
             onOpen={(_item, index) => setViewerIndex(index)}
+            /* 精选页的照片来自不同相册：悬停信息层说清出处，
+               用户才知道自己看的是哪本里的哪一张。 */
+            albumLabel={(item) => item.albumName}
             selecting={selectionActive}
             isSelected={isSelected}
             onToggleSelect={(item) => toggleSelect(item)}

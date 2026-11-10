@@ -2194,6 +2194,36 @@ test("图片属性使用文件ID并支持失败重试和小屏关闭", async ({ 
   }
 });
 
+test("年份卡直接打开这一年的照片墙，照片能回到原相册", async ({
+  page,
+  request,
+}) => {
+  await scannedNodes(request, "photo");
+  await page.goto("/photo");
+
+  // 年份卡的主操作是看这一年的照片：年份散在好几本相册里，
+  // 先挑一本再进去等于让用户替系统做取舍。
+  const year = page
+    .getByTestId("year-timeline")
+    .getByRole("button", { name: /^2024/ });
+  await expect(year).toBeVisible();
+  await year.click();
+  await expect(page).toHaveURL(/\/photo\/years\/2024$/);
+
+  // 墙上是这一年的照片，不是空页。
+  const tile = page.locator('button[aria-label^="查看"]').first();
+  await expect(tile).toBeVisible();
+
+  // 照片带着它的出处：点开大图，标题说清是哪本，点一下就回去。
+  await tile.click();
+  const viewer = page.getByRole("dialog", { name: /大图预览/ });
+  await expect(viewer).toBeVisible();
+  const title = viewer.getByRole("link", { name: "2024年" });
+  await expect(title).toBeVisible();
+  await title.click();
+  await expect(page).toHaveURL(/\/photo\/albums\//);
+});
+
 test("时间线年份卡的筛选按钮可访问名不与卡片本身混淆", async ({
   page,
   request,
