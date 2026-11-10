@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 import path from "node:path";
 import type { VideoInfo, VideoInfoBatchItem } from "../../src/api/videos";
@@ -72,6 +72,20 @@ test("工作台模式切换：两套菜单完全隔离，模式持久化在服�
 
 // 隔离不只在菜单上：两侧共用的卡片、预览与计数单位也各归各。
 // 照片这边说「浏览 / 张 / 本」，漫画那边说「阅读 / 页 / 卷」。
+/**
+ * 取一张相册卡片。
+ *
+ * 网格里的标签卡与集合卡用的是同一个 testid（都是 AlbumCard），
+ * 页面上第一张未必是相册 —— 首页首屏的照片墙又把它推到了后面。
+ * 按「里面有打开相册的链接」筛，才是测试真正要的那一张。
+ */
+function albumCard(page: Page) {
+  return page
+    .locator('[data-testid="album-card"]')
+    .filter({ has: page.getByRole("link", { name: /^打开相册/ }) })
+    .first();
+}
+
 test("两侧的措辞与计数单位各归各", async ({ page }) => {
   await liveRoots(page.request);
   await setWorkbenchMode(page.request, "photo");
@@ -80,10 +94,7 @@ test("两侧的措辞与计数单位各归各", async ({ page }) => {
   await page.goto("/photo");
   // 取一张卡片上的链接，而不是页面上第一个「打开相册」链接：首屏专区
   // 里也有指向相册的链接（随手看看的封面），它不是卡片，没有悬停预览。
-  const photoCard = page
-    .getByTestId("album-card")
-    .first()
-    .getByRole("link", { name: /打开相册/ });
+  const photoCard = albumCard(page).getByRole("link", { name: /打开相册/ });
   await expect(photoCard).toBeVisible();
   await photoCard.evaluate((el) => el.scrollIntoView({ block: "center" }));
   await photoCard.hover();
@@ -98,10 +109,7 @@ test("两侧的措辞与计数单位各归各", async ({ page }) => {
   await setWorkbenchMode(page.request, "comic");
   await scannedNodes(page.request, "comic");
   await page.goto("/comic");
-  const comicCard = page
-    .getByTestId("album-card")
-    .first()
-    .getByRole("link", { name: /打开相册/ });
+  const comicCard = albumCard(page).getByRole("link", { name: /打开相册/ });
   await expect(comicCard).toBeVisible();
   await comicCard.evaluate((el) => el.scrollIntoView({ block: "center" }));
   await comicCard.hover();
@@ -2219,10 +2227,7 @@ test("卡片悬停预览完整落在视口内，不被视口下缘裁掉", async
   await page.goto("/");
   // 明确取一张卡片上的链接：首屏专区里也有指向相册的链接（随手看看的
   // 封面），它不是卡片，没有悬停预览。
-  const card = page
-    .getByTestId("album-card")
-    .first()
-    .getByRole("link", { name: /打开相册/ });
+  const card = albumCard(page).getByRole("link", { name: /打开相册/ });
   await expect(card).toBeVisible();
   // 把卡片滚到视口下缘：预览会向下溢出，只有按整体高度夹紧才不会越界。
   await card.evaluate((el) => el.scrollIntoView({ block: "end" }));
@@ -2280,7 +2285,7 @@ test("卡片右上角的星标可以直接收藏，且不会跳转", async ({ pa
   await page.goto("/");
   // 明确取一张卡片，而不是页面上第一个「打开相册」链接：首屏专区里也有
   // 指向相册的链接（随手看看的封面），它不是卡片，也没有星标。
-  const card = page.getByTestId("album-card").first();
+  const card = albumCard(page);
   const link = card.getByRole("link", { name: /^打开相册/ });
   const href = await link.getAttribute("href");
   expect(href).toBeTruthy();
