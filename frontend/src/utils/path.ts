@@ -60,6 +60,15 @@ export function picksRoute(): string {
 }
 
 /**
+ * 按年份浏览照片。
+ *
+ * 年份只属于照片工作台：漫画按作品与卷组织，年份对它没有意义。
+ */
+export function yearRoute(year: string): string {
+  return `${MODE_PREFIX.photo}/years/${encodeURIComponent(year)}`;
+}
+
+/**
  * 未读页只在漫画工作台存在。
  *
  * 它没有模式参数：照片侧根本没有这个页面，路由表里也不注册。

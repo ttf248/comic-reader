@@ -139,6 +139,60 @@ export interface LibraryMediaItem {
   version?: string;
 }
 
+/**
+ * 跨相册的照片条目：媒体字段 + 它来自哪本相册。
+ *
+ * 年份墙、精选墙上的照片来自不同的本，用户要看得见出处、也回得去
+ * 原来的位置 —— 只给文件 ID 说不出「这张是从哪儿来的」。
+ */
+export interface LibraryFeedItem extends LibraryMediaItem {
+  albumId: string;
+  albumName: string;
+}
+
+/** 照片流里一本相册的定位：这些照片来自哪几本。 */
+export interface LibraryFeedAlbum {
+  id: string;
+  name: string;
+  /** 这本相册贡献的照片数。 */
+  count: number;
+}
+
+/**
+ * 照片流的取材范围。
+ *
+ * - year：某一年下各相册的照片（年份是浏览入口）
+ * - collection：某个集合内部的照片
+ * - recent / random：几本相册的照片交错排在一起
+ */
+export type MediaFeedScope = "recent" | "random" | "year" | "collection";
+
+export interface MediaFeedQuery {
+  kind: AppMode;
+  scope: MediaFeedScope;
+  /** scope=year 时必填："1900".."2099" 或 "other"。 */
+  year?: string;
+  /** scope=collection 时必填：集合的资源 ID。 */
+  parent?: string;
+}
+
+/**
+ * 取材范围里被选中的节点。
+ *
+ * 年份对应的那几个集合：年份页靠它说清「这一年的照片来自哪里」，
+ * 也给出回到那个集合的入口。
+ */
+export interface LibraryFeedSource {
+  id: string;
+  name: string;
+  kind: "album" | "collection";
+}
+
+export interface LibraryFeedPage extends LibraryPage<LibraryFeedItem> {
+  albums: LibraryFeedAlbum[];
+  sources: LibraryFeedSource[];
+}
+
 export interface LibraryTagSummary {
   tag: string;
   albumCount: number;
@@ -207,6 +261,13 @@ export interface LibraryListQuery {
   year?: string;
   minImageCount?: number;
   sort?: "name" | "count" | "added" | "recent" | "viewed";
+  /**
+   * 把按年份归组的代表节点从列表里去掉。
+   *
+   * 首页的年份索引直接给照片墙看，那些集合不必在列表里再出现一次。
+   * 服务端只在顶层范围生效，集合页与标签页不受影响。
+   */
+  excludeYearTargets?: boolean;
 }
 export type LibraryListItem =
   | { kind: "album" | "collection"; node: LibraryNodeSummary }
@@ -327,6 +388,15 @@ export const libraryApi = {
     }),
   manifest: () =>
     api<{ ok: boolean; manifest: LibraryManifest }>("/api/library/manifest"),
+  mediaFeed: (
+    query: MediaFeedQuery,
+    cursor?: string,
+    signal?: AbortSignal,
+  ) =>
+    api<{ ok: boolean; page: LibraryFeedPage }>("/api/library/media-feed", {
+      params: { ...query, cursor, limit: LIBRARY_PAGE_LIMIT },
+      signal,
+    }),
   activitySummary: (kind: AppMode) =>
     api<{ ok: boolean; summary: LibraryActivitySummary }>(
       "/api/library/activity-summary",

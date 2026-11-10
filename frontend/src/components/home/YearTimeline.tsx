@@ -4,6 +4,7 @@ import { useSearchStore } from "../../store/searchStore";
 import { useAppMode } from "../../hooks/useAppMode";
 import type { YearGroup } from "../../utils/albumGrouping";
 import { albumCountUnit } from "../../utils/workbench";
+import { yearRoute } from "../../utils/path";
 import { FilterIcon } from "../common/Icon";
 import Timeline, { type TimelineEntry } from "./Timeline";
 
@@ -15,7 +16,8 @@ interface Props {
 /**
  * 年份索引。
  *
- * 点年份卡：进入那一年（通常是一个同名集合，其次是文件最多的那一本）。
+ * 点年份卡：照片侧直接看这一年的照片 —— 一年散在好几本相册里，
+ * 先挑一本再进去等于让用户替系统做取舍。漫画侧仍进那一年的作品集。
  * 卡片右上角的漏斗才是「只筛这一年」—— 它筛的是下方网格。
  */
 export default function YearTimeline({ groups, gridRef }: Props) {
@@ -25,6 +27,7 @@ export default function YearTimeline({ groups, gridRef }: Props) {
   // 计数单位跟着工作台走：照片侧「张」，漫画侧「页」。
   const { mode } = useAppMode();
   const unit = mode === "comic" ? "页" : "张";
+  const isPhoto = mode === "photo";
 
   const entries = useMemo<TimelineEntry[]>(
     () =>
@@ -66,6 +69,12 @@ export default function YearTimeline({ groups, gridRef }: Props) {
           coverVersion: group.coverPreviewVersions[0],
           active: isActive,
           onActivate: () => {
+            // 照片侧：年份是一段照片的入口，不是文件夹的入口。
+            // 直接看这一年的照片，用户不必先猜中是哪一本相册。
+            if (isPhoto && group.year !== null) {
+              navigate(yearRoute(String(group.year)));
+              return;
+            }
             if (enterTarget) navigate(enterTarget.to);
             else triggerFilter();
           },
@@ -82,7 +91,7 @@ export default function YearTimeline({ groups, gridRef }: Props) {
           ),
         };
       }),
-    [groups, yearFilter, toggleYear, navigate, gridRef, unit, mode],
+    [groups, yearFilter, toggleYear, navigate, gridRef, unit, mode, isPhoto],
   );
 
   return <Timeline entries={entries} testId="year-timeline" />;

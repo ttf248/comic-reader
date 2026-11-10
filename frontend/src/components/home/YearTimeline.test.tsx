@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import YearTimeline from "./YearTimeline";
 import { useSearchStore } from "../../store/searchStore";
+import { useAppModeStore } from "../../store/appModeStore";
 import type { YearGroup } from "../../utils/albumGrouping";
 import type { CardData } from "../album/AlbumCard";
 
@@ -63,6 +64,7 @@ describe("YearTimeline", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useSearchStore.setState({ yearFilter: null });
+    useAppModeStore.setState({ preference: "photo", hydrated: true });
   });
 
   it("代表封面加载失败时降级为年份卡，不露出破图", () => {
@@ -114,16 +116,30 @@ describe("YearTimeline", () => {
     expect(useSearchStore.getState().yearFilter).toBeNull();
   });
 
-  it("原生年份按钮打开该年份唯一的相册", () => {
+  // 照片侧：年份卡直接看这一年的照片。年份散在好几本相册里，
+  // 先挑一本再进去等于让用户替系统做取舍。
+  it("照片侧年份卡直接打开这一年的照片墙", () => {
+    useAppModeStore.setState({ preference: "photo", hydrated: true });
     renderTimeline([makeGroup(2024)]);
     const card = screen.getByRole("button", { name: /2024/ });
 
     expect(card.tagName).toBe("BUTTON");
     fireEvent.click(card);
+    expect(navigate).toHaveBeenCalledWith("/photo/years/2024");
+  });
+
+  // 漫画侧没有照片墙：年份卡仍进那一年（通常是一个同名作品集）。
+  it("漫画侧年份卡打开该年份唯一的相册", () => {
+    useAppModeStore.setState({ preference: "comic", hydrated: true });
+    renderTimeline([makeGroup(2024)]);
+    const card = screen.getByRole("button", { name: /2024/ });
+
+    fireEvent.click(card);
     expect(navigate).toHaveBeenCalledWith("/albums/a0");
   });
 
   it("一年里有多个节点时仍然进入那一年，而不是变成筛选", () => {
+    useAppModeStore.setState({ preference: "comic", hydrated: true });
     renderTimeline([makeGroup(2024, 3)]);
     const card = screen.getByRole("button", { name: /2024/ });
 
@@ -133,6 +149,7 @@ describe("YearTimeline", () => {
   });
 
   it("年份里有集合时进入集合（那一年通常就是一个同名集合）", () => {
+    useAppModeStore.setState({ preference: "comic", hydrated: true });
     const group = makeGroup(2024, 2);
     group.albums = [makeCard("a0"), makeCollectionCard("c0")];
     renderTimeline([group]);
