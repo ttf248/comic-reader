@@ -1,5 +1,6 @@
 import { ensureLibraryReady, scannedNodes } from "./helpers/library";
 import { expect, test } from "@playwright/test";
+import type { StatePreview } from "../../src/api/stateBackup";
 
 // 照片精选的跨层主链路：照片墙加入精选 → 精选页列出来 → 重启后仍在。
 //
@@ -66,4 +67,70 @@ test("照片可以加入精选，在精选页里聚在一起，重启后仍然�
     picks: string[];
   };
   expect(again.picks).toHaveLength(1);
+});
+
+test("精选能随状态备份导出并按类别恢复，且不动相册收藏", async ({
+  request,
+}) => {
+  await ensureLibraryReady(request);
+  // 这一条不再触发扫描：扫描会推进库 revision，恢复前的预览就作废了。
+  const manifest = (await (
+    await request.get("/api/library/manifest")
+  ).json()) as { manifest: { roots: Array<{ id: string; contentKind?: string }> } };
+  const root = manifest.manifest.roots.find(
+    (item) => item.contentKind === "photo",
+  );
+  expect(root).toBeDefined();
+  const children = (await (
+    await request.get(`/api/library/${root!.id}/children?kind=photo&limit=100`)
+  ).json()) as { page: { items: Array<{ id: string; name: string }> } };
+  const album = children.page.items.find((node) => node.name === "sample-album");
+  expect(album).toBeDefined();
+  const media = (await (
+    await request.get(`/api/albums/${album!.id}/media?limit=10`)
+  ).json()) as { page: { items: Array<{ id: string }> } };
+  const pickId = media.page.items[0].id;
+
+  try {
+    await request.post("/api/picks/batch", {
+      data: { ids: [pickId], action: "add" },
+    });
+    // 备份要在精选加进去之后导出，否则里面没有这张。
+    const exported = (await (
+      await request.get("/api/admin/state/export")
+    ).json()) as { picks?: string[] };
+    expect(exported.picks).toContain(pickId);
+
+    // 清掉精选，按类别恢复把它带回来。
+    await request.post("/api/picks/batch", {
+      data: { ids: [pickId], action: "remove" },
+    });
+    const preview = (await (
+      await request.post("/api/admin/state/import/preview", {
+        data: { backup: exported },
+      })
+    ).json()) as StatePreview;
+    const response = await request.post("/api/admin/state/import", {
+      data: {
+        backup: exported,
+        categories: ["picks"],
+        versions: preview.versions,
+        libraryRevision: preview.libraryRevision,
+      },
+    });
+    expect(response.ok()).toBeTruthy();
+    const restored = (await (await request.get("/api/picks")).json()) as {
+      picks: string[];
+    };
+    expect(restored.picks).toContain(pickId);
+  } finally {
+    const current = (await (await request.get("/api/picks")).json()) as {
+      picks: string[];
+    };
+    if (current.picks.length > 0) {
+      await request.post("/api/picks/batch", {
+        data: { ids: current.picks, action: "remove" },
+      });
+    }
+  }
 });

@@ -59,6 +59,7 @@ test("本机备份下载、仅恢复收藏、过期预览拒绝覆盖", async ({
       /服务端偏好 ·/,
       /阅读与播放活动 ·/,
       /自定义封面 ·/,
+      /照片精选 ·/,
     ])
       await panel.getByRole("checkbox", { name: category }).uncheck();
     page.once("dialog", (dialog) => void dialog.accept());

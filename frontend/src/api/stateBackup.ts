@@ -7,6 +7,7 @@ export const backupCategories = [
   "preferences",
   "activities",
   "covers",
+  "picks",
 ] as const;
 export type BackupCategory = (typeof backupCategories)[number];
 export const backupLabels: Record<BackupCategory, string> = {
@@ -15,6 +16,7 @@ export const backupLabels: Record<BackupCategory, string> = {
   preferences: "服务端偏好",
   activities: "阅读与播放活动",
   covers: "自定义封面",
+  picks: "照片精选",
 };
 export interface StatePreview {
   versions: Record<string, string>;
