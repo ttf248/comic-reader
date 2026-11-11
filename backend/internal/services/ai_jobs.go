@@ -86,9 +86,10 @@ type AIJobCheckpoint struct {
 	ModuleVersion  string `json:"moduleVersion"`
 }
 
-// AIJobError 只包含不透明资源 ID 和脱敏原因，不保存文件系统路径。
+// AIJobError 保存资源 ID、根目录别名下的相对路径和脱敏原因，不保存绝对路径。
 type AIJobError struct {
 	ResourceID string    `json:"resourceId"`
+	Path       string    `json:"path,omitempty"`
 	Code       string    `json:"code"`
 	Message    string    `json:"message"`
 	At         time.Time `json:"at"`
@@ -184,12 +185,13 @@ type aiJobRuntime struct {
 }
 
 type aiJobTarget struct {
-	resourceID string
-	path       string
-	position   int
-	size       int64
-	mtimeNs    int64
-	statCode   string
+	resourceID  string
+	path        string
+	displayPath string
+	position    int
+	size        int64
+	mtimeNs     int64
+	statCode    string
 }
 
 // AIJobService 持久化分析任务，并通过有界 worker 处理图片元数据。
@@ -760,7 +762,12 @@ func (s *AIJobService) buildTargets(snapshot CatalogSnapshot) []aiJobTarget {
 		if !ok || !models.IsImageFile(ref.AbsolutePath) {
 			continue
 		}
-		target := aiJobTarget{resourceID: id, path: ref.AbsolutePath, position: len(targets)}
+		target := aiJobTarget{
+			resourceID:  id,
+			path:        ref.AbsolutePath,
+			displayPath: snapshot.RelativeLabel(id),
+			position:    len(targets),
+		}
 		validated, err := s.validatePath(ref.AbsolutePath)
 		if err != nil {
 			target.statCode = "source_unavailable"
@@ -986,6 +993,7 @@ func (s *AIJobService) commitBatch(jobID string, runtimeState *aiJobRuntime, tar
 			job.Failed++
 			job.Errors = append(job.Errors, AIJobError{
 				ResourceID: record.ResourceID,
+				Path:       targets[index].displayPath,
 				Code:       record.ErrorCode,
 				Message:    record.ErrorMessage,
 				At:         record.UpdatedAt,
@@ -1153,6 +1161,10 @@ func (s *AIJobService) scheduleTick(now time.Time) {
 func (s *AIJobService) snapshotLocked(job *AIJob) AIJob {
 	copy := *job
 	copy.Errors = append([]AIJobError(nil), job.Errors...)
+	catalogSnapshot := s.catalog.Acquire()
+	for index := range copy.Errors {
+		copy.Errors[index].Path = catalogSnapshot.RelativeLabel(copy.Errors[index].ResourceID)
+	}
 	if job.StartedAt != nil {
 		end := s.now()
 		if job.FinishedAt != nil {

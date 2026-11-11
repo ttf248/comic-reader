@@ -202,7 +202,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 读取任务历史、活动任务与每日计划；启动请求为 `{ "type": "metadata", "mode": "full" | "incremental" }`。当前只安装 `metadata` 模块。全量分析当前库中的图片，增量分析新增、修改或解析器版本变化的图片。已有其他任务活动时返回 `409 analysis_job_active`；模块类型或模式无效时返回 `400 analysis_start_failed`。响应含任务快照与 `reused`。
 
-任务状态为 `pending`、`running`、`paused`、`completed`、`failed`、`cancelled`。快照包含阶段、总数、已处理/跳过/失败/完成数、检查点、耗时、速度、开始/结束时间及错误项。错误项只公开资源 ID、稳定错误码、脱敏原因和时间，不含路径。任务在后台按 32 张一批提交，重启后自动恢复运行中任务。
+任务状态为 `pending`、`running`、`paused`、`completed`、`failed`、`cancelled`。快照包含阶段、总数、已处理/跳过/失败/完成数、检查点、耗时、速度、开始/结束时间及错误项。错误项包含资源 ID、根目录别名下的相对图片路径、稳定错误码、脱敏原因和时间；不返回文件系统绝对路径。任务在后台按 32 张一批提交，重启后自动恢复运行中任务。
 
 ### `GET /api/ai/jobs/:jobId` / `GET /api/ai/jobs/:jobId/events`
 

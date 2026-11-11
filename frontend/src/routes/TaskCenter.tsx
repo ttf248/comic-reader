@@ -310,10 +310,16 @@ export default function TaskCenter() {
                       <p className="mb-2 text-fg">失败文件（最多展示 20 项）</p>
                       <ul className="space-y-1">
                         {job.errors.slice(0, 20).map((failure, index) => (
-                          <li key={`${failure.resourceId}-${index}`}>
-                            {failure.message}{" "}
-                            <span className="text-fg-subtle">
-                              · {failure.resourceId}
+                          <li
+                            key={`${failure.resourceId}-${index}`}
+                            className="grid gap-1"
+                          >
+                            <span>{failure.message}</span>
+                            <span className="break-all font-mono text-fg-subtle">
+                              图片路径：{failure.path || "当前媒体库中不可用"}
+                            </span>
+                            <span className="break-all text-fg-subtle">
+                              资源 ID：{failure.resourceId}
                             </span>
                           </li>
                         ))}

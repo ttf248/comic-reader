@@ -8,6 +8,7 @@ export type AnalysisStatus =
 
 export interface AIJobError {
   resourceId: string;
+  path?: string;
   code: string;
   message: string;
   at: string;
