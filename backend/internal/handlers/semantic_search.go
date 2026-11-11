@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -17,6 +18,7 @@ import (
 
 type semanticSearchRequest struct {
 	Text       string `json:"text"`
+	OCRText    string `json:"ocrText"`
 	ResourceID string `json:"resourceId"`
 	Kind       string `json:"kind"`
 	AlbumID    string `json:"albumId"`
@@ -28,7 +30,7 @@ type semanticSearchRequest struct {
 
 type semanticSearchHit struct {
 	Item       services.FeedMediaItem `json:"item"`
-	Similarity float64                `json:"similarity"`
+	Similarity *float64               `json:"similarity,omitempty"`
 }
 
 // AIEmbeddingStatusHandler 返回本机运行时、GPU、权重和向量覆盖状态。
@@ -64,11 +66,12 @@ func AIEmbeddingStatusHandler(analyzer *services.EmbeddingAnalyzer, jobs *servic
 	}
 }
 
-// SemanticSearchHandler 用文本或媒体库图片进行本地向量检索。
+// SemanticSearchHandler 组合本地语义向量、OCR 文本与结构化条件搜索照片。
 // 图片查询既可传当前资源 ID，也可用 multipart 上传一张临时查询图。
 func SemanticSearchHandler(
 	analyzer *services.EmbeddingAnalyzer,
 	jobs *services.AIJobService,
+	ocrIndex *services.OCRSearchIndex,
 	catalog *services.ResourceCatalog,
 	validatePath func(string) (string, error),
 	tempDir string,
@@ -78,7 +81,7 @@ func SemanticSearchHandler(
 		var uploadedPath string
 		if strings.HasPrefix(strings.ToLower(c.Get(fiber.HeaderContentType)), "multipart/form-data") {
 			request = semanticSearchRequest{
-				Text: c.FormValue("text"), ResourceID: c.FormValue("resourceId"),
+				Text: c.FormValue("text"), OCRText: c.FormValue("ocrText"), ResourceID: c.FormValue("resourceId"),
 				Kind: c.FormValue("kind"), AlbumID: c.FormValue("albumId"),
 				Year: c.FormValue("year"), LocationID: c.FormValue("locationId"),
 				Offset: parseSemanticInt(c.FormValue("offset"), 0), Limit: parseSemanticInt(c.FormValue("limit"), 60),
@@ -106,14 +109,19 @@ func SemanticSearchHandler(
 			return writeError(c, fiber.StatusBadRequest, "invalid_semantic_search", "request body is not valid JSON")
 		}
 		request.Text = strings.TrimSpace(request.Text)
+		request.OCRText = strings.TrimSpace(request.OCRText)
 		if len(request.Text) > 512 {
 			return writeError(c, fiber.StatusBadRequest, "invalid_semantic_search", "text query must be at most 512 characters")
 		}
-		if (request.Text == "") == (request.ResourceID == "" && uploadedPath == "") {
-			return writeError(c, fiber.StatusBadRequest, "invalid_semantic_search", "provide either text or one image query")
+		if len([]rune(request.OCRText)) > 200 {
+			return writeError(c, fiber.StatusBadRequest, "invalid_semantic_search", "OCR query must be at most 200 characters")
 		}
-		if request.ResourceID != "" && uploadedPath != "" {
-			return writeError(c, fiber.StatusBadRequest, "invalid_semantic_search", "provide only one image query")
+		semanticQuery := request.Text != "" || request.ResourceID != "" || uploadedPath != ""
+		if request.Text != "" && (request.ResourceID != "" || uploadedPath != "") || request.ResourceID != "" && uploadedPath != "" {
+			return writeError(c, fiber.StatusBadRequest, "invalid_semantic_search", "provide either one text or one image query")
+		}
+		if !semanticQuery && request.OCRText == "" && request.AlbumID == "" && request.Year == "" && request.LocationID == "" {
+			return writeError(c, fiber.StatusBadRequest, "invalid_semantic_search", "provide a search query or at least one filter")
 		}
 		kind := services.LibraryKindScope(request.Kind)
 		if kind != services.LibraryKindPhoto && kind != services.LibraryKindComic {
@@ -138,13 +146,25 @@ func SemanticSearchHandler(
 			return c.JSON(fiber.Map{"ok": true, "results": []semanticSearchHit{}, "total": 0, "nextOffset": 0, "revision": snapshot.Revision()})
 		}
 
-		queryVector, err := semanticQueryVector(analyzer, request, uploadedPath, snapshot, validatePath)
-		if err != nil {
-			return semanticSearchError(c, err)
+		var queryVector []float32
+		if semanticQuery {
+			var err error
+			queryVector, err = semanticQueryVector(analyzer, request, uploadedPath, snapshot, validatePath)
+			if err != nil {
+				return semanticSearchError(c, err)
+			}
 		}
 		embeddingRecords := make(map[string]services.AIAnalysisRecord)
-		for _, record := range jobs.Records(services.AIJobTypeEmbedding) {
-			embeddingRecords[record.ResourceID] = record
+		if semanticQuery {
+			for _, record := range jobs.Records(services.AIJobTypeEmbedding) {
+				embeddingRecords[record.ResourceID] = record
+			}
+		}
+		ocrRecords := make(map[string]services.AIAnalysisRecord)
+		if request.OCRText != "" {
+			for _, record := range jobs.Records(services.AIJobTypeOCR) {
+				ocrRecords[record.ResourceID] = record
+			}
 		}
 		metadataRecords := make(map[string]services.AIAnalysisRecord)
 		if request.Year != "" || request.LocationID != "" {
@@ -152,13 +172,44 @@ func SemanticSearchHandler(
 				metadataRecords[record.ResourceID] = record
 			}
 		}
-		candidates := make([]services.VectorMetadata, 0, len(embeddingRecords))
-		candidateByID := make(map[string]services.VectorMetadata, len(embeddingRecords))
-		for _, metadata := range analyzer.Index().Metadata() {
-			record, exists := embeddingRecords[metadata.ResourceID]
-			if !exists || !analyzer.RecordCurrent(record) || record.Size != metadata.Size || record.MTimeNs != metadata.MTimeNs {
-				continue
+		candidateByID := make(map[string]services.VectorMetadata)
+		if semanticQuery {
+			for _, metadata := range analyzer.Index().Metadata() {
+				record, exists := embeddingRecords[metadata.ResourceID]
+				if exists && analyzer.RecordCurrent(record) && record.Size == metadata.Size && record.MTimeNs == metadata.MTimeNs {
+					candidateByID[metadata.ResourceID] = metadata
+				}
 			}
+		} else if request.OCRText != "" {
+			for _, resourceID := range ocrIndex.Candidates(request.OCRText) {
+				if record, exists := ocrRecords[resourceID]; exists && record.Status == "recognized" && record.ModuleVersion == services.OCRAnalyzerVersion {
+					candidateByID[resourceID] = services.VectorMetadata{ResourceID: resourceID, Size: record.Size, MTimeNs: record.MTimeNs}
+				}
+			}
+		} else {
+			for _, resourceID := range snapshot.FileIDs() {
+				ref, exists := snapshot.Lookup(resourceID)
+				if !exists || ref.Kind != services.ResourceFile || !models.IsImageFile(ref.AbsolutePath) {
+					continue
+				}
+				path, validateErr := validatePath(ref.AbsolutePath)
+				if validateErr != nil {
+					continue
+				}
+				info, statErr := os.Stat(path)
+				if statErr == nil && info.Mode().IsRegular() {
+					candidateByID[resourceID] = services.VectorMetadata{ResourceID: resourceID, Size: info.Size(), MTimeNs: info.ModTime().UnixNano()}
+				}
+			}
+		}
+		candidateIDs := make([]string, 0, len(candidateByID))
+		for resourceID := range candidateByID {
+			candidateIDs = append(candidateIDs, resourceID)
+		}
+		sort.Strings(candidateIDs)
+		candidates := make([]services.VectorMetadata, 0, len(candidateIDs))
+		for _, resourceID := range candidateIDs {
+			metadata := candidateByID[resourceID]
 			ref, exists := snapshot.Lookup(metadata.ResourceID)
 			if !exists || ref.Kind != services.ResourceFile || !models.IsImageFile(ref.AbsolutePath) {
 				continue
@@ -187,23 +238,53 @@ func SemanticSearchHandler(
 					continue
 				}
 			}
+			if request.OCRText != "" {
+				ocrRecord, exists := ocrRecords[metadata.ResourceID]
+				if !exists || ocrRecord.Status != "recognized" || ocrRecord.ModuleVersion != services.OCRAnalyzerVersion || ocrRecord.Size != metadata.Size || ocrRecord.MTimeNs != metadata.MTimeNs {
+					continue
+				}
+				var ocrResult struct {
+					Text string `json:"text"`
+				}
+				if json.Unmarshal(ocrRecord.Data, &ocrResult) != nil {
+					continue
+				}
+				query := strings.Join(strings.Fields(strings.ToLower(request.OCRText)), " ")
+				text := strings.Join(strings.Fields(strings.ToLower(ocrResult.Text)), " ")
+				if !strings.Contains(text, query) {
+					continue
+				}
+			}
 			candidates = append(candidates, metadata)
-			candidateByID[metadata.ResourceID] = metadata
 		}
 		start := request.Offset
 		if start > len(candidates) {
 			start = len(candidates)
 		}
-		pageHits, total, err := analyzer.Index().Search(queryVector, candidates, start, request.Limit)
-		if err != nil {
-			return writeError(c, fiber.StatusInternalServerError, "semantic_search_failed", "semantic search failed")
+		var pageHits []services.VectorHit
+		var total int
+		if semanticQuery {
+			var err error
+			pageHits, total, err = analyzer.Index().Search(queryVector, candidates, start, request.Limit)
+			if err != nil {
+				return writeError(c, fiber.StatusInternalServerError, "semantic_search_failed", "semantic search failed")
+			}
+		} else {
+			total = len(candidates)
+			end := min(start+request.Limit, total)
+			for _, candidate := range candidates[start:end] {
+				pageHits = append(pageHits, services.VectorHit{ResourceID: candidate.ResourceID})
+			}
 		}
 		ids := make([]string, 0, len(pageHits))
-		scores := make(map[string]float64, len(pageHits))
+		scores := make(map[string]*float64, len(pageHits))
 		fingerprints := make(map[string]services.VectorMetadata, len(pageHits))
 		for _, hit := range pageHits {
 			ids = append(ids, hit.ResourceID)
-			scores[hit.ResourceID] = hit.Score
+			if semanticQuery {
+				score := hit.Score
+				scores[hit.ResourceID] = &score
+			}
 			fingerprints[hit.ResourceID] = candidateByID[hit.ResourceID]
 		}
 		items := services.ResolveLibraryFeedItems(snapshot, ids, validatePath)

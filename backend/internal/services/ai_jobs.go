@@ -237,13 +237,14 @@ type AIAnalysisRecord struct {
 }
 
 type AIJobServiceOptions struct {
-	StatePath    string
-	MetadataDir  string
-	Catalog      *ResourceCatalog
-	ValidatePath func(string) (string, error)
-	Analyzers    []AIAnalyzer
-	WorkerCount  int
-	Now          func() time.Time
+	StatePath          string
+	MetadataDir        string
+	Catalog            *ResourceCatalog
+	ValidatePath       func(string) (string, error)
+	Analyzers          []AIAnalyzer
+	WorkerCount        int
+	Now                func() time.Time
+	OnRecordsCommitted func([]AIAnalysisRecord)
 }
 
 type aiJobDiskState struct {
@@ -289,6 +290,7 @@ type AIJobService struct {
 	analyzers    map[string]AIAnalyzer
 	workerCount  int
 	now          func() time.Time
+	onRecordsCommitted func([]AIAnalysisRecord)
 	jobs         map[string]*AIJob
 	order        []string
 	records      map[string]AIAnalysisRecord
@@ -322,6 +324,7 @@ func NewAIJobService(options AIJobServiceOptions) (*AIJobService, error) {
 		analyzers:    make(map[string]AIAnalyzer, len(options.Analyzers)),
 		workerCount:  options.WorkerCount,
 		now:          options.Now,
+		onRecordsCommitted: options.OnRecordsCommitted,
 		jobs:         make(map[string]*AIJob),
 		records:      make(map[string]AIAnalysisRecord),
 		runtimes:     make(map[string]*aiJobRuntime),
@@ -1373,9 +1376,9 @@ func (s *AIJobService) commitBatch(jobID string, runtimeState *aiJobRuntime, tar
 	}
 
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	job = s.jobs[jobID]
 	if job == nil {
+		s.mu.Unlock()
 		return errors.New("analysis job not found")
 	}
 	for index, record := range records {
@@ -1407,9 +1410,21 @@ func (s *AIJobService) commitBatch(jobID string, runtimeState *aiJobRuntime, tar
 	job.UpdatedAt = s.now()
 	job.Stage = job.Type
 	if err := s.persistLocked(); err != nil {
+		s.mu.Unlock()
 		return err
 	}
 	s.publishLocked(*job)
+	onRecordsCommitted := s.onRecordsCommitted
+	s.mu.Unlock()
+	if onRecordsCommitted != nil {
+		committed := make([]AIAnalysisRecord, len(records))
+		for index, record := range records {
+			record.Data = append(json.RawMessage(nil), record.Data...)
+			record.Fields = append([]string(nil), record.Fields...)
+			committed[index] = record
+		}
+		onRecordsCommitted(committed)
+	}
 	return nil
 }
 

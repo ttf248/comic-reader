@@ -122,4 +122,40 @@ describe("智能搜索", () => {
     expect(await screen.findByText("还没有可搜索的向量")).toBeInTheDocument();
     expect(screen.getByText(/NVIDIA GeForce RTX 3060/)).toBeInTheDocument();
   });
+
+  it("Chinese-CLIP 不可用时仍可提交 OCR 搜索", async () => {
+    mocks.embeddingStatus.mockResolvedValue({
+      ok: true,
+      status: {
+        runtimeReady: false,
+        modelValid: false,
+        device: "cpu",
+        coverage: { indexed: 0, total: 0 },
+      },
+    });
+    renderSearch();
+
+    fireEvent.change(
+      screen.getByPlaceholderText("例如：车站名称、招牌或照片里的日期"),
+      { target: { value: "入口" } },
+    );
+    const submit = screen.getByRole("button", { name: "搜索照片" });
+    expect(submit).toBeEnabled();
+    fireEvent.click(submit);
+
+    await waitFor(() =>
+      expect(mocks.semanticSearch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ocrText: "入口",
+          kind: "photo",
+          offset: 0,
+          limit: 60,
+        }),
+        undefined,
+      ),
+    );
+    expect(
+      await screen.findByText("还没有可搜索的文字结果"),
+    ).toBeInTheDocument();
+  });
 });

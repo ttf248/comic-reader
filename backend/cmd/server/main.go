@@ -295,15 +295,27 @@ func main() {
 	if err != nil {
 		log.Fatalf("初始化人脸识别模块失败")
 	}
+	ocrSearchIndex, err := services.OpenOCRSearchIndex(filepath.Join(cacheLayout.AIDerivedDir, "ocr-search-index.json"))
+	if err != nil {
+		log.Fatalf("初始化 OCR 搜索索引失败: %v", err)
+	}
 	aiJobs, err := services.NewAIJobService(services.AIJobServiceOptions{
 		StatePath:    cacheLayout.AIJobsPath,
 		MetadataDir:  cacheLayout.MetadataDir,
 		Catalog:      resourceCatalog,
 		ValidatePath: safetyState.Validate,
 		Analyzers:    []services.AIAnalyzer{services.MetadataAnalyzer{}, embeddingAnalyzer, ocrAnalyzer, faceAnalyzer},
+		OnRecordsCommitted: func(records []services.AIAnalysisRecord) {
+			if indexErr := ocrSearchIndex.ApplyRecords(records); indexErr != nil {
+				log.Printf("更新 OCR 搜索索引失败: %v", indexErr)
+			}
+		},
 	})
 	if err != nil {
 		log.Fatalf("初始化媒体分析任务服务失败: %v", err)
+	}
+	if err := ocrSearchIndex.Sync(aiJobs.Records(services.AIJobTypeOCR)); err != nil {
+		log.Printf("重建 OCR 搜索索引失败: %v", err)
 	}
 	aiJobs.StartPending()
 
@@ -374,7 +386,7 @@ func main() {
 	api.Post("/ai/jobs", handlers.AIJobStartHandler(aiJobs))
 	api.Post("/ai/jobs/sequence", handlers.AIJobSequenceStartHandler(aiJobs))
 	api.Get("/ai/semantic/status", handlers.AIEmbeddingStatusHandler(embeddingAnalyzer, aiJobs, resourceCatalog))
-	api.Post("/ai/search", handlers.SemanticSearchHandler(embeddingAnalyzer, aiJobs, resourceCatalog, safetyState.Validate, cacheLayout.TempDir))
+	api.Post("/ai/search", handlers.SemanticSearchHandler(embeddingAnalyzer, aiJobs, ocrSearchIndex, resourceCatalog, safetyState.Validate, cacheLayout.TempDir))
 	api.Post("/ai/faces/search", handlers.FaceSimilaritySearchHandler(aiJobs, resourceCatalog, safetyState.Validate))
 	api.Get("/ai/jobs/settings", handlers.AIJobSettingsHandler(aiJobs))
 	api.Put("/ai/jobs/settings", handlers.AIJobSettingsHandler(aiJobs))

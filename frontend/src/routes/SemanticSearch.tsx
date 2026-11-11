@@ -19,7 +19,7 @@ import { usePhotoStore, wallTargetHeight } from "../store/photoStore";
 import { useUIStore } from "../store/uiStore";
 import { albumRoute } from "../utils/path";
 
-type ScoredFeedItem = LibraryFeedItem & { similarity: number };
+type ScoredFeedItem = LibraryFeedItem & { similarity?: number };
 type SearchMode = "text" | "image";
 
 interface SubmittedSearch {
@@ -34,6 +34,7 @@ export default function SemanticSearch() {
   const pushToast = useUIStore((state) => state.pushToast);
   const [mode, setMode] = useState<SearchMode>("text");
   const [text, setText] = useState("");
+  const [ocrText, setOcrText] = useState("");
   const [imageFile, setImageFile] = useState<File | undefined>();
   const [similarResourceId, setSimilarResourceId] = useState("");
   const [albumText, setAlbumText] = useState("");
@@ -84,11 +85,21 @@ export default function SemanticSearch() {
   const total = submittedQuery.data?.pages[0]?.total ?? 0;
   const status = statusQuery.data?.status;
   const embeddingReady = Boolean(status?.runtimeReady && status.modelValid);
+  const hasSemanticQuery =
+    mode === "text"
+      ? Boolean(text.trim())
+      : Boolean(similarResourceId || imageFile);
+  const hasSearchCondition = Boolean(
+    hasSemanticQuery || ocrText.trim() || album || year || locationId,
+  );
 
   const search = (resourceId?: string, file?: File) => {
     const request: SemanticSearchRequest = {
       kind: "photo",
-      ...(mode === "text" && !resourceId ? { text: text.trim() } : {}),
+      ...(mode === "text" && !resourceId && text.trim()
+        ? { text: text.trim() }
+        : {}),
+      ...(ocrText.trim() ? { ocrText: ocrText.trim() } : {}),
       ...(resourceId ? { resourceId } : {}),
       ...(album ? { albumId: album.path } : {}),
       ...(year.trim() ? { year: year.trim() } : {}),
@@ -100,18 +111,17 @@ export default function SemanticSearch() {
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!embeddingReady) return;
-    if (mode === "text") {
-      if (!text.trim()) return;
-      setSimilarResourceId("");
-      search();
-      return;
-    }
+    if (hasSemanticQuery && !embeddingReady) return;
     if (similarResourceId) {
       search(similarResourceId);
       return;
     }
-    if (imageFile) search(undefined, imageFile);
+    if (mode === "image" && imageFile) {
+      search(undefined, imageFile);
+      return;
+    }
+    if (mode === "text") setSimilarResourceId("");
+    search();
   };
 
   const findSimilar = (item: ScoredFeedItem) => {
@@ -129,9 +139,9 @@ export default function SemanticSearch() {
     <div className="flex h-full min-h-0 flex-col">
       <div className="shrink-0 overflow-y-auto pb-4">
         <PageHeading
-          eyebrow="本地 AI · Chinese-CLIP"
+          eyebrow="本地 AI · 组合检索"
           title="智能搜索"
-          description="用中文描述查找画面，或选择一张图片寻找相似照片。推理和向量索引都在本机完成。"
+          description="组合中文语义、图片文字、相册、年份与 GPS 条件，在本机照片库中查找。"
         />
         <section className="page-shell mt-5">
           <form
@@ -206,6 +216,22 @@ export default function SemanticSearch() {
                 )}
               </div>
             )}
+
+            <label className="mt-3 block">
+              <span className="mb-1.5 block text-meta text-fg-muted">
+                图片中的文字
+              </span>
+              <input
+                value={ocrText}
+                onChange={(event) => setOcrText(event.target.value)}
+                maxLength={200}
+                placeholder="例如：车站名称、招牌或照片里的日期"
+                className="h-10 w-full rounded-lg border border-border bg-bg px-3 text-body text-fg placeholder:text-fg-subtle focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/20"
+              />
+              <span className="mt-1 block text-meta text-fg-subtle">
+                需要先在任务中心运行文字识别；此条件不依赖 Chinese-CLIP。
+              </span>
+            </label>
 
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
               <label className="min-w-0 text-meta text-fg-muted">
@@ -283,10 +309,9 @@ export default function SemanticSearch() {
               <button
                 type="submit"
                 disabled={
-                  !embeddingReady ||
                   submittedQuery.isFetching ||
-                  (mode === "text" && !text.trim()) ||
-                  (mode === "image" && !similarResourceId && !imageFile)
+                  (hasSemanticQuery && !embeddingReady) ||
+                  !hasSearchCondition
                 }
                 className="btn btn-primary"
               >
@@ -347,7 +372,11 @@ export default function SemanticSearch() {
             onLoadMore={loadMore}
             onOpen={(_item, index) => setViewerIndex(index)}
             albumLabel={(item) => item.albumName}
-            itemBadge={(item) => `相似度 ${item.similarity.toFixed(2)}`}
+            itemBadge={(item) =>
+              item.similarity === undefined
+                ? undefined
+                : `相似度 ${item.similarity.toFixed(2)}`
+            }
             isPicked={picks.isPicked}
             onTogglePick={(item) => {
               void picks
@@ -359,24 +388,43 @@ export default function SemanticSearch() {
           />
         ) : submitted && !submittedQuery.isLoading ? (
           <EmptyState
-            title={total === 0 ? "还没有可搜索的向量" : "没有匹配的照片"}
+            title={
+              total === 0 &&
+              (submitted.request.text ||
+                submitted.request.resourceId ||
+                submitted.image)
+                ? "还没有可搜索的向量"
+                : total === 0 && submitted.request.ocrText
+                  ? "还没有可搜索的文字结果"
+                  : "没有匹配的照片"
+            }
             description={
               total === 0
-                ? "请先到任务中心运行向量索引任务。"
+                ? submitted.request.text ||
+                  submitted.request.resourceId ||
+                  submitted.image
+                  ? "请先到任务中心运行语义向量任务。"
+                  : submitted.request.ocrText
+                    ? "请先到任务中心运行文字识别任务。"
+                    : "当前相册、年份与地点条件下没有照片。"
                 : "试试调整描述，或放宽相册、年份与地点筛选。"
             }
             action={
-              total === 0 ? (
+              total === 0 &&
+              (submitted.request.text ||
+                submitted.request.resourceId ||
+                submitted.image ||
+                submitted.request.ocrText) ? (
                 <Link to="/tasks" className="btn btn-outline">
-                  建立向量索引
+                  打开任务中心
                 </Link>
               ) : undefined
             }
           />
         ) : (
           <EmptyState
-            title="描述想找的画面"
-            description="搜索结果会按相似度排列，并保留回到原相册的入口。"
+            title="输入条件开始搜索"
+            description="语义结果按相似度排列；文字或结构化筛选不需要 CLIP。"
             icon={<SearchIcon size={24} />}
             dense
           />

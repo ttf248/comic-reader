@@ -248,9 +248,9 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 ### `POST /api/ai/search`
 
-文本检索使用 JSON：`{ "text": "海边散步的人", "kind": "photo", "albumId": "…", "year": "2024", "locationId": "…", "offset": 0, "limit": 60 }`。以图搜图可传 `{ "resourceId": "…", "kind": "photo" }`，或用 `multipart/form-data` 上传 `image`（最大 64 MiB）。每次请求只提供文本、资源 ID 或上传图片中的一种；`kind` 为必填的 `photo` 或 `comic`，年份为四位数，分页上限 200。
+语义检索使用 `text`，以图搜图使用 `resourceId` 或 multipart 上传的 `image`（最大 64 MiB）；三者最多选一种。可额外组合 `ocrText`（最多 200 字符）、`albumId`、`year` 和 `locationId`。只做 OCR 或结构化筛选时不需要 `text`、图片或 Chinese-CLIP；至少要提供一个查询条件。`kind` 为必填的 `photo` 或 `comic`，年份为四位数，分页上限 200。例如：`{ "ocrText": "入口", "kind": "photo", "year": "2024", "locationId": "…" }`。
 
-结果按精确余弦相似度降序，`results` 中每项为当前照片 DTO 与 `similarity`，保留所属相册 ID/名称；还包含 `total`、`offset`、`nextOffset` 与当前媒体库 `revision`。年份筛选依赖当前版本的 EXIF 拍摄年份，地点筛选复用 GPS 地点聚类 ID。每个候选和最终结果都会按当前媒体根重新验证路径、文件类型及大小/修改时间；响应不包含绝对路径。无效请求返回 `400 invalid_semantic_search`，缺少模型/运行环境分别返回 `503 ai_model_missing` / `503 ai_runtime_unavailable`。
+带语义查询的结果按精确余弦相似度降序，并返回 `similarity`；仅 OCR/结构化查询时按资源 ID 稳定排序，结果不含 `similarity`。每项保留当前媒体 DTO 与所属相册 ID/名称；响应还包含 `total`、`offset`、`nextOffset` 与当前媒体库 `revision`。OCR 只匹配当前 OCR 版本、文件指纹有效的识别文本；年份筛选依赖当前版本的 EXIF 拍摄年份，地点筛选复用 GPS 地点聚类 ID。每个候选和最终结果都会按当前媒体根重新验证路径、文件类型及大小/修改时间；响应不包含绝对路径。无效请求返回 `400 invalid_semantic_search`；语义检索缺少模型/运行环境分别返回 `503 ai_model_missing` / `503 ai_runtime_unavailable`。
 
 ### `GET /api/images/:fileId/metadata`
 

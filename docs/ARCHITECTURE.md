@@ -80,7 +80,7 @@ ID 只能证明扫描时的身份。每次媒体、批量元数据及系统打�
 
 AI Worker 使用独立 `backend/aiworker/.venv`（Python 3.11）。Windows 安装 PyTorch 2.7.1 + CUDA 12.6 与 Chinese-CLIP 1.6.0；RapidOCR 3.10.0 + ONNX Runtime 1.31.1 处理文字，OpenCV 4.12.0 + YuNet/SFace ONNX 权重处理人脸。Go 通过 stdin/stdout JSON Lines 调用并将 stderr 接入服务日志，Worker 常驻并复用 OCR/人脸模型。每个模块独立报告依赖与权重状态；缺失时任务中心不会把它显示为可运行。所有权重只从 `cacheDir/derived/ai/models/` 读取，模型下载脚本固定来源 revision 并校验 SHA256，不在服务启动时联网下载。Chinese-CLIP GPU 初始 batch 为 8，CUDA OOM 时减半，单张仍 OOM 则切到 CPU；搜索请求与建库推理共享同一串行 Worker。
 
-向量以 512 维 Float16 保存在 `derived/ai/vectors/shards/`，每片有 JSONL 元数据与 SHA256，manifest 原子发布并标记已压实分片；元数据只含资源 ID、文件指纹、模型版本和片内位置，不保存文件路径。应用启动时将 Float16 shard 装入内存，完整校验哈希后才用于检索；模型/索引版本不兼容时重建派生索引。索引增量追加，累计 128 个未压实 shard 后由独立后台压实，每片最多 512 条；达到压实门槛后不因已有分片数量重复排队。查询采用当前有效资源的精确余弦排序；年份筛选使用当前 EXIF 拍摄年份，GPS 筛选复用既有 geohash 精度 5 地点 ID，媒体库快照与文件指纹在返回前再次校验。当前不引入 HNSW、数据库或外部推理服务。
+向量以 512 维 Float16 保存在 `derived/ai/vectors/shards/`，每片有 JSONL 元数据与 SHA256，manifest 原子发布并标记已压实分片；元数据只含资源 ID、文件指纹、模型版本和片内位置，不保存文件路径。应用启动时将 Float16 shard 装入内存，完整校验哈希后才用于检索；模型/索引版本不兼容时重建派生索引。索引增量追加，累计 128 个未压实 shard 后由独立后台压实，每片最多 512 条；达到压实门槛后不因已有分片数量重复排队。OCR 额外维护 `derived/ai/ocr-search-index.json` 倒排索引，索引项仅存 OCR 词元、模块版本和文件指纹，启动时从已提交的 OCR 批次核对并修复，任务批次提交后增量更新；查询再回到 OCR 结果核对完整短语。语义结果采用当前有效资源的精确余弦排序，纯 OCR/结构化结果按资源 ID 稳定排序；年份筛选使用当前 EXIF 拍摄年份，GPS 筛选复用既有 geohash 精度 5 地点 ID，媒体库快照与文件指纹在返回前再次校验。当前不引入 HNSW、数据库或外部推理服务。
 
 任务快照分两类字段：事实与派生。`results`（按解析状态分类的计数）与 `fields`（按字段统计的产出）是事实，随每个 32 张的批次原子提交并落盘；重启时按批次文件重放，与失败计数走同一条恢复路径。`planned`、`completed`、`estimatedRemainingMs` 与速度是派生值，每次快照按落盘的计数重算，不写入状态文件 —— 写进去就等于把某一刻的估计当成事实。已注册的分析模块清单由后端给出，客户端不维护第二份模块名表。
 

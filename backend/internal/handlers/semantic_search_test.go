@@ -23,6 +23,10 @@ func (handlerSemanticWorker) Status(context.Context) (services.AIWorkerStatus, e
 		PythonAvailable: true, RuntimeReady: true, CUDAAvailable: true,
 		Device: "cuda", ModelAvailable: true, ModelValid: true,
 		ModelVersion: services.ChineseCLIPModelVersion,
+		Modules: map[string]services.AIWorkerModuleStatus{
+			services.AIJobTypeOCR:  {Ready: true, Version: services.OCRAnalyzerVersion},
+			services.AIJobTypeFace: {Ready: true, Version: services.FaceAnalyzerVersion},
+		},
 	}, nil
 }
 
@@ -48,6 +52,31 @@ func (handlerSemanticWorker) EmbedTexts(_ context.Context, texts []string) ([]se
 		results[index].Vector = vector
 	}
 	return results, nil
+}
+
+func (handlerSemanticWorker) AnalyzeOCR(_ context.Context, paths []string) ([]services.AIWorkerAnalysis, error) {
+	results := make([]services.AIWorkerAnalysis, len(paths))
+	for index, path := range paths {
+		text := "海边 漫步"
+		if filepath.Base(path) == "first.jpg" {
+			text = "入口 大门"
+		}
+		data, _ := json.Marshal(map[string]string{"text": text})
+		results[index].Data = data
+	}
+	return results, nil
+}
+
+func (handlerSemanticWorker) AnalyzeFaces(_ context.Context, paths []string) ([]services.AIWorkerAnalysis, error) {
+	results := make([]services.AIWorkerAnalysis, len(paths))
+	for index := range results {
+		results[index].Data = json.RawMessage(`{"faces":[]}`)
+	}
+	return results, nil
+}
+
+func (handlerSemanticWorker) ModuleStatus(moduleType string) services.AIWorkerModuleStatus {
+	return services.AIWorkerModuleStatus{Ready: true, Version: moduleType + "-test"}
 }
 
 func (handlerSemanticWorker) Close() error { return nil }
@@ -81,11 +110,24 @@ func TestSemanticSearchAPIUsesCurrentIndexedResources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	ocrIndex, err := services.OpenOCRSearchIndex(filepath.Join(t.TempDir(), "ocr-index.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ocrAnalyzer, err := services.NewOCRAnalyzer(handlerSemanticWorker{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	jobs, err := services.NewAIJobService(services.AIJobServiceOptions{
 		StatePath:   filepath.Join(t.TempDir(), "state", "ai_jobs.json"),
 		MetadataDir: filepath.Join(t.TempDir(), "metadata"),
 		Catalog:     catalog, ValidatePath: safetyState.Validate,
-		Analyzers: []services.AIAnalyzer{services.MetadataAnalyzer{}, analyzer},
+		Analyzers: []services.AIAnalyzer{services.MetadataAnalyzer{}, analyzer, ocrAnalyzer},
+		OnRecordsCommitted: func(records []services.AIAnalysisRecord) {
+			if err := ocrIndex.ApplyRecords(records); err != nil {
+				t.Errorf("update OCR index: %v", err)
+			}
+		},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -115,11 +157,29 @@ func TestSemanticSearchAPIUsesCurrentIndexedResources(t *testing.T) {
 	if current, _ := jobs.Get(job.ID); current.Status != services.AIJobStatusCompleted {
 		t.Fatalf("index job did not complete: %+v", current)
 	}
+	ocrJob, _, err := jobs.Start(services.AIJobTypeOCR, services.AIJobModeFull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline = time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		current, exists := jobs.Get(ocrJob.ID)
+		if exists && (current.Status == services.AIJobStatusCompleted || current.Status == services.AIJobStatusFailed) {
+			if current.Status != services.AIJobStatusCompleted {
+				t.Fatalf("OCR job failed: %+v", current)
+			}
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if current, _ := jobs.Get(ocrJob.ID); current.Status != services.AIJobStatusCompleted {
+		t.Fatalf("OCR job did not complete: %+v", current)
+	}
 
 	app := fiber.New()
 	api := app.Group("/api")
 	api.Use(safety)
-	api.Post("/ai/search", SemanticSearchHandler(analyzer, jobs, catalog, safetyState.Validate, t.TempDir()))
+	api.Post("/ai/search", SemanticSearchHandler(analyzer, jobs, ocrIndex, catalog, safetyState.Validate, t.TempDir()))
 	request := httptest.NewRequest("POST", "/api/ai/search", strings.NewReader(`{"text":"蓝色山景","kind":"photo","limit":10}`))
 	request.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
 	response, err := app.Test(request, -1)
@@ -147,6 +207,32 @@ func TestSemanticSearchAPIUsesCurrentIndexedResources(t *testing.T) {
 	firstID := catalog.ExternalID(files[0], services.ResourceFile)
 	if !body.OK || body.Total != 2 || len(body.Results) != 2 || body.Results[0].Item.ID != firstID || body.Results[0].Item.AlbumName != "风景" || body.Results[0].Similarity < 0.99 {
 		t.Fatalf("semantic search response = %+v", body)
+	}
+
+	ocrRequest := httptest.NewRequest("POST", "/api/ai/search", strings.NewReader(`{"ocrText":"入口","kind":"photo","limit":10}`))
+	ocrRequest.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+	ocrResponse, err := app.Test(ocrRequest, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ocrResponse.Body.Close()
+	if ocrResponse.StatusCode != fiber.StatusOK {
+		t.Fatalf("OCR search status = %d", ocrResponse.StatusCode)
+	}
+	var ocrBody struct {
+		Results []struct {
+			Item struct {
+				ID string `json:"id"`
+			} `json:"item"`
+			Similarity *float64 `json:"similarity"`
+		} `json:"results"`
+		Total int `json:"total"`
+	}
+	if err := json.NewDecoder(ocrResponse.Body).Decode(&ocrBody); err != nil {
+		t.Fatal(err)
+	}
+	if ocrBody.Total != 1 || len(ocrBody.Results) != 1 || ocrBody.Results[0].Item.ID != firstID || ocrBody.Results[0].Similarity != nil {
+		t.Fatalf("OCR search response = %+v", ocrBody)
 	}
 
 	imageRequest := httptest.NewRequest("POST", "/api/ai/search", strings.NewReader(`{"resourceId":"`+firstID+`","kind":"photo","limit":10}`))

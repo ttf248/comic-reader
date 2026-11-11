@@ -142,6 +142,7 @@ export interface FaceSearchResponse {
 
 export interface SemanticSearchRequest {
   text?: string;
+  ocrText?: string;
   resourceId?: string;
   kind: AppMode;
   albumId?: string;
@@ -153,7 +154,7 @@ export interface SemanticSearchRequest {
 
 export interface SemanticSearchHit {
   item: LibraryFeedItem;
-  similarity: number;
+  similarity?: number;
 }
 
 export interface SemanticSearchResponse {
