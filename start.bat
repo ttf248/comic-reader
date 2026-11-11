@@ -9,9 +9,11 @@ set "result=1"
 if not exist "config.yaml" (
   echo [错误] 缺少 backend\config.yaml。
 
-  echo 请复制 backend\config.example.yaml 为 backend\config.yaml，设置 mediaRoots，
+  echo 请先安装 Go 1.24+、Node.js 20+ 和 PowerShell 7，
 
-  echo 并将 staticDir 设置为 "../frontend/dist"，然后重新运行 start.bat。
+  echo 再在仓库根目录运行：pwsh -NoProfile -File scripts\setup-dev.ps1
+
+  echo 然后编辑 backend\config.yaml，设置 mediaRoots 和 staticDir 为 "../frontend/dist"。
 
   goto finish
 )
@@ -25,6 +27,8 @@ if errorlevel 1 (
 
 if not exist "..\frontend\node_modules" (
   echo [错误] 缺少前端依赖，请先在 frontend 目录执行 npm ci。
+
+  echo 或在仓库根目录运行 scripts\setup-dev.ps1。
 
   goto finish
 )

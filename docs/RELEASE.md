@@ -4,14 +4,14 @@
 
 ## Windows 源码目录一键运行
 
-根目录 `build.bat` 复用 `scripts/build.ps1`，安装锁定的前端依赖、构建前端，再编译 Windows 本机架构的后端。构建需要 Go 1.24+、Node.js 20+（含 npm）和 PowerShell 7，均从 PATH 查找。
+根目录 `build.bat` 复用 `scripts/build.ps1`，安装锁定的前端依赖、构建前端，再编译 Windows 本机架构的后端。构建需要 Go 1.24+、Node.js 20+（含 npm）和 PowerShell 7，均从 PATH 查找。新开发环境的准备步骤见根 [README.md](../README.md#从源码开发)，使用 `scripts/setup-dev.ps1` 安装项目依赖并创建本机配置。
 
 ```powershell
 .\build.bat
 .\start.bat
 ```
 
-构建产物为 `bin/local-gallery.exe` 与 `frontend/dist/`。首次启动前复制 `backend/config.example.yaml` 为 `backend/config.yaml`，填写实际媒体目录 `mediaRoots`，并将 `staticDir` 设为 `"../frontend/dist"`。脚本不会覆盖已有配置。
+构建产物为 `bin/local-gallery.exe` 与 `frontend/dist/`。首次构建前运行 `scripts/setup-dev.ps1`；然后在 `backend/config.yaml` 填写实际媒体目录 `mediaRoots`，并将 `staticDir` 设为 `"../frontend/dist"`。准备脚本不会覆盖已有配置。
 
 `start.bat` 检查二进制、前端入口和配置文件后，以 `backend/` 为工作目录执行 `../bin/local-gallery.exe --config config.yaml`，不调用编译器或开发服务器。相对媒体路径、`cacheDir` 和 `staticDir` 均相对该工作目录解析；默认状态和缓存存放在 `backend/.local-gallery/`。启动只需要构建产物和有效配置，视频增强功能仍按配置使用 ffmpeg / ffprobe。
 

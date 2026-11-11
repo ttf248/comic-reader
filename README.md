@@ -69,64 +69,52 @@ Local Gallery 是一款在本机运行的照片、漫画与视频画廊。Go 后
 
 使用发布包浏览照片、漫画和视频不需要 Go、Node.js、Python 或数据库。语义搜索需要额外安装 Python 环境并下载模型；FFmpeg 属于可选增强组件。
 
-### 从源码构建
+### 从源码开发
 
-适用于当前主线和需要修改代码的用户。准备：
+适用于要修改代码的用户。先安装 Git、Go 1.24+、Node.js 20+（包含 npm）和 PowerShell 7，再克隆仓库。按操作系统从 [Git](https://git-scm.com/downloads)、[Go](https://go.dev/dl/)、[Node.js](https://nodejs.org/) 和 [PowerShell](https://learn.microsoft.com/powershell/scripting/install/installing-powershell) 官方页面下载安装；安装后重新打开终端。
 
-- Go 1.24 或更新的兼容版本；
-- Node.js 20 或更新版本，包含 npm；
-- PowerShell 7（用于仓库构建脚本）；
-- Python 3.11 仅在启用语义搜索时需要。
-
-先在仓库根目录创建本机配置：
+在仓库根目录首次运行准备脚本：
 
 ~~~powershell
-Copy-Item backend/config.example.yaml backend/config.yaml
+pwsh -NoProfile -File scripts/setup-dev.ps1
 ~~~
 
-编辑 backend/config.yaml 中的 mediaRoots，填入真实目录和类型。源码构建并启动时，进程工作目录是 backend/，将 staticDir 设为 ../frontend/dist。
+脚本会检查工具版本、创建 `backend/config.yaml`（已有配置不会覆盖），并准备 Go 和前端依赖。它不安装上述开发工具。打开 `backend/config.yaml`，将 `mediaRoots` 改为本机目录；也可以设为 `[]`，启动后从设置页添加。
 
-Windows 在仓库根目录执行：
+开发时打开两个终端：
+
+~~~powershell
+# 终端一：仓库根目录
+Set-Location backend
+go run ./cmd/server --config config.yaml
+~~~
+
+~~~powershell
+# 终端二：仓库根目录
+Set-Location frontend
+npm run dev
+~~~
+
+浏览器访问 http://localhost:5173。Vite 会将 `/api` 转发到后端 `127.0.0.1:8080`。开发模式不需要设置 `staticDir`。
+
+### 构建并运行
+
+需要单进程运行时，在 `backend/config.yaml` 中将 `staticDir` 设为 `../frontend/dist`。Windows 在仓库根目录运行：
 
 ~~~powershell
 .\build.bat
 .\start.bat
 ~~~
 
-macOS / Linux 在仓库根目录执行：
+macOS / Linux 在仓库根目录运行：
 
 ~~~powershell
 pwsh -NoProfile -File scripts/build.ps1
-cd backend
+Set-Location backend
 ../bin/local-gallery --config config.yaml
 ~~~
 
-服务默认监听 127.0.0.1:8080，后端同时托管 frontend/dist。构建和源码目录一键运行说明见 [构建与发布](./docs/RELEASE.md)。
-
-### 开发模式
-
-开发模式需要两个终端。首次安装前端依赖一次：
-
-~~~powershell
-Set-Location frontend
-npm ci
-~~~
-
-终端一启动后端：
-
-~~~powershell
-Set-Location backend
-go run ./cmd/server --config config.yaml
-~~~
-
-终端二启动 Vite：
-
-~~~powershell
-Set-Location frontend
-npm run dev
-~~~
-
-打开 http://localhost:5173。Vite 会把 /api 请求代理到 http://127.0.0.1:8080。开发模式不需要设置可用的 staticDir。
+服务默认监听 `127.0.0.1:8080`。构建与发布细节见 [构建与发布](./docs/RELEASE.md)。
 
 ## 可选功能安装
 
@@ -217,7 +205,7 @@ backend/
 frontend/
   src/                React 页面、API、hooks、store 与界面组件
   tests/e2e/          Playwright 全栈测试
-scripts/              构建、发布、FFmpeg 安装与开发工具
+scripts/              开发环境准备、构建、发布与 FFmpeg 安装
 docs/                 API、架构、快捷键、设计与发布文档
 ~~~
 
