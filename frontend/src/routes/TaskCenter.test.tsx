@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   fireEvent,
+  act,
   render,
   screen,
   waitFor,
@@ -15,6 +16,7 @@ vi.mock("../api/aiJobs", () => ({
   aiJobsApi: {
     list: vi.fn(),
     start: vi.fn(),
+    startAll: vi.fn(),
     action: vi.fn(),
     settings: vi.fn(),
     updateSettings: vi.fn(),
@@ -23,9 +25,21 @@ vi.mock("../api/aiJobs", () => ({
   },
 }));
 
+const sseHarness = vi.hoisted(() => ({
+  onEvent: null as null | ((eventName: string, value: unknown) => void),
+}));
+
 vi.mock("../api/client", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api/client")>();
-  return { ...actual, sse: vi.fn(() => () => {}) };
+  return {
+    ...actual,
+    sse: vi.fn(
+      (_path: string, onEvent: (eventName: string, value: unknown) => void) => {
+        sseHarness.onEvent = onEvent;
+        return () => {};
+      },
+    ),
+  };
 });
 
 const currentJob: AIJob = {
@@ -101,6 +115,7 @@ function renderCenter() {
 describe("任务中心", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sseHarness.onEvent = null;
     vi.mocked(aiJobsApi.list).mockResolvedValue({
       ok: true,
       snapshot: snapshot(),
@@ -109,6 +124,18 @@ describe("任务中心", () => {
       ok: true,
       job: currentJob,
       reused: false,
+    });
+    vi.mocked(aiJobsApi.startAll).mockResolvedValue({
+      ok: true,
+      jobs: [],
+      skippedModules: [
+        {
+          type: "face",
+          name: "人脸识别",
+          installed: false,
+          reason: "face_model_missing_or_checksum_invalid",
+        },
+      ],
     });
     vi.mocked(aiJobsApi.action).mockResolvedValue({ ok: true });
     vi.mocked(aiJobsApi.updateSettings).mockResolvedValue({
@@ -189,6 +216,93 @@ describe("任务中心", () => {
     await waitFor(() =>
       expect(aiJobsApi.start).toHaveBeenCalledWith("metadata", "full"),
     );
+  });
+
+  it("按所选模式一键排入全部模块，并提供设置页入口", async () => {
+    vi.mocked(aiJobsApi.list).mockResolvedValue({
+      ok: true,
+      snapshot: snapshot({ jobs: [], active: undefined }),
+    });
+    renderCenter();
+
+    await screen.findByText("队列空闲");
+    expect(
+      screen.getByRole("link", { name: "设置与存储路径" }),
+    ).toHaveAttribute("href", "/settings#ai-storage");
+    fireEvent.change(screen.getByRole("combobox", { name: "全部任务模式" }), {
+      target: { value: "full" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "按序启动全部任务" }));
+    await waitFor(() =>
+      expect(aiJobsApi.startAll).toHaveBeenCalledWith("full"),
+    );
+    expect(
+      await screen.findByText(/已跳过未就绪模块：人脸识别/),
+    ).toBeInTheDocument();
+  });
+
+  it("当前任务结束后刷新快照并显示队列中的下一项", async () => {
+    const nextJob: AIJob = {
+      ...currentJob,
+      id: "job-next",
+      type: "embedding",
+      mode: "incremental",
+      status: "running",
+      stage: "embedding",
+      currentResourceId: undefined,
+    };
+    let reads = 0;
+    vi.mocked(aiJobsApi.list).mockImplementation(async () => {
+      reads += 1;
+      return {
+        ok: true,
+        snapshot:
+          reads === 1
+            ? snapshot()
+            : snapshot({ jobs: [nextJob, currentJob], active: nextJob }),
+      };
+    });
+    renderCenter();
+
+    await screen.findByText("读取照片元数据");
+    const completedJob = { ...currentJob, status: "completed" as const };
+    act(() => sseHarness.onEvent?.("completed", completedJob));
+    expect(await screen.findByText("运行中 · 向量索引")).toBeInTheDocument();
+    await waitFor(() => expect(aiJobsApi.list).toHaveBeenCalledTimes(2));
+  });
+
+  it("任务记录按执行顺序排列等待中的模块", async () => {
+    const queuedOCR: AIJob = {
+      ...currentJob,
+      id: "job-ocr",
+      type: "ocr",
+      status: "pending",
+      stage: "pending",
+    };
+    const queuedFace: AIJob = {
+      ...queuedOCR,
+      id: "job-face",
+      type: "face",
+    };
+    const previous: AIJob = {
+      ...currentJob,
+      id: "job-previous",
+      status: "completed",
+      createdAt: "2026-11-11T03:00:00Z",
+    };
+    vi.mocked(aiJobsApi.list).mockResolvedValue({
+      ok: true,
+      snapshot: snapshot({
+        jobs: [queuedFace, queuedOCR, currentJob, previous],
+        active: currentJob,
+      }),
+    });
+    renderCenter();
+
+    const rows = await screen.findAllByTestId("task-history-row");
+    expect(rows[0].textContent).toContain("文字识别");
+    expect(rows[1].textContent).toContain("人脸识别");
+    expect(rows[2].textContent).toContain("元数据分析");
   });
 
   it("已安装向量模块时可从同一任务服务启动全量建索引", async () => {

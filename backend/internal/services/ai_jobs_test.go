@@ -61,6 +61,47 @@ func TestAIJobServiceFullIncrementalAndPersistentResults(t *testing.T) {
 	shutdownAIJobService(t, restarted)
 }
 
+func TestAIJobServiceStartAllQueuesModulesInOrder(t *testing.T) {
+	root := t.TempDir()
+	files := writeAIJobImages(t, root, 1)
+	catalog := aiJobCatalog(root, files)
+	metadata := &blockingAnalyzer{started: make(chan struct{}), release: make(chan struct{})}
+	service := newTestAIJobService(t, filepath.Join(t.TempDir(), "state", "jobs.json"), filepath.Join(t.TempDir(), "derived"), catalog,
+		metadata,
+		testJSONAnalyzer{module: AIJobTypeEmbedding, version: "embedding-v1"},
+		testJSONAnalyzer{module: AIJobTypeOCR, version: "ocr-v1"},
+		testJSONAnalyzer{module: AIJobTypeFace, version: "face-v1"},
+	)
+
+	jobs, skipped, err := service.StartAll(AIJobModeIncremental)
+	if err != nil || len(skipped) != 0 {
+		t.Fatalf("StartAll() = (%+v, skipped=%+v, err=%v)", jobs, skipped, err)
+	}
+	wantOrder := []string{AIJobTypeMetadata, AIJobTypeEmbedding, AIJobTypeOCR, AIJobTypeFace}
+	if len(jobs) != len(wantOrder) {
+		t.Fatalf("queued %d jobs, want %d", len(jobs), len(wantOrder))
+	}
+	for index, want := range wantOrder {
+		if jobs[index].Type != want || jobs[index].Mode != AIJobModeIncremental {
+			t.Fatalf("job[%d] = %+v, want type %s in incremental mode", index, jobs[index], want)
+		}
+	}
+	select {
+	case <-metadata.started:
+	case <-time.After(3 * time.Second):
+		t.Fatal("first queued module did not start")
+	}
+	if _, _, err := service.StartAll(AIJobModeIncremental); !errors.Is(err, ErrAIJobActive) {
+		t.Fatalf("StartAll() while queue is active returned %v", err)
+	}
+	close(metadata.release)
+	for _, job := range jobs {
+		waitForAIJob(t, service, job.ID, AIJobStatusCompleted)
+	}
+	waitForAIJobIdle(t, service)
+	shutdownAIJobService(t, service)
+}
+
 func TestAIJobServiceIncrementalDetectsChangedFilesAndModuleVersion(t *testing.T) {
 	root := t.TempDir()
 	files := writeAIJobImages(t, root, 3)

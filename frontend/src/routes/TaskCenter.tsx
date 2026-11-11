@@ -3,6 +3,7 @@ import { useTaskCenter } from "../hooks/useTaskCenter";
 import TaskConsole from "../components/tasks/TaskConsole";
 import DailyPlanPanel from "../components/tasks/DailyPlanPanel";
 import JobHistoryPanel from "../components/tasks/JobHistoryPanel";
+import { Link } from "react-router-dom";
 
 export default function TaskCenter() {
   const center = useTaskCenter();
@@ -13,7 +14,12 @@ export default function TaskCenter() {
       <PageHeading
         eyebrow="后台分析"
         title="任务中心"
-        description="查看元数据分析与语义向量索引进度，安排每日增量更新，并在需要时暂停、继续或重试。分析完全在本机运行。"
+        description="查看照片元数据、语义向量、文字与人脸分析进度，安排每日增量更新，并在需要时暂停、继续或重试。分析完全在本机运行。"
+        action={
+          <Link className="btn btn-outline" to="/settings#ai-storage">
+            设置与存储路径
+          </Link>
+        }
       />
 
       {center.loadError ? (
@@ -40,8 +46,16 @@ export default function TaskCenter() {
             embeddingStatus={center.embeddingStatus}
             embeddingStatusLoading={center.embeddingStatusLoading}
             onStart={center.start}
+            onStartAll={center.startAll}
             onAction={center.act}
           />
+          {center.sequenceSkipped && center.sequenceSkipped.length > 0 ? (
+            <p role="status" className="mt-3 text-meta text-warning">
+              本次按序启动已跳过未就绪模块：
+              {center.sequenceSkipped.map((module) => module.name).join("、")}。
+              可前往设置查看模型与运行环境路径。
+            </p>
+          ) : null}
           {center.operationError ? (
             <p role="alert" className="mt-3 text-meta text-danger">
               操作未完成，请稍后重试。

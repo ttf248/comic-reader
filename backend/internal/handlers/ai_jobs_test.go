@@ -173,6 +173,115 @@ func TestAIJobAPIFullAnalysisOverThousandImages(t *testing.T) {
 	}
 }
 
+func TestAIJobSequenceAPIQueuesAllModulesInOrder(t *testing.T) {
+	root := t.TempDir()
+	albumPath := filepath.Join(root, "photos")
+	if err := os.MkdirAll(albumPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	photoPath := filepath.Join(albumPath, "sample.jpg")
+	if err := os.WriteFile(photoPath, []byte{0xff, 0xd8, 0xff, 0xd9}, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	catalog := services.NewResourceCatalog()
+	catalog.Publish(&models.ScanResult{
+		Roots: []string{root},
+		Albums: []models.Album{{
+			Type: "album", Name: "照片", Path: albumPath, SourceRoot: root,
+			ImageFiles: []string{photoPath}, CoverImage: photoPath,
+		}},
+	}, []string{root})
+	safety, safetyState := middleware.PathSafetyMiddleware([]string{root}, catalog)
+	callOrder := []string{}
+	analyzers := make([]services.AIAnalyzer, 0, 4)
+	for _, moduleType := range []string{services.AIJobTypeMetadata, services.AIJobTypeEmbedding, services.AIJobTypeOCR, services.AIJobTypeFace} {
+		analyzers = append(analyzers, &sequenceAPIAnalyzer{module: moduleType, calls: &callOrder})
+	}
+	service, err := services.NewAIJobService(services.AIJobServiceOptions{
+		StatePath:    filepath.Join(t.TempDir(), "state", "ai_jobs.json"),
+		MetadataDir:  filepath.Join(t.TempDir(), "derived", "metadata"),
+		Catalog:      catalog,
+		ValidatePath: safetyState.Validate,
+		Analyzers:    analyzers,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := service.Shutdown(ctx); err != nil {
+			t.Errorf("AI job shutdown: %v", err)
+		}
+	})
+
+	app := fiber.New()
+	api := app.Group("/api")
+	api.Use(safety)
+	api.Post("/ai/jobs/sequence", AIJobSequenceStartHandler(service))
+	request := httptest.NewRequest(fiber.MethodPost, "/api/ai/jobs/sequence", strings.NewReader(`{"mode":"full"}`))
+	request.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+	response, err := app.Test(request, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != fiber.StatusOK {
+		t.Fatalf("sequence start status = %d", response.StatusCode)
+	}
+	var body struct {
+		Jobs    []services.AIJob       `json:"jobs"`
+		Skipped []services.AIJobModule `json:"skippedModules"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	wantOrder := []string{services.AIJobTypeMetadata, services.AIJobTypeEmbedding, services.AIJobTypeOCR, services.AIJobTypeFace}
+	if len(body.Jobs) != len(wantOrder) || len(body.Skipped) != 0 {
+		t.Fatalf("sequence response = %+v", body)
+	}
+	for index, want := range wantOrder {
+		if body.Jobs[index].Type != want {
+			t.Fatalf("queued job[%d] type = %q, want %q", index, body.Jobs[index].Type, want)
+		}
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		finished := true
+		for _, job := range body.Jobs {
+			current, ok := service.Get(job.ID)
+			if !ok || current.Status != services.AIJobStatusCompleted {
+				finished = false
+				break
+			}
+		}
+		if finished {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if len(callOrder) != len(wantOrder) {
+		t.Fatalf("analyzer calls = %v", callOrder)
+	}
+	for index, want := range wantOrder {
+		if callOrder[index] != want {
+			t.Fatalf("analyzer calls = %v, want order %v", callOrder, wantOrder)
+		}
+	}
+}
+
+type sequenceAPIAnalyzer struct {
+	module string
+	calls  *[]string
+}
+
+func (a *sequenceAPIAnalyzer) Type() string    { return a.module }
+func (a *sequenceAPIAnalyzer) Version() string { return a.module + "-v1" }
+func (a *sequenceAPIAnalyzer) Analyze(context.Context, io.ReadSeeker) (services.AIAnalysisOutput, error) {
+	*a.calls = append(*a.calls, a.module)
+	return services.AIAnalysisOutput{Status: "processed", Data: json.RawMessage(`{"ok":true}`)}, nil
+}
+
 func TestAIJobSettingsHandlerExplainsInvalidModules(t *testing.T) {
 	service, err := services.NewAIJobService(services.AIJobServiceOptions{
 		StatePath:    filepath.Join(t.TempDir(), "state", "jobs.json"),

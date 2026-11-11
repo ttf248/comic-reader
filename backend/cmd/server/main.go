@@ -372,6 +372,7 @@ func main() {
 	api.Get("/locations/:id/media", handlers.GPSLocationsHandler(resourceCatalog, aiJobs, safetyState.Validate, picks))
 	api.Get("/ai/jobs", handlers.AIJobsHandler(aiJobs))
 	api.Post("/ai/jobs", handlers.AIJobStartHandler(aiJobs))
+	api.Post("/ai/jobs/sequence", handlers.AIJobSequenceStartHandler(aiJobs))
 	api.Get("/ai/semantic/status", handlers.AIEmbeddingStatusHandler(embeddingAnalyzer, aiJobs, resourceCatalog))
 	api.Post("/ai/search", handlers.SemanticSearchHandler(embeddingAnalyzer, aiJobs, resourceCatalog, safetyState.Validate, cacheLayout.TempDir))
 	api.Post("/ai/faces/search", handlers.FaceSimilaritySearchHandler(aiJobs, resourceCatalog, safetyState.Validate))
@@ -427,6 +428,13 @@ func main() {
 	api.Get("/admin/state/export", middleware.LoopbackOnly(), handlers.StateExportHandler(backupService))
 	api.Post("/admin/state/import/preview", middleware.LoopbackOnly(), handlers.StatePreviewHandler(backupService))
 	api.Post("/admin/state/import", middleware.LoopbackOnly(), handlers.StateImportHandler(backupService))
+	api.Get("/config/storage", middleware.LoopbackOnly(), handlers.AIStorageHandler(handlers.AIStorageOptions{
+		ConfigPath:       mgr.Path(),
+		WorkingDirectory: ".",
+		CacheRoot:        cacheLayout.Root,
+		WorkerDirectory:  filepath.Dir(workerOptions.ScriptPath),
+		PythonPath:       workerOptions.PythonPath,
+	}))
 	api.Get("/config", middleware.LoopbackOnly(), handlers.ConfigGetHandler(mgr))
 	api.Put("/config", middleware.LoopbackOnly(), handlers.ConfigUpdateHandler(mgr, onConfigUpdate))
 

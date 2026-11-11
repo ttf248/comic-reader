@@ -221,6 +221,16 @@ export const aiJobsApi = {
       body: { type, mode },
       nonIdempotent: true,
     }),
+  startAll: (mode: AnalysisMode) =>
+    api<{
+      ok: boolean;
+      jobs: AIJob[];
+      skippedModules: AIJobModule[];
+    }>("/api/ai/jobs/sequence", {
+      method: "POST",
+      body: { mode },
+      nonIdempotent: true,
+    }),
   action: (id: string, action: "pause" | "resume" | "cancel" | "retry") =>
     api<{ ok: boolean; job?: AIJob }>(
       `/api/ai/jobs/${encodeURIComponent(id)}/${action}`,

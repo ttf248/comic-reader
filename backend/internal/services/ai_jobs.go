@@ -408,6 +408,109 @@ func (s *AIJobService) Start(moduleType, mode string) (AIJob, bool, error) {
 	return s.snapshotLocked(&job), false, nil
 }
 
+// StartAll 按固定模块顺序把所有已就绪的分析任务写入现有任务队列。
+func (s *AIJobService) StartAll(mode string) ([]AIJob, []AIJobModule, error) {
+	if mode != AIJobModeFull && mode != AIJobModeIncremental {
+		return nil, nil, errors.New("unknown analysis mode")
+	}
+	moduleTypes := []string{AIJobTypeMetadata, AIJobTypeEmbedding, AIJobTypeOCR, AIJobTypeFace}
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return nil, nil, errors.New("AI job service is shutting down")
+	}
+	if s.hasPendingJobsLocked() {
+		s.mu.Unlock()
+		return nil, nil, ErrAIJobActive
+	}
+	analyzers := make(map[string]AIAnalyzer, len(moduleTypes))
+	for _, moduleType := range moduleTypes {
+		analyzers[moduleType] = s.analyzers[moduleType]
+	}
+	s.mu.Unlock()
+
+	readyModules := make([]string, 0, len(moduleTypes))
+	skippedModules := make([]AIJobModule, 0)
+	for _, moduleType := range moduleTypes {
+		analyzer := analyzers[moduleType]
+		if analyzer == nil {
+			skippedModules = append(skippedModules, AIJobModule{
+				Type: moduleType, Name: aiJobModuleName(moduleType), Reason: "module_not_registered",
+			})
+			continue
+		}
+		if available, reason := aiAnalyzerAvailability(analyzer); !available {
+			skippedModules = append(skippedModules, AIJobModule{
+				Type: moduleType, Name: aiJobModuleName(moduleType), Reason: reason,
+			})
+			continue
+		}
+		if readiness, ok := analyzer.(AIAnalyzerReadiness); ok {
+			readyCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			err := readiness.Ready(readyCtx)
+			cancel()
+			if err != nil {
+				_, reason := aiAnalyzerAvailability(analyzer)
+				if reason == "" {
+					reason = "runtime_unavailable"
+				}
+				skippedModules = append(skippedModules, AIJobModule{
+					Type: moduleType, Name: aiJobModuleName(moduleType), Reason: reason,
+				})
+				continue
+			}
+		}
+		readyModules = append(readyModules, moduleType)
+	}
+	if len(readyModules) == 0 {
+		return nil, skippedModules, ErrAIAnalyzerUnavailable
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return nil, nil, errors.New("AI job service is shutting down")
+	}
+	if s.hasPendingJobsLocked() {
+		return nil, nil, ErrAIJobActive
+	}
+	previousOrderLength := len(s.order)
+	jobIDs := make([]string, 0, len(readyModules))
+	for _, moduleType := range readyModules {
+		job := s.newJobLocked(moduleType, mode)
+		s.jobs[job.ID] = &job
+		s.order = append(s.order, job.ID)
+		jobIDs = append(jobIDs, job.ID)
+	}
+	s.activeID = jobIDs[0]
+	if err := s.persistLocked(); err != nil {
+		for _, id := range jobIDs {
+			delete(s.jobs, id)
+		}
+		s.order = s.order[:previousOrderLength]
+		s.activeID = ""
+		return nil, nil, err
+	}
+	s.launchLocked(jobIDs[0])
+	jobs := make([]AIJob, 0, len(jobIDs))
+	for _, id := range jobIDs {
+		jobs = append(jobs, s.snapshotLocked(s.jobs[id]))
+	}
+	return jobs, skippedModules, nil
+}
+
+func (s *AIJobService) hasPendingJobsLocked() bool {
+	if s.activeID != "" {
+		return true
+	}
+	for _, job := range s.jobs {
+		if isAIJobActive(job.Status) {
+			return true
+		}
+	}
+	return false
+}
+
 // Pause 请求在当前批次原子提交后暂停任务。
 func (s *AIJobService) Pause(id string) bool {
 	s.mu.Lock()

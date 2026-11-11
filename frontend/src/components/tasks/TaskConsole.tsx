@@ -31,6 +31,7 @@ interface Props {
   embeddingStatus?: AIWorkerStatus;
   embeddingStatusLoading: boolean;
   onStart: (type: AnalysisType, mode: AnalysisMode) => void;
+  onStartAll: (mode: AnalysisMode) => void;
   onAction: (id: string, action: JobAction) => void;
 }
 
@@ -49,11 +50,13 @@ export default function TaskConsole({
   embeddingStatus,
   embeddingStatusLoading,
   onStart,
+  onStartAll,
   onAction,
 }: Props) {
   const installedModules = modules.filter((module) => module.installed);
   const [selectedModule, setSelectedModule] =
     useState<AnalysisType>("metadata");
+  const [allTasksMode, setAllTasksMode] = useState<AnalysisMode>("incremental");
   useEffect(() => {
     if (!installedModules.some((module) => module.type === selectedModule)) {
       setSelectedModule(installedModules[0]?.type ?? "metadata");
@@ -140,6 +143,34 @@ export default function TaskConsole({
             {startLabels.full}
           </button>
         </div>
+        <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-border-faint pt-5">
+          <label className="flex items-center gap-3 text-meta text-fg-muted">
+            <span>全部任务模式</span>
+            <select
+              aria-label="全部任务模式"
+              value={allTasksMode}
+              disabled={busy}
+              onChange={(event) =>
+                setAllTasksMode(event.target.value as AnalysisMode)
+              }
+              className="rounded-md border border-border bg-bg-elevated px-3 py-2 text-body text-fg disabled:opacity-60"
+            >
+              <option value="incremental">增量</option>
+              <option value="full">全量</option>
+            </select>
+          </label>
+          <button
+            type="button"
+            className="btn btn-primary"
+            disabled={busy || installedModules.length === 0}
+            onClick={() => onStartAll(allTasksMode)}
+          >
+            按序启动全部任务
+          </button>
+        </div>
+        <p className="mt-3 text-meta leading-relaxed text-fg-subtle">
+          按照片元数据、向量索引、文字识别、人脸识别的顺序执行；未就绪的模块会跳过。增量模式只处理新增或变更图片。
+        </p>
         <p className="mt-3 text-meta leading-relaxed text-fg-subtle">
           {isEmbedding
             ? `增量更新只处理新增、修改或模型版本变化的图片；全量会重新生成当前媒体库的${selectedName}结果。`

@@ -213,6 +213,10 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 - `results`：按处理结果分类的计数。元数据使用 `parsed`、`no_exif`、`unsupported`、`failed`；OCR 使用 `recognized`、`no_text`、`failed`；人脸使用 `faces_found`、`no_faces`、`failed`；向量使用 `indexed`、`failed`。每组键的计数和等于 `completed`。
 - `fields`：按字段统计的产出计数，键包括 `exifTime`、`camera`、`gps`、`embedding`、`ocrText`、`faces`。只统计实际取得内容的图片，不报告空结果。
 
+### `POST /api/ai/jobs/sequence`
+
+请求为 `{ "mode": "full" | "incremental" }`，一次创建所有已就绪模块的任务，并按照片元数据、向量索引、OCR、人脸识别的固定顺序加入既有任务队列。任务逐项执行，单项结束后自动启动下一项；未安装或运行环境未就绪的模块列在 `skippedModules`，其余任务仍会排队。响应包含有序 `jobs` 与 `{type,name,reason}` 形式的跳过清单。队列已有活动或待执行任务时返回 `409 analysis_job_active`；没有任何可运行模块时返回 `503 ai_module_unavailable`。
+
 `planned`、`completed`、`estimatedRemainingMs` 与速度都是快照派生值，不写入 `state/ai_jobs.json`；`results` 与 `fields` 是事实，随批次一并落盘，重启后按批次文件重放恢复。
 
 快照还带 `modules`：后端已知的全部分析模块及其安装情况，元素包含 `{ "type", "name", "installed", "version", "reason" }`。`type` 为 `metadata`、`embedding`、`ocr`、`face`；对 OCR 与人脸模块，`installed` 表示对应本机运行依赖和权重已就绪，缺失时可用 `reason` 诊断。`version` 只在已就绪时给出。客户端据此渲染模块清单，不再自行硬编码模块名。
@@ -237,6 +241,10 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 ### `GET /api/ai/semantic/status`
 
 返回本机 Python、PyTorch、CUDA/GPU、Chinese-CLIP SHA256 校验、向量索引版本与覆盖率，以及 `modules.ocr` 与 `modules.face` 的依赖/权重状态。`runtimeReady` 表示 Chinese-CLIP 推理依赖可导入，`modelValid` 表示权重匹配固定 revision；`cudaAvailable` 为 false 时仍可使用 CPU。OCR 和人脸检测通过 `modules` 独立报告就绪状态，不受 Chinese-CLIP 权重缺失影响。`coverage` 按当前资源快照和有效文件指纹统计已索引数/照片数。
+
+### `GET /api/config/storage`
+
+本机存储信息接口，仅允许回环访问，并经过现有 API 访问门禁；响应设置 `Cache-Control: no-store`。返回当前工作目录、配置文件、缓存根目录、状态/任务状态/分析结果/模型/向量目录、Python 环境与启动器路径，以及四个模块的模型文件路径、文件大小和分析结果缓存占用。路径是完整本机路径，只用于本机设置页，不应写入浏览器持久状态或对 LAN 客户端开放。照片元数据由 Go 内置 EXIF/GPS 解析器处理，没有独立模型权重；Chinese-CLIP、RapidOCR 和 YuNet/SFace 按各自实际权重文件统计。
 
 ### `POST /api/ai/search`
 

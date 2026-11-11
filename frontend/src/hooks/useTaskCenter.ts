@@ -22,6 +22,13 @@ const JOB_EVENTS = [
 
 export type JobAction = "pause" | "resume" | "cancel" | "retry";
 
+const FIXED_ANALYSIS_ORDER: readonly AnalysisType[] = [
+  "metadata",
+  "embedding",
+  "ocr",
+  "face",
+];
+
 export interface TaskCenterPlan {
   /** 草稿状态：与服务器设置分开，改完点保存才写回。 */
   enabled: boolean;
@@ -41,12 +48,14 @@ export interface TaskCenterPlan {
 export interface TaskCenterState {
   snapshot?: AIJobSnapshot;
   active?: AIJob;
+  sequenceSkipped?: AIJobSnapshot["modules"];
   /** 已结束的任务，最新的在前。 */
   history: AIJob[];
   loading: boolean;
   loadError: boolean;
   plan: TaskCenterPlan;
   start: (type: AnalysisType, mode: AnalysisMode) => void;
+  startAll: (mode: AnalysisMode) => void;
   act: (id: string, action: JobAction) => void;
   /** 启动或任务操作正在提交。 */
   busy: boolean;
@@ -123,6 +132,13 @@ export function useTaskCenter(): TaskCenterState {
             };
           },
         );
+        if (
+          value.status === "completed" ||
+          value.status === "failed" ||
+          value.status === "cancelled"
+        ) {
+          void queryClient.invalidateQueries({ queryKey: JOBS_KEY });
+        }
       },
       { events: JOB_EVENTS, signal: controller.signal },
     );
@@ -132,6 +148,10 @@ export function useTaskCenter(): TaskCenterState {
   const startMutation = useMutation({
     mutationFn: ({ type, mode }: { type: AnalysisType; mode: AnalysisMode }) =>
       aiJobsApi.start(type, mode),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: JOBS_KEY }),
+  });
+  const startAllMutation = useMutation({
+    mutationFn: (mode: AnalysisMode) => aiJobsApi.startAll(mode),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: JOBS_KEY }),
   });
   const actionMutation = useMutation({
@@ -166,14 +186,30 @@ export function useTaskCenter(): TaskCenterState {
     },
   });
 
-  const history = useMemo(
-    () => snapshot?.jobs.filter((job) => job.id !== active?.id) ?? [],
-    [active?.id, snapshot?.jobs],
-  );
+  const history = useMemo(() => {
+    const jobs = snapshot?.jobs.filter((job) => job.id !== active?.id) ?? [];
+    const pending = jobs
+      .filter((job) => job.status === "pending")
+      .sort((left, right) => {
+        const createdOrder = left.createdAt.localeCompare(right.createdAt);
+        if (createdOrder !== 0) return createdOrder;
+        const leftOrder = left.scheduled
+          ? (snapshot?.settings.dailyModules ?? FIXED_ANALYSIS_ORDER)
+          : FIXED_ANALYSIS_ORDER;
+        const rightOrder = right.scheduled
+          ? (snapshot?.settings.dailyModules ?? FIXED_ANALYSIS_ORDER)
+          : FIXED_ANALYSIS_ORDER;
+        const leftRank = leftOrder.indexOf(left.type);
+        const rightRank = rightOrder.indexOf(right.type);
+        return leftRank - rightRank;
+      });
+    return [...pending, ...jobs.filter((job) => job.status !== "pending")];
+  }, [active?.id, snapshot?.jobs, snapshot?.settings.dailyModules]);
 
   return {
     snapshot,
     active,
+    sequenceSkipped: startAllMutation.data?.skippedModules,
     history,
     loading: jobsQuery.isLoading,
     loadError: jobsQuery.isError,
@@ -203,10 +239,17 @@ export function useTaskCenter(): TaskCenterState {
     },
     start: (type: AnalysisType, mode: AnalysisMode) =>
       startMutation.mutate({ type, mode }),
+    startAll: (mode: AnalysisMode) => startAllMutation.mutate(mode),
     act: (id: string, action: JobAction) =>
       actionMutation.mutate({ id, action }),
-    busy: startMutation.isPending || actionMutation.isPending,
-    operationError: startMutation.isError || actionMutation.isError,
+    busy:
+      startMutation.isPending ||
+      startAllMutation.isPending ||
+      actionMutation.isPending,
+    operationError:
+      startMutation.isError ||
+      startAllMutation.isError ||
+      actionMutation.isError,
     embeddingStatus: embeddingStatusQuery.data?.status,
     embeddingStatusLoading: embeddingStatusQuery.isLoading,
   };

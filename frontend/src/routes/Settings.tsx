@@ -8,6 +8,7 @@ import ThemeSwitcher from "../components/common/ThemeSwitcher";
 import { useUIStore } from "../store/uiStore";
 import { libraryQueryKeys, useLibraryManifest } from "../hooks/useLibrary";
 import StateBackupPanel from "../components/settings/StateBackupPanel";
+import LocalAIStoragePanel from "../components/settings/LocalAIStoragePanel";
 import CacheRebuildPanel from "../components/settings/CacheRebuildPanel";
 import ServerConfigPanel from "../components/settings/ServerConfigPanel";
 import ScanWarnings from "../components/common/ScanWarnings";
@@ -257,6 +258,7 @@ export default function Settings() {
         description="调整外观、阅读方式与本地媒体配置。"
       />
       {prefsError}
+      <LocalAIStoragePanel />
       <div className="settings-columns">
         <Section title="外观" icon={<SunIcon size={13} />}>
           <Row label="主题">

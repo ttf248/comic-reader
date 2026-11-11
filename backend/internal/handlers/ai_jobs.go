@@ -22,6 +22,10 @@ type aiJobStartRequest struct {
 	Mode string `json:"mode"`
 }
 
+type aiJobSequenceStartRequest struct {
+	Mode string `json:"mode"`
+}
+
 type aiJobSettingsRequest struct {
 	DailyEnabled bool     `json:"dailyEnabled"`
 	DailyTime    string   `json:"dailyTime"`
@@ -65,6 +69,30 @@ func AIJobStartHandler(service *services.AIJobService) fiber.Handler {
 			return writeError(c, fiber.StatusBadRequest, "analysis_start_failed", "unable to start analysis task")
 		}
 		return c.JSON(fiber.Map{"ok": true, "job": job, "reused": reused})
+	}
+}
+
+// AIJobSequenceStartHandler 把所有已就绪模块按固定顺序加入现有任务队列。
+func AIJobSequenceStartHandler(service *services.AIJobService) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		if service == nil {
+			return writeError(c, fiber.StatusServiceUnavailable, "analysis_unavailable", "analysis service is unavailable")
+		}
+		var body aiJobSequenceStartRequest
+		if err := c.BodyParser(&body); err != nil {
+			return writeError(c, fiber.StatusBadRequest, "invalid_analysis_request", "request body is not valid JSON")
+		}
+		jobs, skipped, err := service.StartAll(strings.TrimSpace(body.Mode))
+		if err != nil {
+			if errors.Is(err, services.ErrAIJobActive) {
+				return writeError(c, fiber.StatusConflict, "analysis_job_active", "another analysis task is active")
+			}
+			if errors.Is(err, services.ErrAIAnalyzerUnavailable) {
+				return writeError(c, fiber.StatusServiceUnavailable, "ai_module_unavailable", "no local analysis modules are ready")
+			}
+			return writeError(c, fiber.StatusBadRequest, "analysis_start_failed", "unable to queue analysis tasks")
+		}
+		return c.JSON(fiber.Map{"ok": true, "jobs": jobs, "skippedModules": skipped})
 	}
 }
 
