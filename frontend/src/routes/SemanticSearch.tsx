@@ -41,6 +41,9 @@ export default function SemanticSearch() {
   const [album, setAlbum] = useState<SearchHit | undefined>();
   const [year, setYear] = useState("");
   const [locationId, setLocationId] = useState("");
+  const [personId, setPersonId] = useState("");
+  const [favoriteOnly, setFavoriteOnly] = useState(false);
+  const [pickedOnly, setPickedOnly] = useState(false);
   const [submitted, setSubmitted] = useState<SubmittedSearch | null>(null);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
 
@@ -52,6 +55,11 @@ export default function SemanticSearch() {
   const locationsQuery = useQuery({
     queryKey: ["gps-locations", "semantic-filter"],
     queryFn: () => aiJobsApi.locations().then((result) => result.page.items),
+    staleTime: 60_000,
+  });
+  const peopleQuery = useQuery({
+    queryKey: ["people", false],
+    queryFn: () => aiJobsApi.people(false),
     staleTime: 60_000,
   });
   const albumQuery = useQuery({
@@ -90,7 +98,14 @@ export default function SemanticSearch() {
       ? Boolean(text.trim())
       : Boolean(similarResourceId || imageFile);
   const hasSearchCondition = Boolean(
-    hasSemanticQuery || ocrText.trim() || album || year || locationId,
+    hasSemanticQuery ||
+    ocrText.trim() ||
+    album ||
+    year ||
+    locationId ||
+    personId ||
+    favoriteOnly ||
+    pickedOnly,
   );
 
   const search = (resourceId?: string, file?: File) => {
@@ -104,6 +119,9 @@ export default function SemanticSearch() {
       ...(album ? { albumId: album.path } : {}),
       ...(year.trim() ? { year: year.trim() } : {}),
       ...(locationId ? { locationId } : {}),
+      ...(personId ? { personId } : {}),
+      ...(favoriteOnly ? { favoriteOnly: true } : {}),
+      ...(pickedOnly ? { pickedOnly: true } : {}),
     };
     setSubmitted({ request, image: file, token: Date.now() });
     setViewerIndex(null);
@@ -233,7 +251,7 @@ export default function SemanticSearch() {
               </span>
             </label>
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
               <label className="min-w-0 text-meta text-fg-muted">
                 <span className="mb-1.5 block">限定相册</span>
                 {album ? (
@@ -303,9 +321,40 @@ export default function SemanticSearch() {
                   ))}
                 </select>
               </label>
+              <label className="text-meta text-fg-muted">
+                <span className="mb-1.5 block">人物</span>
+                <select
+                  value={personId}
+                  onChange={(event) => setPersonId(event.target.value)}
+                  className="h-10 w-full rounded-md border border-border bg-bg px-3 text-body text-fg"
+                >
+                  <option value="">所有人物</option>
+                  {(peopleQuery.data?.people ?? []).map((person) => (
+                    <option key={person.id} value={person.id}>
+                      {person.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
 
             <div className="mt-4 flex flex-wrap items-center gap-3">
+              <label className="flex items-center gap-2 text-meta text-fg-muted">
+                <input
+                  type="checkbox"
+                  checked={favoriteOnly}
+                  onChange={(event) => setFavoriteOnly(event.target.checked)}
+                />
+                仅来自收藏相册
+              </label>
+              <label className="flex items-center gap-2 text-meta text-fg-muted">
+                <input
+                  type="checkbox"
+                  checked={pickedOnly}
+                  onChange={(event) => setPickedOnly(event.target.checked)}
+                />
+                仅精选照片
+              </label>
               <button
                 type="submit"
                 disabled={

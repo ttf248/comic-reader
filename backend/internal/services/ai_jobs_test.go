@@ -72,6 +72,9 @@ func TestAIJobServiceStartAllQueuesModulesInOrder(t *testing.T) {
 		testJSONAnalyzer{module: AIJobTypeOCR, version: "ocr-v1"},
 		testJSONAnalyzer{module: AIJobTypeFace, version: "face-v1"},
 	)
+	if _, err := service.SetPeopleEnabled(true); err != nil {
+		t.Fatal(err)
+	}
 
 	jobs, skipped, err := service.StartAll(AIJobModeIncremental)
 	if err != nil || len(skipped) != 0 {
@@ -100,6 +103,44 @@ func TestAIJobServiceStartAllQueuesModulesInOrder(t *testing.T) {
 	}
 	waitForAIJobIdle(t, service)
 	shutdownAIJobService(t, service)
+}
+
+func TestFaceAnalysisRequiresExplicitPeopleOptIn(t *testing.T) {
+	root := t.TempDir()
+	files := writeAIJobImages(t, root, 1)
+	catalog := aiJobCatalog(root, files)
+	service := newTestAIJobService(t, filepath.Join(t.TempDir(), "state", "jobs.json"), filepath.Join(t.TempDir(), "derived"), catalog,
+		MetadataAnalyzer{},
+		testJSONAnalyzer{module: AIJobTypeFace, version: "face-v1"},
+	)
+	defer shutdownAIJobService(t, service)
+
+	if service.List().Settings.PeopleEnabled {
+		t.Fatal("people analysis must be disabled by default")
+	}
+	if _, _, err := service.Start(AIJobTypeFace, AIJobModeFull); !errors.Is(err, ErrPeopleAnalysisDisabled) {
+		t.Fatalf("face task started without opt-in: %v", err)
+	}
+	queued, skipped, err := service.StartAll(AIJobModeIncremental)
+	faceSkipped := false
+	for _, module := range skipped {
+		if module.Type == AIJobTypeFace && module.Reason == "people_analysis_disabled" {
+			faceSkipped = true
+		}
+	}
+	if err != nil || len(queued) != 1 || !faceSkipped {
+		t.Fatalf("StartAll without opt-in = jobs %v, skipped %v, error %v", queued, skipped, err)
+	}
+	waitForAIJob(t, service, queued[0].ID, AIJobStatusCompleted)
+	waitForAIJobIdle(t, service)
+	if _, err := service.SetPeopleEnabled(true); err != nil {
+		t.Fatal(err)
+	}
+	faceJob, _, err := service.Start(AIJobTypeFace, AIJobModeFull)
+	if err != nil {
+		t.Fatalf("face task did not start after opt-in: %v", err)
+	}
+	waitForAIJob(t, service, faceJob.ID, AIJobStatusCompleted)
 }
 
 func TestAIJobServiceIncrementalDetectsChangedFilesAndModuleVersion(t *testing.T) {
@@ -343,7 +384,7 @@ func TestAIJobSchedulerUsesLocalTimeAndRunsMissedDayOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.ConfigureDaily(true, "03:00", []string{AIJobTypeMetadata}); err != nil {
+	if _, err := service.ConfigureDaily(true, "03:00", []string{AIJobTypeMetadata}, false); err != nil {
 		t.Fatal(err)
 	}
 	service.scheduleTick(current)
@@ -409,7 +450,7 @@ func TestAIJobSchedulerQueuesConfiguredModules(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	settings, err := service.ConfigureDaily(true, "03:00", []string{AIJobTypeEmbedding, AIJobTypeMetadata, AIJobTypeEmbedding})
+	settings, err := service.ConfigureDaily(true, "03:00", []string{AIJobTypeEmbedding, AIJobTypeMetadata, AIJobTypeEmbedding}, false)
 	if err != nil {
 		t.Fatal(err)
 	}

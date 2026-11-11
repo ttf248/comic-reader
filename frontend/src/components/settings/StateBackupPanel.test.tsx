@@ -18,7 +18,7 @@ vi.mock("../../api/stateBackup", async (original) => ({
 }));
 vi.mock("../../api/prefs", () => ({ prefsApi: { get: vi.fn() } }));
 const preview: StatePreview = {
-  versions: { preferences: "one", activities: "two", covers: "three", picks: "four" },
+  versions: { preferences: "one", activities: "two", covers: "three", picks: "four", people: "five" },
   libraryRevision: 1,
   ready: true,
   counts: {
@@ -28,6 +28,7 @@ const preview: StatePreview = {
     activities: 0,
     covers: 0,
     picks: 2,
+    people: 0,
   },
   missing: { favorites: 1 },
   skippedCovers: 0,
@@ -72,6 +73,7 @@ it("预览后可仅覆盖收藏，保留其他类别并展示结果", async () =
     /阅读与播放活动 ·/,
     /自定义封面 ·/,
     /照片精选 ·/,
+    /人物分组与手动修正 ·/,
   ])
     fireEvent.click(screen.getByRole("checkbox", { name }));
   fireEvent.click(screen.getByRole("button", { name: "确认覆盖恢复" }));

@@ -299,7 +299,15 @@ func main() {
 	if err != nil {
 		log.Fatalf("初始化 OCR 搜索索引失败: %v", err)
 	}
-	aiJobs, err := services.NewAIJobService(services.AIJobServiceOptions{
+	peopleService, err := services.OpenPeopleService(
+		filepath.Join(cacheLayout.StateDir, "people.json"),
+		filepath.Join(cacheLayout.AIDerivedDir, "people-index.json"),
+	)
+	if err != nil {
+		log.Fatalf("初始化人物索引失败: %v", err)
+	}
+	var aiJobs *services.AIJobService
+	aiJobs, err = services.NewAIJobService(services.AIJobServiceOptions{
 		StatePath:    cacheLayout.AIJobsPath,
 		MetadataDir:  cacheLayout.MetadataDir,
 		Catalog:      resourceCatalog,
@@ -309,6 +317,11 @@ func main() {
 			if indexErr := ocrSearchIndex.ApplyRecords(records); indexErr != nil {
 				log.Printf("更新 OCR 搜索索引失败: %v", indexErr)
 			}
+			if aiJobs != nil && aiJobs.PeopleEnabled() {
+				if indexErr := peopleService.ApplyRecords(records); indexErr != nil {
+					log.Printf("更新人物索引失败: %v", indexErr)
+				}
+			}
 		},
 	})
 	if err != nil {
@@ -316,6 +329,11 @@ func main() {
 	}
 	if err := ocrSearchIndex.Sync(aiJobs.Records(services.AIJobTypeOCR)); err != nil {
 		log.Printf("重建 OCR 搜索索引失败: %v", err)
+	}
+	if aiJobs.PeopleEnabled() {
+		if err := peopleService.Sync(aiJobs.Records(services.AIJobTypeFace)); err != nil {
+			log.Printf("重建人物索引失败: %v", err)
+		}
 	}
 	aiJobs.StartPending()
 
@@ -382,14 +400,20 @@ func main() {
 	api.Delete("/library", handlers.ScanCacheClearHandler(scanCache, resourceCatalog, runner))
 	api.Get("/locations", handlers.GPSLocationsHandler(resourceCatalog, aiJobs, safetyState.Validate, picks))
 	api.Get("/locations/:id/media", handlers.GPSLocationsHandler(resourceCatalog, aiJobs, safetyState.Validate, picks))
+	api.Get("/people", handlers.PeopleHandler(peopleService, aiJobs, resourceCatalog, safetyState.Validate))
+	api.Delete("/people", handlers.PeopleHandler(peopleService, aiJobs, resourceCatalog, safetyState.Validate))
+	api.Get("/people/:id/media", handlers.PersonMediaHandler(peopleService, aiJobs, resourceCatalog, safetyState.Validate))
+	api.Put("/people/:id", handlers.PersonHandler(peopleService))
+	api.Post("/people/merge", handlers.PeopleMergeHandler(peopleService))
+	api.Post("/people/split", handlers.PeopleSplitHandler(peopleService))
 	api.Get("/ai/jobs", handlers.AIJobsHandler(aiJobs))
 	api.Post("/ai/jobs", handlers.AIJobStartHandler(aiJobs))
 	api.Post("/ai/jobs/sequence", handlers.AIJobSequenceStartHandler(aiJobs))
 	api.Get("/ai/semantic/status", handlers.AIEmbeddingStatusHandler(embeddingAnalyzer, aiJobs, resourceCatalog))
-	api.Post("/ai/search", handlers.SemanticSearchHandler(embeddingAnalyzer, aiJobs, ocrSearchIndex, resourceCatalog, safetyState.Validate, cacheLayout.TempDir))
+	api.Post("/ai/search", handlers.SemanticSearchHandler(embeddingAnalyzer, aiJobs, ocrSearchIndex, resourceCatalog, safetyState.Validate, cacheLayout.TempDir, prefs, picks, peopleService))
 	api.Post("/ai/faces/search", handlers.FaceSimilaritySearchHandler(aiJobs, resourceCatalog, safetyState.Validate))
-	api.Get("/ai/jobs/settings", handlers.AIJobSettingsHandler(aiJobs))
-	api.Put("/ai/jobs/settings", handlers.AIJobSettingsHandler(aiJobs))
+	api.Get("/ai/jobs/settings", handlers.AIJobSettingsHandler(aiJobs, peopleService))
+	api.Put("/ai/jobs/settings", handlers.AIJobSettingsHandler(aiJobs, peopleService))
 	api.Get("/ai/jobs/:id/events", handlers.AIJobEventsHandler(aiJobs))
 	api.Get("/ai/jobs/:id", handlers.AIJobStatusHandler(aiJobs))
 	api.Post("/ai/jobs/:id/pause", handlers.AIJobActionHandler(aiJobs, "pause"))
@@ -436,7 +460,7 @@ func main() {
 	api.Post("/admin/fs/directories", middleware.LoopbackOnly(), handlers.DirectoriesHandler())
 
 	// 配置读写
-	backupService := &services.StateBackupService{Prefs: prefs, Activities: activities, Covers: coverOverrides, Picks: picks, Catalog: resourceCatalog, ScanCache: scanCache, ValidatePath: safetyState.Validate, BackupDir: services.StateBackupDirectory(cacheLayout)}
+	backupService := &services.StateBackupService{Prefs: prefs, Activities: activities, Covers: coverOverrides, Picks: picks, People: peopleService, Catalog: resourceCatalog, ScanCache: scanCache, ValidatePath: safetyState.Validate, BackupDir: services.StateBackupDirectory(cacheLayout)}
 	api.Get("/admin/state/export", middleware.LoopbackOnly(), handlers.StateExportHandler(backupService))
 	api.Post("/admin/state/import/preview", middleware.LoopbackOnly(), handlers.StatePreviewHandler(backupService))
 	api.Post("/admin/state/import", middleware.LoopbackOnly(), handlers.StateImportHandler(backupService))

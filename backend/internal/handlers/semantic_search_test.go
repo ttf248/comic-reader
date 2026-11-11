@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -14,9 +15,35 @@ import (
 	"github.com/tianlongxiang/local-gallery/internal/middleware"
 	"github.com/tianlongxiang/local-gallery/internal/models"
 	"github.com/tianlongxiang/local-gallery/internal/services"
+	"github.com/tianlongxiang/local-gallery/internal/store"
 )
 
 type handlerSemanticWorker struct{}
+
+type handlerMetadataAnalyzer struct{}
+
+func (handlerMetadataAnalyzer) Type() string    { return services.AIJobTypeMetadata }
+func (handlerMetadataAnalyzer) Version() string { return services.MetadataParserVersion }
+func (handlerMetadataAnalyzer) Analyze(context.Context, io.ReadSeeker) (services.AIAnalysisOutput, error) {
+	data, _ := json.Marshal(services.ImageMetadata{Status: services.MetadataParseNoExif})
+	return services.AIAnalysisOutput{Status: services.MetadataParseNoExif, Data: data}, nil
+}
+func (handlerMetadataAnalyzer) AnalyzeBatch(_ context.Context, inputs []services.AIAnalysisInput) ([]services.AIAnalysisOutput, error) {
+	outputs := make([]services.AIAnalysisOutput, len(inputs))
+	for index, input := range inputs {
+		metadata := services.ImageMetadata{Status: services.MetadataParseParsed, DateTimeOriginal: "2023:06:01 10:00:00"}
+		if filepath.Base(input.Path) == "first.jpg" {
+			metadata.DateTimeOriginal = "2024:06:01 10:00:00"
+			metadata.GPS = &services.GPSMetadata{Latitude: 39.9, Longitude: 116.4}
+		}
+		data, _ := json.Marshal(metadata)
+		outputs[index] = services.AIAnalysisOutput{
+			Status: services.MetadataParseParsed, Data: data,
+			Fields: []string{services.AIFieldExifTime, services.AIFieldGPS},
+		}
+	}
+	return outputs, nil
+}
 
 func (handlerSemanticWorker) Status(context.Context) (services.AIWorkerStatus, error) {
 	return services.AIWorkerStatus{
@@ -70,7 +97,20 @@ func (handlerSemanticWorker) AnalyzeOCR(_ context.Context, paths []string) ([]se
 func (handlerSemanticWorker) AnalyzeFaces(_ context.Context, paths []string) ([]services.AIWorkerAnalysis, error) {
 	results := make([]services.AIWorkerAnalysis, len(paths))
 	for index := range results {
-		results[index].Data = json.RawMessage(`{"faces":[]}`)
+		vector := make([]float32, 128)
+		vector[0] = 1
+		data, _ := json.Marshal(struct {
+			Faces []struct {
+				Box       []float32 `json:"box"`
+				Score     float32   `json:"score"`
+				Embedding []float32 `json:"embedding"`
+			} `json:"faces"`
+		}{Faces: []struct {
+			Box       []float32 `json:"box"`
+			Score     float32   `json:"score"`
+			Embedding []float32 `json:"embedding"`
+		}{{Box: []float32{0.1, 0.1, 0.5, 0.5}, Score: 0.99, Embedding: vector}}})
+		results[index].Data = data
 	}
 	return results, nil
 }
@@ -118,14 +158,28 @@ func TestSemanticSearchAPIUsesCurrentIndexedResources(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	faceAnalyzer, err := services.NewFaceAnalyzer(handlerSemanticWorker{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	peopleService, err := services.OpenPeopleService(filepath.Join(t.TempDir(), "state", "people.json"), filepath.Join(t.TempDir(), "derived", "people-index.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := peopleService.Sync(nil); err != nil {
+		t.Fatal(err)
+	}
 	jobs, err := services.NewAIJobService(services.AIJobServiceOptions{
 		StatePath:   filepath.Join(t.TempDir(), "state", "ai_jobs.json"),
 		MetadataDir: filepath.Join(t.TempDir(), "metadata"),
 		Catalog:     catalog, ValidatePath: safetyState.Validate,
-		Analyzers: []services.AIAnalyzer{services.MetadataAnalyzer{}, analyzer, ocrAnalyzer},
+		Analyzers: []services.AIAnalyzer{handlerMetadataAnalyzer{}, analyzer, ocrAnalyzer, faceAnalyzer},
 		OnRecordsCommitted: func(records []services.AIAnalysisRecord) {
 			if err := ocrIndex.ApplyRecords(records); err != nil {
 				t.Errorf("update OCR index: %v", err)
+			}
+			if err := peopleService.ApplyRecords(records); err != nil {
+				t.Errorf("update people index: %v", err)
 			}
 		},
 	})
@@ -175,11 +229,52 @@ func TestSemanticSearchAPIUsesCurrentIndexedResources(t *testing.T) {
 	if current, _ := jobs.Get(ocrJob.ID); current.Status != services.AIJobStatusCompleted {
 		t.Fatalf("OCR job did not complete: %+v", current)
 	}
+	metadataJob, _, err := jobs.Start(services.AIJobTypeMetadata, services.AIJobModeFull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline = time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		current, exists := jobs.Get(metadataJob.ID)
+		if exists && (current.Status == services.AIJobStatusCompleted || current.Status == services.AIJobStatusFailed) {
+			if current.Status != services.AIJobStatusCompleted {
+				t.Fatalf("metadata job failed: %+v", current)
+			}
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if current, _ := jobs.Get(metadataJob.ID); current.Status != services.AIJobStatusCompleted {
+		t.Fatalf("metadata job did not complete: %+v", current)
+	}
+	if _, err := jobs.SetPeopleEnabled(true); err != nil {
+		t.Fatal(err)
+	}
+	faceJob, _, err := jobs.Start(services.AIJobTypeFace, services.AIJobModeFull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline = time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		current, exists := jobs.Get(faceJob.ID)
+		if exists && (current.Status == services.AIJobStatusCompleted || current.Status == services.AIJobStatusFailed) {
+			if current.Status != services.AIJobStatusCompleted {
+				t.Fatalf("face job failed: %+v", current)
+			}
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if current, _ := jobs.Get(faceJob.ID); current.Status != services.AIJobStatusCompleted {
+		t.Fatalf("face job did not complete: %+v", current)
+	}
 
 	app := fiber.New()
 	api := app.Group("/api")
 	api.Use(safety)
-	api.Post("/ai/search", SemanticSearchHandler(analyzer, jobs, ocrIndex, catalog, safetyState.Validate, t.TempDir()))
+	prefs := store.NewPrefsStore(filepath.Join(t.TempDir(), "prefs.json"))
+	picks := store.NewPickStore(filepath.Join(t.TempDir(), "picks.json"))
+	api.Post("/ai/search", SemanticSearchHandler(analyzer, jobs, ocrIndex, catalog, safetyState.Validate, t.TempDir(), prefs, picks, peopleService))
 	request := httptest.NewRequest("POST", "/api/ai/search", strings.NewReader(`{"text":"蓝色山景","kind":"photo","limit":10}`))
 	request.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
 	response, err := app.Test(request, -1)
@@ -233,6 +328,46 @@ func TestSemanticSearchAPIUsesCurrentIndexedResources(t *testing.T) {
 	}
 	if ocrBody.Total != 1 || len(ocrBody.Results) != 1 || ocrBody.Results[0].Item.ID != firstID || ocrBody.Results[0].Similarity != nil {
 		t.Fatalf("OCR search response = %+v", ocrBody)
+	}
+	albumID := catalog.ExternalID(albumPath, services.ResourceAlbum)
+	if _, err := prefs.AddFavorite(albumID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := picks.Batch([]string{firstID}, true); err != nil {
+		t.Fatal(err)
+	}
+	peopleGroups := peopleService.Groups(false)
+	if len(peopleGroups) != 1 {
+		t.Fatalf("test faces should form one candidate group: %+v", peopleGroups)
+	}
+	combinedBody, _ := json.Marshal(map[string]any{
+		"ocrText": "入口", "albumId": albumID, "personId": peopleGroups[0].ID,
+		"favoriteOnly": true, "pickedOnly": true, "year": "2024",
+		"locationId": services.GPSLocationID(39.9, 116.4), "kind": "photo", "limit": 10,
+	})
+	combinedRequest := httptest.NewRequest("POST", "/api/ai/search", strings.NewReader(string(combinedBody)))
+	combinedRequest.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+	combinedResponse, err := app.Test(combinedRequest, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer combinedResponse.Body.Close()
+	var combinedResult struct {
+		Results []struct {
+			Item struct {
+				ID string `json:"id"`
+			} `json:"item"`
+		} `json:"results"`
+		Total int `json:"total"`
+	}
+	if combinedResponse.StatusCode != fiber.StatusOK {
+		t.Fatalf("combined search status = %d", combinedResponse.StatusCode)
+	}
+	if err := json.NewDecoder(combinedResponse.Body).Decode(&combinedResult); err != nil {
+		t.Fatal(err)
+	}
+	if combinedResult.Total != 1 || len(combinedResult.Results) != 1 || combinedResult.Results[0].Item.ID != firstID {
+		t.Fatalf("combined structured filters response = %+v", combinedResult)
 	}
 
 	imageRequest := httptest.NewRequest("POST", "/api/ai/search", strings.NewReader(`{"resourceId":"`+firstID+`","kind":"photo","limit":10}`))

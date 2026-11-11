@@ -28,6 +28,7 @@ interface Props {
   /** 启动或任务操作正在提交。 */
   busy: boolean;
   modules: AIJobModule[];
+  peopleEnabled: boolean;
   embeddingStatus?: AIWorkerStatus;
   embeddingStatusLoading: boolean;
   onStart: (type: AnalysisType, mode: AnalysisMode) => void;
@@ -47,6 +48,7 @@ export default function TaskConsole({
   loading,
   busy,
   modules,
+  peopleEnabled,
   embeddingStatus,
   embeddingStatusLoading,
   onStart,
@@ -54,14 +56,17 @@ export default function TaskConsole({
   onAction,
 }: Props) {
   const installedModules = modules.filter((module) => module.installed);
+  const runnableModules = installedModules.filter(
+    (module) => module.type !== "face" || peopleEnabled,
+  );
   const [selectedModule, setSelectedModule] =
     useState<AnalysisType>("metadata");
   const [allTasksMode, setAllTasksMode] = useState<AnalysisMode>("incremental");
   useEffect(() => {
-    if (!installedModules.some((module) => module.type === selectedModule)) {
-      setSelectedModule(installedModules[0]?.type ?? "metadata");
+    if (!runnableModules.some((module) => module.type === selectedModule)) {
+      setSelectedModule(runnableModules[0]?.type ?? "metadata");
     }
-  }, [installedModules, selectedModule]);
+  }, [runnableModules, selectedModule]);
 
   if (loading) {
     return (
@@ -104,8 +109,13 @@ export default function TaskConsole({
             className="rounded-md border border-border bg-bg-elevated px-3 py-2 text-body text-fg disabled:opacity-60"
           >
             {installedModules.map((module) => (
-              <option key={module.type} value={module.type}>
+              <option
+                key={module.type}
+                value={module.type}
+                disabled={module.type === "face" && !peopleEnabled}
+              >
                 {module.name}
+                {module.type === "face" && !peopleEnabled ? "（需先启用）" : ""}
               </option>
             ))}
           </select>
@@ -129,7 +139,11 @@ export default function TaskConsole({
           <button
             type="button"
             className="btn btn-outline"
-            disabled={busy || (isEmbedding && !embeddingReady)}
+            disabled={
+              busy ||
+              (isEmbedding && !embeddingReady) ||
+              (selectedModule === "face" && !peopleEnabled)
+            }
             onClick={() => onStart(selectedModule, "incremental")}
           >
             {startLabels.incremental}
@@ -137,7 +151,11 @@ export default function TaskConsole({
           <button
             type="button"
             className="btn btn-primary"
-            disabled={busy || (isEmbedding && !embeddingReady)}
+            disabled={
+              busy ||
+              (isEmbedding && !embeddingReady) ||
+              (selectedModule === "face" && !peopleEnabled)
+            }
             onClick={() => onStart(selectedModule, "full")}
           >
             {startLabels.full}

@@ -236,7 +236,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 ### `GET /api/ai/jobs/settings` / `PUT /api/ai/jobs/settings`
 
-每日计划字段为 `{ "dailyEnabled": true, "dailyTime": "03:00", "dailyModules": ["metadata", "ocr", "face"] }`。默认开启，模块默认为 `metadata`，按服务所在设备本地时间每天凌晨 3 点运行。时间格式为 24 小时 `HH:MM`；开启计划时至少选择一个已安装模块。未安装模块、空模块选择或无效时间返回 `400 invalid_analysis_settings`。到时后按配置顺序排入所选模块的增量任务，并复用现有任务队列逐项执行；运行环境或权重未就绪的模块会跳过。服务错过计划日期后启动时补跑一次，同一天不重复创建。旧状态文件缺少 `dailyModules` 时按 metadata 恢复。
+每日计划字段为 `{ "dailyEnabled": true, "dailyTime": "03:00", "dailyModules": ["metadata", "ocr"], "peopleEnabled": false }`。`peopleEnabled` 默认关闭；开启后才允许启动 `face` 任务，也可将其加入每日计划。关闭时会从计划模块中移除 `face`；若人脸任务仍在排队、运行或暂停，返回 `409 analysis_job_active`。时间格式为 24 小时 `HH:MM`；开启计划时至少选择一个已安装模块。未安装模块、空模块选择或无效时间返回 `400 invalid_analysis_settings`。到时后按配置顺序排入所选模块的增量任务，并复用现有任务队列逐项执行；运行环境或权重未就绪的模块会跳过。服务错过计划日期后启动时补跑一次，同一天不重复创建。旧状态文件缺少 `dailyModules` 时按 metadata 恢复，缺少 `peopleEnabled` 时按关闭处理。
 
 ### `GET /api/ai/semantic/status`
 
@@ -248,7 +248,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 ### `POST /api/ai/search`
 
-语义检索使用 `text`，以图搜图使用 `resourceId` 或 multipart 上传的 `image`（最大 64 MiB）；三者最多选一种。可额外组合 `ocrText`（最多 200 字符）、`albumId`、`year` 和 `locationId`。只做 OCR 或结构化筛选时不需要 `text`、图片或 Chinese-CLIP；至少要提供一个查询条件。`kind` 为必填的 `photo` 或 `comic`，年份为四位数，分页上限 200。例如：`{ "ocrText": "入口", "kind": "photo", "year": "2024", "locationId": "…" }`。
+语义检索使用 `text`，以图搜图使用 `resourceId` 或 multipart 上传的 `image`（最大 64 MiB）；三者最多选一种。可额外组合 `ocrText`（最多 200 字符）、`albumId`、`year`、`locationId`、`personId`、`favoriteOnly` 与 `pickedOnly`。只做 OCR 或结构化筛选时不需要 `text`、图片或 Chinese-CLIP；至少要提供一个查询条件。`personId` 仅用于照片工作区；`favoriteOnly` 匹配被收藏相册、集合或标签中的照片，`pickedOnly` 匹配用户精选的单张照片。`kind` 为必填的 `photo` 或 `comic`，年份为四位数，分页上限 200。例如：`{ "ocrText": "入口", "kind": "photo", "year": "2024", "locationId": "…", "favoriteOnly": true }`。
 
 带语义查询的结果按精确余弦相似度降序，并返回 `similarity`；仅 OCR/结构化查询时按资源 ID 稳定排序，结果不含 `similarity`。每项保留当前媒体 DTO 与所属相册 ID/名称；响应还包含 `total`、`offset`、`nextOffset` 与当前媒体库 `revision`。OCR 只匹配当前 OCR 版本、文件指纹有效的识别文本；年份筛选依赖当前版本的 EXIF 拍摄年份，地点筛选复用 GPS 地点聚类 ID。每个候选和最终结果都会按当前媒体根重新验证路径、文件类型及大小/修改时间；响应不包含绝对路径。无效请求返回 `400 invalid_semantic_search`；语义检索缺少模型/运行环境分别返回 `503 ai_model_missing` / `503 ai_runtime_unavailable`。
 
@@ -263,6 +263,17 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 ### `POST /api/ai/faces/search`
 
 请求为 `{ "resourceId": "…", "faceIndex": 0 }`，用当前图片中指定的人脸查找媒体库相似照片。响应按 SFace 余弦相似度降序，最多返回 40 个结果；低于 `0.363` 的匹配会过滤。候选仅包含当前快照内记录版本和文件指纹匹配、路径通过当前媒体根重新验证的照片。每项返回当前照片 DTO、匹配的人脸序号与相似度，不包含特征向量或绝对路径。结果是相似度线索，不代表已确认人物身份。无效请求返回 `400 invalid_face_search`，没有可用的人脸源记录返回 `404 face_search_source_unavailable`。
+
+### 人物相册 API
+
+- `GET /api/people?includeHidden=true` 返回当前有效的照片候选组；默认隐藏手动隐藏的分组。结果只包含资源 ID、人数统计、名称和封面 ID，不返回特征向量或文件系统路径。
+- `GET /api/people/:personId/media?cursor=…&limit=200` 返回人物相册分页、当前照片 DTO 与可供纠错的脸部框/序号。
+- `PUT /api/people/:personId` 接受 `name` 和/或 `hidden`；空名称恢复默认名称。
+- `POST /api/people/merge` 接受 `{ "sourceId": "…", "targetId": "…" }`，将来源组的脸分配给目标组。
+- `POST /api/people/split` 接受 `{ "personId": "…", "faceKeys": ["f_…#0"] }`，将选中脸拆到新组；每次最多 200 张，必须给原组留至少一张脸。
+- `DELETE /api/people` 在没有活动人脸任务时关闭人物分析，并清除人脸任务结果、分组索引与手动修正。存在活动或排队任务时返回 `409 analysis_job_active`。
+
+人物分组使用 SFace 余弦相似度 `0.363` 作为候选阈值；这是参考基准，不代表身份确认。分组对每次构建限制最多 30,000 张脸与 2,000,000 次组中心比较，超出部分保留为独立候选组。用户名称、隐藏标记和手动拆分/合并保存在 `state/people.json`；可重建索引位于 `derived/ai/people-index.json`，只存资源 ID、文件指纹、脸部框和组 ID。人脸特征仍只保存在现有 `derived/metadata/face/` 结果中。
 
 ### `GET /api/locations` / `GET /api/locations/:locationId/media`
 

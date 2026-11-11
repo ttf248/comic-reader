@@ -69,6 +69,7 @@ export interface AIJobSettings {
   dailyEnabled: boolean;
   dailyTime: string;
   dailyModules: AnalysisType[];
+  peopleEnabled: boolean;
   lastScheduledDate?: string;
 }
 
@@ -148,6 +149,9 @@ export interface SemanticSearchRequest {
   albumId?: string;
   year?: string;
   locationId?: string;
+  personId?: string;
+  favoriteOnly?: boolean;
+  pickedOnly?: boolean;
   offset?: number;
   limit?: number;
 }
@@ -213,6 +217,33 @@ export interface GPSLocationAlbum {
 }
 
 export type GPSLocationMedia = LibraryFeedItem;
+
+export interface PersonGroup {
+  id: string;
+  name: string;
+  faceCount: number;
+  photoCount: number;
+  coverResourceId?: string;
+  hidden: boolean;
+}
+
+export interface PersonFace {
+  key: string;
+  resourceId: string;
+  faceIndex: number;
+  personId: string;
+  box: number[];
+  score: number;
+}
+
+export interface PersonMediaPage {
+  revision: number;
+  person: PersonGroup;
+  items: LibraryFeedItem[];
+  faces: PersonFace[];
+  total: number;
+  nextCursor?: string;
+}
 
 export const aiJobsApi = {
   list: () => api<{ ok: boolean; snapshot: AIJobSnapshot }>("/api/ai/jobs"),
@@ -295,4 +326,40 @@ export const aiJobsApi = {
     }>(`/api/locations/${encodeURIComponent(id)}/media`, {
       params: { cursor, limit: 200 },
     }),
+  people: (includeHidden = false) =>
+    api<{
+      ok: boolean;
+      people: PersonGroup[];
+      groupingLimited: boolean;
+      threshold: number;
+      revision: number;
+    }>("/api/people", { params: { includeHidden } }),
+  personMedia: (id: string, cursor?: string) =>
+    api<{ ok: boolean; page: PersonMediaPage }>(
+      `/api/people/${encodeURIComponent(id)}/media`,
+      { params: { cursor, limit: 200 } },
+    ),
+  updatePerson: (id: string, body: { name?: string; hidden?: boolean }) =>
+    api<{ ok: boolean }>(`/api/people/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body,
+      nonIdempotent: true,
+    }),
+  mergePeople: (sourceId: string, targetId: string) =>
+    api<{ ok: boolean }>("/api/people/merge", {
+      method: "POST",
+      body: { sourceId, targetId },
+      nonIdempotent: true,
+    }),
+  splitPerson: (personId: string, faceKeys: string[]) =>
+    api<{ ok: boolean; personId: string }>("/api/people/split", {
+      method: "POST",
+      body: { personId, faceKeys },
+      nonIdempotent: true,
+    }),
+  clearPeople: () =>
+    api<{ ok: boolean; cleared: boolean; peopleEnabled: boolean }>(
+      "/api/people",
+      { method: "DELETE", nonIdempotent: true },
+    ),
 };

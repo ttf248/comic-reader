@@ -12,6 +12,7 @@ import {
   ShuffleIcon,
   SparkleIcon,
   MapPinIcon,
+  PeopleIcon,
   TasksIcon,
   FolderSearchIcon,
 } from "../common/Icon";
@@ -78,6 +79,7 @@ const PHOTO_GROUP: NavEntry[] = [
   { to: favoritesRoute("photo"), label: "收藏照片", Icon: StarIcon },
   { to: picksRoute(), label: "精选照片", Icon: PickIcon },
   { to: locationsRoute(), label: "拍摄地点", Icon: MapPinIcon },
+  { to: "/photo/people", label: "人物相册", Icon: PeopleIcon },
   { to: semanticSearchRoute(), label: "智能搜索", Icon: FolderSearchIcon },
 ];
 

@@ -854,6 +854,8 @@ test("设置媒体根按 Esc 撤销整组未提交内容并保留已经确认的
   await page.clock.install();
   await page.goto("/settings");
   const inputs = page.getByPlaceholder("E:\\照片 或 /home/user/pics");
+  await expect(inputs.first()).toBeVisible();
+  await page.clock.pauseAt(new Date("2030-01-01T00:00:00.000Z"));
   await inputs.nth(0).fill(roots[0] + "_cancelled");
   await inputs.nth(1).fill(roots[1] + "_cancelled");
   await page.getByRole("button", { name: "添加根目录", exact: true }).click();

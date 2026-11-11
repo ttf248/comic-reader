@@ -120,6 +120,55 @@ func TestStateBackupRestoresPicksIndependently(t *testing.T) {
 	}
 }
 
+func TestStateBackupRestoresPeopleCorrectionsWithoutVectors(t *testing.T) {
+	s, _, root := newBackupFixture(t)
+	filePath := filepath.Join(root, "作品 C++ 100%", "page.jpg")
+	resourceID := s.Catalog.ExternalID(filePath, ResourceFile)
+	cacheRoot := t.TempDir()
+	people, err := OpenPeopleService(filepath.Join(cacheRoot, "state", "people.json"), filepath.Join(cacheRoot, "derived", "people.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	vector := make([]float32, peopleEmbeddingDimension)
+	vector[0] = 1
+	data, _ := json.Marshal(map[string]any{"faces": []any{map[string]any{
+		"box": []float32{1, 2, 3, 4}, "score": .9, "embedding": vector,
+	}}})
+	if err := people.Sync([]AIAnalysisRecord{{
+		Type: AIJobTypeFace, ResourceID: resourceID, Size: 7, MTimeNs: 11,
+		ModuleVersion: FaceAnalyzerVersion, Status: "faces_found", Data: data,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	personID := people.Groups(false)[0].ID
+	if err := people.Rename(personID, "家人"); err != nil {
+		t.Fatal(err)
+	}
+	s.People = people
+	backup, err := s.Export()
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, _ := json.Marshal(backup)
+	if bytes.Contains(encoded, []byte("embedding")) {
+		t.Fatalf("backup contains face vectors: %s", encoded)
+	}
+	if err := people.ReplaceCorrections(PeopleCorrections{Version: 1, Names: map[string]string{}, Hidden: map[string]bool{}, Assignments: map[string]string{}}); err != nil {
+		t.Fatal(err)
+	}
+	preview, err := s.Preview(backup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := s.Restore(backup, []string{"people"}, preview.Versions, preview.LibraryRevision)
+	if err != nil || result.Failed != "" || len(result.Completed) != 1 {
+		t.Fatalf("people restore = %+v, %v", result, err)
+	}
+	if got := people.Groups(false); len(got) != 1 || got[0].Name != "家人" {
+		t.Fatalf("restored people corrections = %+v", got)
+	}
+}
+
 func TestStateBackupRejectsInvalidPicks(t *testing.T) {
 	s, _, _ := newBackupFixture(t)
 	backup, _ := s.Export()

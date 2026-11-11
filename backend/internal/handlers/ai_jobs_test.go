@@ -207,6 +207,9 @@ func TestAIJobSequenceAPIQueuesAllModulesInOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := service.SetPeopleEnabled(true); err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
@@ -302,7 +305,7 @@ func TestAIJobSettingsHandlerExplainsInvalidModules(t *testing.T) {
 	})
 
 	app := fiber.New()
-	app.Put("/api/ai/jobs/settings", AIJobSettingsHandler(service))
+	app.Put("/api/ai/jobs/settings", AIJobSettingsHandler(service, nil))
 	request := httptest.NewRequest(fiber.MethodPut, "/api/ai/jobs/settings", strings.NewReader(`{"dailyEnabled":true,"dailyTime":"03:00","dailyModules":[]}`))
 	request.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
 	response, err := app.Test(request, -1)
@@ -322,5 +325,47 @@ func TestAIJobSettingsHandlerExplainsInvalidModules(t *testing.T) {
 	}
 	if body.Code != "invalid_analysis_settings" || !strings.Contains(body.Message, "dailyModules") {
 		t.Fatalf("settings error = %+v", body)
+	}
+}
+
+func TestAIJobStartAPIRequiresPeopleOptIn(t *testing.T) {
+	service, err := services.NewAIJobService(services.AIJobServiceOptions{
+		StatePath:    filepath.Join(t.TempDir(), "state", "jobs.json"),
+		MetadataDir:  filepath.Join(t.TempDir(), "derived"),
+		Catalog:      services.NewResourceCatalog(),
+		Analyzers:    []services.AIAnalyzer{services.MetadataAnalyzer{}},
+		ValidatePath: func(path string) (string, error) { return path, nil },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := service.Shutdown(ctx); err != nil {
+			t.Errorf("AI job shutdown: %v", err)
+		}
+	})
+
+	app := fiber.New()
+	app.Post("/api/ai/jobs", AIJobStartHandler(service))
+	request := httptest.NewRequest(fiber.MethodPost, "/api/ai/jobs", strings.NewReader(`{"type":"face","mode":"full"}`))
+	request.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+	response, err := app.Test(request, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != fiber.StatusForbidden {
+		t.Fatalf("face start without opt-in status = %d", response.StatusCode)
+	}
+	var body struct {
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Code != "people_analysis_disabled" {
+		t.Fatalf("face start error = %+v", body)
 	}
 }

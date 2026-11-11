@@ -11,7 +11,7 @@ Local Gallery 是一款在本机运行的照片、漫画与视频画廊。Go 后
 | 照片 | 多目录合并为媒体库；按相册、集合、标签、年份和 GPS 地点浏览；中文语义搜索与以图搜图；照片墙、大图预览、并排对比、精选、收藏、最近浏览。 |
 | 漫画 | 独立作品列表；单页、连续、双页与 RTL 阅读；缩放、旋转、目录、阅读进度恢复、未读列表与最近阅读。 |
 | 后台任务 | 扫描进度与取消；EXIF/GPS、OCR、人脸分析和语义向量的全量或增量任务；任务中心支持按序启动全部已就绪模块、暂停、继续、失败项重试、重启恢复与每日计划，并链接到本机模型/缓存路径及占用统计。任务记录失败图片的相对路径。 |
-| 本机 AI | Chinese-CLIP 中文语义搜索和图片相似检索；RapidOCR 识别文字、支持 OCR 关键词搜索，并可与相册、年份和 GPS 条件组合；YuNet + SFace 检测人脸、生成本地特征并查找相似照片。 |
+| 本机 AI | Chinese-CLIP 中文语义搜索和图片相似检索；RapidOCR 识别文字、支持 OCR 关键词搜索，并可与相册、年份、GPS、人物、收藏和精选条件组合；YuNet + SFace 检测人脸、生成本地特征、查找相似照片并建立可改名/合并/拆分/隐藏的人物候选相册。人物分析默认关闭，须在任务中心显式启用。 |
 | 视频与媒体 | 浏览器原生播放和 Range 请求；可选 FFmpeg 提供视频封面、元数据、faststart、H.264/AAC 转码及 HEIC/HEIF/TIFF 转换。 |
 | 本机管理 | 多媒体根目录、缓存清理、状态备份与恢复、明暗主题、键盘与触摸操作。照片级「精选」与相册级「收藏」分开保存。 |
 
@@ -134,7 +134,7 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File backend/aiworker/setup.ps1
 pwsh -NoProfile -ExecutionPolicy Bypass -File aiworker/setup.ps1
 ~~~
 
-脚本安装 RapidOCR、ONNX Runtime、OpenCV，并下载/校验 Chinese-CLIP、YuNet 和 SFace 权重；最后实际运行 OCR 识别、YuNet 检测与 SFace 特征提取检查。安装完成后重启 Local Gallery，在「任务中心」运行「文字识别」或「人脸识别」的全量任务；之后可用增量任务处理新增或变更图片。图片详情会展示识别文字、人脸框，并可按人脸查找相似照片。识别组件见 [RapidOCR 安装与用法](https://rapidai.github.io/RapidOCRDocs/main/en/install_usage/rapidocr/install/)；人脸权重固定来自 [OpenCV Zoo YuNet](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet) 和 [SFace](https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface)。
+脚本安装 RapidOCR、ONNX Runtime、OpenCV，并下载/校验 Chinese-CLIP、YuNet 和 SFace 权重；最后实际运行 OCR 识别、YuNet 检测与 SFace 特征提取检查。安装完成后重启 Local Gallery，在「任务中心」运行「文字识别」或「人脸识别」的全量任务；人物分析默认关闭，首次使用需在每日计划区域勾选「启用人物分析」并保存，然后启动人脸识别。之后可用增量任务处理新增或变更图片。图片详情会展示识别文字、人脸框，并可按人脸查找相似照片；「人物相册」页允许改名、合并、拆分或隐藏候选分组。识别组件见 [RapidOCR 安装与用法](https://rapidai.github.io/RapidOCRDocs/main/en/install_usage/rapidocr/install/)；人脸权重固定来自 [OpenCV Zoo YuNet](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet) 和 [SFace](https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface)。
 
 Python 虚拟环境位于 Worker 目录的 `.venv/`，模型按配置保存在 `<cacheDir>/derived/ai/models/`：
 
@@ -171,7 +171,7 @@ pwsh -NoProfile -File scripts/install-ffmpeg.ps1
 
 - 这是单用户本地画廊，不包含账号系统、云端同步、在线分享、协作或数据库。
 - 只扫描配置的文件夹，不导入 ZIP/RAR 等压缩包。
-- 语义检索与人脸相似检索目前面向照片；人脸功能只按本机特征查找相似照片，不识别或推断真实姓名。
+- 语义检索、人脸相似检索与人物相册目前面向照片；人物分组只是本机相似度候选，不识别或推断真实姓名，需要用户确认和纠错。
 - GPS 地点相册按照片坐标在本机生成，不调用在线地图或地理编码服务。
 - 发布包是便携压缩包，不安装系统服务或配置登录自启；需要手动启动程序并保持进程运行。
 - 发布包会附带本机 AI Worker、依赖清单和一键安装脚本，但不会打包 Python 虚拟环境或模型权重。基本浏览无需 Python；启用 OCR、人脸分析或语义搜索前需运行上文安装脚本。

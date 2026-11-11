@@ -27,9 +27,10 @@ type aiJobSequenceStartRequest struct {
 }
 
 type aiJobSettingsRequest struct {
-	DailyEnabled bool     `json:"dailyEnabled"`
-	DailyTime    string   `json:"dailyTime"`
-	DailyModules []string `json:"dailyModules"`
+	DailyEnabled  bool     `json:"dailyEnabled"`
+	DailyTime     string   `json:"dailyTime"`
+	DailyModules  []string `json:"dailyModules"`
+	PeopleEnabled bool     `json:"peopleEnabled"`
 }
 
 // AIJobsHandler 返回任务历史、活动任务与每日调度设置。
@@ -54,6 +55,9 @@ func AIJobStartHandler(service *services.AIJobService) fiber.Handler {
 		}
 		job, reused, err := service.Start(strings.TrimSpace(body.Type), strings.TrimSpace(body.Mode))
 		if err != nil {
+			if errors.Is(err, services.ErrPeopleAnalysisDisabled) {
+				return writeError(c, fiber.StatusForbidden, "people_analysis_disabled", "enable people analysis before starting face tasks")
+			}
 			if errors.Is(err, services.ErrAIJobActive) {
 				return writeError(c, fiber.StatusConflict, "analysis_job_active", "another analysis task is active")
 			}
@@ -190,7 +194,7 @@ func AIJobActionHandler(service *services.AIJobService, action string) fiber.Han
 }
 
 // AIJobSettingsHandler 读取或更新本地每日增量分析计划。
-func AIJobSettingsHandler(service *services.AIJobService) fiber.Handler {
+func AIJobSettingsHandler(service *services.AIJobService, people *services.PeopleService) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		if c.Method() == fiber.MethodGet {
 			return c.JSON(fiber.Map{"ok": true, "settings": service.List().Settings})
@@ -199,9 +203,18 @@ func AIJobSettingsHandler(service *services.AIJobService) fiber.Handler {
 		if err := c.BodyParser(&body); err != nil {
 			return writeError(c, fiber.StatusBadRequest, "invalid_analysis_settings", "request body is not valid JSON")
 		}
-		settings, err := service.ConfigureDaily(body.DailyEnabled, body.DailyTime, body.DailyModules)
+		peopleWasEnabled := service.PeopleEnabled()
+		settings, err := service.ConfigureDaily(body.DailyEnabled, body.DailyTime, body.DailyModules, body.PeopleEnabled)
 		if err != nil {
+			if errors.Is(err, services.ErrAIJobActive) {
+				return writeError(c, fiber.StatusConflict, "analysis_job_active", "stop the face analysis task before disabling people analysis")
+			}
 			return writeError(c, fiber.StatusBadRequest, "invalid_analysis_settings", "dailyTime and dailyModules are invalid")
+		}
+		if settings.PeopleEnabled && !peopleWasEnabled && people != nil {
+			if err := people.Sync(service.Records(services.AIJobTypeFace)); err != nil {
+				return writeError(c, fiber.StatusInternalServerError, "people_index_unavailable", "people index could not be prepared")
+			}
 		}
 		return c.JSON(fiber.Map{"ok": true, "settings": settings})
 	}

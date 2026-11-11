@@ -24,6 +24,7 @@ const Reader = lazy(() => import("./routes/Reader"));
 const Settings = lazy(() => import("./routes/Settings"));
 const TaskCenter = lazy(() => import("./routes/TaskCenter"));
 const GPSLocations = lazy(() => import("./routes/GPSLocations"));
+const People = lazy(() => import("./routes/People"));
 const SemanticSearch = lazy(() => import("./routes/SemanticSearch"));
 
 function lazyPage(Page: ComponentType) {
@@ -88,6 +89,8 @@ export default function App() {
               element={lazyPage(GPSLocations)}
             />
             <Route path="/photo/semantic" element={lazyPage(SemanticSearch)} />
+            <Route path="/photo/people" element={lazyPage(People)} />
+            <Route path="/photo/people/:personId" element={lazyPage(People)} />
             <Route path="/tasks" element={lazyPage(TaskCenter)} />
             <Route path="/settings" element={lazyPage(Settings)} />
           </Route>

@@ -146,6 +146,7 @@ export default function StateBackupPanel() {
             "activity-query",
             "library",
             "picks",
+            "people",
           ].includes(String(query.queryKey[0])),
       });
       if (restored.completed.includes("preferences")) {
@@ -185,7 +186,7 @@ export default function StateBackupPanel() {
       </div>
       <div className="settings-section__body p-5 space-y-4">
         <p className="text-body text-fg-muted">
-          备份收藏、最近访问、服务端偏好、阅读/播放活动、自定义封面与照片精选。仅本机可操作；不包含媒体文件、服务配置或此浏览器的阅读器偏好。
+          备份收藏、最近访问、服务端偏好、阅读/播放活动、自定义封面、照片精选与人物分组修正。不会备份人脸特征向量、媒体文件、服务配置或此浏览器的阅读器偏好。
         </p>
         <button
           className="btn btn-outline"

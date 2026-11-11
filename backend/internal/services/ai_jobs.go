@@ -52,6 +52,7 @@ const (
 
 var ErrAIJobActive = errors.New("an analysis job is already active")
 var ErrAIAnalyzerUnavailable = errors.New("analysis module runtime or model is unavailable")
+var ErrPeopleAnalysisDisabled = errors.New("people analysis is disabled")
 
 // AIAnalysisOutput 是一个分析模块对单个媒体返回的可序列化结果。
 type AIAnalysisOutput struct {
@@ -200,6 +201,7 @@ type AIJobSettings struct {
 	DailyEnabled      bool     `json:"dailyEnabled"`
 	DailyTime         string   `json:"dailyTime"`
 	DailyModules      []string `json:"dailyModules"`
+	PeopleEnabled     bool     `json:"peopleEnabled"`
 	LastScheduledDate string   `json:"lastScheduledDate,omitempty"`
 }
 
@@ -282,26 +284,26 @@ type aiJobTarget struct {
 
 // AIJobService 持久化分析任务，并通过有界 worker 处理图片元数据。
 type AIJobService struct {
-	mu           sync.Mutex
-	statePath    string
-	metadataDir  string
-	catalog      *ResourceCatalog
-	validatePath func(string) (string, error)
-	analyzers    map[string]AIAnalyzer
-	workerCount  int
-	now          func() time.Time
+	mu                 sync.Mutex
+	statePath          string
+	metadataDir        string
+	catalog            *ResourceCatalog
+	validatePath       func(string) (string, error)
+	analyzers          map[string]AIAnalyzer
+	workerCount        int
+	now                func() time.Time
 	onRecordsCommitted func([]AIAnalysisRecord)
-	jobs         map[string]*AIJob
-	order        []string
-	records      map[string]AIAnalysisRecord
-	runtimes     map[string]*aiJobRuntime
-	subs         map[string]map[chan AIJob]struct{}
-	activeID     string
-	closed       bool
-	settings     AIJobSettings
-	stopSchedule context.CancelFunc
-	closeOnce    sync.Once
-	wg           sync.WaitGroup
+	jobs               map[string]*AIJob
+	order              []string
+	records            map[string]AIAnalysisRecord
+	runtimes           map[string]*aiJobRuntime
+	subs               map[string]map[chan AIJob]struct{}
+	activeID           string
+	closed             bool
+	settings           AIJobSettings
+	stopSchedule       context.CancelFunc
+	closeOnce          sync.Once
+	wg                 sync.WaitGroup
 }
 
 func NewAIJobService(options AIJobServiceOptions) (*AIJobService, error) {
@@ -317,19 +319,19 @@ func NewAIJobService(options AIJobServiceOptions) (*AIJobService, error) {
 	options.WorkerCount = min(options.WorkerCount, aiMaxWorkers)
 
 	service := &AIJobService{
-		statePath:    options.StatePath,
-		metadataDir:  options.MetadataDir,
-		catalog:      options.Catalog,
-		validatePath: options.ValidatePath,
-		analyzers:    make(map[string]AIAnalyzer, len(options.Analyzers)),
-		workerCount:  options.WorkerCount,
-		now:          options.Now,
+		statePath:          options.StatePath,
+		metadataDir:        options.MetadataDir,
+		catalog:            options.Catalog,
+		validatePath:       options.ValidatePath,
+		analyzers:          make(map[string]AIAnalyzer, len(options.Analyzers)),
+		workerCount:        options.WorkerCount,
+		now:                options.Now,
 		onRecordsCommitted: options.OnRecordsCommitted,
-		jobs:         make(map[string]*AIJob),
-		records:      make(map[string]AIAnalysisRecord),
-		runtimes:     make(map[string]*aiJobRuntime),
-		subs:         make(map[string]map[chan AIJob]struct{}),
-		settings:     AIJobSettings{DailyEnabled: true, DailyTime: "03:00", DailyModules: []string{AIJobTypeMetadata}},
+		jobs:               make(map[string]*AIJob),
+		records:            make(map[string]AIAnalysisRecord),
+		runtimes:           make(map[string]*aiJobRuntime),
+		subs:               make(map[string]map[chan AIJob]struct{}),
+		settings:           AIJobSettings{DailyEnabled: true, DailyTime: "03:00", DailyModules: []string{AIJobTypeMetadata}},
 	}
 	for _, analyzer := range options.Analyzers {
 		if analyzer == nil || !validAIJobType(analyzer.Type()) || strings.TrimSpace(analyzer.Version()) == "" {
@@ -361,6 +363,9 @@ func (s *AIJobService) Start(moduleType, mode string) (AIJob, bool, error) {
 	if mode != AIJobModeFull && mode != AIJobModeIncremental {
 		return AIJob{}, false, errors.New("unknown analysis mode")
 	}
+	if moduleType == AIJobTypeFace && !s.PeopleEnabled() {
+		return AIJob{}, false, ErrPeopleAnalysisDisabled
+	}
 	analyzer, exists := s.analyzers[moduleType]
 	if !exists {
 		if validAIJobType(moduleType) {
@@ -389,6 +394,9 @@ func (s *AIJobService) Start(moduleType, mode string) (AIJob, bool, error) {
 	defer s.mu.Unlock()
 	if s.closed {
 		return AIJob{}, false, errors.New("AI job service is shutting down")
+	}
+	if moduleType == AIJobTypeFace && !s.settings.PeopleEnabled {
+		return AIJob{}, false, ErrPeopleAnalysisDisabled
 	}
 	if s.activeID != "" {
 		active := s.jobs[s.activeID]
@@ -426,6 +434,7 @@ func (s *AIJobService) StartAll(mode string) ([]AIJob, []AIJobModule, error) {
 		s.mu.Unlock()
 		return nil, nil, ErrAIJobActive
 	}
+	peopleEnabled := s.settings.PeopleEnabled
 	analyzers := make(map[string]AIAnalyzer, len(moduleTypes))
 	for _, moduleType := range moduleTypes {
 		analyzers[moduleType] = s.analyzers[moduleType]
@@ -435,6 +444,12 @@ func (s *AIJobService) StartAll(mode string) ([]AIJob, []AIJobModule, error) {
 	readyModules := make([]string, 0, len(moduleTypes))
 	skippedModules := make([]AIJobModule, 0)
 	for _, moduleType := range moduleTypes {
+		if moduleType == AIJobTypeFace && !peopleEnabled {
+			skippedModules = append(skippedModules, AIJobModule{
+				Type: moduleType, Name: aiJobModuleName(moduleType), Reason: "people_analysis_disabled",
+			})
+			continue
+		}
 		analyzer := analyzers[moduleType]
 		if analyzer == nil {
 			skippedModules = append(skippedModules, AIJobModule{
@@ -703,7 +718,7 @@ func aiJobModuleName(moduleType string) string {
 }
 
 // ConfigureDaily 更新持久化的本地每日调度设置。
-func (s *AIJobService) ConfigureDaily(enabled bool, dailyTime string, dailyModules []string) (AIJobSettings, error) {
+func (s *AIJobService) ConfigureDaily(enabled bool, dailyTime string, dailyModules []string, peopleEnabled bool) (AIJobSettings, error) {
 	if _, err := time.Parse("15:04", dailyTime); err != nil {
 		return AIJobSettings{}, errors.New("daily time must use HH:MM")
 	}
@@ -711,6 +726,12 @@ func (s *AIJobService) ConfigureDaily(enabled bool, dailyTime string, dailyModul
 	defer s.mu.Unlock()
 	if s.closed {
 		return AIJobSettings{}, errors.New("AI job service is shutting down")
+	}
+	if !peopleEnabled && hasActiveAIJobType(s.jobs, AIJobTypeFace) {
+		return AIJobSettings{}, ErrAIJobActive
+	}
+	if !peopleEnabled {
+		dailyModules = withoutModule(dailyModules, AIJobTypeFace)
 	}
 	modules, err := s.normalizeDailyModulesLocked(dailyModules, enabled)
 	if err != nil {
@@ -720,11 +741,94 @@ func (s *AIJobService) ConfigureDaily(enabled bool, dailyTime string, dailyModul
 	s.settings.DailyEnabled = enabled
 	s.settings.DailyTime = dailyTime
 	s.settings.DailyModules = modules
+	s.settings.PeopleEnabled = peopleEnabled
 	if err := s.persistLocked(); err != nil {
 		s.settings = previous
 		return AIJobSettings{}, err
 	}
 	return s.copySettingsLocked(), nil
+}
+
+// PeopleEnabled reports whether face analysis has been explicitly enabled.
+func (s *AIJobService) PeopleEnabled() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.settings.PeopleEnabled
+}
+
+// SetPeopleEnabled controls face analysis without changing other schedule settings.
+func (s *AIJobService) SetPeopleEnabled(enabled bool) (AIJobSettings, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return AIJobSettings{}, errors.New("AI job service is shutting down")
+	}
+	if !enabled && hasActiveAIJobType(s.jobs, AIJobTypeFace) {
+		return AIJobSettings{}, ErrAIJobActive
+	}
+	previous := s.copySettingsLocked()
+	s.settings.PeopleEnabled = enabled
+	if !enabled {
+		s.settings.DailyModules = withoutModule(s.settings.DailyModules, AIJobTypeFace)
+	}
+	if err := s.persistLocked(); err != nil {
+		s.settings = previous
+		return AIJobSettings{}, err
+	}
+	return s.copySettingsLocked(), nil
+}
+
+// ClearModuleRecords removes a module's batch files and in-memory results.
+func (s *AIJobService) ClearModuleRecords(moduleType string) error {
+	if moduleType != AIJobTypeFace {
+		return errors.New("only face analysis data can be cleared independently")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return errors.New("AI job service is shutting down")
+	}
+	if hasActiveAIJobType(s.jobs, moduleType) {
+		return ErrAIJobActive
+	}
+	moduleDir := filepath.Join(s.metadataDir, moduleType)
+	if err := os.RemoveAll(moduleDir); err != nil {
+		return err
+	}
+	for key, record := range s.records {
+		if record.Type == moduleType {
+			delete(s.records, key)
+		}
+	}
+	keptOrder := s.order[:0]
+	for _, id := range s.order {
+		if job := s.jobs[id]; job != nil && job.Type == moduleType {
+			delete(s.jobs, id)
+			continue
+		}
+		keptOrder = append(keptOrder, id)
+	}
+	s.order = keptOrder
+	return s.persistLocked()
+}
+
+func hasActiveAIJobType(jobs map[string]*AIJob, moduleType string) bool {
+	for _, job := range jobs {
+		if job != nil && job.Type == moduleType && isAIJobActive(job.Status) {
+			return true
+		}
+	}
+	return false
+}
+
+func withoutModule(modules []string, excluded string) []string {
+	result := make([]string, 0, len(modules))
+	for _, module := range modules {
+		if module != excluded {
+			result = append(result, module)
+		}
+	}
+	return result
 }
 
 func (s *AIJobService) normalizeDailyModulesLocked(modules []string, enabled bool) ([]string, error) {
@@ -1721,6 +1825,14 @@ func (s *AIJobService) loadState() error {
 	if s.settings.DailyModules == nil {
 		s.settings.DailyModules = []string{AIJobTypeMetadata}
 	}
+	settingsChanged := false
+	if !s.settings.PeopleEnabled {
+		modules := withoutModule(s.settings.DailyModules, AIJobTypeFace)
+		if len(modules) != len(s.settings.DailyModules) {
+			s.settings.DailyModules = modules
+			settingsChanged = true
+		}
+	}
 	for _, job := range state.Jobs {
 		if job.ID == "" || !validAIJobType(job.Type) || (job.Mode != AIJobModeFull && job.Mode != AIJobModeIncremental) {
 			continue
@@ -1732,6 +1844,9 @@ func (s *AIJobService) loadState() error {
 		s.jobs[job.ID] = &copy
 		s.order = append(s.order, job.ID)
 	}
+	if settingsChanged {
+		return s.persistLocked()
+	}
 	return nil
 }
 
@@ -1741,6 +1856,17 @@ func (s *AIJobService) recoverInterruptedJobs() {
 	changed := false
 	for _, id := range s.order {
 		job := s.jobs[id]
+		if job.Type == AIJobTypeFace && !s.settings.PeopleEnabled && isAIJobActive(job.Status) {
+			job.Status = AIJobStatusCancelled
+			job.Stage = string(AIJobStatusCancelled)
+			job.Error = ErrPeopleAnalysisDisabled.Error()
+			finished := s.now()
+			job.FinishedAt = &finished
+			job.CurrentResourceID = ""
+			job.UpdatedAt = finished
+			changed = true
+			continue
+		}
 		if job.Status == AIJobStatusRunning {
 			job.Status = AIJobStatusPending
 			job.Stage = "pending"

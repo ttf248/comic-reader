@@ -6,11 +6,13 @@ interface Props {
   enabled: boolean;
   time: string;
   selectedModules: AnalysisType[];
+  peopleEnabled: boolean;
   /** 服务器设置还没到之前不允许编辑。 */
   ready: boolean;
   onEnabledChange: (value: boolean) => void;
   onTimeChange: (value: string) => void;
   onModulesChange: (value: AnalysisType[]) => void;
+  onPeopleEnabledChange: (value: boolean) => void;
   onSave: () => void;
   saving: boolean;
   saved: boolean;
@@ -25,10 +27,12 @@ export default function DailyPlanPanel({
   enabled,
   time,
   selectedModules,
+  peopleEnabled,
   ready,
   onEnabledChange,
   onTimeChange,
   onModulesChange,
+  onPeopleEnabledChange,
   onSave,
   saving,
   saved,
@@ -81,7 +85,9 @@ export default function DailyPlanPanel({
                 <input
                   type="checkbox"
                   checked={selectedModules.includes(module.type)}
-                  disabled={disabled}
+                  disabled={
+                    disabled || (module.type === "face" && !peopleEnabled)
+                  }
                   onChange={(event) => {
                     const next = event.target.checked
                       ? [...selectedModules, module.type]
@@ -93,6 +99,16 @@ export default function DailyPlanPanel({
               </label>
             ))}
         </fieldset>
+
+        <label className="flex items-center gap-2 text-meta text-fg">
+          <input
+            type="checkbox"
+            checked={peopleEnabled}
+            disabled={disabled}
+            onChange={(event) => onPeopleEnabledChange(event.target.checked)}
+          />
+          启用人物分析（默认关闭）
+        </label>
 
         <button
           className="btn btn-outline"
@@ -123,7 +139,7 @@ export default function DailyPlanPanel({
 
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-3 border-t border-border-faint px-5 py-3.5 sm:px-6">
         <p className="text-meta leading-relaxed text-fg-subtle">
-          按服务所在设备的本地时间运行；错过计划时间后，下次启动会补跑一次。
+          分析仅在本机处理。人物分析需显式启用；关闭后将从每日计划移除。按设备本地时间运行，错过计划时间后会补跑一次。
         </p>
         <ModuleList modules={modules} />
       </div>

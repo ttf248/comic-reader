@@ -93,6 +93,7 @@ function snapshot(overrides: Partial<AIJobSnapshot> = {}): AIJobSnapshot {
       dailyEnabled: false,
       dailyTime: "03:00",
       dailyModules: ["metadata"],
+      peopleEnabled: false,
     },
     modules,
     ...overrides,
@@ -144,6 +145,7 @@ describe("任务中心", () => {
         dailyEnabled: true,
         dailyTime: "04:15",
         dailyModules: ["metadata"],
+        peopleEnabled: false,
       },
     });
     vi.mocked(aiJobsApi.embeddingStatus).mockResolvedValue({
@@ -335,6 +337,12 @@ describe("任务中心", () => {
       snapshot: snapshot({
         jobs: [],
         active: undefined,
+        settings: {
+          dailyEnabled: false,
+          dailyTime: "03:00",
+          dailyModules: ["metadata"],
+          peopleEnabled: true,
+        },
         modules: [
           modules[0],
           {
@@ -420,6 +428,7 @@ describe("任务中心", () => {
         dailyEnabled: true,
         dailyTime: "04:15",
         dailyModules: ["metadata"],
+        peopleEnabled: false,
       }),
     );
   });
@@ -445,6 +454,46 @@ describe("任务中心", () => {
         dailyEnabled: false,
         dailyTime: "03:00",
         dailyModules: ["metadata", "embedding"],
+        peopleEnabled: false,
+      }),
+    );
+  });
+
+  it("人物分析默认关闭，显式启用后才能加入每日计划", async () => {
+    vi.mocked(aiJobsApi.list).mockResolvedValue({
+      ok: true,
+      snapshot: snapshot({
+        jobs: [],
+        active: undefined,
+        modules: [
+          ...modules,
+          {
+            type: "face",
+            name: "人脸识别",
+            installed: true,
+            version: "face-v1",
+          },
+        ],
+      }),
+    });
+    renderCenter();
+
+    const faceModule = await screen.findByRole("checkbox", {
+      name: "人脸识别",
+    });
+    expect(faceModule).toBeDisabled();
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "启用人物分析（默认关闭）" }),
+    );
+    expect(faceModule).toBeEnabled();
+    fireEvent.click(faceModule);
+    fireEvent.click(screen.getByRole("button", { name: "保存计划" }));
+    await waitFor(() =>
+      expect(aiJobsApi.updateSettings).toHaveBeenCalledWith({
+        dailyEnabled: false,
+        dailyTime: "03:00",
+        dailyModules: ["metadata", "face"],
+        peopleEnabled: true,
       }),
     );
   });

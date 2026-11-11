@@ -72,7 +72,7 @@ ID 只能证明扫描时的身份。每次媒体、批量元数据及系统打�
 
 ## 媒体分析任务
 
-`AIJobService` 与扫描任务分开运行：扫描负责发布当前资源快照，分析服务只处理快照内的图片文件。`metadata`（EXIF/GPS）、`embedding`（Chinese-CLIP）、`ocr`（RapidOCR）与 `face`（YuNet + SFace）都通过 `AIAnalyzer` 注册并各自维护版本。全量任务重算全部图片，增量任务按资源 ID、大小、纳秒修改时间与模块版本筛出新增或变化项。OCR 文本和人脸框/特征写入既有分析批次；相似人脸接口只返回通过当前路径和文件指纹检查的照片 DTO，不对外暴露特征向量。每个结果仍由现有任务服务按 32 张一批提交、恢复与重试，不另设任务队列。
+`AIJobService` 与扫描任务分开运行：扫描负责发布当前资源快照，分析服务只处理快照内的图片文件。`metadata`（EXIF/GPS）、`embedding`（Chinese-CLIP）、`ocr`（RapidOCR）与 `face`（YuNet + SFace）都通过 `AIAnalyzer` 注册并各自维护版本。全量任务重算全部图片，增量任务按资源 ID、大小、纳秒修改时间与模块版本筛出新增或变化项。人物分析通过 `peopleEnabled` 默认关闭；明确开启后才允许手动、按序或每日启动 `face` 任务。OCR 文本和人脸框/特征写入既有分析批次；相似人脸接口只返回通过当前路径和文件指纹检查的照片 DTO，不对外暴露特征向量。每个结果仍由现有任务服务按 32 张一批提交、恢复与重试，不另设任务队列。
 
 任务状态与每日计划写在 `state/ai_jobs.json`，每 32 张图片提交一个批次检查点；批次结果使用同目录内的原子 JSON 文件，位于 `derived/metadata/<模块>/batches/<任务 ID>/`，可重建且与用户状态分开。结果文件先原子发布，再写检查点；启动时扫描结果批次并修复“结果已写、检查点未写”的崩溃窗口。任务恢复只从最近已提交的批次继续，未提交的尾批会重跑。失败记录写入同一批次，错误仅含资源 ID、稳定错误码和脱敏原因。
 
@@ -80,7 +80,7 @@ ID 只能证明扫描时的身份。每次媒体、批量元数据及系统打�
 
 AI Worker 使用独立 `backend/aiworker/.venv`（Python 3.11）。Windows 安装 PyTorch 2.7.1 + CUDA 12.6 与 Chinese-CLIP 1.6.0；RapidOCR 3.10.0 + ONNX Runtime 1.31.1 处理文字，OpenCV 4.12.0 + YuNet/SFace ONNX 权重处理人脸。Go 通过 stdin/stdout JSON Lines 调用并将 stderr 接入服务日志，Worker 常驻并复用 OCR/人脸模型。每个模块独立报告依赖与权重状态；缺失时任务中心不会把它显示为可运行。所有权重只从 `cacheDir/derived/ai/models/` 读取，模型下载脚本固定来源 revision 并校验 SHA256，不在服务启动时联网下载。Chinese-CLIP GPU 初始 batch 为 8，CUDA OOM 时减半，单张仍 OOM 则切到 CPU；搜索请求与建库推理共享同一串行 Worker。
 
-向量以 512 维 Float16 保存在 `derived/ai/vectors/shards/`，每片有 JSONL 元数据与 SHA256，manifest 原子发布并标记已压实分片；元数据只含资源 ID、文件指纹、模型版本和片内位置，不保存文件路径。应用启动时将 Float16 shard 装入内存，完整校验哈希后才用于检索；模型/索引版本不兼容时重建派生索引。索引增量追加，累计 128 个未压实 shard 后由独立后台压实，每片最多 512 条；达到压实门槛后不因已有分片数量重复排队。OCR 额外维护 `derived/ai/ocr-search-index.json` 倒排索引，索引项仅存 OCR 词元、模块版本和文件指纹，启动时从已提交的 OCR 批次核对并修复，任务批次提交后增量更新；查询再回到 OCR 结果核对完整短语。语义结果采用当前有效资源的精确余弦排序，纯 OCR/结构化结果按资源 ID 稳定排序；年份筛选使用当前 EXIF 拍摄年份，GPS 筛选复用既有 geohash 精度 5 地点 ID，媒体库快照与文件指纹在返回前再次校验。当前不引入 HNSW、数据库或外部推理服务。
+向量以 512 维 Float16 保存在 `derived/ai/vectors/shards/`，每片有 JSONL 元数据与 SHA256，manifest 原子发布并标记已压实分片；元数据只含资源 ID、文件指纹、模型版本和片内位置，不保存文件路径。应用启动时将 Float16 shard 装入内存，完整校验哈希后才用于检索；模型/索引版本不兼容时重建派生索引。索引增量追加，累计 128 个未压实 shard 后由独立后台压实，每片最多 512 条；达到压实门槛后不因已有分片数量重复排队。OCR 额外维护 `derived/ai/ocr-search-index.json` 倒排索引，索引项仅存 OCR 词元、模块版本和文件指纹，启动时从已提交的 OCR 批次核对并修复，任务批次提交后增量更新；查询再回到 OCR 结果核对完整短语。人物服务从现有人脸批次生成中心向量候选分组；每次最多读取 30,000 张脸并限制 2,000,000 次中心比较，超限剩余脸保留独立组，不会阻塞任务队列。名称、隐藏状态与纠错映射写入 `state/people.json`；`derived/ai/people-index.json` 只保存资源 ID、指纹、脸部框与分组引用，不复制特征向量。语义结果采用当前有效资源的精确余弦排序，纯 OCR/结构化结果按资源 ID 稳定排序；年份筛选使用当前 EXIF 拍摄年份，GPS 筛选复用既有 geohash 精度 5 地点 ID，人物、收藏与精选条件叠加在同一候选集合上，媒体库快照与文件指纹在返回前再次校验。当前不引入 HNSW、数据库或外部推理服务。
 
 任务快照分两类字段：事实与派生。`results`（按解析状态分类的计数）与 `fields`（按字段统计的产出）是事实，随每个 32 张的批次原子提交并落盘；重启时按批次文件重放，与失败计数走同一条恢复路径。`planned`、`completed`、`estimatedRemainingMs` 与速度是派生值，每次快照按落盘的计数重算，不写入状态文件 —— 写进去就等于把某一刻的估计当成事实。已注册的分析模块清单由后端给出，客户端不维护第二份模块名表。
 
@@ -142,7 +142,8 @@ EXIF 解析器保存拍摄墙上时间、朝向、相机信息和 GPS 附属字�
 | `state/web_settings.json`                        | 收藏、历史与服务端偏好（含工作台模式）                       |
 | `state/activity.json`                            | 漫画阅读、视频播放活动                                       |
 | `state/picks.json`                               | 照片级精选（媒体文件 ID 集合）                               |
-| `state/ai_jobs.json`                             | 媒体分析任务历史、检查点、每日时间与模块选择               |
+| `state/ai_jobs.json`                             | 媒体分析任务历史、检查点、每日时间与模块选择、人物分析开关 |
+| `state/people.json`                              | 人物名称、隐藏状态与手动分组修正                         |
 | `state/cover_overrides.json`                     | 自定义封面                                                   |
 | `derived/thumbnails/`、`converted/`、`previews/` | 缩略图、整图格式转换、阅读器预览，各自独立统计/清理          |
 | `derived/media_dimensions.jsonl`                  | 媒体像素宽高（照片墙排布用），可由源文件重建                |
@@ -150,6 +151,7 @@ EXIF 解析器保存拍摄墙上时间、朝向、相机信息和 GPS 附属字�
 | `derived/metadata/`                              | EXIF/GPS、OCR 与人脸等模块分析批次；由源文件与分析器版本重建  |
 | `derived/ai/models/`                             | 经固定 SHA256 校验的本机 AI 模型权重                         |
 | `derived/ai/vectors/`                            | Float16 语义向量 shard、JSONL 元数据和 manifest              |
+| `derived/ai/people-index.json`                    | 可重建的人脸组、脸部框与资源 ID，不含特征向量              |
 | `temp/`                                          | 通用临时目录；需原子发布的媒体任务在目标目录创建独占临时文件 |
 
 `state/backups/` 保存用户手动恢复前的备份，不属于派生缓存，不参与缓存清理。对外备份仅使用资源 ID；另存的内部封面映射仅供本机恢复旧状态，不对外下载。

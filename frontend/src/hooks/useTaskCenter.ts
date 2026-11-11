@@ -34,11 +34,13 @@ export interface TaskCenterPlan {
   enabled: boolean;
   time: string;
   modules: AnalysisType[];
+  peopleEnabled: boolean;
   /** 服务器设置已读取，可以开始编辑。 */
   ready: boolean;
   setEnabled: (value: boolean) => void;
   setTime: (value: string) => void;
   setModules: (value: AnalysisType[]) => void;
+  setPeopleEnabled: (value: boolean) => void;
   save: () => void;
   saving: boolean;
   saved: boolean;
@@ -91,6 +93,7 @@ export function useTaskCenter(): TaskCenterState {
     enabled: boolean;
     time: string;
     modules: AnalysisType[];
+    peopleEnabled: boolean;
   } | null>(null);
 
   useEffect(() => {
@@ -99,6 +102,7 @@ export function useTaskCenter(): TaskCenterState {
       enabled: snapshot.settings.dailyEnabled,
       time: snapshot.settings.dailyTime || "03:00",
       modules: snapshot.settings.dailyModules ?? ["metadata"],
+      peopleEnabled: snapshot.settings.peopleEnabled ?? false,
     });
   }, [snapshot, planDraft]);
 
@@ -164,17 +168,20 @@ export function useTaskCenter(): TaskCenterState {
       enabled: boolean;
       time: string;
       modules: AnalysisType[];
+      peopleEnabled: boolean;
     }) =>
       aiJobsApi.updateSettings({
         dailyEnabled: draft.enabled,
         dailyTime: draft.time,
         dailyModules: draft.modules,
+        peopleEnabled: draft.peopleEnabled,
       }),
     onSuccess: ({ settings }) => {
       setPlanDraft({
         enabled: settings.dailyEnabled,
         time: settings.dailyTime,
         modules: settings.dailyModules,
+        peopleEnabled: settings.peopleEnabled,
       });
       queryClient.setQueryData<{ ok: boolean; snapshot: AIJobSnapshot }>(
         JOBS_KEY,
@@ -217,6 +224,7 @@ export function useTaskCenter(): TaskCenterState {
       enabled: planDraft?.enabled ?? false,
       time: planDraft?.time ?? "03:00",
       modules: planDraft?.modules ?? ["metadata"],
+      peopleEnabled: planDraft?.peopleEnabled ?? false,
       ready: planDraft !== null,
       setEnabled: (value: boolean) =>
         setPlanDraft((current) =>
@@ -229,6 +237,18 @@ export function useTaskCenter(): TaskCenterState {
       setModules: (value: AnalysisType[]) =>
         setPlanDraft((current) =>
           current ? { ...current, modules: value } : current,
+        ),
+      setPeopleEnabled: (value: boolean) =>
+        setPlanDraft((current) =>
+          current
+            ? {
+                ...current,
+                peopleEnabled: value,
+                modules: value
+                  ? current.modules
+                  : current.modules.filter((type) => type !== "face"),
+              }
+            : current,
         ),
       save: () => {
         if (planDraft) settingsMutation.mutate(planDraft);

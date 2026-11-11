@@ -7,6 +7,7 @@ import SemanticSearch from "./SemanticSearch";
 const mocks = vi.hoisted(() => ({
   embeddingStatus: vi.fn(),
   locations: vi.fn(),
+  people: vi.fn(),
   semanticSearch: vi.fn(),
   albumSearch: vi.fn(),
 }));
@@ -15,6 +16,7 @@ vi.mock("../api/aiJobs", () => ({
   aiJobsApi: {
     embeddingStatus: mocks.embeddingStatus,
     locations: mocks.locations,
+    people: mocks.people,
     semanticSearch: mocks.semanticSearch,
   },
 }));
@@ -83,7 +85,37 @@ describe("智能搜索", () => {
         coverage: { indexed: 0, total: 0 },
       },
     });
-    mocks.locations.mockResolvedValue({ ok: true, page: { items: [] } });
+    mocks.locations.mockResolvedValue({
+      ok: true,
+      page: {
+        items: [
+          {
+            id: "gps_abc",
+            name: "北京",
+            latitude: 39.9,
+            longitude: 116.4,
+            fileCount: 2,
+            albumCount: 1,
+            cellPrecision: 5,
+          },
+        ],
+      },
+    });
+    mocks.people.mockResolvedValue({
+      ok: true,
+      people: [
+        {
+          id: "p_123456",
+          name: "旅行同伴",
+          faceCount: 2,
+          photoCount: 2,
+          hidden: false,
+        },
+      ],
+      groupingLimited: false,
+      threshold: 0.363,
+      revision: 1,
+    });
     mocks.semanticSearch.mockResolvedValue({
       ok: true,
       results: [],
@@ -157,5 +189,60 @@ describe("智能搜索", () => {
     expect(
       await screen.findByText("还没有可搜索的文字结果"),
     ).toBeInTheDocument();
+  });
+
+  it("将语义、OCR、相册、年份、地点、人物、收藏和精选条件一起提交", async () => {
+    mocks.albumSearch.mockResolvedValue({
+      results: [{ kind: "album", path: "a_album123", name: "旅行相册" }],
+    });
+    renderSearch();
+
+    fireEvent.change(
+      await screen.findByPlaceholderText(
+        "例如：夜晚街道上的霓虹灯、海边散步的人",
+      ),
+      { target: { value: "海边散步" } },
+    );
+    fireEvent.change(
+      screen.getByPlaceholderText("例如：车站名称、招牌或照片里的日期"),
+      {
+        target: { value: "入口" },
+      },
+    );
+    fireEvent.change(screen.getByPlaceholderText("输入相册名搜索"), {
+      target: { value: "旅行" },
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "旅行相册" }));
+    fireEvent.change(screen.getByPlaceholderText("例如 2024"), {
+      target: { value: "2024" },
+    });
+    fireEvent.change(screen.getByLabelText("GPS 地点"), {
+      target: { value: "gps_abc" },
+    });
+    fireEvent.change(screen.getByLabelText("人物"), {
+      target: { value: "p_123456" },
+    });
+    fireEvent.click(screen.getByLabelText("仅来自收藏相册"));
+    fireEvent.click(screen.getByLabelText("仅精选照片"));
+    fireEvent.click(screen.getByRole("button", { name: "搜索照片" }));
+
+    await waitFor(() =>
+      expect(mocks.semanticSearch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          text: "海边散步",
+          ocrText: "入口",
+          albumId: "a_album123",
+          year: "2024",
+          locationId: "gps_abc",
+          personId: "p_123456",
+          favoriteOnly: true,
+          pickedOnly: true,
+          kind: "photo",
+          offset: 0,
+          limit: 60,
+        }),
+        undefined,
+      ),
+    );
   });
 });

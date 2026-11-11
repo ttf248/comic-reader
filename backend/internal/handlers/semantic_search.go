@@ -14,18 +14,22 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/tianlongxiang/local-gallery/internal/models"
 	"github.com/tianlongxiang/local-gallery/internal/services"
+	"github.com/tianlongxiang/local-gallery/internal/store"
 )
 
 type semanticSearchRequest struct {
-	Text       string `json:"text"`
-	OCRText    string `json:"ocrText"`
-	ResourceID string `json:"resourceId"`
-	Kind       string `json:"kind"`
-	AlbumID    string `json:"albumId"`
-	Year       string `json:"year"`
-	LocationID string `json:"locationId"`
-	Offset     int    `json:"offset"`
-	Limit      int    `json:"limit"`
+	Text         string `json:"text"`
+	OCRText      string `json:"ocrText"`
+	ResourceID   string `json:"resourceId"`
+	Kind         string `json:"kind"`
+	AlbumID      string `json:"albumId"`
+	Year         string `json:"year"`
+	LocationID   string `json:"locationId"`
+	PersonID     string `json:"personId"`
+	FavoriteOnly bool   `json:"favoriteOnly"`
+	PickedOnly   bool   `json:"pickedOnly"`
+	Offset       int    `json:"offset"`
+	Limit        int    `json:"limit"`
 }
 
 type semanticSearchHit struct {
@@ -75,6 +79,9 @@ func SemanticSearchHandler(
 	catalog *services.ResourceCatalog,
 	validatePath func(string) (string, error),
 	tempDir string,
+	prefs *store.PrefsStore,
+	picks *store.PickStore,
+	people *services.PeopleService,
 ) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		var request semanticSearchRequest
@@ -83,7 +90,8 @@ func SemanticSearchHandler(
 			request = semanticSearchRequest{
 				Text: c.FormValue("text"), OCRText: c.FormValue("ocrText"), ResourceID: c.FormValue("resourceId"),
 				Kind: c.FormValue("kind"), AlbumID: c.FormValue("albumId"),
-				Year: c.FormValue("year"), LocationID: c.FormValue("locationId"),
+				Year: c.FormValue("year"), LocationID: c.FormValue("locationId"), PersonID: c.FormValue("personId"),
+				FavoriteOnly: c.FormValue("favoriteOnly") == "true", PickedOnly: c.FormValue("pickedOnly") == "true",
 				Offset: parseSemanticInt(c.FormValue("offset"), 0), Limit: parseSemanticInt(c.FormValue("limit"), 60),
 			}
 			file, err := c.FormFile("image")
@@ -120,12 +128,15 @@ func SemanticSearchHandler(
 		if request.Text != "" && (request.ResourceID != "" || uploadedPath != "") || request.ResourceID != "" && uploadedPath != "" {
 			return writeError(c, fiber.StatusBadRequest, "invalid_semantic_search", "provide either one text or one image query")
 		}
-		if !semanticQuery && request.OCRText == "" && request.AlbumID == "" && request.Year == "" && request.LocationID == "" {
+		if !semanticQuery && request.OCRText == "" && request.AlbumID == "" && request.Year == "" && request.LocationID == "" && request.PersonID == "" && !request.FavoriteOnly && !request.PickedOnly {
 			return writeError(c, fiber.StatusBadRequest, "invalid_semantic_search", "provide a search query or at least one filter")
 		}
 		kind := services.LibraryKindScope(request.Kind)
 		if kind != services.LibraryKindPhoto && kind != services.LibraryKindComic {
 			return writeError(c, fiber.StatusBadRequest, "invalid_library_kind", "kind must be photo or comic")
+		}
+		if request.PersonID != "" && kind != services.LibraryKindPhoto {
+			return writeError(c, fiber.StatusBadRequest, "invalid_semantic_filter", "person filters are available for photos only")
 		}
 		if request.Year != "" {
 			if len(request.Year) != 4 {
@@ -172,6 +183,30 @@ func SemanticSearchHandler(
 				metadataRecords[record.ResourceID] = record
 			}
 		}
+		favoriteIDs := map[string]struct{}{}
+		if request.FavoriteOnly {
+			preferences, err := prefs.Get()
+			if err != nil {
+				return writeError(c, fiber.StatusInternalServerError, "favorites_unavailable", "favorite filter is unavailable")
+			}
+			for _, id := range preferences.Favorites {
+				favoriteIDs[id] = struct{}{}
+			}
+		}
+		pickedIDs := map[string]struct{}{}
+		if request.PickedOnly {
+			for _, id := range picks.Get() {
+				pickedIDs[id] = struct{}{}
+			}
+		}
+		personIDs := map[string]struct{}{}
+		if request.PersonID != "" && people != nil {
+			for _, face := range people.Faces(request.PersonID) {
+				if _, err := currentFaceRecord(jobs, snapshot, face.ResourceID, validatePath); err == nil {
+					personIDs[face.ResourceID] = struct{}{}
+				}
+			}
+		}
 		candidateByID := make(map[string]services.VectorMetadata)
 		if semanticQuery {
 			for _, metadata := range analyzer.Index().Metadata() {
@@ -210,6 +245,16 @@ func SemanticSearchHandler(
 		candidates := make([]services.VectorMetadata, 0, len(candidateIDs))
 		for _, resourceID := range candidateIDs {
 			metadata := candidateByID[resourceID]
+			if request.PickedOnly {
+				if _, exists := pickedIDs[resourceID]; !exists {
+					continue
+				}
+			}
+			if request.PersonID != "" {
+				if _, exists := personIDs[resourceID]; !exists {
+					continue
+				}
+			}
 			ref, exists := snapshot.Lookup(metadata.ResourceID)
 			if !exists || ref.Kind != services.ResourceFile || !models.IsImageFile(ref.AbsolutePath) {
 				continue
@@ -220,6 +265,9 @@ func SemanticSearchHandler(
 			}
 			album, exists := snapshot.LibraryNode(item.AlbumID)
 			if !exists || album.ContentKind != string(kind) || request.AlbumID != "" && request.AlbumID != item.AlbumID {
+				continue
+			}
+			if request.FavoriteOnly && !libraryAlbumIsFavorite(snapshot, album, favoriteIDs) {
 				continue
 			}
 			if request.Year != "" || request.LocationID != "" {
@@ -314,6 +362,29 @@ func SemanticSearchHandler(
 			"nextOffset": nextOffset, "revision": snapshot.Revision(),
 		})
 	}
+}
+
+func libraryAlbumIsFavorite(snapshot services.CatalogSnapshot, album services.LibraryNodeSummary, favorites map[string]struct{}) bool {
+	if _, exists := favorites[album.ID]; exists {
+		return true
+	}
+	for _, tag := range album.Tags {
+		if _, exists := favorites["smart:"+tag]; exists {
+			return true
+		}
+	}
+	parentID := album.ParentID
+	for parentID != "" {
+		if _, exists := favorites[parentID]; exists {
+			return true
+		}
+		parent, exists := snapshot.LibraryNode(parentID)
+		if !exists {
+			break
+		}
+		parentID = parent.ParentID
+	}
+	return false
 }
 
 func semanticQueryVector(

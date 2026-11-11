@@ -74,6 +74,7 @@ export default function AppShell() {
       [unreadRoute()]: "未读",
       "/tasks": "任务中心",
       "/photo/locations": "拍摄地点",
+      "/photo/people": "人物相册",
       "/settings": "设置",
     };
     const path = location.pathname;
@@ -85,6 +86,8 @@ export default function AppShell() {
         base = raw || "标签";
       } else if (path.startsWith("/photo/locations/")) {
         base = "拍摄地点";
+      } else if (path.startsWith("/photo/people/")) {
+        base = "人物相册";
       } else {
         base = workbenchCopy(mode).albumTypeLabel;
       }

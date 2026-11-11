@@ -43,6 +43,7 @@ export default function TaskCenter() {
             loading={center.loading}
             busy={center.busy}
             modules={snapshot?.modules ?? []}
+            peopleEnabled={plan.peopleEnabled}
             embeddingStatus={center.embeddingStatus}
             embeddingStatusLoading={center.embeddingStatusLoading}
             onStart={center.start}
@@ -73,10 +74,12 @@ export default function TaskCenter() {
             enabled={plan.enabled}
             time={plan.time}
             selectedModules={plan.modules}
+            peopleEnabled={plan.peopleEnabled}
             ready={plan.ready}
             onEnabledChange={plan.setEnabled}
             onTimeChange={plan.setTime}
             onModulesChange={plan.setModules}
+            onPeopleEnabledChange={plan.setPeopleEnabled}
             onSave={plan.save}
             saving={plan.saving}
             saved={plan.saved}

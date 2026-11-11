@@ -65,6 +65,12 @@ export function locationsRoute(locationId?: string): string {
   return locationId ? `${base}/${encodeURIComponent(locationId)}` : base;
 }
 
+/** 照片侧的人物候选分组相册。 */
+export function peopleRoute(personId?: string): string {
+  const base = `${MODE_PREFIX.photo}/people`;
+  return personId ? `${base}/${encodeURIComponent(personId)}` : base;
+}
+
 /** 照片侧的中文语义搜索与以图搜图。 */
 export function semanticSearchRoute(): string {
   return `${MODE_PREFIX.photo}/semantic`;
