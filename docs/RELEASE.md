@@ -83,7 +83,11 @@ git push github v2.0.0
 - `local-gallery` 或 `local-gallery.exe`；
 - `dist/` 前端静态资源；
 - `config.example.yaml`；
+- README 引用的 `backend/config.example.yaml`、`AGENTS.md` 与 `docs/` 文档；
+- `aiworker/` 下的 Worker 源码、依赖清单及环境/权重安装脚本；
 - `README.md`。
+
+发布包不包含 Python 虚拟环境或约 753 MB 的 Chinese-CLIP 权重。照片、漫画和视频浏览不需要 Python；首次启用语义搜索时，Windows 用户在发布包根目录运行 `pwsh -File aiworker/setup.ps1` 与 `pwsh -File aiworker/download-model.ps1`。macOS/Linux 用户自行安装 Python 3.11 和平台对应的 PyTorch，再安装 `aiworker/requirements.txt` 并下载权重。程序从发布包根目录启动，使 Worker 和相对配置路径均指向包内文件。
 
 这是“单端口可运行包”，不是把前端资源硬编码进 Go 二进制：生产配置中的 `staticDir: "dist"` 与包内目录保持一致，便于用户替换前端资源、排查问题和保持后端构建简单。当前架构仍然是单进程，不引入数据库、消息队列或反向代理。
 

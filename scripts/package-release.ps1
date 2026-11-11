@@ -1,5 +1,5 @@
 # scripts/package-release.ps1
-# 生成一个可直接解压运行的当前架构发布包：二进制 + 前端 dist + 示例配置。
+# 生成一个可直接解压运行的当前架构发布包：二进制 + 前端 dist + 文档 + 示例配置 + 本机 AI Worker。
 
 [CmdletBinding()]
 param(
@@ -80,6 +80,17 @@ try {
   Copy-Item -Path (Join-Path $distPath "*") -Destination (Join-Path $packageRoot "dist") -Recurse -Force
   Copy-Item -LiteralPath $configExamplePath -Destination (Join-Path $packageRoot "config.example.yaml")
   Copy-Item -LiteralPath (Join-Path $repoRoot "README.md") -Destination (Join-Path $packageRoot "README.md")
+  Copy-Item -LiteralPath (Join-Path $repoRoot "AGENTS.md") -Destination (Join-Path $packageRoot "AGENTS.md")
+  Copy-Item -LiteralPath (Join-Path $repoRoot "docs") -Destination (Join-Path $packageRoot "docs") -Recurse -Force
+  $packageBackendDir = Join-Path $packageRoot "backend"
+  New-Item -ItemType Directory -Path $packageBackendDir -Force | Out-Null
+  Copy-Item -LiteralPath $configExamplePath -Destination (Join-Path $packageBackendDir "config.example.yaml")
+  $workerSourceDir = Join-Path (Join-Path $repoRoot "backend") "aiworker"
+  $workerTargetDir = Join-Path $packageRoot "aiworker"
+  New-Item -ItemType Directory -Path $workerTargetDir -Force | Out-Null
+  foreach ($workerFile in @("worker.py", "requirements.txt", "setup.ps1", "download-model.ps1")) {
+    Copy-Item -LiteralPath (Join-Path $workerSourceDir $workerFile) -Destination (Join-Path $workerTargetDir $workerFile)
+  }
   $licensePath = Join-Path $repoRoot "LICENSE"
   if (Test-Path -LiteralPath $licensePath -PathType Leaf) {
     Copy-Item -LiteralPath $licensePath -Destination (Join-Path $packageRoot "LICENSE")

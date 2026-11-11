@@ -1,154 +1,245 @@
 # Local Gallery · 本地画廊
 
-本地照片、漫画与视频浏览器，Go + React，单进程单端口，离线可用。协作规则见 [AGENTS.md](./AGENTS.md)。
+Local Gallery 是一款在本机运行的照片、漫画与视频画廊。Go 后端直接读取配置的目录，浏览器提供界面；应用状态保存在本地 JSON 文件中，不需要数据库。媒体分析与语义检索都在本机执行，语义检索模型需首次单独下载。
 
-## 当前能力
+协作规则见 [AGENTS.md](./AGENTS.md)。
 
-- 多个媒体根合并为一个库，保留目录集合，从目录名提取标签，支持年份、搜索、收藏与最近浏览；按年份可直接铺开这一年的照片墙，每张照片带着它出自哪本相册并能回到原相册，年份墙上的大图预览能跨页连续翻（翻到已加载的末尾自动接下一页）；列表支持多选、批量收藏及漫画已读/未读操作。
-- 照片级精选：相册级收藏之外另有一份照片级的「精选」——照片墙里可单张或多张勾选加入，跨相册聚到「精选照片」页；两张照片可并排对比构图与细节。精选与收藏是两份数据，互不覆盖，各自持久化并可备份恢复。
-- 可取消的后台扫描与 SSE 进度，媒体根配置变更后自动扫描；服务端筛选排序、按需分页和虚拟网格支撑大库，扫描失败保留上次完整结果。
-- 全局工作台模式：侧栏品牌区下方切换「照片 / 漫画」，两套菜单完全隔离——照片工作台只列照片目录的相册，用「浏览 / 收藏 / 最近 / 精选」的说法；漫画工作台只列漫画目录的相册，用「继续阅读 / 未读 / 最近阅读」。模式进 URL 路径（`/photo/…` 与 `/comic/…`），切模式是普通导航，前进后退能跨模式、深链可直接分享；服务端记住上次用的是哪一侧，决定从根路径进来时落到哪边。
-- 目录级的两种浏览方式：照片目录的相册进入按真实宽高比排布的照片墙，点开是沉浸式大图预览（缩放、拖动、全屏、键盘）；漫画目录的相册进入阅读器，支持单页、连续、双页并排、RTL、适配、缩放、旋转、全屏、触摸翻页、目录与进度恢复。
-- 内容属性按目录设置且互斥：每个媒体根只能是照片或漫画，目录下的相册与集合一并继承。阅读进度、未读与「读完」只属于漫画，照片这边不留浏览进度。
-- 两个工作台各成一套：首页首屏专区不同（照片是「随手看看」的跨相册照片墙加「接着看」，漫画是「继续阅读 / 未读」），索引维度不同（照片按年份，年份卡直接铺出这一年的照片墙；漫画按作品），封面画幅不同（照片方形、漫画竖版），色调不同（照片冷、漫画暖），措辞与计数单位也不同（照片说「张 / 本 / 浏览」，漫画说「页 / 卷 / 阅读」），菜单与按钮则完全隔离——照片侧没有「未读 / 已读完」，漫画侧没有「最近浏览」。
-- 照片侧的推荐与回忆各成一段：「随手看看」按年份分散地抽相册、一本相册里等距取样，「换一批」换的是取材种子，因此一定换得掉；「那年今日」摆的是往年同一天真正拍下的那一张照片（日期证据来自文件名），点开即看，也能回到那本相册。
-- EXIF 与 GPS 元数据在本机后台分批分析，支持全量/增量、暂停/继续、取消、失败项重试、重启恢复与每日计划；任务中心按区块展示进度、预计剩余时间、产出明细与按原因分组的失败项。照片侧按 GPS 坐标生成离线地点相册，不调用在线地图或地理编码服务。
-- 照片侧提供本机中文语义搜索与以图搜图：Chinese-CLIP 为媒体库建立向量索引，按中文描述、相似图片、相册、EXIF 年份与 GPS 地点筛选；任务中心负责全量/增量索引和每日计划。
-- 视频原生播放与 Range；可选 ffmpeg 提供封面、元数据、faststart、按需 H.264 + AAC 转码及特殊图片格式转换。
-- 缩略图、预览图和视频派生缓存分层存储，可分别清理；收藏、最近、阅读/播放活动与偏好通过服务端 JSON 持久化；图片进度串行合并并跳过重复落盘，设置页可导出备份、预览并按类别覆盖恢复。
-- 界面采用中性灰阶的视觉表达：首页阅读与发现区、照片卡片、相册摘要、分组设置和暗场阅读器共用一套无彩灰阶，照片是页面上唯一的彩色，仅品牌标记与页眉眉标用琥珀点缀（工作台模式会给品牌点缀换成冷/暖两套色调）；支持明暗/跟随系统主题、键盘与触摸操作。主页面按 `R` 随机打开一本、`Ctrl+S` 扫描、`?` 查看当前场景的快捷键。
+## 核心功能
 
-## 开发启动
+| 工作区 | 主要功能 |
+| --- | --- |
+| 照片 | 多目录合并为媒体库；按相册、集合、标签、年份和 GPS 地点浏览；中文语义搜索与以图搜图；照片墙、大图预览、并排对比、精选、收藏、最近浏览。 |
+| 漫画 | 独立作品列表；单页、连续、双页与 RTL 阅读；缩放、旋转、目录、阅读进度恢复、未读列表与最近阅读。 |
+| 后台任务 | 扫描进度与取消；EXIF/GPS 元数据全量或增量分析；任务暂停、继续、取消、失败项重试、重启恢复与每日计划。任务中心记录进度、产出和失败图片的相对路径。 |
+| 本机 AI | Chinese-CLIP 中文语义搜索和图片相似检索；可按相册、年份与 GPS 地点筛选，显示模型运行状态、设备和向量覆盖率。 |
+| 视频与媒体 | 浏览器原生播放和 Range 请求；可选 FFmpeg 提供视频封面、元数据、faststart、H.264/AAC 转码及 HEIC/HEIF/TIFF 转换。 |
+| 本机管理 | 多媒体根目录、缓存清理、状态备份与恢复、明暗主题、键盘与触摸操作。照片级「精选」与相册级「收藏」分开保存。 |
 
-需要 Go 1.24+、Node.js 20+（含 npm）；仓库脚本与 E2E 使用 PowerShell 7。首选 VSCode「运行和调试」中的“全栈复合调试”，入口见 [.vscode/launch.json](./.vscode/launch.json)。
+照片与漫画是两套隔离的工作区。每个媒体根目录需指定照片或漫画类型；漫画阅读进度不会混入照片浏览历史。
 
-首次配置与安装，在仓库根目录执行：
+## 第一次安装与运行
 
-```powershell
+### 使用发布包
+
+当前主线是 Go + React v2 架构。下载发布包时选择 v2.x 对应的系统与架构；v1.x 属于旧版 Python/PyInstaller 架构，不适用于当前配置。若 [发布页](https://github.com/ttf248/local-gallery/releases) 尚无 v2.x 包，请按下面的源码方式构建。
+
+1. 下载并解压与你的操作系统和处理器架构对应的 local-gallery-v2.x 压缩包。
+2. 复制配置样例并编辑媒体目录。照片和漫画目录都可以配置多个；暂时不添加目录时可使用 mediaRoots: []，之后在设置页添加。
+
+   ~~~powershell
+   # Windows
+   Copy-Item config.example.yaml config.yaml
+   ~~~
+
+   ~~~sh
+   # macOS / Linux
+   cp config.example.yaml config.yaml
+   ~~~
+
+   配置示例：
+
+   ~~~yaml
+   mediaRoots:
+     - path: "D:/Photos"
+       kind: photo
+     - path: "E:/Comics"
+       kind: comic
+   host: "127.0.0.1"
+   port: 8080
+   accessMode: local
+   cacheDir: ".local-gallery"
+   staticDir: "dist"
+   ~~~
+
+   路径请替换为本机实际目录，并建议使用正斜杠。Windows 可写 `D:/Photos`；macOS/Linux 可写 `/Users/you/Pictures` 或 `/home/you/Pictures`。`cacheDir` 和 `staticDir` 的相对路径以启动目录为准。
+
+3. 从解压目录启动。
+
+   ~~~powershell
+   # Windows
+   .\local-gallery.exe --config .\config.yaml
+   ~~~
+
+   ~~~sh
+   # macOS / Linux
+   ./local-gallery --config ./config.yaml
+   ~~~
+
+4. 浏览器打开 http://127.0.0.1:8080。等待已配置目录完成扫描后即可浏览。若 `mediaRoots` 为空，先进入「设置」添加照片或漫画目录；目录变更后会自动扫描。按 Ctrl+C 停止服务。
+
+使用发布包浏览照片、漫画和视频不需要 Go、Node.js、Python 或数据库。语义搜索需要额外安装 Python 环境并下载模型；FFmpeg 属于可选增强组件。
+
+### 从源码构建
+
+适用于当前主线和需要修改代码的用户。准备：
+
+- Go 1.24 或更新的兼容版本；
+- Node.js 20 或更新版本，包含 npm；
+- PowerShell 7（用于仓库构建脚本）；
+- Python 3.11 仅在启用语义搜索时需要。
+
+先在仓库根目录创建本机配置：
+
+~~~powershell
 Copy-Item backend/config.example.yaml backend/config.yaml
-# 编辑 mediaRoots，填入本机媒体目录；也可设为 [] 后从设置页添加
-cd frontend
-npm ci
-```
+~~~
 
-分别在两个终端启动，以下均从仓库根目录开始：
+编辑 backend/config.yaml 中的 mediaRoots，填入真实目录和类型。源码构建并启动时，进程工作目录是 backend/，将 staticDir 设为 ../frontend/dist。
 
-```powershell
-# 终端一：后端
+Windows 在仓库根目录执行：
+
+~~~powershell
+.\build.bat
+.\start.bat
+~~~
+
+macOS / Linux 在仓库根目录执行：
+
+~~~powershell
+pwsh -NoProfile -File scripts/build.ps1
 cd backend
-go run ./cmd/server
-```
+../bin/local-gallery --config config.yaml
+~~~
 
-```powershell
-# 终端二：前端
-cd frontend
+服务默认监听 127.0.0.1:8080，后端同时托管 frontend/dist。构建和源码目录一键运行说明见 [构建与发布](./docs/RELEASE.md)。
+
+### 开发模式
+
+开发模式需要两个终端。首次安装前端依赖一次：
+
+~~~powershell
+Set-Location frontend
+npm ci
+~~~
+
+终端一启动后端：
+
+~~~powershell
+Set-Location backend
+go run ./cmd/server --config config.yaml
+~~~
+
+终端二启动 Vite：
+
+~~~powershell
+Set-Location frontend
 npm run dev
-```
+~~~
 
-打开 `http://localhost:5173`。Vite 将 `/api` 代理到 `http://127.0.0.1:8080`，同时改写 Host 与 Origin；无需额外跨域配置。
+打开 http://localhost:5173。Vite 会把 /api 请求代理到 http://127.0.0.1:8080。开发模式不需要设置可用的 staticDir。
 
-## 构建与运行
+## 可选功能安装
 
-Windows 源码目录支持 `build.bat` 构建、`start.bat` 运行。先准备上述配置，并设置 `staticDir: "../frontend/dist"`。首次运行前在 `frontend/` 执行 `npm ci`；此后 `start.bat` 每次启动都会重建前后端，构建失败时不会启动已有二进制。两个入口可双击或从命令行调用，自动化可加 `--no-pause`。
+### 中文语义搜索与以图搜图
 
-VSCode「运行和调试」里的“运行本机最新构建”也会在启动前构建前后端；“后端: Go (Fiber)”和“全栈复合调试”直接以 Go 调试器运行源码。
+Chinese-CLIP 权重约 753 MB。模型和推理都在本机运行，首次下载需要网络；下载后检索不依赖在线 AI 服务。
 
-其他平台可在仓库根目录执行 `pwsh -File scripts/build.ps1`，同样使用 `staticDir: "../frontend/dist"`，从 `backend/` 运行生成的 `../bin/local-gallery`。Windows 产物带 `.exe` 后缀。默认访问 `http://127.0.0.1:8080`。
+源码目录的 Windows 用户从仓库根目录运行：
 
-生产模式下后端同端口托管前端构建产物：文本类资源（html/js/css）按 `Accept-Encoding` 压缩，带内容哈希的 `/assets/*` 长期缓存（`immutable`），入口文件每次回源以便发新版后立即生效。
-
-发布包用户：在解压目录复制 `config.example.yaml` 为 `config.yaml`，设置媒体根并保留 `staticDir: "dist"`，从该目录运行 `local-gallery`（Windows 为 `local-gallery.exe`）。运行发布包无需 Go、Node.js 或 PowerShell。
-
-跨平台打包、手动 CI 与 Release 流程见 [构建与发布](./docs/RELEASE.md)。构建产物与运行时配置不入仓。
-
-## 配置
-
-字段、配置示例与默认值说明集中在 [backend/config.example.yaml](./backend/config.example.yaml)，内置默认值以 `config.Default()` 为准；热更新规则见 [API 配置契约](./docs/API.md#健康与配置)。
-
-- 运行参数来自 YAML，CLI 只支持 `--config <yaml>` 选择文件，不支持环境变量或其他参数覆盖。相对媒体、缓存与静态目录均相对进程 CWD 解析。
-- `mediaRoots` 是唯一媒体根字段，每个条目是 `{ path, kind }`：`kind` 为 `photo` 或 `comic`，两者互斥，决定该目录归入哪个工作台。可设空数组；目录暂时离线仍可启动并访问设置页，扫描不会发布部分根的结果。
-- `cacheDir` 默认是 CWD 下 `.local-gallery/`，`state/` 保存持久状态，`derived/` 保存可重建缓存；“清空缓存”保留状态。存储布局见 [架构文档](./docs/ARCHITECTURE.md#配置与持久化)。
-- `/settings` 的“服务端”可修改配置，仅本机可管理。默认 `127.0.0.1:8080`、`accessMode: local`；可信家庭网络访问需配置 `lan` 与强令牌，浏览器通过 HttpOnly 会话认证。
-- `host`、`port`、`cacheDir`、`staticDir` 与 `ffmpegPath` 修改后重启；配置页会显示重启提示。源码运行与发布包的 `staticDir` 布局不同，按上一节设置。
-
-前端默认同源访问；自定义 API 基址时按 [frontend/.env.example](./frontend/.env.example) 设置构建期 `VITE_API_BASE`，它不覆盖后端 YAML。
-
-### 可选依赖
-
-ffmpeg / ffprobe 提供视频增强能力及 HEIC/HEIF/TIFF 转换。Windows 可从仓库根目录安装到 `bin/ffmpeg/windows/amd64/`，后端自动探测，不修改 PATH：
-
-```powershell
-pwsh -File scripts/install-ffmpeg.ps1
-# 可选参数：-Force 强制重装；-Url 指定压缩包；-TargetDir 指定安装位置
-```
-
-其他平台或自定义安装位置需设置 `ffmpegPath` 为可执行文件路径。工具缺失时图片浏览与原生可播放视频仍可用，视频封面回退浏览器抽帧；需转码的视频和特殊图片格式可能无法显示。
-
-## 本机语义搜索
-
-Windows 首次使用时，在仓库根目录执行以下命令，安装独立 Python 3.11 环境并下载固定 revision 的 Chinese-CLIP ViT-B/16 权重：
-
-```powershell
+~~~powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File backend/aiworker/setup.ps1
 pwsh -NoProfile -ExecutionPolicy Bypass -File backend/aiworker/download-model.ps1
-```
+~~~
 
-运行环境使用 PyTorch 2.7.1 + CUDA 12.6；RTX 3060 可在 CUDA 上推理，显存不足时会缩小批次并回退 CPU。权重约 753 MB，下载脚本会校验 SHA256 `5997ef32c50de18f3ac06eb5d746c324a639053c3bed8f2986f97ebb22b2ecde`，保存到 `cacheDir/derived/ai/models/`；权重和 Python 虚拟环境都不入仓。非 Windows 平台需使用 Python 3.11 与对应平台的官方 PyTorch 安装命令，再安装 `backend/aiworker/requirements.txt` 中的模型包及推理依赖，并将同一权重放入上述缓存目录。
+发布包的 Windows 用户从解压目录运行：
 
-启动后可从照片侧的「智能搜索」使用中文描述或上传图片检索。首次搜索前需在任务中心运行「向量索引」全量任务；新图片和变更图片可用增量任务更新。当前采用精确余弦检索，运行状态、CUDA、权重校验与索引覆盖率都在页面显示。
+~~~powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File aiworker/setup.ps1
+pwsh -NoProfile -ExecutionPolicy Bypass -File aiworker/download-model.ps1
+~~~
+
+setup.ps1 为 Python 3.11 创建独立虚拟环境，并安装 Windows CUDA 12.6 版 PyTorch；无可用 GPU 时支持 CPU 推理。download-model.ps1 会校验固定 revision 的官方权重 SHA256 `5997ef32c50de18f3ac06eb5d746c324a639053c3bed8f2986f97ebb22b2ecde`，再将模型保存到：
+
+~~~text
+<cacheDir>/derived/ai/models/clip_cn_vit-b-16.pt
+~~~
+
+默认 cacheDir 是进程工作目录下的 .local-gallery。权重不会放进 Python 的 site-packages，也不包含在发布压缩包内。
+
+setup.ps1 会把 Python 虚拟环境建在 Worker 目录的 `.venv/` 下；程序优先使用这个项目内环境，不会把模型存到系统 Python 目录。源码目录对应 `backend/aiworker/.venv/`，发布包对应 `aiworker/.venv/`。若未创建该环境，程序才会尝试查找系统 Python 3.11。
+
+macOS / Linux 用户需自行安装 Python 3.11、PowerShell 7（提供 `pwsh`）和平台对应的 PyTorch，再安装 Worker 依赖并下载权重。发布包从包根目录执行：
+
+~~~sh
+python3.11 -m venv aiworker/.venv
+. aiworker/.venv/bin/activate
+# 按 PyTorch 官方安装页面选择系统与 CPU/CUDA，然后执行页面生成的命令
+python -m pip install -r aiworker/requirements.txt
+pwsh -NoProfile -File aiworker/download-model.ps1
+~~~
+
+源码目录将命令中的 `aiworker/` 改为 `backend/aiworker/`。PyTorch 安装命令需按系统和 CPU/CUDA 设备选择，见 [PyTorch 官方安装说明](https://pytorch.org/get-started/locally/)。完成后启动程序，在「任务中心」选择「向量索引」并运行一次全量任务；之后可用增量任务处理新增或变更的照片。EXIF/GPS 元数据分析不需要 Chinese-CLIP。
+
+### FFmpeg 媒体增强
+
+FFmpeg / ffprobe 用于视频封面与元数据、部分视频转码和特殊图片格式转换。源码目录的 Windows 用户可从仓库根目录运行：
+
+~~~powershell
+pwsh -NoProfile -File scripts/install-ffmpeg.ps1
+~~~
+
+其他平台可安装系统 FFmpeg，或在 config.yaml 中设置 ffmpegPath。没有 FFmpeg 时，照片、漫画和浏览器原生支持的视频仍可使用；需要服务端转码的媒体可能无法播放。
+
+## 配置与本地数据
+
+- 配置文件是 YAML。源码开发默认读取 `backend/config.yaml`；发布包读取启动目录中的 `config.yaml`。CLI 仅用 `--config` 选择配置文件。
+- `mediaRoots` 每项包含 `path` 与 `kind`，`kind` 为 `photo` 或 `comic`。可留空后从设置页添加。目录路径按进程工作目录解析。
+- 默认缓存目录是进程工作目录下的 `.local-gallery/`。`state/` 保存任务、偏好、精选、收藏与活动等 JSON 状态；`derived/` 保存缩略图、向量索引与可重新生成的派生数据。
+- 默认地址为 `127.0.0.1:8080`、`accessMode: local`，只供本机访问。需要局域网访问时，按 [配置样例](./backend/config.example.yaml) 设置 `accessMode: lan` 与强随机令牌；不要将服务暴露到互联网或不可信网络。
+- 源码构建与发布包的 `staticDir` 不同：源码从 `backend/` 启动时使用 `../frontend/dist`；发布包从包根目录启动时使用 `dist`。
+- 配置字段、默认值和可热更新项见 [配置样例](./backend/config.example.yaml) 与 [API 文档](./docs/API.md)。架构和持久化布局见 [架构文档](./docs/ARCHITECTURE.md)。
+
+## 当前能力边界
+
+- 这是单用户本地画廊，不包含账号系统、云端同步、在线分享、协作或数据库。
+- 只扫描配置的文件夹，不导入 ZIP/RAR 等压缩包。
+- 语义检索目前面向照片；OCR 与人脸识别尚未提供，任务中心会显示未安装状态。
+- GPS 地点相册按照片坐标在本机生成，不调用在线地图或地理编码服务。
+- 发布包是便携压缩包，不安装系统服务或配置登录自启；需要手动启动程序并保持进程运行。
+- 发布包会附带本机 AI Worker、依赖清单和安装脚本，但不会打包 Python 虚拟环境或大体积模型。基本浏览无需 Python；启用语义搜索需按上文手动安装。
 
 ## 开发验证
 
-| 工作目录    | 命令                             | 用途                                   |
-| ----------- | -------------------------------- | -------------------------------------- |
-| `backend/`  | `go test ./...`                  | 后端单元与集成测试                     |
-| `backend/`  | `go test ./tests/integration -v` | 仅 HTTP 集成主链路                     |
-| `backend/`  | `go vet ./...`                   | 后端静态检查                           |
-| `backend/aiworker/` | `python test_worker.py`   | Worker 权重校验、OOM 回退与 CPU 状态测试 |
-| `frontend/` | `npm run lint`                   | 前端静态检查                           |
-| `frontend/` | `npm run test`                   | Vitest 单元/组件测试                   |
-| `frontend/` | `npm run build`                  | TypeScript 检查与生产构建              |
-| `frontend/` | `npm run test:e2e`               | 使用独立临时库启动真实全栈 E2E         |
-| `frontend/` | `npm run audit:size`             | 量首屏实际传输体积与请求数            |
-| `frontend/` | `npm run audit:size -- --dist`   | 只量构建产物首屏（CI 的守门线）       |
-| 仓库根      | `pwsh -File scripts/build.ps1`   | 全栈构建；也可使用 VSCode `build: all` |
-| 仓库根      | VSCode「运行本机最新构建」或 Windows `start.bat` | 构建本机前后端最新代码并启动 |
+以下命令适用于完整源码仓库；发布包用户按前文的发布包步骤启动。
 
-首次跑 E2E 需在 `frontend/` 执行 `npx playwright install chromium`。E2E 自动选择端口、生成媒体与构建产物，结束清理临时服务，不读取个人媒体库。用例按浏览、阅读器、设置和状态拆分，共享临时服务时顺序运行。业务改动按协作规则同步相应测试；纯文档改动检查链接、引用与格式。
+| 工作目录 | 命令 | 用途 |
+| --- | --- | --- |
+| backend/ | go test ./... | 后端单元与集成测试 |
+| backend/ | go test ./tests/integration -v | HTTP 集成主链路 |
+| backend/ | go vet ./... | 后端静态检查 |
+| backend/aiworker/ | python test_worker.py | Worker 权重校验、OOM 回退与 CPU 状态测试 |
+| frontend/ | npm run lint | 前端静态检查 |
+| frontend/ | npm run test | Vitest 单元与组件测试 |
+| frontend/ | npm run build | TypeScript 检查与生产构建 |
+| frontend/ | npm run test:e2e | 独立临时媒体库的全栈浏览器测试 |
+| 仓库根 | pwsh -NoProfile -File scripts/build.ps1 | 全栈构建 |
+| 仓库根 | pwsh -NoProfile -File scripts/package-release.ps1 -Version 2.0.0 -TargetOS windows -TargetArch amd64 | 生成 Windows 发布包 |
 
-前端重设计可调整现有布局、组件与视觉 token，设计权限、质量要求及审计/截图/崩溃探针统一见 [设计文档](./docs/DESIGN.md)；现有尺寸、列数和布局测试随方案演进。性能基准只在显式优化任务运行，方法见架构文档。
+E2E 首次运行前，在 frontend/ 执行 npx playwright install chromium。测试会生成独立临时媒体与配置，不读取个人媒体库；只读文档改动不需要新增业务测试。
 
 ## 项目结构与文档
 
-```text
+~~~text
 backend/
-  cmd/server/         Go 入口与服务装配
-  aiworker/           Python 3.11 常驻推理 Worker、隔离环境和权重安装脚本
-  internal/           config、pathutil、models、middleware、handlers、services、store
-  tests/integration/  真实 HTTP 路由测试
+  cmd/server/         Go 服务入口与依赖装配
+  aiworker/           本机语义搜索 Worker、依赖与模型安装脚本
+  internal/           配置、资源索引、媒体服务、API 与 JSON 存储
 frontend/
-  src/                api、hooks、store、routes、components、styles、utils（含 `/tasks`、`/photo/locations` 与 `/photo/semantic`）
-  scripts/            布局/对比度审计、截图、崩溃探针
-  tests/e2e/          Playwright 全栈用例
-scripts/              开发、构建、E2E、ffmpeg 安装与手动发布工具
-.vscode/              现有调试、任务与编辑器配置
-.github/workflows/    仅手动触发的 CI 与 Release
-```
+  src/                React 页面、API、hooks、store 与界面组件
+  tests/e2e/          Playwright 全栈测试
+scripts/              构建、发布、FFmpeg 安装与开发工具
+docs/                 API、架构、快捷键、设计与发布文档
+~~~
 
-后续 AI 默认只需阅读 `AGENTS.md` 与本页，再按任务选读下表；无需逐份加载。依赖版本看 `backend/go.mod` 与 `frontend/package.json`，配置字段看 YAML 样例。代码与测试用于确认当前行为，现有视觉方案可以按设计目标重做。
-
-| 文档                                           | 何时阅读                                             |
-| ---------------------------------------------- | ---------------------------------------------------- |
-| [AGENTS.md](./AGENTS.md)                       | 开始工作：边界、修改规则、验证与提交要求             |
-| [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | 定位模块，修改扫描、资源索引、媒体管线、状态或持久化 |
-| [docs/API.md](./docs/API.md)                   | 修改或对接 HTTP/SSE 契约、字段和错误码               |
-| [docs/SHORTCUTS.md](./docs/SHORTCUTS.md)       | 修改快捷键、菜单、弹窗和输入控件的键盘行为           |
-| [docs/DESIGN.md](./docs/DESIGN.md)             | 修改界面：设计自主权、质量要求、验证与未完成事项     |
-| [docs/RELEASE.md](./docs/RELEASE.md)           | 构建、推送、手动验证与正式发布                       |
-| [docs/release-notes/](./docs/release-notes/)   | 查询对应版本的发布/迁移记录；不作为当前规则或待办    |
-
-每类信息只维护一份完整说明。已完成工作与历史实验通过 `git log` 查询，开放界面问题集中在设计文档末尾。
+| 文档 | 用途 |
+| --- | --- |
+| [AGENTS.md](./AGENTS.md) | 协作边界、修改规则、验证与提交要求 |
+| [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | 模块边界、媒体管线、任务与持久化 |
+| [docs/API.md](./docs/API.md) | HTTP、SSE、字段与错误码 |
+| [docs/SHORTCUTS.md](./docs/SHORTCUTS.md) | 键盘快捷键 |
+| [docs/DESIGN.md](./docs/DESIGN.md) | 界面目标、设计权限与视觉验证 |
+| [docs/RELEASE.md](./docs/RELEASE.md) | 构建、发布包、手动 CI 与正式发布 |
 
 ## 使用范围与许可
 
-当前为单用户本地工具，媒体按目录读取，不解析 ZIP/RAR，不提供在线分享或协作。仅供个人学习和非商业用途。
+项目当前定位为单用户本地媒体工具，按目录读取照片、漫画和视频。不提供在线分享或协作，也不解析压缩包。仓库目前没有单独的 LICENSE 文件，再分发与商业使用授权尚未在仓库中明确，因此当前发布包也不会附带许可证文件。
