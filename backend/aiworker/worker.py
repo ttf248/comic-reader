@@ -173,8 +173,8 @@ def run_with_fallback(items, encode, prepare):
                 pending = pending[size:]
                 continue
             torch.cuda.empty_cache()
-            if batch_size > 1:
-                batch_size = max(1, batch_size // 2)
+            if size > 1:
+                batch_size = max(1, size // 2)
                 continue
             device = "cpu"
             model = model.to("cpu").float()

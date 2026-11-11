@@ -148,6 +148,23 @@ func TestSemanticSearchAPIUsesCurrentIndexedResources(t *testing.T) {
 	if !body.OK || body.Total != 2 || len(body.Results) != 2 || body.Results[0].Item.ID != firstID || body.Results[0].Item.AlbumName != "风景" || body.Results[0].Similarity < 0.99 {
 		t.Fatalf("semantic search response = %+v", body)
 	}
+
+	imageRequest := httptest.NewRequest("POST", "/api/ai/search", strings.NewReader(`{"resourceId":"`+firstID+`","kind":"photo","limit":10}`))
+	imageRequest.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+	imageResponse, err := app.Test(imageRequest, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer imageResponse.Body.Close()
+	if imageResponse.StatusCode != fiber.StatusOK {
+		t.Fatalf("image search status = %d", imageResponse.StatusCode)
+	}
+	if err := json.NewDecoder(imageResponse.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if !body.OK || body.Total != 2 || len(body.Results) != 2 || body.Results[0].Item.ID != firstID || body.Results[0].Similarity < 0.99 {
+		t.Fatalf("image similarity response = %+v", body)
+	}
 	encoded, err := json.Marshal(body)
 	if err != nil {
 		t.Fatal(err)

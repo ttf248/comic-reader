@@ -42,7 +42,7 @@ func (*fakeEmbeddingWorker) Close() error { return nil }
 
 func TestEmbeddingAnalyzerUsesExistingTaskBatchesAndIncrementalRecords(t *testing.T) {
 	root := t.TempDir()
-	files := writeAIJobImages(t, root, 2)
+	files := writeAIJobImages(t, root, 1000)
 	catalog := aiJobCatalog(root, files)
 	statePath := filepath.Join(t.TempDir(), "state", "ai_jobs.json")
 	metadataDir := filepath.Join(t.TempDir(), "derived", "metadata")
@@ -62,7 +62,8 @@ func TestEmbeddingAnalyzerUsesExistingTaskBatchesAndIncrementalRecords(t *testin
 	}
 	job = waitForAIJob(t, service, job.ID, AIJobStatusCompleted)
 	waitForAIJobIdle(t, service)
-	if job.Processed != 2 || worker.imageBatches.Load() != 1 || index.Status().Vectors != 2 {
+	expectedBatches := (len(files) + aiBatchSize - 1) / aiBatchSize
+	if job.Processed != 1000 || int(worker.imageBatches.Load()) != expectedBatches || index.Status().Vectors != 1000 {
 		t.Fatalf("embedding job=%+v batches=%d index=%+v", job, worker.imageBatches.Load(), index.Status())
 	}
 	incremental, _, err := service.Start(AIJobTypeEmbedding, AIJobModeIncremental)
@@ -71,7 +72,7 @@ func TestEmbeddingAnalyzerUsesExistingTaskBatchesAndIncrementalRecords(t *testin
 	}
 	incremental = waitForAIJob(t, service, incremental.ID, AIJobStatusCompleted)
 	waitForAIJobIdle(t, service)
-	if incremental.Processed != 0 || incremental.Skipped != 2 {
+	if incremental.Processed != 0 || incremental.Skipped != 1000 {
 		t.Fatalf("unchanged incremental job = %+v", incremental)
 	}
 	changedAt := time.Now().Add(2 * time.Second)
@@ -86,7 +87,7 @@ func TestEmbeddingAnalyzerUsesExistingTaskBatchesAndIncrementalRecords(t *testin
 		t.Fatal(err)
 	}
 	changed = waitForAIJob(t, service, changed.ID, AIJobStatusCompleted)
-	if changed.Processed != 1 || changed.Skipped != 1 {
+	if changed.Processed != 1 || changed.Skipped != 999 {
 		t.Fatalf("changed incremental job = %+v", changed)
 	}
 }

@@ -97,6 +97,23 @@ describe("大图预览的精选与对比", () => {
     expect(onTogglePick).toHaveBeenCalledTimes(1);
   });
 
+  it("查找相似照片按钮使用当前照片触发搜索", () => {
+    const onFindSimilar = vi.fn();
+    render(
+      <PhotoViewer
+        items={items}
+        index={1}
+        albumName="测试相册"
+        onIndexChange={vi.fn()}
+        onClose={vi.fn()}
+        onFindSimilar={onFindSimilar}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "查找相似照片" }));
+    expect(onFindSimilar).toHaveBeenCalledTimes(1);
+  });
+
   it("C 键放进对比", () => {
     const onToggleCompare = vi.fn();
     render(

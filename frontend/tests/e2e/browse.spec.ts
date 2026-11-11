@@ -2292,6 +2292,9 @@ test("窄屏下顶栏不横向溢出，筛选标签保持一行", async ({ page 
   await expect(page.locator("header kbd")).toBeHidden();
 
   // 视图标签不能被压成竖排文字（一个字一行）。
+  await expect(
+    page.getByRole("button", { name: /^全部\s+\d+$/ }),
+  ).toBeVisible();
   const chips = await page.evaluate(() => {
     const matched = [...document.querySelectorAll("button")].filter((button) =>
       // 两侧的类型词：叶级目录都叫「相册」，集合词分侧

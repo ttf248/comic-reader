@@ -104,6 +104,7 @@ pwsh -NoProfile -ExecutionPolicy Bypass -File backend/aiworker/download-model.ps
 | `backend/`  | `go test ./...`                  | 后端单元与集成测试                     |
 | `backend/`  | `go test ./tests/integration -v` | 仅 HTTP 集成主链路                     |
 | `backend/`  | `go vet ./...`                   | 后端静态检查                           |
+| `backend/aiworker/` | `python test_worker.py`   | Worker 权重校验、OOM 回退与 CPU 状态测试 |
 | `frontend/` | `npm run lint`                   | 前端静态检查                           |
 | `frontend/` | `npm run test`                   | Vitest 单元/组件测试                   |
 | `frontend/` | `npm run build`                  | TypeScript 检查与生产构建              |
