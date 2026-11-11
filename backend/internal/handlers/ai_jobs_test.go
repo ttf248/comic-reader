@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -128,13 +129,46 @@ func TestAIJobAPIFullAnalysisOverThousandImages(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer listResponse.Body.Close()
+	listBytes, err := io.ReadAll(listResponse.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var listBody struct {
 		Snapshot services.AIJobSnapshot `json:"snapshot"`
 	}
-	if err := json.NewDecoder(listResponse.Body).Decode(&listBody); err != nil {
+	if err := json.Unmarshal(listBytes, &listBody); err != nil {
 		t.Fatal(err)
 	}
 	if len(listBody.Snapshot.Jobs) != 1 || listBody.Snapshot.Jobs[0].Processed != 1001 {
 		t.Fatalf("job list response = %+v", listBody.Snapshot)
+	}
+	job := listBody.Snapshot.Jobs[0]
+	if job.Planned != 1001 || job.Completed != 1001 {
+		t.Fatalf("job progress = planned %d, completed %d", job.Planned, job.Completed)
+	}
+	if job.Results[services.MetadataParseNoExif] != 1001 {
+		t.Fatalf("job results = %+v", job.Results)
+	}
+	if len(listBody.Snapshot.Modules) != 4 {
+		t.Fatalf("modules = %+v", listBody.Snapshot.Modules)
+	}
+
+	var rawList map[string]any
+	if err := json.Unmarshal(listBytes, &rawList); err != nil {
+		t.Fatal(err)
+	}
+	rawSnapshot, _ := rawList["snapshot"].(map[string]any)
+	if _, ok := rawSnapshot["modules"]; !ok {
+		t.Fatalf("snapshot is missing modules: %+v", rawSnapshot)
+	}
+	rawJobs, _ := rawSnapshot["jobs"].([]any)
+	if len(rawJobs) == 0 {
+		t.Fatalf("snapshot has no jobs: %+v", rawSnapshot)
+	}
+	rawJob, _ := rawJobs[0].(map[string]any)
+	for _, key := range []string{"planned", "completed", "estimatedRemainingMs", "results"} {
+		if _, ok := rawJob[key]; !ok {
+			t.Fatalf("job payload is missing %q: %+v", key, rawJob)
+		}
 	}
 }

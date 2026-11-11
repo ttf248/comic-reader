@@ -36,6 +36,11 @@ const (
 	AIJobStatusFailed    = "failed"
 	AIJobStatusCancelled = "cancelled"
 
+	// 分析模块在单条结果里报告的字段标识，用于按字段统计任务产出。
+	AIFieldExifTime = "exifTime"
+	AIFieldCamera   = "camera"
+	AIFieldGPS      = "gps"
+
 	aiJobStoreVersion = 1
 	aiBatchSize       = 32
 	aiMaxWorkers      = 4
@@ -47,6 +52,8 @@ var ErrAIJobActive = errors.New("an analysis job is already active")
 type AIAnalysisOutput struct {
 	Status string          `json:"status"`
 	Data   json.RawMessage `json:"data,omitempty"`
+	// Fields 列出这条结果里实际有值的字段标识；任务按字段累计产出。
+	Fields []string `json:"fields,omitempty"`
 }
 
 // AIAnalyzer 是 metadata / embedding / ocr / face 模块的扩展边界。
@@ -74,7 +81,22 @@ func (MetadataAnalyzer) Analyze(ctx context.Context, reader io.ReadSeeker) (AIAn
 	if err != nil {
 		return AIAnalysisOutput{}, err
 	}
-	return AIAnalysisOutput{Status: metadata.Status, Data: data}, nil
+	return AIAnalysisOutput{Status: metadata.Status, Data: data, Fields: metadataFields(metadata)}, nil
+}
+
+// metadataFields 报告这条元数据里实际有值的字段。
+func metadataFields(metadata ImageMetadata) []string {
+	fields := make([]string, 0, 3)
+	if metadata.DateTimeOriginal != "" {
+		fields = append(fields, AIFieldExifTime)
+	}
+	if metadata.CameraMake != "" || metadata.CameraModel != "" {
+		fields = append(fields, AIFieldCamera)
+	}
+	if metadata.GPS != nil {
+		fields = append(fields, AIFieldGPS)
+	}
+	return fields
 }
 
 // AIJobCheckpoint 是某个模块任务的独立恢复游标。
@@ -122,6 +144,15 @@ type AIJob struct {
 	UpdatedAt         time.Time       `json:"updatedAt"`
 	ElapsedMs         int64           `json:"elapsedMs"`
 	SpeedPerSecond    float64         `json:"speedPerSecond"`
+	// Planned 是本次任务实际要处理的张数，Completed 是已处理张数。
+	// 两者由快照按持久化计数推导，不作为事实落盘。
+	Planned   int `json:"planned"`
+	Completed int `json:"completed"`
+	// EstimatedRemainingMs 是运行中任务的预计剩余毫秒，同样是快照派生值。
+	EstimatedRemainingMs int64 `json:"estimatedRemainingMs"`
+	// Results 按解析结果分类计数，Fields 按字段统计产出；两者是事实，落盘保留。
+	Results map[string]int `json:"results,omitempty"`
+	Fields  map[string]int `json:"fields,omitempty"`
 }
 
 // AIJobSettings 放在 state/，不属于可重建的 derived 数据。
@@ -135,6 +166,16 @@ type AIJobSnapshot struct {
 	Jobs     []AIJob       `json:"jobs"`
 	Active   *AIJob        `json:"active,omitempty"`
 	Settings AIJobSettings `json:"settings"`
+	// Modules 列出全部已知分析模块及其安装状态，前端不再硬编码模块名。
+	Modules []AIJobModule `json:"modules"`
+}
+
+// AIJobModule 描述一个分析模块的安装情况。
+type AIJobModule struct {
+	Type      string `json:"type"`
+	Name      string `json:"name"`
+	Installed bool   `json:"installed"`
+	Version   string `json:"version,omitempty"`
 }
 
 // AIAnalysisRecord 是 derived/metadata 中可重建的单资源分析结果。
@@ -149,6 +190,8 @@ type AIAnalysisRecord struct {
 	ErrorCode     string          `json:"errorCode,omitempty"`
 	ErrorMessage  string          `json:"errorMessage,omitempty"`
 	UpdatedAt     time.Time       `json:"updatedAt"`
+	// Fields 记录这条结果里实际有值的字段；批次重放要靠它还原任务产出。
+	Fields []string `json:"fields,omitempty"`
 }
 
 type AIJobServiceOptions struct {
@@ -430,7 +473,11 @@ func (s *AIJobService) Get(id string) (AIJob, bool) {
 func (s *AIJobService) List() AIJobSnapshot {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	result := AIJobSnapshot{Settings: s.settings, Jobs: make([]AIJob, 0, len(s.order))}
+	result := AIJobSnapshot{
+		Settings: s.settings,
+		Jobs:     make([]AIJob, 0, len(s.order)),
+		Modules:  s.modulesLocked(),
+	}
 	for index := len(s.order) - 1; index >= 0; index-- {
 		if job := s.jobs[s.order[index]]; job != nil {
 			copy := s.snapshotLocked(job)
@@ -442,6 +489,37 @@ func (s *AIJobService) List() AIJobSnapshot {
 		}
 	}
 	return result
+}
+
+// modulesLocked 列出全部已知分析模块及其安装情况。
+func (s *AIJobService) modulesLocked() []AIJobModule {
+	known := []string{AIJobTypeMetadata, AIJobTypeEmbedding, AIJobTypeOCR, AIJobTypeFace}
+	modules := make([]AIJobModule, 0, len(known))
+	for _, moduleType := range known {
+		module := AIJobModule{Type: moduleType, Name: aiJobModuleName(moduleType)}
+		if analyzer, exists := s.analyzers[moduleType]; exists {
+			module.Installed = true
+			module.Version = analyzer.Version()
+		}
+		modules = append(modules, module)
+	}
+	return modules
+}
+
+// aiJobModuleName 给分析模块一个中文显示名。
+func aiJobModuleName(moduleType string) string {
+	switch moduleType {
+	case AIJobTypeMetadata:
+		return "照片元数据"
+	case AIJobTypeEmbedding:
+		return "向量索引"
+	case AIJobTypeOCR:
+		return "文字识别"
+	case AIJobTypeFace:
+		return "人脸识别"
+	default:
+		return moduleType
+	}
 }
 
 // ConfigureDaily 更新持久化的本地每日调度设置。
@@ -800,6 +878,7 @@ func (s *AIJobService) selectTargets(jobID string, targets []aiJobTarget, digest
 		job.Checkpoint = AIJobCheckpoint{ModuleVersion: version}
 		job.Total, job.Processed, job.Skipped, job.Failed, job.Done = 0, 0, 0, 0, 0
 		job.Errors = nil
+		job.Results, job.Fields = nil, nil
 	}
 	job.ModuleVersion = version
 	job.Checkpoint.ModuleVersion = version
@@ -817,6 +896,7 @@ func (s *AIJobService) selectTargets(jobID string, targets []aiJobTarget, digest
 			job.Processed, job.Skipped, job.Failed, job.Done = 0, 0, 0, 0
 			job.Checkpoint = AIJobCheckpoint{ModuleVersion: version, TargetDigest: digest}
 			job.Errors = nil
+			job.Results, job.Fields = nil, nil
 			candidates = append(candidates, targets...)
 		}
 	} else {
@@ -932,6 +1012,7 @@ func (s *AIJobService) processTarget(ctx context.Context, jobID string, target a
 	}
 	record.Status = output.Status
 	record.Data = append(json.RawMessage(nil), output.Data...)
+	record.Fields = append([]string(nil), output.Fields...)
 	return record
 }
 
@@ -1001,6 +1082,7 @@ func (s *AIJobService) commitBatch(jobID string, runtimeState *aiJobRuntime, tar
 		} else {
 			job.Processed++
 		}
+		accumulateAIJobOutput(job, record)
 		job.Done++
 		job.CurrentResourceID = record.ResourceID
 		job.Checkpoint.Offset = targets[index].position + 1
@@ -1161,10 +1243,19 @@ func (s *AIJobService) scheduleTick(now time.Time) {
 func (s *AIJobService) snapshotLocked(job *AIJob) AIJob {
 	copy := *job
 	copy.Errors = append([]AIJobError(nil), job.Errors...)
+	copy.Results = copyAIJobCounts(job.Results)
+	copy.Fields = copyAIJobCounts(job.Fields)
 	catalogSnapshot := s.catalog.Acquire()
 	for index := range copy.Errors {
 		copy.Errors[index].Path = catalogSnapshot.RelativeLabel(copy.Errors[index].ResourceID)
 	}
+	// Planned 是本次任务真正要处理的张数：增量任务的 total 是整库规模，
+	// 拿 total 当分母会让进度一上来就接近满格。
+	copy.Planned = max(0, job.Total-job.Skipped)
+	copy.Completed = job.Processed + job.Failed
+	copy.ElapsedMs = 0
+	copy.SpeedPerSecond = 0
+	copy.EstimatedRemainingMs = 0
 	if job.StartedAt != nil {
 		end := s.now()
 		if job.FinishedAt != nil {
@@ -1172,10 +1263,44 @@ func (s *AIJobService) snapshotLocked(job *AIJob) AIJob {
 		}
 		copy.ElapsedMs = max(0, end.Sub(*job.StartedAt).Milliseconds())
 		if copy.ElapsedMs > 0 {
-			copy.SpeedPerSecond = float64(job.Done) * 1000 / float64(copy.ElapsedMs)
+			copy.SpeedPerSecond = float64(copy.Completed) * 1000 / float64(copy.ElapsedMs)
+		}
+	}
+	// 预计剩余只在运行时给出：暂停时耗时仍在增长，速度已经失真。
+	if job.Status == AIJobStatusRunning && copy.ElapsedMs > 0 && copy.Completed > 0 {
+		if remaining := copy.Planned - copy.Completed; remaining > 0 {
+			copy.EstimatedRemainingMs = int64(remaining) * copy.ElapsedMs / int64(copy.Completed)
 		}
 	}
 	return copy
+}
+
+// copyAIJobCounts 复制计数表，避免调用方改到任务自身的状态。
+func copyAIJobCounts(counts map[string]int) map[string]int {
+	if len(counts) == 0 {
+		return nil
+	}
+	result := make(map[string]int, len(counts))
+	for key, value := range counts {
+		result[key] = value
+	}
+	return result
+}
+
+// accumulateAIJobOutput 累计一条分析结果：按解析状态与字段统计产出。
+func accumulateAIJobOutput(job *AIJob, record AIAnalysisRecord) {
+	if record.Status != "" {
+		if job.Results == nil {
+			job.Results = make(map[string]int)
+		}
+		job.Results[record.Status]++
+	}
+	for _, field := range record.Fields {
+		if job.Fields == nil {
+			job.Fields = make(map[string]int)
+		}
+		job.Fields[field]++
+	}
 }
 
 func (s *AIJobService) publishLocked(job AIJob) {
@@ -1303,6 +1428,7 @@ func (s *AIJobService) loadRecords() error {
 				} else {
 					job.Processed++
 				}
+				accumulateAIJobOutput(job, record)
 				job.Done++
 			}
 			job.Checkpoint.Batch = batch.Number
@@ -1337,6 +1463,9 @@ func (s *AIJobService) persistLocked() error {
 			copy := *job
 			copy.ElapsedMs = 0
 			copy.SpeedPerSecond = 0
+			copy.Planned = 0
+			copy.Completed = 0
+			copy.EstimatedRemainingMs = 0
 			state.Jobs = append(state.Jobs, copy)
 		}
 	}

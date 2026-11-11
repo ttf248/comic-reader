@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -374,6 +375,182 @@ func TestAIJobModuleVersionsAreIndependent(t *testing.T) {
 	shutdownAIJobService(t, upgraded)
 }
 
+func TestAIJobServiceReportsPlannedProgressAndOutputBreakdown(t *testing.T) {
+	root := t.TempDir()
+	files := writeAIJobImages(t, root, 3)
+	catalog := aiJobCatalog(root, files)
+	statePath := filepath.Join(t.TempDir(), "state", "ai_jobs.json")
+	metadataDir := filepath.Join(t.TempDir(), "derived", "metadata")
+	service := newTestAIJobService(t, statePath, metadataDir, catalog, MetadataAnalyzer{})
+
+	full, _, err := service.Start(AIJobTypeMetadata, AIJobModeFull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	full = waitForAIJob(t, service, full.ID, AIJobStatusCompleted)
+	if full.Planned != 3 || full.Completed != 3 {
+		t.Fatalf("full job progress = planned %d, completed %d", full.Planned, full.Completed)
+	}
+	if full.Results[MetadataParseParsed] != 3 {
+		t.Fatalf("full job results = %+v", full.Results)
+	}
+	if full.Fields[AIFieldExifTime] != 3 || full.Fields[AIFieldCamera] != 3 || full.Fields[AIFieldGPS] != 3 {
+		t.Fatalf("full job fields = %+v", full.Fields)
+	}
+	if full.EstimatedRemainingMs != 0 {
+		t.Fatalf("finished job still reports remaining time: %d", full.EstimatedRemainingMs)
+	}
+	waitForAIJobIdle(t, service)
+
+	incremental, _, err := service.Start(AIJobTypeMetadata, AIJobModeIncremental)
+	if err != nil {
+		t.Fatal(err)
+	}
+	incremental = waitForAIJob(t, service, incremental.ID, AIJobStatusCompleted)
+	if incremental.Planned != 0 || incremental.Completed != 0 {
+		t.Fatalf("incremental job progress = planned %d, completed %d", incremental.Planned, incremental.Completed)
+	}
+	waitForAIJobIdle(t, service)
+	shutdownAIJobService(t, service)
+
+	modules := service.List().Modules
+	if len(modules) != 4 {
+		t.Fatalf("modules = %+v, want 4 entries", modules)
+	}
+	installed := map[string]AIJobModule{}
+	for _, module := range modules {
+		installed[module.Type] = module
+	}
+	if !installed[AIJobTypeMetadata].Installed || installed[AIJobTypeMetadata].Version != MetadataParserVersion {
+		t.Fatalf("metadata module = %+v", installed[AIJobTypeMetadata])
+	}
+	if installed[AIJobTypeEmbedding].Installed || installed[AIJobTypeOCR].Installed || installed[AIJobTypeFace].Installed {
+		t.Fatalf("uninstalled modules reported as installed: %+v", modules)
+	}
+	if installed[AIJobTypeEmbedding].Name != "向量索引" {
+		t.Fatalf("module display name = %+v", installed[AIJobTypeEmbedding])
+	}
+}
+
+func TestAIJobServiceEstimatesRemainingTimeWhileRunning(t *testing.T) {
+	root := t.TempDir()
+	files := writeAIJobImages(t, root, aiBatchSize+8)
+	catalog := aiJobCatalog(root, files)
+	gate := &gateAnalyzer{gate: int32(aiBatchSize + 1), blocked: make(chan struct{}), release: make(chan struct{})}
+	var clock atomic.Int64
+	clock.Store(time.Now().UnixMilli())
+	service, err := NewAIJobService(AIJobServiceOptions{
+		StatePath:    filepath.Join(t.TempDir(), "state", "ai_jobs.json"),
+		MetadataDir:  filepath.Join(t.TempDir(), "derived", "metadata"),
+		Catalog:      catalog,
+		ValidatePath: aiTestPathValidator(t, root),
+		Analyzers:    []AIAnalyzer{gate},
+		WorkerCount:  2,
+		Now:          func() time.Time { return time.UnixMilli(clock.Load()) },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { shutdownAIJobService(t, service) })
+
+	job, _, err := service.Start(AIJobTypeMetadata, AIJobModeFull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-gate.blocked:
+	case <-time.After(10 * time.Second):
+		t.Fatal("analyzer did not reach the gate")
+	}
+	clock.Store(clock.Load() + 5000)
+
+	running, ok := service.Get(job.ID)
+	if !ok {
+		t.Fatal("running job not found")
+	}
+	if running.Status != AIJobStatusRunning {
+		t.Fatalf("job status = %s", running.Status)
+	}
+	if running.Completed != aiBatchSize || running.Planned != aiBatchSize+8 {
+		t.Fatalf("running job progress = planned %d, completed %d", running.Planned, running.Completed)
+	}
+	wantRemaining := int64(8) * 5000 / int64(aiBatchSize)
+	if running.EstimatedRemainingMs != wantRemaining {
+		t.Fatalf("estimated remaining = %d, want %d", running.EstimatedRemainingMs, wantRemaining)
+	}
+	if running.SpeedPerSecond != float64(aiBatchSize)*1000/5000 {
+		t.Fatalf("speed per second = %v", running.SpeedPerSecond)
+	}
+
+	close(gate.release)
+	finished := waitForAIJob(t, service, job.ID, AIJobStatusCompleted)
+	if finished.EstimatedRemainingMs != 0 {
+		t.Fatalf("finished job still reports remaining time: %d", finished.EstimatedRemainingMs)
+	}
+	if finished.Completed != aiBatchSize+8 {
+		t.Fatalf("finished job completed = %d", finished.Completed)
+	}
+}
+
+func TestAIJobServiceReplaysOutputBreakdownAfterRestart(t *testing.T) {
+	root := t.TempDir()
+	files := writeAIJobImages(t, root, 3)
+	catalog := aiJobCatalog(root, files)
+	statePath := filepath.Join(t.TempDir(), "state", "ai_jobs.json")
+	metadataDir := filepath.Join(t.TempDir(), "derived", "metadata")
+	service := newTestAIJobService(t, statePath, metadataDir, catalog, MetadataAnalyzer{})
+
+	job, _, err := service.Start(AIJobTypeMetadata, AIJobModeFull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitForAIJob(t, service, job.ID, AIJobStatusCompleted)
+	waitForAIJobIdle(t, service)
+	shutdownAIJobService(t, service)
+
+	// 模拟崩溃窗口：批次结果已落盘，检查点与计数还没写进状态文件。
+	data, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var state aiJobDiskState
+	if err := json.Unmarshal(data, &state); err != nil {
+		t.Fatal(err)
+	}
+	for index := range state.Jobs {
+		state.Jobs[index].Processed = 0
+		state.Jobs[index].Failed = 0
+		state.Jobs[index].Done = 0
+		state.Jobs[index].Errors = nil
+		state.Jobs[index].Results = nil
+		state.Jobs[index].Fields = nil
+		state.Jobs[index].Checkpoint.Batch = 0
+	}
+	rewritten, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(statePath, rewritten, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	restarted := newTestAIJobService(t, statePath, metadataDir, catalog, MetadataAnalyzer{})
+	jobs := restarted.List().Jobs
+	if len(jobs) != 1 {
+		t.Fatalf("restarted jobs = %d, want 1", len(jobs))
+	}
+	replayed := jobs[0]
+	if replayed.Processed != 3 || replayed.Done != 3 {
+		t.Fatalf("replayed counters = %+v", replayed)
+	}
+	if replayed.Results[MetadataParseParsed] != 3 {
+		t.Fatalf("replayed results = %+v", replayed.Results)
+	}
+	if replayed.Fields[AIFieldCamera] != 3 || replayed.Fields[AIFieldGPS] != 3 {
+		t.Fatalf("replayed fields = %+v", replayed.Fields)
+	}
+}
+
 func TestAIJobServiceProcessesAtLeastOneThousandImagesWithinBoundedMemory(t *testing.T) {
 	root := t.TempDir()
 	files := writeAIJobImages(t, root, 1001)
@@ -586,6 +763,29 @@ func (a *blockingAnalyzer) Version() string { return MetadataParserVersion }
 func (a *blockingAnalyzer) Analyze(ctx context.Context, reader io.ReadSeeker) (AIAnalysisOutput, error) {
 	if a.blocked.CompareAndSwap(false, true) {
 		close(a.started)
+		select {
+		case <-ctx.Done():
+			return AIAnalysisOutput{}, ctx.Err()
+		case <-a.release:
+		}
+	}
+	return (MetadataAnalyzer{}).Analyze(ctx, reader)
+}
+
+// gateAnalyzer 从第 gate 次调用开始挂起，用来观察运行中任务的进度与预计剩余。
+type gateAnalyzer struct {
+	gate    int32
+	calls   atomic.Int32
+	blocked chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (a *gateAnalyzer) Type() string    { return AIJobTypeMetadata }
+func (a *gateAnalyzer) Version() string { return MetadataParserVersion }
+func (a *gateAnalyzer) Analyze(ctx context.Context, reader io.ReadSeeker) (AIAnalysisOutput, error) {
+	if a.calls.Add(1) >= a.gate {
+		a.once.Do(func() { close(a.blocked) })
 		select {
 		case <-ctx.Done():
 			return AIAnalysisOutput{}, ctx.Err()

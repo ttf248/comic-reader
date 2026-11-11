@@ -1,9 +1,15 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import TaskCenter from "./TaskCenter";
-import { aiJobsApi } from "../api/aiJobs";
+import { aiJobsApi, type AIJob, type AIJobSnapshot } from "../api/aiJobs";
 
 vi.mock("../api/aiJobs", () => ({
   aiJobsApi: {
@@ -21,11 +27,11 @@ vi.mock("../api/client", async (importOriginal) => {
   return { ...actual, sse: vi.fn(() => () => {}) };
 });
 
-const currentJob = {
+const currentJob: AIJob = {
   id: "job-current",
-  type: "metadata" as const,
-  mode: "incremental" as const,
-  status: "running" as const,
+  type: "metadata",
+  mode: "incremental",
+  status: "running",
   stage: "metadata",
   moduleVersion: "metadata-v1",
   total: 100,
@@ -33,12 +39,17 @@ const currentJob = {
   skipped: 55,
   failed: 1,
   done: 98,
+  planned: 45,
+  completed: 43,
+  estimatedRemainingMs: 12_000,
+  speedPerSecond: 1.6,
+  results: { parsed: 42, failed: 1 },
+  fields: { exifTime: 40, camera: 12 },
   checkpoint: { offset: 98, batch: 3, moduleVersion: "metadata-v1" },
   createdAt: "2026-11-11T02:00:00Z",
   startedAt: "2026-11-11T02:00:01Z",
   updatedAt: "2026-11-11T02:01:00Z",
   elapsedMs: 60_000,
-  speedPerSecond: 1.6,
   errors: [
     {
       resourceId: "f_bad",
@@ -48,6 +59,26 @@ const currentJob = {
     },
   ],
 };
+
+const modules = [
+  {
+    type: "metadata",
+    name: "照片元数据",
+    installed: true,
+    version: "metadata-v1",
+  },
+  { type: "embedding", name: "向量索引", installed: false },
+] as AIJobSnapshot["modules"];
+
+function snapshot(overrides: Partial<AIJobSnapshot> = {}): AIJobSnapshot {
+  return {
+    jobs: [currentJob],
+    active: currentJob,
+    settings: { dailyEnabled: false, dailyTime: "03:00" },
+    modules,
+    ...overrides,
+  };
+}
 
 function renderCenter() {
   const client = new QueryClient({
@@ -67,11 +98,7 @@ describe("任务中心", () => {
     vi.clearAllMocks();
     vi.mocked(aiJobsApi.list).mockResolvedValue({
       ok: true,
-      snapshot: {
-        jobs: [currentJob],
-        active: currentJob,
-        settings: { dailyEnabled: false, dailyTime: "03:00" },
-      },
+      snapshot: snapshot(),
     });
     vi.mocked(aiJobsApi.start).mockResolvedValue({
       ok: true,
@@ -85,32 +112,60 @@ describe("任务中心", () => {
     });
   });
 
-  it("显示实时进度、各类计数與速度，并支持暂停", async () => {
+  it("按编号区块呈现状态、每日计划与任务记录", async () => {
+    renderCenter();
+
+    expect(await screen.findByText("状态")).toBeInTheDocument();
+    expect(screen.getByText("每日计划")).toBeInTheDocument();
+    expect(screen.getByText("任务记录")).toBeInTheDocument();
+    expect(screen.getByText("01")).toBeInTheDocument();
+    expect(screen.getByText("02")).toBeInTheDocument();
+    expect(screen.getByText("03")).toBeInTheDocument();
+  });
+
+  it("运行中显示阶段、进度口径、速度与预计剩余，并支持暂停", async () => {
     renderCenter();
 
     expect(await screen.findByText("读取照片元数据")).toBeInTheDocument();
-    expect(screen.getByText("42", { selector: "span" })).toBeInTheDocument();
+    // 百分比按本次待处理量算：43 / 45。
+    expect(screen.getByText("96%")).toBeInTheDocument();
+    expect(screen.getByText("43 / 45 张")).toBeInTheDocument();
     expect(screen.getByText("1.6 张/秒")).toBeInTheDocument();
+    expect(screen.getByText("12 秒")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "暂停" }));
     await waitFor(() =>
       expect(aiJobsApi.action).toHaveBeenCalledWith("job-current", "pause"),
     );
   });
 
-  it("发起全量任务并保存每日计划", async () => {
+  it("空闲时给出开始分析的入口与模块清单", async () => {
     vi.mocked(aiJobsApi.list).mockResolvedValue({
       ok: true,
-      snapshot: {
-        jobs: [],
-        settings: { dailyEnabled: false, dailyTime: "03:00" },
-      },
+      snapshot: snapshot({ jobs: [], active: undefined }),
     });
     renderCenter();
-    fireEvent.click(await screen.findByRole("button", { name: "全量分析" }));
+
+    expect(await screen.findByText("队列空闲")).toBeInTheDocument();
+    expect(screen.getByText("照片元数据")).toBeInTheDocument();
+    expect(screen.getByText("未安装")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "全量分析" }));
     await waitFor(() =>
       expect(aiJobsApi.start).toHaveBeenCalledWith("metadata", "full"),
     );
-    fireEvent.click(screen.getByLabelText("每天自动检查变化"));
+  });
+
+  it("每日计划用开关与时间输入，保存后写回设置", async () => {
+    vi.mocked(aiJobsApi.list).mockResolvedValue({
+      ok: true,
+      snapshot: snapshot({ jobs: [], active: undefined }),
+    });
+    renderCenter();
+
+    const toggle = await screen.findByRole("switch", {
+      name: "每天自动检查变化",
+    });
+    await waitFor(() => expect(toggle).toBeEnabled());
+    fireEvent.click(toggle);
     fireEvent.change(screen.getByLabelText("每日分析开始时间"), {
       target: { value: "04:15" },
     });
@@ -123,29 +178,83 @@ describe("任务中心", () => {
     );
   });
 
-  it("历史记录展开后显示失败原因并支持只重试失败项", async () => {
-    const failedJob = {
+  it("任务记录展开后按原因分组显示失败项，并支持只重试失败项", async () => {
+    const failedJob: AIJob = {
       ...currentJob,
       id: "job-failed",
-      status: "failed" as const,
+      status: "failed",
+      errors: [
+        ...currentJob.errors!,
+        {
+          resourceId: "f_bad_2",
+          code: "analysis_failed",
+          message: "EXIF 数据损坏或无法解析",
+          at: "2026-11-11T02:01:00Z",
+        },
+        {
+          resourceId: "f_missing",
+          code: "source_unavailable",
+          message: "无法读取图片或路径校验失败",
+          at: "2026-11-11T02:01:00Z",
+        },
+      ],
     };
     vi.mocked(aiJobsApi.list).mockResolvedValue({
       ok: true,
-      snapshot: {
+      snapshot: snapshot({
         jobs: [failedJob],
-        settings: { dailyEnabled: false, dailyTime: "03:00" },
-      },
+        active: undefined,
+      }),
     });
     renderCenter();
 
     fireEvent.click(await screen.findByText("手动 元数据分析"));
-    expect(
-      await screen.findByText(/EXIF 数据损坏或无法解析/),
-    ).toBeInTheDocument();
-    expect(screen.getByText(/f_bad/)).toBeInTheDocument();
+    const group = (await screen.findByText("EXIF 数据损坏或无法解析")).closest(
+      "details",
+    );
+    expect(group?.textContent).toContain("· 2 项");
+    const other = screen
+      .getByText("无法读取图片或路径校验失败")
+      .closest("details");
+    expect(other?.textContent).toContain("· 1 项");
+    expect(screen.getByText("已解析")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "仅重试失败项" }));
     await waitFor(() =>
       expect(aiJobsApi.action).toHaveBeenCalledWith("job-failed", "retry"),
     );
+  });
+
+  it("失败项展开后给出可复制的路径", async () => {
+    const failedJob: AIJob = {
+      ...currentJob,
+      id: "job-failed",
+      status: "failed",
+      errors: [
+        {
+          resourceId: "f_bad",
+          code: "analysis_failed",
+          message: "EXIF 数据损坏或无法解析",
+          at: "2026-11-11T02:01:00Z",
+          path: "album/a/IMG_0001.jpg",
+        },
+      ],
+    };
+    vi.mocked(aiJobsApi.list).mockResolvedValue({
+      ok: true,
+      snapshot: snapshot({ jobs: [failedJob], active: undefined }),
+    });
+    renderCenter();
+
+    fireEvent.click(await screen.findByText("手动 元数据分析"));
+    const group = (await screen.findByText("EXIF 数据损坏或无法解析")).closest(
+      "details",
+    );
+    expect(group).not.toBeNull();
+    expect(
+      within(group as HTMLElement).getByText("album/a/IMG_0001.jpg"),
+    ).toBeInTheDocument();
+    expect(
+      within(group as HTMLElement).getByRole("button", { name: /复制/ }),
+    ).toBeInTheDocument();
   });
 });

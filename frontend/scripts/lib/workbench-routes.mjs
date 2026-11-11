@@ -47,12 +47,12 @@ export async function resolveAlbumId(page, kind = "photo") {
  * 把审计页面清单里的写法翻译成真实地址。
  *
  * - "/" 保持原样（根路径按服务端偏好落到某一侧）
- * - "/settings" 与模式无关，保持原样
+ * - "/settings" 与 "/tasks" 与模式无关，保持原样
  * - 已带 /photo 或 /comic 前缀的原样使用
  * - 其它以 "/" 开头的按当前模式补前缀（/recents → /photo/recents）
  */
 export function buildRoute(route, mode) {
-  if (route === "/" || route === "/settings") return route;
+  if (route === "/" || route === "/settings" || route === "/tasks") return route;
   if (route.startsWith("/photo") || route.startsWith("/comic")) return route;
   if (route.startsWith("/")) return `/${mode}${route}`;
   return route;

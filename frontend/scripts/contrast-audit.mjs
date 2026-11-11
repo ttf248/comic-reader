@@ -30,7 +30,7 @@ const THEMES = (process.env.LG_THEMES ?? "light,dark").split(",");
 //   reader —— 阅读器（见下方 openReader）
 //   tag    —— 标签页（真实库里可能一个标签都没有，用仪表盘里的真实相册
 //             伪造标签页数据，封面仍是真实缩略图）
-const PAGES = (process.env.LG_PAGES ?? "/,/unread,/recents,/favorites,/settings,album,reader,tag")
+const PAGES = (process.env.LG_PAGES ?? "/,/unread,/recents,/favorites,/settings,/tasks,album,reader,tag")
   .split(",")
   .map((p) => p.trim())
   .filter(Boolean);
@@ -892,7 +892,11 @@ for (const theme of THEMES) {
         console.log(`  · 跳过 ${theme} ${route}：库里没有可打开的相册`);
         continue;
       }
-      await page.goto(BASE + target, { waitUntil: "networkidle" });
+      // 任务中心有 SSE 长连接（任务在跑时订阅事件流），networkidle 会
+      // 一直等不到空闲；这类页面改用 domcontentloaded 再等画面稳定。
+      await page.goto(BASE + target, {
+        waitUntil: route === "/tasks" ? "domcontentloaded" : "networkidle",
+      });
       await waitForStable(page);
     }
     if (SELF_TEST_ONLY) await page.evaluate(SELF_TEST);

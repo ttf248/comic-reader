@@ -37,7 +37,7 @@ const THEMES = (process.env.LG_THEMES ?? "light,dark")
 //             伪造标签页数据，封面仍是真实缩略图）
 const PAGES = (
   process.env.LG_PAGES ??
-  "/,/recents,/favorites,/unread,/settings,album,reader,tag"
+  "/,/recents,/favorites,/unread,/settings,/tasks,album,reader,tag"
 )
   .split(",")
   .map((p) => p.trim())
@@ -71,6 +71,14 @@ const MEASURE = ({ minFontPx, minControlPx }) => {
       const cs = getComputedStyle(cur);
       if (Number(cs.opacity) < 0.05) return true;
       if (cs.visibility === "hidden" || cs.display === "none") return true;
+      // 收起的 <details> 只露出 summary，里面的内容用户看不到，
+      // 不该被算成"页面上的可见控件"。子元素仍会量到自己的尺寸，
+      // 只靠 display:none 判断不到这一层。没有 summary 的 details
+      // 内容始终可见，不按收起处理。
+      if (cur instanceof HTMLDetailsElement && !cur.open) {
+        const summary = cur.querySelector(":scope > summary");
+        if (summary && !summary.contains(el)) return true;
+      }
       cur = cur.parentElement;
     }
     return false;

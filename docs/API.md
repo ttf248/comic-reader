@@ -204,6 +204,19 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 任务状态为 `pending`、`running`、`paused`、`completed`、`failed`、`cancelled`。快照包含阶段、总数、已处理/跳过/失败/完成数、检查点、耗时、速度、开始/结束时间及错误项。错误项包含资源 ID、根目录别名下的相对图片路径、稳定错误码、脱敏原因和时间；不返回文件系统绝对路径。任务在后台按 32 张一批提交，重启后自动恢复运行中任务。
 
+快照里另有几个按持久化计数推导的进度字段，以及两份产出统计：
+
+- `planned`：本次任务实际要处理的张数。`total` 是整库规模，增量任务里绝大多数文件已经是最新的；`planned` 才是这次真正要干的活。
+- `completed`：已处理张数（成功与失败都算）。
+- `estimatedRemainingMs`：运行中任务的预计剩余毫秒。只在 `running` 时给出；暂停时耗时仍在增长、速度已失真，因此返回 0。队列、暂停与终态同样返回 0。
+- `speedPerSecond`：每秒实际处理张数，不含被跳过的文件（增量任务的 `done` 从跳过数起步，按它算速度会在任务开头虚高）。
+- `results`：按解析结果分类的计数，键为 `parsed`、`no_exif`、`unsupported`、`failed`。四类之和等于 `completed`。
+- `fields`：按字段统计的产出计数，键为 `exifTime`、`camera`、`gps`。只统计实际取到值的字段。
+
+`planned`、`completed`、`estimatedRemainingMs` 与速度都是快照派生值，不写入 `state/ai_jobs.json`；`results` 与 `fields` 是事实，随批次一并落盘，重启后按批次文件重放恢复。
+
+快照还带 `modules`：后端已知的全部分析模块及其安装情况，元素为 `{ "type", "name", "installed", "version" }`。`type` 为 `metadata`、`embedding`、`ocr`、`face`；`installed` 表示该模块是否注册了分析器，`version` 只在已安装时给出。客户端据此渲染模块清单，不再自行硬编码模块名。
+
 ### `GET /api/ai/jobs/:jobId` / `GET /api/ai/jobs/:jobId/events`
 
 单项读取持久任务。SSE 事件名与状态一致；每条 `data` 为完整快照。`pending`、`running` 与 `paused` 保持订阅，终态事件（`completed`、`failed`、`cancelled`）后关闭。每 15 秒发送注释心跳；断开只释放订阅，不会暂停或取消任务。未知 ID 返回 `404 analysis_job_not_found`。

@@ -11,6 +11,7 @@ import StateBackupPanel from "../components/settings/StateBackupPanel";
 import CacheRebuildPanel from "../components/settings/CacheRebuildPanel";
 import ServerConfigPanel from "../components/settings/ServerConfigPanel";
 import ScanWarnings from "../components/common/ScanWarnings";
+import Toggle from "../components/common/Toggle";
 import { syncHistoryCache } from "../utils/historyCache";
 import { useAppMode } from "../hooks/useAppMode";
 import { usePhotoStore, WALL_DENSITY_LABEL } from "../store/photoStore";
@@ -726,45 +727,6 @@ function Row({
       </span>
       {children}
     </div>
-  );
-}
-
-function Toggle({
-  label,
-  checked,
-  disabled = false,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  /** 保存进行中置灰；本地偏好没有异步保存，直接省略。 */
-  disabled?: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  return (
-    // 视觉是 20px 的药丸（和系统设置一致），可点区域撑到 28px：
-    // 外层按钮 28px 高、内部药丸居中，命中区从 20px 提到 28px，
-    // 视觉尺寸完全不变。20px 的开关在触摸设备上很难点准。
-    <button
-      role="switch"
-      aria-label={label}
-      aria-checked={checked}
-      disabled={disabled}
-      onClick={() => onChange(!checked)}
-      className="relative inline-flex h-7 w-9 items-center justify-center rounded-full disabled:opacity-50"
-    >
-      <span
-        className={`relative inline-flex h-5 w-9 rounded-full transition-colors ${
-          checked ? "bg-accent" : "bg-bg-strong"
-        }`}
-      >
-        <span
-          className={`absolute top-0.5 left-0.5 w-4 h-4 bg-bg-elevated rounded-full shadow transition-transform ${
-            checked ? "translate-x-4" : ""
-          }`}
-        />
-      </span>
-    </button>
   );
 }
 

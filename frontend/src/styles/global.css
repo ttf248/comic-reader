@@ -1051,6 +1051,27 @@
   .settings-row {
     min-height: 68px;
   }
+  /* 运行中的状态点：缓慢呼吸，提醒任务还在跑。
+     颜色之外还有动效，色觉障碍的用户也能看出状态在变化。 */
+  .status-dot--running {
+    animation: statusPulse 2.4s var(--ease-out) infinite;
+  }
+  @keyframes statusPulse {
+    0%,
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.4;
+      transform: scale(0.8);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .status-dot--running {
+      animation: none;
+    }
+  }
   /* 空态图标：架上的两本书。
      「后面那本」用伪元素画，不能用 box-shadow —— 阴影跟着元素自己的
      圆角走（只有轮廓没有圆角），于是一方方角从圆角方块后面支出来，

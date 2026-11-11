@@ -19,6 +19,7 @@ import {
   type FieldStatus,
 } from "../../hooks/useServerConfigSave";
 import DirectoryPicker from "./DirectoryPicker";
+import Toggle from "../common/Toggle";
 import {
   CheckIcon,
   AlertIcon,
@@ -1047,7 +1048,7 @@ function ConfigRow({
           <Toggle
             checked={Boolean(value)}
             onChange={onChange}
-            ariaLabel={def.label}
+            label={def.label}
           />
         )}
         {/* 状态指示:只在非路径/非紧凑模式单独显示(紧凑模式由 PathField 内部带) */}
@@ -1143,7 +1144,7 @@ function ExcludeRulesField({
           <Toggle
             checked={skipHidden}
             onChange={onSkipHiddenChange}
-            ariaLabel="跳过隐藏目录"
+            label="跳过隐藏目录"
           />
           <StatusBadge status={skipHiddenStatus} />
         </div>
@@ -1329,41 +1330,6 @@ async function openConfiguredDirectory(path: string): Promise<void> {
   } catch (e: unknown) {
     ui.pushToast({ kind: "error", message: fileManagerErrorMessage(e) });
   }
-}
-
-function Toggle({
-  checked,
-  onChange,
-  ariaLabel,
-}: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  /** 给屏幕阅读器 / 测试用 — 多开关时区分哪个对应哪个设置 */
-  ariaLabel?: string;
-}) {
-  return (
-    // 视觉 20px 的药丸，可点区域 28px（外层按钮撑开，药丸居中）。
-    // 20px 的开关在触摸设备上很难点准。
-    <button
-      role="switch"
-      aria-checked={checked}
-      aria-label={ariaLabel}
-      onClick={() => onChange(!checked)}
-      className="relative inline-flex h-7 w-9 items-center justify-center rounded-full"
-    >
-      <span
-        className={`relative inline-flex h-5 w-9 rounded-full transition-colors ${
-          checked ? "bg-accent" : "bg-bg-strong"
-        }`}
-      >
-        <span
-          className={`absolute top-0.5 left-0.5 w-4 h-4 bg-bg-elevated rounded-full shadow transition-transform ${
-            checked ? "translate-x-4" : ""
-          }`}
-        />
-      </span>
-    </button>
-  );
 }
 
 function StatusBadge({ status }: { status: FieldStatus }) {

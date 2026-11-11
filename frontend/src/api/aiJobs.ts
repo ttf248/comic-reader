@@ -14,6 +14,14 @@ export interface AIJobError {
   at: string;
 }
 
+/** 后端已知的分析模块及其安装状态。 */
+export interface AIJobModule {
+  type: AnalysisType;
+  name: string;
+  installed: boolean;
+  version?: string;
+}
+
 export interface AIJob {
   id: string;
   type: AnalysisType;
@@ -44,6 +52,16 @@ export interface AIJob {
   updatedAt: string;
   elapsedMs: number;
   speedPerSecond: number;
+  /** 本次任务实际要处理的张数：增量任务里不含已经是最新的部分。 */
+  planned: number;
+  /** 已处理的张数（含失败）。 */
+  completed: number;
+  /** 运行中任务的预计剩余毫秒；非运行状态为 0。 */
+  estimatedRemainingMs: number;
+  /** 按解析状态分类的产出计数，如 parsed / no_exif / unsupported / failed。 */
+  results?: Record<string, number>;
+  /** 按字段统计的产出计数，如 exifTime / camera / gps。 */
+  fields?: Record<string, number>;
 }
 
 export interface AIJobSettings {
@@ -56,6 +74,7 @@ export interface AIJobSnapshot {
   jobs: AIJob[];
   active?: AIJob;
   settings: AIJobSettings;
+  modules: AIJobModule[];
 }
 
 export interface ImageMetadata {
