@@ -83,4 +83,29 @@ describe("api error response", () => {
     expect(listener).toHaveBeenCalledOnce();
     window.removeEventListener(AUTH_REQUIRED_EVENT, listener);
   });
+
+  it("上传 FormData 时不覆盖浏览器生成的 multipart boundary", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue({ ok: true }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const body = new FormData();
+    body.append("image", new File(["image"], "query.jpg"));
+
+    await api("/api/ai/search", {
+      method: "POST",
+      body,
+      nonIdempotent: true,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/ai/search",
+      expect.objectContaining({
+        body,
+        headers: { Accept: "application/json" },
+      }),
+    );
+  });
 });

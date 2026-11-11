@@ -31,10 +31,7 @@ interface Props<T extends LibraryMediaItem = LibraryMediaItem> {
   isLoadingMore: boolean;
   onLoadMore: () => void;
   onOpen: (item: T, index: number) => void;
-  onContextMenu?: (
-    item: T,
-    event: MouseEvent<HTMLButtonElement>,
-  ) => void;
+  onContextMenu?: (item: T, event: MouseEvent<HTMLButtonElement>) => void;
   /**
    * 照片的出处标签（跨相册的墙上才有意义）。
    *
@@ -42,6 +39,8 @@ interface Props<T extends LibraryMediaItem = LibraryMediaItem> {
    * 墙这类跨相册的墙上想知道的是「这张出自哪本」。
    */
   albumLabel?: (item: T) => string | undefined;
+  /** 可选媒体角标，如语义搜索相似度。 */
+  itemBadge?: (item: T) => string | undefined;
   /** 是否处于多选模式。多选时点击照片改为勾选，不再打开大图。 */
   selecting?: boolean;
   /** 某张照片是否已被勾选。 */
@@ -86,7 +85,9 @@ export function effectiveTargetHeight(
  * 与漫画阅读器彻底分开：这里没有页码、没有双页、没有阅读进度，
  * 只有「平铺浏览 → 点开大图」这一条路径。
  */
-export default function PhotoWall<T extends LibraryMediaItem = LibraryMediaItem>({
+export default function PhotoWall<
+  T extends LibraryMediaItem = LibraryMediaItem,
+>({
   items,
   total,
   targetHeight,
@@ -97,6 +98,7 @@ export default function PhotoWall<T extends LibraryMediaItem = LibraryMediaItem>
   onOpen,
   onContextMenu,
   albumLabel,
+  itemBadge,
   selecting = false,
   isSelected,
   onToggleSelect,
@@ -238,6 +240,7 @@ export default function PhotoWall<T extends LibraryMediaItem = LibraryMediaItem>
                 const selected = isSelected?.(item.id) ?? false;
                 // 跨相册的墙上，照片的出处比文件名更值得说。
                 const sourceLabel = albumLabel?.(item);
+                const badge = itemBadge?.(item);
                 return (
                   // 触发层是覆盖在封面之上的独立按钮：视频封面自带「重试」
                   // 按钮，把它包进 <button> 会产生嵌套按钮（无效 HTML，
@@ -268,6 +271,11 @@ export default function PhotoWall<T extends LibraryMediaItem = LibraryMediaItem>
                         className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
                       />
                     )}
+                    {badge && (
+                      <span className="pointer-events-none absolute right-1.5 top-1.5 z-10 rounded-md bg-black/70 px-2 py-1 text-meta font-medium tabular-nums text-white backdrop-blur">
+                        {badge}
+                      </span>
+                    )}
                     <button
                       type="button"
                       onClick={() => {
@@ -278,7 +286,11 @@ export default function PhotoWall<T extends LibraryMediaItem = LibraryMediaItem>
                       }}
                       onContextMenu={(event) => onContextMenu?.(item, event)}
                       className="absolute inset-0 z-0 block h-full w-full cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-focus"
-                      title={sourceLabel ? `${sourceLabel} · ${item.name}` : item.name}
+                      title={
+                        sourceLabel
+                          ? `${sourceLabel} · ${item.name}`
+                          : item.name
+                      }
                       aria-label={
                         isVideo ? `播放 ${item.name}` : `查看 ${item.name}`
                       }
@@ -311,7 +323,11 @@ export default function PhotoWall<T extends LibraryMediaItem = LibraryMediaItem>
                           onTogglePick(item);
                         }}
                         aria-pressed={picked}
-                        aria-label={picked ? `把 ${item.name} 移出精选` : `把 ${item.name} 加入精选`}
+                        aria-label={
+                          picked
+                            ? `把 ${item.name} 移出精选`
+                            : `把 ${item.name} 加入精选`
+                        }
                         title={picked ? "移出精选" : "加入精选"}
                         className={`absolute left-0 top-0 z-10 grid h-7 w-7 place-items-center rounded-full transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white ${
                           picked ? "opacity-100" : "wall-pick-reveal"

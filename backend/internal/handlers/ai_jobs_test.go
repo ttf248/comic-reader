@@ -172,3 +172,46 @@ func TestAIJobAPIFullAnalysisOverThousandImages(t *testing.T) {
 		}
 	}
 }
+
+func TestAIJobSettingsHandlerExplainsInvalidModules(t *testing.T) {
+	service, err := services.NewAIJobService(services.AIJobServiceOptions{
+		StatePath:    filepath.Join(t.TempDir(), "state", "jobs.json"),
+		MetadataDir:  filepath.Join(t.TempDir(), "derived"),
+		Catalog:      services.NewResourceCatalog(),
+		ValidatePath: func(path string) (string, error) { return path, nil },
+		Analyzers:    []services.AIAnalyzer{services.MetadataAnalyzer{}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := service.Shutdown(ctx); err != nil {
+			t.Errorf("AI job shutdown: %v", err)
+		}
+	})
+
+	app := fiber.New()
+	app.Put("/api/ai/jobs/settings", AIJobSettingsHandler(service))
+	request := httptest.NewRequest(fiber.MethodPut, "/api/ai/jobs/settings", strings.NewReader(`{"dailyEnabled":true,"dailyTime":"03:00","dailyModules":[]}`))
+	request.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+	response, err := app.Test(request, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("settings status = %d", response.StatusCode)
+	}
+	var body struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Code != "invalid_analysis_settings" || !strings.Contains(body.Message, "dailyModules") {
+		t.Fatalf("settings error = %+v", body)
+	}
+}

@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -37,9 +38,10 @@ const (
 	AIJobStatusCancelled = "cancelled"
 
 	// 分析模块在单条结果里报告的字段标识，用于按字段统计任务产出。
-	AIFieldExifTime = "exifTime"
-	AIFieldCamera   = "camera"
-	AIFieldGPS      = "gps"
+	AIFieldExifTime  = "exifTime"
+	AIFieldCamera    = "camera"
+	AIFieldGPS       = "gps"
+	AIFieldEmbedding = "embedding"
 
 	aiJobStoreVersion = 1
 	aiBatchSize       = 32
@@ -50,8 +52,10 @@ var ErrAIJobActive = errors.New("an analysis job is already active")
 
 // AIAnalysisOutput 是一个分析模块对单个媒体返回的可序列化结果。
 type AIAnalysisOutput struct {
-	Status string          `json:"status"`
-	Data   json.RawMessage `json:"data,omitempty"`
+	Status       string          `json:"status"`
+	Data         json.RawMessage `json:"data,omitempty"`
+	ErrorCode    string          `json:"errorCode,omitempty"`
+	ErrorMessage string          `json:"errorMessage,omitempty"`
 	// Fields 列出这条结果里实际有值的字段标识；任务按字段累计产出。
 	Fields []string `json:"fields,omitempty"`
 }
@@ -62,6 +66,34 @@ type AIAnalyzer interface {
 	Type() string
 	Version() string
 	Analyze(context.Context, io.ReadSeeker) (AIAnalysisOutput, error)
+}
+
+// AIAnalyzerBatch 可选地覆盖同一任务提交批次的推理，供 GPU 模块调用常驻 Worker。
+type AIAnalyzerBatch interface {
+	AnalyzeBatch(context.Context, []AIAnalysisInput) ([]AIAnalysisOutput, error)
+}
+
+type AIAnalysisInput struct {
+	ResourceID string
+	Path       string
+	Size       int64
+	MTimeNs    int64
+}
+
+type AIAnalyzerReadiness interface {
+	Ready(context.Context) error
+}
+
+type AIAnalyzerRecordValidator interface {
+	RecordCurrent(AIAnalysisRecord) bool
+}
+
+type AIAnalyzerWorkerLimit interface {
+	MaxWorkers() int
+}
+
+type AIAnalyzerCloser interface {
+	Close() error
 }
 
 // MetadataAnalyzer 使用 EXIF 解析器实现 metadata 模块。
@@ -157,9 +189,10 @@ type AIJob struct {
 
 // AIJobSettings 放在 state/，不属于可重建的 derived 数据。
 type AIJobSettings struct {
-	DailyEnabled      bool   `json:"dailyEnabled"`
-	DailyTime         string `json:"dailyTime"`
-	LastScheduledDate string `json:"lastScheduledDate,omitempty"`
+	DailyEnabled      bool     `json:"dailyEnabled"`
+	DailyTime         string   `json:"dailyTime"`
+	DailyModules      []string `json:"dailyModules"`
+	LastScheduledDate string   `json:"lastScheduledDate,omitempty"`
 }
 
 type AIJobSnapshot struct {
@@ -256,6 +289,7 @@ type AIJobService struct {
 	closed       bool
 	settings     AIJobSettings
 	stopSchedule context.CancelFunc
+	closeOnce    sync.Once
 	wg           sync.WaitGroup
 }
 
@@ -283,7 +317,7 @@ func NewAIJobService(options AIJobServiceOptions) (*AIJobService, error) {
 		records:      make(map[string]AIAnalysisRecord),
 		runtimes:     make(map[string]*aiJobRuntime),
 		subs:         make(map[string]map[chan AIJob]struct{}),
-		settings:     AIJobSettings{DailyEnabled: true, DailyTime: "03:00"},
+		settings:     AIJobSettings{DailyEnabled: true, DailyTime: "03:00", DailyModules: []string{AIJobTypeMetadata}},
 	}
 	for _, analyzer := range options.Analyzers {
 		if analyzer == nil || !validAIJobType(analyzer.Type()) || strings.TrimSpace(analyzer.Version()) == "" {
@@ -310,16 +344,30 @@ func NewAIJobService(options AIJobServiceOptions) (*AIJobService, error) {
 	return service, nil
 }
 
-// Start 创建并启动全量或增量任务。metadata 是当前唯一已注册的分析模块。
+// Start 创建并启动已注册分析模块的全量或增量任务。
 func (s *AIJobService) Start(moduleType, mode string) (AIJob, bool, error) {
 	if mode != AIJobModeFull && mode != AIJobModeIncremental {
 		return AIJob{}, false, errors.New("unknown analysis mode")
 	}
-	if _, exists := s.analyzers[moduleType]; !exists {
+	analyzer, exists := s.analyzers[moduleType]
+	if !exists {
 		if validAIJobType(moduleType) {
 			return AIJob{}, false, fmt.Errorf("analysis module %q is not installed", moduleType)
 		}
 		return AIJob{}, false, errors.New("unknown analysis module")
+	}
+	s.mu.Lock()
+	closed := s.closed
+	s.mu.Unlock()
+	if closed {
+		return AIJob{}, false, errors.New("AI job service is shutting down")
+	}
+	if readiness, ok := analyzer.(AIAnalyzerReadiness); ok {
+		readyCtx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		if err := readiness.Ready(readyCtx); err != nil {
+			return AIJob{}, false, err
+		}
 	}
 
 	s.mu.Lock()
@@ -474,7 +522,7 @@ func (s *AIJobService) List() AIJobSnapshot {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	result := AIJobSnapshot{
-		Settings: s.settings,
+		Settings: s.copySettingsLocked(),
 		Jobs:     make([]AIJob, 0, len(s.order)),
 		Modules:  s.modulesLocked(),
 	}
@@ -523,7 +571,7 @@ func aiJobModuleName(moduleType string) string {
 }
 
 // ConfigureDaily 更新持久化的本地每日调度设置。
-func (s *AIJobService) ConfigureDaily(enabled bool, dailyTime string) (AIJobSettings, error) {
+func (s *AIJobService) ConfigureDaily(enabled bool, dailyTime string, dailyModules []string) (AIJobSettings, error) {
 	if _, err := time.Parse("15:04", dailyTime); err != nil {
 		return AIJobSettings{}, errors.New("daily time must use HH:MM")
 	}
@@ -532,14 +580,51 @@ func (s *AIJobService) ConfigureDaily(enabled bool, dailyTime string) (AIJobSett
 	if s.closed {
 		return AIJobSettings{}, errors.New("AI job service is shutting down")
 	}
-	previous := s.settings
+	modules, err := s.normalizeDailyModulesLocked(dailyModules, enabled)
+	if err != nil {
+		return AIJobSettings{}, err
+	}
+	previous := s.copySettingsLocked()
 	s.settings.DailyEnabled = enabled
 	s.settings.DailyTime = dailyTime
+	s.settings.DailyModules = modules
 	if err := s.persistLocked(); err != nil {
 		s.settings = previous
 		return AIJobSettings{}, err
 	}
-	return s.settings, nil
+	return s.copySettingsLocked(), nil
+}
+
+func (s *AIJobService) normalizeDailyModulesLocked(modules []string, enabled bool) ([]string, error) {
+	if len(modules) == 0 {
+		if enabled {
+			return nil, errors.New("at least one installed analysis module is required")
+		}
+		return []string{}, nil
+	}
+	selected := make(map[string]struct{}, len(modules))
+	for _, moduleType := range modules {
+		if !validAIJobType(moduleType) {
+			return nil, fmt.Errorf("unknown analysis module %q", moduleType)
+		}
+		if _, installed := s.analyzers[moduleType]; !installed {
+			return nil, fmt.Errorf("analysis module %q is not installed", moduleType)
+		}
+		selected[moduleType] = struct{}{}
+	}
+	ordered := make([]string, 0, len(selected))
+	for _, moduleType := range []string{AIJobTypeMetadata, AIJobTypeEmbedding, AIJobTypeOCR, AIJobTypeFace} {
+		if _, exists := selected[moduleType]; exists {
+			ordered = append(ordered, moduleType)
+		}
+	}
+	return ordered, nil
+}
+
+func (s *AIJobService) copySettingsLocked() AIJobSettings {
+	settings := s.settings
+	settings.DailyModules = append([]string{}, s.settings.DailyModules...)
+	return settings
 }
 
 // Subscribe 为单个客户端创建独立缓冲订阅，并立即发送任务快照。
@@ -684,10 +769,22 @@ func (s *AIJobService) Shutdown(ctx context.Context) error {
 	}()
 	select {
 	case <-done:
+		s.closeAnalyzers()
 		return nil
 	case <-ctx.Done():
+		s.closeAnalyzers()
 		return ctx.Err()
 	}
+}
+
+func (s *AIJobService) closeAnalyzers() {
+	s.closeOnce.Do(func() {
+		for _, analyzer := range s.analyzers {
+			if closer, ok := analyzer.(AIAnalyzerCloser); ok {
+				_ = closer.Close()
+			}
+		}
+	})
 }
 
 func (s *AIJobService) newJobLocked(moduleType, mode string) AIJob {
@@ -905,7 +1002,12 @@ func (s *AIJobService) selectTargets(jobID string, targets []aiJobTarget, digest
 		}
 		for _, target := range targets {
 			record, exists := s.records[aiRecordKey(job.Type, target.resourceID)]
-			current := exists && record.Size == target.size && record.MTimeNs == target.mtimeNs && record.ModuleVersion == version
+			current := exists && record.Status != "failed" && record.Size == target.size && record.MTimeNs == target.mtimeNs && record.ModuleVersion == version
+			if current {
+				if validator, ok := s.analyzers[job.Type].(AIAnalyzerRecordValidator); ok {
+					current = validator.RecordCurrent(record)
+				}
+			}
 			if job.RetryFailedOnly {
 				if (exists && record.Status == "failed") || (target.position >= job.RetryFromOffset && !current) {
 					candidates = append(candidates, target)
@@ -922,7 +1024,7 @@ func (s *AIJobService) selectTargets(jobID string, targets []aiJobTarget, digest
 			job.Done = job.Skipped
 		}
 	}
-	job.Stage = "metadata"
+	job.Stage = job.Type
 	job.UpdatedAt = s.now()
 	if err := s.persistLocked(); err != nil {
 		return nil, err
@@ -932,8 +1034,21 @@ func (s *AIJobService) selectTargets(jobID string, targets []aiJobTarget, digest
 }
 
 func (s *AIJobService) processBatch(ctx context.Context, jobID string, targets []aiJobTarget) []AIAnalysisRecord {
+	s.mu.Lock()
+	job := s.jobs[jobID]
+	var analyzer AIAnalyzer
+	if job != nil {
+		analyzer = s.analyzers[job.Type]
+	}
+	s.mu.Unlock()
+	if batchAnalyzer, ok := analyzer.(AIAnalyzerBatch); ok {
+		return s.processAnalyzerBatch(ctx, analyzer, batchAnalyzer, targets)
+	}
 	results := make([]AIAnalysisRecord, len(targets))
 	workers := min(s.workerCount, len(targets))
+	if workerLimit, ok := analyzer.(AIAnalyzerWorkerLimit); ok && workerLimit.MaxWorkers() > 0 {
+		workers = min(workers, workerLimit.MaxWorkers())
+	}
 	queue := make(chan int)
 	var workersDone sync.WaitGroup
 	for worker := 0; worker < workers; worker++ {
@@ -956,6 +1071,74 @@ sendLoop:
 	}
 	close(queue)
 	workersDone.Wait()
+	return results
+}
+
+func (s *AIJobService) processAnalyzerBatch(ctx context.Context, analyzer AIAnalyzer, batchAnalyzer AIAnalyzerBatch, targets []aiJobTarget) []AIAnalysisRecord {
+	version := analyzer.Version()
+	results := make([]AIAnalysisRecord, len(targets))
+	inputs := make([]AIAnalysisInput, 0, len(targets))
+	inputPositions := make([]int, 0, len(targets))
+	for index, target := range targets {
+		results[index] = AIAnalysisRecord{
+			Type: analyzer.Type(), ResourceID: target.resourceID, Size: target.size,
+			MTimeNs: target.mtimeNs, ModuleVersion: version, UpdatedAt: s.now(),
+		}
+		if err := ctx.Err(); err != nil {
+			continue
+		}
+		if target.statCode != "" {
+			results[index] = failedAIRecord(results[index], "source_unavailable", "无法读取图片或路径校验失败")
+			continue
+		}
+		validated, err := s.validatePath(target.path)
+		if err != nil {
+			results[index] = failedAIRecord(results[index], "source_unavailable", "无法读取图片或路径校验失败")
+			continue
+		}
+		info, err := os.Stat(validated)
+		if err != nil || !info.Mode().IsRegular() || info.Size() != target.size || info.ModTime().UnixNano() != target.mtimeNs {
+			results[index] = failedAIRecord(results[index], "source_changed", "分析期间图片已发生变化")
+			continue
+		}
+		inputs = append(inputs, AIAnalysisInput{ResourceID: target.resourceID, Path: validated, Size: target.size, MTimeNs: target.mtimeNs})
+		inputPositions = append(inputPositions, index)
+	}
+	if len(inputs) == 0 || ctx.Err() != nil {
+		return results
+	}
+	outputs, err := batchAnalyzer.AnalyzeBatch(ctx, inputs)
+	if err != nil || len(outputs) != len(inputs) {
+		for _, index := range inputPositions {
+			results[index] = failedAIRecord(results[index], "analysis_failed", analysisFailureMessage(analyzer.Type()))
+		}
+		return results
+	}
+	for inputIndex, output := range outputs {
+		position := inputPositions[inputIndex]
+		if err := ctx.Err(); err != nil {
+			continue
+		}
+		info, statErr := os.Stat(inputs[inputIndex].Path)
+		if statErr != nil || !info.Mode().IsRegular() || info.Size() != inputs[inputIndex].Size || info.ModTime().UnixNano() != inputs[inputIndex].MTimeNs {
+			results[position] = failedAIRecord(results[position], "source_changed", "分析期间图片已发生变化")
+			continue
+		}
+		if output.Status == "failed" {
+			code, message := output.ErrorCode, output.ErrorMessage
+			if code == "" {
+				code, message = "analysis_failed", analysisFailureMessage(analyzer.Type())
+			}
+			results[position] = failedAIRecord(results[position], code, message)
+			continue
+		}
+		if output.Status == "" {
+			output.Status = "processed"
+		}
+		results[position].Status = output.Status
+		results[position].Data = append(json.RawMessage(nil), output.Data...)
+		results[position].Fields = append([]string(nil), output.Fields...)
+	}
 	return results
 }
 
@@ -1092,7 +1275,7 @@ func (s *AIJobService) commitBatch(jobID string, runtimeState *aiJobRuntime, tar
 	job.Checkpoint.TargetDigest = digest
 	job.Checkpoint.ModuleVersion = job.ModuleVersion
 	job.UpdatedAt = s.now()
-	job.Stage = "metadata"
+	job.Stage = job.Type
 	if err := s.persistLocked(); err != nil {
 		return err
 	}
@@ -1196,48 +1379,90 @@ func (s *AIJobService) finishJob(id, status, stage, message string) {
 
 func (s *AIJobService) scheduleTick(now time.Time) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.closed || !s.settings.DailyEnabled {
+	if s.closed || s.activeID != "" || !dailyScheduleDue(s.settings, now) {
+		s.mu.Unlock()
 		return
+	}
+	modules := append([]string(nil), s.settings.DailyModules...)
+	analyzers := make(map[string]AIAnalyzer, len(modules))
+	for _, moduleType := range modules {
+		analyzers[moduleType] = s.analyzers[moduleType]
+	}
+	s.mu.Unlock()
+
+	readyModules := make([]string, 0, len(modules))
+	for _, moduleType := range modules {
+		analyzer := analyzers[moduleType]
+		if analyzer == nil {
+			continue
+		}
+		if readiness, ok := analyzer.(AIAnalyzerReadiness); ok {
+			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+			err := readiness.Ready(ctx)
+			cancel()
+			if err != nil {
+				continue
+			}
+		}
+		readyModules = append(readyModules, moduleType)
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed || s.activeID != "" || !dailyScheduleDue(s.settings, now) || !slices.Equal(s.settings.DailyModules, modules) {
+		return
+	}
+	today := now.In(time.Local).Format("2006-01-02")
+	previousDate := s.settings.LastScheduledDate
+	previousOrderLength := len(s.order)
+	created := make([]string, 0, len(readyModules))
+	for _, moduleType := range readyModules {
+		if _, installed := s.analyzers[moduleType]; !installed {
+			continue
+		}
+		job := s.newJobLocked(moduleType, AIJobModeIncremental)
+		job.Scheduled = true
+		s.jobs[job.ID] = &job
+		s.order = append(s.order, job.ID)
+		created = append(created, job.ID)
+	}
+	s.settings.LastScheduledDate = today
+	if err := s.persistLocked(); err != nil {
+		s.settings.LastScheduledDate = previousDate
+		for _, id := range created {
+			delete(s.jobs, id)
+		}
+		s.order = s.order[:previousOrderLength]
+		return
+	}
+	if len(created) > 0 {
+		s.activeID = created[0]
+		s.launchLocked(created[0])
+	}
+}
+
+func dailyScheduleDue(settings AIJobSettings, now time.Time) bool {
+	if !settings.DailyEnabled {
+		return false
 	}
 	now = now.In(time.Local)
 	today := now.Format("2006-01-02")
-	if s.settings.LastScheduledDate == today {
-		return
+	if settings.LastScheduledDate == today {
+		return false
 	}
-	scheduledToday, err := time.ParseInLocation("2006-01-02 15:04", today+" "+s.settings.DailyTime, time.Local)
+	scheduledToday, err := time.ParseInLocation("2006-01-02 15:04", today+" "+settings.DailyTime, time.Local)
 	if err != nil {
-		return
+		return false
 	}
 	missedPreviousDay := false
-	if s.settings.LastScheduledDate != "" {
-		lastDate, parseErr := time.ParseInLocation("2006-01-02", s.settings.LastScheduledDate, time.Local)
+	if settings.LastScheduledDate != "" {
+		lastDate, parseErr := time.ParseInLocation("2006-01-02", settings.LastScheduledDate, time.Local)
 		if parseErr == nil {
 			yesterday := time.Date(now.Year(), now.Month(), now.Day()-1, 0, 0, 0, 0, time.Local)
 			missedPreviousDay = lastDate.Before(yesterday)
 		}
 	}
-	if now.Before(scheduledToday) && !missedPreviousDay {
-		return
-	}
-	if s.activeID != "" {
-		return
-	}
-	job := s.newJobLocked(AIJobTypeMetadata, AIJobModeIncremental)
-	job.Scheduled = true
-	s.jobs[job.ID] = &job
-	s.order = append(s.order, job.ID)
-	s.activeID = job.ID
-	previousDate := s.settings.LastScheduledDate
-	s.settings.LastScheduledDate = today
-	if err := s.persistLocked(); err != nil {
-		s.settings.LastScheduledDate = previousDate
-		delete(s.jobs, job.ID)
-		s.order = s.order[:len(s.order)-1]
-		s.activeID = ""
-		return
-	}
-	s.launchLocked(job.ID)
+	return !now.Before(scheduledToday) || missedPreviousDay
 }
 
 func (s *AIJobService) snapshotLocked(job *AIJob) AIJob {
@@ -1347,6 +1572,9 @@ func (s *AIJobService) loadState() error {
 			return errors.New("invalid daily analysis time in state")
 		}
 		s.settings = state.Settings
+	}
+	if s.settings.DailyModules == nil {
+		s.settings.DailyModules = []string{AIJobTypeMetadata}
 	}
 	for _, job := range state.Jobs {
 		if job.ID == "" || !validAIJobType(job.Type) || (job.Mode != AIJobModeFull && job.Mode != AIJobModeIncremental) {

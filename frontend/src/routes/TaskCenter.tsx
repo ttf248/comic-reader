@@ -13,7 +13,7 @@ export default function TaskCenter() {
       <PageHeading
         eyebrow="后台分析"
         title="任务中心"
-        description="查看照片元数据分析进度，安排每日增量更新，并在需要时暂停、继续或重试。分析完全在本机运行。"
+        description="查看元数据分析与语义向量索引进度，安排每日增量更新，并在需要时暂停、继续或重试。分析完全在本机运行。"
       />
 
       {center.loadError ? (
@@ -36,6 +36,9 @@ export default function TaskCenter() {
             lastJob={history[0]}
             loading={center.loading}
             busy={center.busy}
+            modules={snapshot?.modules ?? []}
+            embeddingStatus={center.embeddingStatus}
+            embeddingStatusLoading={center.embeddingStatusLoading}
             onStart={center.start}
             onAction={center.act}
           />
@@ -55,9 +58,11 @@ export default function TaskCenter() {
           <DailyPlanPanel
             enabled={plan.enabled}
             time={plan.time}
+            selectedModules={plan.modules}
             ready={plan.ready}
             onEnabledChange={plan.setEnabled}
             onTimeChange={plan.setTime}
+            onModulesChange={plan.setModules}
             onSave={plan.save}
             saving={plan.saving}
             saved={plan.saved}

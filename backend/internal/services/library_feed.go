@@ -57,6 +57,81 @@ type FeedMediaItem struct {
 	AlbumName string `json:"albumName"`
 }
 
+// LookupLibraryFeedItem 只从已发布目录快照取媒体与原相册摘要，不执行磁盘访问。
+// 调用方在对外返回前仍须通过路径安全校验器验证源文件。
+func LookupLibraryFeedItem(snapshot CatalogSnapshot, id string) (FeedMediaItem, bool) {
+	if !snapshot.Ready() || snapshot.state == nil || snapshot.state.library == nil {
+		return FeedMediaItem{}, false
+	}
+	library := snapshot.state.library
+	ref, exists := library.mediaByFile[id]
+	if !exists {
+		return FeedMediaItem{}, false
+	}
+	media := library.media[ref.albumID]
+	if ref.index < 0 || ref.index >= len(media) {
+		return FeedMediaItem{}, false
+	}
+	album, exists := library.nodes[ref.albumID]
+	if !exists {
+		return FeedMediaItem{}, false
+	}
+	item := media[ref.index]
+	if item.Kind != "image" {
+		return FeedMediaItem{}, false
+	}
+	name := strings.TrimSpace(album.DisplayName)
+	if name == "" {
+		name = strings.TrimSpace(album.Name)
+	}
+	return FeedMediaItem{LibraryMediaItem: item, AlbumID: ref.albumID, AlbumName: name}, true
+}
+
+// ResolveLibraryFeedItems 按给定 ID 顺序解析当前快照里的媒体条目，并补上原相册定位。
+// 路径仅在服务端用于再次校验与计算版本，不会出现在返回 DTO 中。
+func ResolveLibraryFeedItems(snapshot CatalogSnapshot, ids []string, validatePath func(string) (string, error)) []FeedMediaItem {
+	if !snapshot.Ready() || snapshot.state == nil || snapshot.state.library == nil {
+		return []FeedMediaItem{}
+	}
+	library := snapshot.state.library
+	items := make([]FeedMediaItem, 0, len(ids))
+	for _, id := range ids {
+		ref, exists := library.mediaByFile[id]
+		if !exists {
+			continue
+		}
+		media := library.media[ref.albumID]
+		if ref.index < 0 || ref.index >= len(media) {
+			continue
+		}
+		album, exists := library.nodes[ref.albumID]
+		if !exists {
+			continue
+		}
+		item := media[ref.index]
+		if item.Kind != "image" {
+			continue
+		}
+		if item.sourcePath != "" && validatePath != nil {
+			path, err := validatePath(item.sourcePath)
+			if err != nil {
+				continue
+			}
+			version, err := MediaVersion(path)
+			if err != nil {
+				continue
+			}
+			item.Version = version
+		}
+		name := strings.TrimSpace(album.DisplayName)
+		if name == "" {
+			name = strings.TrimSpace(album.Name)
+		}
+		items = append(items, FeedMediaItem{LibraryMediaItem: item, AlbumID: ref.albumID, AlbumName: name})
+	}
+	return items
+}
+
 // FeedAlbumRef 是照片流里一本相册的定位信息。
 type FeedAlbumRef struct {
 	ID   string `json:"id"`

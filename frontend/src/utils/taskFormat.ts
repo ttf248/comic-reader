@@ -71,6 +71,8 @@ export function taskStageLabel(stage: string): string {
       return "处理中";
     case "metadata":
       return "读取照片元数据";
+    case "embedding":
+      return "生成语义向量";
     case "paused":
       return "已暂停";
     case "complete":
@@ -120,6 +122,8 @@ export function taskResultLabel(key: string): string {
       return "解析失败";
     case "processed":
       return "已处理";
+    case "indexed":
+      return "已建向量";
     default:
       return key;
   }
@@ -134,6 +138,8 @@ export function taskFieldLabel(key: string): string {
       return "相机信息";
     case "gps":
       return "GPS 坐标";
+    case "embedding":
+      return "语义向量";
     default:
       return key;
   }

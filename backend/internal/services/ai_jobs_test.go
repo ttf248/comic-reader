@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"sync"
 	"sync/atomic"
@@ -123,6 +124,16 @@ func TestAIJobServiceRetriesOnlyFailedAndUncommittedResources(t *testing.T) {
 	job = waitForAIJob(t, service, job.ID, AIJobStatusFailed)
 	if job.Failed != 1 || len(job.Errors) != 1 || job.Errors[0].ResourceID == "" || filepath.IsAbs(job.Errors[0].Message) {
 		t.Fatalf("failed job details = %+v", job)
+	}
+	failedName := ""
+	for _, path := range files {
+		if catalog.ExternalID(path, ResourceFile) == job.Errors[0].ResourceID {
+			failedName = filepath.Base(path)
+			break
+		}
+	}
+	if job.Errors[0].Path == "" || filepath.IsAbs(job.Errors[0].Path) || filepath.Base(job.Errors[0].Path) != failedName {
+		t.Fatalf("failed image path = %q, want relative path ending in %q", job.Errors[0].Path, failedName)
 	}
 	waitForAIJobIdle(t, service)
 
@@ -291,7 +302,7 @@ func TestAIJobSchedulerUsesLocalTimeAndRunsMissedDayOnce(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.ConfigureDaily(true, "03:00"); err != nil {
+	if _, err := service.ConfigureDaily(true, "03:00", []string{AIJobTypeMetadata}); err != nil {
 		t.Fatal(err)
 	}
 	service.scheduleTick(current)
@@ -334,6 +345,60 @@ func TestAIJobSchedulerUsesLocalTimeAndRunsMissedDayOnce(t *testing.T) {
 		t.Fatalf("missed run = %+v", job)
 	}
 	waitForAIJobIdle(t, service)
+	shutdownAIJobService(t, service)
+}
+
+func TestAIJobSchedulerQueuesConfiguredModules(t *testing.T) {
+	root := t.TempDir()
+	catalog := aiJobCatalog(root, nil)
+	var now atomic.Value
+	current := time.Date(2026, time.November, 11, 3, 0, 0, 0, time.Local)
+	now.Store(current)
+	service, err := NewAIJobService(AIJobServiceOptions{
+		StatePath:    filepath.Join(t.TempDir(), "state", "jobs.json"),
+		MetadataDir:  filepath.Join(t.TempDir(), "derived"),
+		Catalog:      catalog,
+		ValidatePath: aiTestPathValidator(t, root),
+		Analyzers: []AIAnalyzer{
+			MetadataAnalyzer{},
+			testJSONAnalyzer{module: AIJobTypeEmbedding, version: "embed-v1"},
+		},
+		Now: func() time.Time { return now.Load().(time.Time) },
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings, err := service.ConfigureDaily(true, "03:00", []string{AIJobTypeEmbedding, AIJobTypeMetadata, AIJobTypeEmbedding})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(settings.DailyModules, []string{AIJobTypeMetadata, AIJobTypeEmbedding}) {
+		t.Fatalf("daily modules = %v", settings.DailyModules)
+	}
+
+	service.scheduleTick(current)
+	waitForJobHistoryCount(t, service, 2)
+	for _, job := range service.List().Jobs {
+		waitForAIJob(t, service, job.ID, AIJobStatusCompleted)
+	}
+	waitForAIJobIdle(t, service)
+	jobs := service.List().Jobs
+	if len(jobs) != 2 {
+		t.Fatalf("scheduled jobs = %+v", jobs)
+	}
+	seen := make(map[string]bool, len(jobs))
+	for _, job := range jobs {
+		if !job.Scheduled || job.Mode != AIJobModeIncremental || job.Status != AIJobStatusCompleted {
+			t.Fatalf("scheduled job = %+v", job)
+		}
+		seen[job.Type] = true
+	}
+	if !seen[AIJobTypeMetadata] || !seen[AIJobTypeEmbedding] {
+		t.Fatalf("scheduled modules = %v", seen)
+	}
+	if service.List().Settings.LastScheduledDate != "2026-11-11" {
+		t.Fatalf("scheduled date = %q", service.List().Settings.LastScheduledDate)
+	}
 	shutdownAIJobService(t, service)
 }
 

@@ -29,6 +29,7 @@ import {
   InfoIcon,
   MinusIcon,
   PickIcon,
+  SearchIcon,
   PlusIcon,
   StarIcon,
 } from "../common/Icon";
@@ -79,6 +80,8 @@ interface Props {
   isPicked?: boolean;
   /** 把这张照片加入 / 移出精选。 */
   onTogglePick?: () => void;
+  /** 以当前照片作为查询图，查找语义相似的照片。 */
+  onFindSimilar?: () => void;
   /** 这张照片是否已经放进「待对比」的那一格。 */
   comparePinned?: boolean;
   /** 放进待对比 / 与待对比的那张并排。 */
@@ -138,6 +141,7 @@ export default function PhotoViewer({
   hasCustomCover,
   isPicked,
   onTogglePick,
+  onFindSimilar,
   comparePinned,
   onToggleCompare,
   compareOpen = false,
@@ -666,6 +670,17 @@ export default function PhotoViewer({
               title={hasCustomCover ? "更换封面" : "设为封面"}
             >
               设为封面
+            </button>
+          )}
+          {onFindSimilar && !isVideo && (
+            <button
+              type="button"
+              onClick={onFindSimilar}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-md text-white/80 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+              title="查找相似照片"
+              aria-label="查找相似照片"
+            >
+              <SearchIcon size={15} />
             </button>
           )}
           <button

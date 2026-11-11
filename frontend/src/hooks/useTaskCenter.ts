@@ -5,6 +5,8 @@ import {
   aiJobsApi,
   type AIJob,
   type AIJobSnapshot,
+  type AIWorkerStatus,
+  type AnalysisType,
   type AnalysisMode,
 } from "../api/aiJobs";
 
@@ -24,10 +26,12 @@ export interface TaskCenterPlan {
   /** 草稿状态：与服务器设置分开，改完点保存才写回。 */
   enabled: boolean;
   time: string;
+  modules: AnalysisType[];
   /** 服务器设置已读取，可以开始编辑。 */
   ready: boolean;
   setEnabled: (value: boolean) => void;
   setTime: (value: string) => void;
+  setModules: (value: AnalysisType[]) => void;
   save: () => void;
   saving: boolean;
   saved: boolean;
@@ -42,11 +46,13 @@ export interface TaskCenterState {
   loading: boolean;
   loadError: boolean;
   plan: TaskCenterPlan;
-  start: (mode: AnalysisMode) => void;
+  start: (type: AnalysisType, mode: AnalysisMode) => void;
   act: (id: string, action: JobAction) => void;
   /** 启动或任务操作正在提交。 */
   busy: boolean;
   operationError: boolean;
+  embeddingStatus?: AIWorkerStatus;
+  embeddingStatusLoading: boolean;
 }
 
 /**
@@ -62,6 +68,11 @@ export function useTaskCenter(): TaskCenterState {
     refetchInterval: (query) =>
       query.state.data?.snapshot.active ? 15_000 : false,
   });
+  const embeddingStatusQuery = useQuery({
+    queryKey: ["ai-embedding-status"],
+    queryFn: aiJobsApi.embeddingStatus,
+    refetchInterval: 30_000,
+  });
   const snapshot = jobsQuery.data?.snapshot;
   const active = snapshot?.active;
   const activeId = active?.id;
@@ -70,6 +81,7 @@ export function useTaskCenter(): TaskCenterState {
   const [planDraft, setPlanDraft] = useState<{
     enabled: boolean;
     time: string;
+    modules: AnalysisType[];
   } | null>(null);
 
   useEffect(() => {
@@ -77,6 +89,7 @@ export function useTaskCenter(): TaskCenterState {
     setPlanDraft({
       enabled: snapshot.settings.dailyEnabled,
       time: snapshot.settings.dailyTime || "03:00",
+      modules: snapshot.settings.dailyModules ?? ["metadata"],
     });
   }, [snapshot, planDraft]);
 
@@ -117,7 +130,8 @@ export function useTaskCenter(): TaskCenterState {
   }, [activeId, queryClient]);
 
   const startMutation = useMutation({
-    mutationFn: (mode: AnalysisMode) => aiJobsApi.start("metadata", mode),
+    mutationFn: ({ type, mode }: { type: AnalysisType; mode: AnalysisMode }) =>
+      aiJobsApi.start(type, mode),
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: JOBS_KEY }),
   });
   const actionMutation = useMutation({
@@ -126,15 +140,21 @@ export function useTaskCenter(): TaskCenterState {
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: JOBS_KEY }),
   });
   const settingsMutation = useMutation({
-    mutationFn: (draft: { enabled: boolean; time: string }) =>
+    mutationFn: (draft: {
+      enabled: boolean;
+      time: string;
+      modules: AnalysisType[];
+    }) =>
       aiJobsApi.updateSettings({
         dailyEnabled: draft.enabled,
         dailyTime: draft.time,
+        dailyModules: draft.modules,
       }),
     onSuccess: ({ settings }) => {
       setPlanDraft({
         enabled: settings.dailyEnabled,
         time: settings.dailyTime,
+        modules: settings.dailyModules,
       });
       queryClient.setQueryData<{ ok: boolean; snapshot: AIJobSnapshot }>(
         JOBS_KEY,
@@ -160,6 +180,7 @@ export function useTaskCenter(): TaskCenterState {
     plan: {
       enabled: planDraft?.enabled ?? false,
       time: planDraft?.time ?? "03:00",
+      modules: planDraft?.modules ?? ["metadata"],
       ready: planDraft !== null,
       setEnabled: (value: boolean) =>
         setPlanDraft((current) =>
@@ -169,6 +190,10 @@ export function useTaskCenter(): TaskCenterState {
         setPlanDraft((current) =>
           current ? { ...current, time: value } : current,
         ),
+      setModules: (value: AnalysisType[]) =>
+        setPlanDraft((current) =>
+          current ? { ...current, modules: value } : current,
+        ),
       save: () => {
         if (planDraft) settingsMutation.mutate(planDraft);
       },
@@ -176,11 +201,14 @@ export function useTaskCenter(): TaskCenterState {
       saved: settingsMutation.isSuccess,
       error: settingsMutation.isError,
     },
-    start: (mode: AnalysisMode) => startMutation.mutate(mode),
+    start: (type: AnalysisType, mode: AnalysisMode) =>
+      startMutation.mutate({ type, mode }),
     act: (id: string, action: JobAction) =>
       actionMutation.mutate({ id, action }),
     busy: startMutation.isPending || actionMutation.isPending,
     operationError: startMutation.isError || actionMutation.isError,
+    embeddingStatus: embeddingStatusQuery.data?.status,
+    embeddingStatusLoading: embeddingStatusQuery.isLoading,
   };
 }
 

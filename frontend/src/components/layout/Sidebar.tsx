@@ -13,6 +13,7 @@ import {
   SparkleIcon,
   MapPinIcon,
   TasksIcon,
+  FolderSearchIcon,
 } from "../common/Icon";
 import { useNavigate } from "react-router-dom";
 import { useUIStore } from "../../store/uiStore";
@@ -29,6 +30,7 @@ import {
   favoritesRoute,
   homeRoute,
   locationsRoute,
+  semanticSearchRoute,
   picksRoute,
   recentsRoute,
   unreadRoute,
@@ -76,6 +78,7 @@ const PHOTO_GROUP: NavEntry[] = [
   { to: favoritesRoute("photo"), label: "收藏照片", Icon: StarIcon },
   { to: picksRoute(), label: "精选照片", Icon: PickIcon },
   { to: locationsRoute(), label: "拍摄地点", Icon: MapPinIcon },
+  { to: semanticSearchRoute(), label: "智能搜索", Icon: FolderSearchIcon },
 ];
 
 const COMIC_GROUP: NavEntry[] = [

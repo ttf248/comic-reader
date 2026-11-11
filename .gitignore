@@ -99,6 +99,8 @@ $RECYCLE.BIN/
 # 用户 config.yaml 写错 cacheDir 拼写(少 r)产生的实际目录
 .image-viewe/
 .cache/
+/backend/aiworker/.venv/
+__pycache__/
 *.tsbuildinfo
 backend/config.local.yaml
 

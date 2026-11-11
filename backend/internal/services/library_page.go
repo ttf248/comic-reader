@@ -251,6 +251,18 @@ type LibraryPage[T any] struct {
 	NextCursor string `json:"nextCursor,omitempty"`
 }
 
+// LibraryNode 返回当前快照内的相册或集合摘要副本。
+func (s CatalogSnapshot) LibraryNode(id string) (LibraryNodeSummary, bool) {
+	if s.state == nil || s.state.library == nil {
+		return LibraryNodeSummary{}, false
+	}
+	node, exists := s.state.library.nodes[id]
+	if !exists {
+		return LibraryNodeSummary{}, false
+	}
+	return cloneNodeSummary(node), true
+}
+
 // NormalizeLibraryPageLimit 提供服务层的安全默认值与硬上限。
 func NormalizeLibraryPageLimit(limit int) int {
 	if limit <= 0 {

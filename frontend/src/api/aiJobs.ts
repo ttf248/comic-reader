@@ -1,5 +1,5 @@
 import { api } from "./client";
-import type { LibraryFeedItem, LibraryPage } from "./library";
+import type { AppMode, LibraryFeedItem, LibraryPage } from "./library";
 
 export type AnalysisType = "metadata" | "embedding" | "ocr" | "face";
 export type AnalysisMode = "full" | "incremental";
@@ -67,6 +67,7 @@ export interface AIJob {
 export interface AIJobSettings {
   dailyEnabled: boolean;
   dailyTime: string;
+  dailyModules: AnalysisType[];
   lastScheduledDate?: string;
 }
 
@@ -75,6 +76,58 @@ export interface AIJobSnapshot {
   active?: AIJob;
   settings: AIJobSettings;
   modules: AIJobModule[];
+}
+
+export interface AIWorkerStatus {
+  pythonAvailable: boolean;
+  pythonVersion?: string;
+  torchVersion?: string;
+  cudaAvailable: boolean;
+  cudaVersion?: string;
+  gpuName?: string;
+  gpuMemoryBytes?: number;
+  device: string;
+  runtimeReady: boolean;
+  runtimeError?: string;
+  modelAvailable: boolean;
+  modelValid: boolean;
+  modelLoaded: boolean;
+  modelVersion: string;
+  modelSha256?: string;
+  index: {
+    modelVersion: string;
+    dimension: number;
+    vectors: number;
+    shards: number;
+    indexVersion: number;
+    ready: boolean;
+  };
+  coverage: { indexed: number; total: number };
+}
+
+export interface SemanticSearchRequest {
+  text?: string;
+  resourceId?: string;
+  kind: AppMode;
+  albumId?: string;
+  year?: string;
+  locationId?: string;
+  offset?: number;
+  limit?: number;
+}
+
+export interface SemanticSearchHit {
+  item: LibraryFeedItem;
+  similarity: number;
+}
+
+export interface SemanticSearchResponse {
+  ok: boolean;
+  results: SemanticSearchHit[];
+  total: number;
+  offset: number;
+  nextOffset: number;
+  revision: number;
 }
 
 export interface ImageMetadata {
@@ -150,6 +203,27 @@ export const aiJobsApi = {
     api<ImageMetadataResponse>(
       `/api/images/${encodeURIComponent(id)}/metadata`,
     ),
+  embeddingStatus: () =>
+    api<{ ok: boolean; status: AIWorkerStatus }>("/api/ai/semantic/status"),
+  semanticSearch: (request: SemanticSearchRequest, image?: File) => {
+    if (!image) {
+      return api<SemanticSearchResponse>("/api/ai/search", {
+        method: "POST",
+        body: request,
+        nonIdempotent: true,
+      });
+    }
+    const body = new FormData();
+    body.append("image", image);
+    for (const [key, value] of Object.entries(request)) {
+      if (value !== undefined) body.append(key, String(value));
+    }
+    return api<SemanticSearchResponse>("/api/ai/search", {
+      method: "POST",
+      body,
+      nonIdempotent: true,
+    });
+  },
   locations: (cursor?: string) =>
     api<{ ok: boolean; page: LibraryPage<GPSLocationAlbum> }>(
       "/api/locations",

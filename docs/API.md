@@ -200,7 +200,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 ### `GET /api/ai/jobs` / `POST /api/ai/jobs`
 
-读取任务历史、活动任务与每日计划；启动请求为 `{ "type": "metadata", "mode": "full" | "incremental" }`。当前只安装 `metadata` 模块。全量分析当前库中的图片，增量分析新增、修改或解析器版本变化的图片。已有其他任务活动时返回 `409 analysis_job_active`；模块类型或模式无效时返回 `400 analysis_start_failed`。响应含任务快照与 `reused`。
+读取任务历史、活动任务与每日计划；启动请求为 `{ "type": "metadata" | "embedding", "mode": "full" | "incremental" }`。全量分析当前库中的图片，增量分析新增、修改或模块版本变化的图片。`metadata` 读取 EXIF/GPS；`embedding` 使用本机 Chinese-CLIP 生成语义向量。向量任务需要可用的 Python 运行环境与已校验权重，缺失时返回 `503 ai_runtime_unavailable` 或 `503 ai_model_missing`。已有其他任务活动时返回 `409 analysis_job_active`；模块类型或模式无效时返回 `400 analysis_start_failed`。响应含任务快照与 `reused`。
 
 任务状态为 `pending`、`running`、`paused`、`completed`、`failed`、`cancelled`。快照包含阶段、总数、已处理/跳过/失败/完成数、检查点、耗时、速度、开始/结束时间及错误项。错误项包含资源 ID、根目录别名下的相对图片路径、稳定错误码、脱敏原因和时间；不返回文件系统绝对路径。任务在后台按 32 张一批提交，重启后自动恢复运行中任务。
 
@@ -232,7 +232,17 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 ### `GET /api/ai/jobs/settings` / `PUT /api/ai/jobs/settings`
 
-每日计划字段为 `{ "dailyEnabled": true, "dailyTime": "03:00" }`。默认开启，按服务所在设备本地时间每天凌晨 3 点运行。时间格式为 24 小时 `HH:MM`；无效请求返回 `400 invalid_analysis_settings`。每天创建 metadata 增量任务；服务错过计划日期后启动时补跑一次，同一天不重复创建。
+每日计划字段为 `{ "dailyEnabled": true, "dailyTime": "03:00", "dailyModules": ["metadata", "embedding"] }`。默认开启，模块默认为 `metadata`，按服务所在设备本地时间每天凌晨 3 点运行。时间格式为 24 小时 `HH:MM`；开启计划时至少选择一个已安装模块。未安装模块、空模块选择或无效时间返回 `400 invalid_analysis_settings`。到时后按配置顺序排入所选模块的增量任务，并复用现有任务队列逐项执行；运行环境或权重未就绪的模块会跳过。服务错过计划日期后启动时补跑一次，同一天不重复创建。旧状态文件缺少 `dailyModules` 时按 metadata 恢复。
+
+### `GET /api/ai/semantic/status`
+
+返回本机 Python、PyTorch、CUDA/GPU、模型 SHA256 校验、向量索引版本与覆盖率。`runtimeReady` 表示推理依赖可导入，`modelValid` 表示权重匹配固定 revision；`cudaAvailable` 为 false 时仍可使用 CPU。`coverage` 按当前资源快照和有效文件指纹统计已索引数/照片数。
+
+### `POST /api/ai/search`
+
+文本检索使用 JSON：`{ "text": "海边散步的人", "kind": "photo", "albumId": "…", "year": "2024", "locationId": "…", "offset": 0, "limit": 60 }`。以图搜图可传 `{ "resourceId": "…", "kind": "photo" }`，或用 `multipart/form-data` 上传 `image`（最大 64 MiB）。每次请求只提供文本、资源 ID 或上传图片中的一种；`kind` 为必填的 `photo` 或 `comic`，年份为四位数，分页上限 200。
+
+结果按精确余弦相似度降序，`results` 中每项为当前照片 DTO 与 `similarity`，保留所属相册 ID/名称；还包含 `total`、`offset`、`nextOffset` 与当前媒体库 `revision`。年份筛选依赖当前版本的 EXIF 拍摄年份，地点筛选复用 GPS 地点聚类 ID。每个候选和最终结果都会按当前媒体根重新验证路径、文件类型及大小/修改时间；响应不包含绝对路径。无效请求返回 `400 invalid_semantic_search`，缺少模型/运行环境分别返回 `503 ai_model_missing` / `503 ai_runtime_unavailable`。
 
 ### `GET /api/images/:fileId/metadata`
 

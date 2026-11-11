@@ -48,7 +48,7 @@ export default function FailureGroupList({ errors }: Props) {
               >
                 <span
                   className="min-w-0 flex-1 truncate font-mono text-meta text-fg-muted"
-                  title={item.resourceId}
+                  title={item.path || item.resourceId}
                 >
                   {item.path || "当前媒体库中不可用"}
                 </span>

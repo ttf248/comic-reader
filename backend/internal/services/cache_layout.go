@@ -26,6 +26,9 @@ type CacheLayout struct {
 	ConvertedDir       string
 	PreviewDir         string
 	MetadataDir        string
+	AIDerivedDir       string
+	AIVectorsDir       string
+	AIModelsDir        string
 	ScanCachePath      string
 	PreferencesPath    string
 	ActivityPath       string
@@ -48,6 +51,9 @@ func ResolveCacheLayout(root string) CacheLayout {
 		ConvertedDir:       filepath.Join(derivedDir, convertedDirName),
 		PreviewDir:         filepath.Join(derivedDir, previewDirName),
 		MetadataDir:        filepath.Join(derivedDir, "metadata"),
+		AIDerivedDir:       filepath.Join(derivedDir, "ai"),
+		AIVectorsDir:       filepath.Join(derivedDir, "ai", "vectors"),
+		AIModelsDir:        filepath.Join(derivedDir, "ai", "models"),
 		ScanCachePath:      filepath.Join(stateDir, "scan_cache.json"),
 		PreferencesPath:    filepath.Join(stateDir, "web_settings.json"),
 		ActivityPath:       filepath.Join(stateDir, "activity.json"),
@@ -66,7 +72,7 @@ func EnsureCacheLayout(root string) (CacheLayout, error) {
 		return CacheLayout{}, fmt.Errorf("cache root is required")
 	}
 	layout := ResolveCacheLayout(root)
-	for _, dir := range []string{layout.Root, layout.StateDir, layout.DerivedDir, layout.TempDir, layout.ThumbnailDir, layout.ConvertedDir, layout.PreviewDir, layout.MetadataDir} {
+	for _, dir := range []string{layout.Root, layout.StateDir, layout.DerivedDir, layout.TempDir, layout.ThumbnailDir, layout.ConvertedDir, layout.PreviewDir, layout.MetadataDir, layout.AIVectorsDir, layout.AIModelsDir} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return CacheLayout{}, fmt.Errorf("create cache layout: %w", err)
 		}

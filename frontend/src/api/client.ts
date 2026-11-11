@@ -85,17 +85,24 @@ export async function api<T>(
   opts: RequestOptions = {},
 ): Promise<T> {
   const { body, params, headers, retries, nonIdempotent, ...rest } = opts;
+  const formDataBody =
+    typeof FormData !== "undefined" && body instanceof FormData
+      ? body
+      : undefined;
   const init: RequestInit = {
     ...rest,
     credentials: rest.credentials ?? "include",
     headers: {
-      "Content-Type": "application/json",
+      ...(formDataBody === undefined
+        ? { "Content-Type": "application/json" }
+        : {}),
       Accept: "application/json",
       ...(headers as Record<string, string> | undefined),
     },
   };
   if (body !== undefined) {
-    init.body = typeof body === "string" ? body : JSON.stringify(body);
+    init.body =
+      typeof body === "string" ? body : (formDataBody ?? JSON.stringify(body));
   }
 
   const maxAttempts = resolveRetries(opts.method, retries, nonIdempotent) + 1;

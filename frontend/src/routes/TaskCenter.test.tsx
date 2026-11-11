@@ -19,6 +19,7 @@ vi.mock("../api/aiJobs", () => ({
     settings: vi.fn(),
     updateSettings: vi.fn(),
     metadata: vi.fn(),
+    embeddingStatus: vi.fn(),
   },
 }));
 
@@ -74,7 +75,11 @@ function snapshot(overrides: Partial<AIJobSnapshot> = {}): AIJobSnapshot {
   return {
     jobs: [currentJob],
     active: currentJob,
-    settings: { dailyEnabled: false, dailyTime: "03:00" },
+    settings: {
+      dailyEnabled: false,
+      dailyTime: "03:00",
+      dailyModules: ["metadata"],
+    },
     modules,
     ...overrides,
   };
@@ -108,7 +113,37 @@ describe("任务中心", () => {
     vi.mocked(aiJobsApi.action).mockResolvedValue({ ok: true });
     vi.mocked(aiJobsApi.updateSettings).mockResolvedValue({
       ok: true,
-      settings: { dailyEnabled: true, dailyTime: "04:15" },
+      settings: {
+        dailyEnabled: true,
+        dailyTime: "04:15",
+        dailyModules: ["metadata"],
+      },
+    });
+    vi.mocked(aiJobsApi.embeddingStatus).mockResolvedValue({
+      ok: true,
+      status: {
+        pythonAvailable: true,
+        pythonVersion: "3.11.9",
+        torchVersion: "2.7.1",
+        cudaAvailable: true,
+        cudaVersion: "12.6",
+        gpuName: "NVIDIA GeForce RTX 3060",
+        device: "cuda",
+        runtimeReady: true,
+        modelAvailable: true,
+        modelValid: true,
+        modelLoaded: true,
+        modelVersion: "clip-v1",
+        index: {
+          modelVersion: "clip-v1",
+          dimension: 512,
+          vectors: 100,
+          shards: 4,
+          indexVersion: 1,
+          ready: true,
+        },
+        coverage: { indexed: 100, total: 100 },
+      },
     });
   });
 
@@ -146,11 +181,37 @@ describe("任务中心", () => {
     renderCenter();
 
     expect(await screen.findByText("队列空闲")).toBeInTheDocument();
-    expect(screen.getByText("照片元数据")).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "照片元数据" }),
+    ).toBeInTheDocument();
     expect(screen.getByText("未安装")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "全量分析" }));
     await waitFor(() =>
       expect(aiJobsApi.start).toHaveBeenCalledWith("metadata", "full"),
+    );
+  });
+
+  it("已安装向量模块时可从同一任务服务启动全量建索引", async () => {
+    vi.mocked(aiJobsApi.list).mockResolvedValue({
+      ok: true,
+      snapshot: snapshot({
+        jobs: [],
+        active: undefined,
+        modules: [
+          modules[0],
+          { ...modules[1], installed: true, version: "clip-v1" },
+        ],
+      }),
+    });
+    renderCenter();
+
+    await screen.findByText("队列空闲");
+    fireEvent.change(screen.getByRole("combobox", { name: "分析模块" }), {
+      target: { value: "embedding" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "全量生成向量" }));
+    await waitFor(() =>
+      expect(aiJobsApi.start).toHaveBeenCalledWith("embedding", "full"),
     );
   });
 
@@ -174,6 +235,32 @@ describe("任务中心", () => {
       expect(aiJobsApi.updateSettings).toHaveBeenCalledWith({
         dailyEnabled: true,
         dailyTime: "04:15",
+        dailyModules: ["metadata"],
+      }),
+    );
+  });
+
+  it("每日计划会保存用户选择的已安装分析模块", async () => {
+    vi.mocked(aiJobsApi.list).mockResolvedValue({
+      ok: true,
+      snapshot: snapshot({
+        jobs: [],
+        active: undefined,
+        modules: [
+          modules[0],
+          { ...modules[1], installed: true, version: "clip-v1" },
+        ],
+      }),
+    });
+    renderCenter();
+
+    fireEvent.click(await screen.findByRole("checkbox", { name: "向量索引" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存计划" }));
+    await waitFor(() =>
+      expect(aiJobsApi.updateSettings).toHaveBeenCalledWith({
+        dailyEnabled: false,
+        dailyTime: "03:00",
+        dailyModules: ["metadata", "embedding"],
       }),
     );
   });
@@ -253,6 +340,9 @@ describe("任务中心", () => {
     expect(
       within(group as HTMLElement).getByText("album/a/IMG_0001.jpg"),
     ).toBeInTheDocument();
+    expect(
+      within(group as HTMLElement).getByText("album/a/IMG_0001.jpg"),
+    ).toHaveAttribute("title", "album/a/IMG_0001.jpg");
     expect(
       within(group as HTMLElement).getByRole("button", { name: /复制/ }),
     ).toBeInTheDocument();

@@ -23,8 +23,9 @@ type aiJobStartRequest struct {
 }
 
 type aiJobSettingsRequest struct {
-	DailyEnabled bool   `json:"dailyEnabled"`
-	DailyTime    string `json:"dailyTime"`
+	DailyEnabled bool     `json:"dailyEnabled"`
+	DailyTime    string   `json:"dailyTime"`
+	DailyModules []string `json:"dailyModules"`
 }
 
 // AIJobsHandler 返回任务历史、活动任务与每日调度设置。
@@ -51,6 +52,12 @@ func AIJobStartHandler(service *services.AIJobService) fiber.Handler {
 		if err != nil {
 			if errors.Is(err, services.ErrAIJobActive) {
 				return writeError(c, fiber.StatusConflict, "analysis_job_active", "another analysis task is active")
+			}
+			if errors.Is(err, services.ErrAIModelUnavailable) {
+				return writeError(c, fiber.StatusServiceUnavailable, "ai_model_missing", "local semantic model is missing or checksum verification failed")
+			}
+			if errors.Is(err, services.ErrAIRuntimeUnavailable) || errors.Is(err, services.ErrAIWorkerUnavailable) {
+				return writeError(c, fiber.StatusServiceUnavailable, "ai_runtime_unavailable", "local AI runtime is unavailable")
 			}
 			return writeError(c, fiber.StatusBadRequest, "analysis_start_failed", "unable to start analysis task")
 		}
@@ -161,9 +168,9 @@ func AIJobSettingsHandler(service *services.AIJobService) fiber.Handler {
 		if err := c.BodyParser(&body); err != nil {
 			return writeError(c, fiber.StatusBadRequest, "invalid_analysis_settings", "request body is not valid JSON")
 		}
-		settings, err := service.ConfigureDaily(body.DailyEnabled, body.DailyTime)
+		settings, err := service.ConfigureDaily(body.DailyEnabled, body.DailyTime, body.DailyModules)
 		if err != nil {
-			return writeError(c, fiber.StatusBadRequest, "invalid_analysis_settings", "dailyTime must use 24-hour HH:MM format")
+			return writeError(c, fiber.StatusBadRequest, "invalid_analysis_settings", "dailyTime and dailyModules are invalid")
 		}
 		return c.JSON(fiber.Map{"ok": true, "settings": settings})
 	}

@@ -258,6 +258,14 @@ func gpsLocationID(cell string) string {
 	return "loc_" + hex.EncodeToString(sum[:8])
 }
 
+// GPSLocationID 返回坐标所属的离线地点相册 ID，与地点页使用同一 geohash 精度。
+func GPSLocationID(latitude, longitude float64) string {
+	if !validCoordinates(latitude, longitude) {
+		return ""
+	}
+	return gpsLocationID(encodeGeohash(latitude, longitude, gpsLocationGeohashPrecision))
+}
+
 func encodeGeohash(latitude, longitude float64, precision int) string {
 	const alphabet = "0123456789bcdefghjkmnpqrstuvwxyz"
 	latMin, latMax := -90.0, 90.0

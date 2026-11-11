@@ -96,7 +96,11 @@ export default function JobHistoryPanel({
                 label="速度"
                 value={formatTaskSpeed(job.speedPerSecond)}
               />
-              <SpecRow label="模块版本" value={job.moduleVersion || "—"} />
+              <SpecRow
+                label="模块版本"
+                value={job.moduleVersion || "—"}
+                fullWidth
+              />
             </dl>
 
             {job.error ? (
@@ -132,11 +136,27 @@ export default function JobHistoryPanel({
   );
 }
 
-function SpecRow({ label, value }: { label: string; value: string }) {
+function SpecRow({
+  label,
+  value,
+  fullWidth = false,
+}: {
+  label: string;
+  value: string;
+  fullWidth?: boolean;
+}) {
   return (
-    <div className="flex items-baseline justify-between gap-4 border-b border-border-faint py-1.5">
-      <dt className="text-meta text-fg-subtle">{label}</dt>
-      <dd className="font-mono text-meta tabular-nums text-fg">{value}</dd>
+    <div
+      className={`flex items-baseline justify-between gap-4 border-b border-border-faint py-1.5 ${fullWidth ? "sm:col-span-2" : ""}`}
+    >
+      <dt className="shrink-0 whitespace-nowrap text-meta text-fg-subtle">
+        {label}
+      </dt>
+      <dd
+        className={`min-w-0 font-mono text-meta tabular-nums text-fg ${fullWidth ? "break-all text-right" : ""}`}
+      >
+        {value}
+      </dd>
     </div>
   );
 }
@@ -158,7 +178,9 @@ function OutputBreakdown({ job }: { job: AIJob }) {
       <div className="mt-2 space-y-1.5">
         {results.length > 0 ? (
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1.5">
-            <span className="text-meta text-fg-subtle">解析结果</span>
+            <span className="text-meta text-fg-subtle">
+              {job.type === "metadata" ? "解析结果" : "处理结果"}
+            </span>
             {results.map(([key, value]) => (
               <CountChip
                 key={`result-${key}`}

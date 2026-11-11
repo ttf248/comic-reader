@@ -268,12 +268,28 @@ func main() {
 	} else if mismatch {
 		log.Printf("  扫描缓存与当前媒体根不一致或内容无效，已清空旧缓存")
 	}
+	workerOptions, err := services.ResolveLocalAIWorkerOptions(cacheLayout.AIModelsDir)
+	if err != nil {
+		log.Fatalf("初始化本地语义搜索 Worker 失败")
+	}
+	aiWorker, err := services.NewLocalAIWorker(workerOptions)
+	if err != nil {
+		log.Fatalf("初始化本地语义搜索 Worker 失败")
+	}
+	vectorIndex, err := services.OpenVectorIndex(cacheLayout.AIVectorsDir, services.ChineseCLIPModelVersion)
+	if err != nil {
+		log.Fatalf("初始化语义向量索引失败: %v", err)
+	}
+	embeddingAnalyzer, err := services.NewEmbeddingAnalyzer(aiWorker, vectorIndex)
+	if err != nil {
+		log.Fatalf("初始化向量分析模块失败")
+	}
 	aiJobs, err := services.NewAIJobService(services.AIJobServiceOptions{
 		StatePath:    cacheLayout.AIJobsPath,
 		MetadataDir:  cacheLayout.MetadataDir,
 		Catalog:      resourceCatalog,
 		ValidatePath: safetyState.Validate,
-		Analyzers:    []services.AIAnalyzer{services.MetadataAnalyzer{}},
+		Analyzers:    []services.AIAnalyzer{services.MetadataAnalyzer{}, embeddingAnalyzer},
 	})
 	if err != nil {
 		log.Fatalf("初始化媒体分析任务服务失败: %v", err)
@@ -345,6 +361,8 @@ func main() {
 	api.Get("/locations/:id/media", handlers.GPSLocationsHandler(resourceCatalog, aiJobs, safetyState.Validate, picks))
 	api.Get("/ai/jobs", handlers.AIJobsHandler(aiJobs))
 	api.Post("/ai/jobs", handlers.AIJobStartHandler(aiJobs))
+	api.Get("/ai/semantic/status", handlers.AIEmbeddingStatusHandler(embeddingAnalyzer, aiJobs, resourceCatalog))
+	api.Post("/ai/search", handlers.SemanticSearchHandler(embeddingAnalyzer, aiJobs, resourceCatalog, safetyState.Validate, cacheLayout.TempDir))
 	api.Get("/ai/jobs/settings", handlers.AIJobSettingsHandler(aiJobs))
 	api.Put("/ai/jobs/settings", handlers.AIJobSettingsHandler(aiJobs))
 	api.Get("/ai/jobs/:id/events", handlers.AIJobEventsHandler(aiJobs))

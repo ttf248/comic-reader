@@ -65,6 +65,11 @@ export function locationsRoute(locationId?: string): string {
   return locationId ? `${base}/${encodeURIComponent(locationId)}` : base;
 }
 
+/** 照片侧的中文语义搜索与以图搜图。 */
+export function semanticSearchRoute(): string {
+  return `${MODE_PREFIX.photo}/semantic`;
+}
+
 /**
  * 按年份浏览照片。
  *

@@ -13,6 +13,7 @@
 - 两个工作台各成一套：首页首屏专区不同（照片是「随手看看」的跨相册照片墙加「接着看」，漫画是「继续阅读 / 未读」），索引维度不同（照片按年份，年份卡直接铺出这一年的照片墙；漫画按作品），封面画幅不同（照片方形、漫画竖版），色调不同（照片冷、漫画暖），措辞与计数单位也不同（照片说「张 / 本 / 浏览」，漫画说「页 / 卷 / 阅读」），菜单与按钮则完全隔离——照片侧没有「未读 / 已读完」，漫画侧没有「最近浏览」。
 - 照片侧的推荐与回忆各成一段：「随手看看」按年份分散地抽相册、一本相册里等距取样，「换一批」换的是取材种子，因此一定换得掉；「那年今日」摆的是往年同一天真正拍下的那一张照片（日期证据来自文件名），点开即看，也能回到那本相册。
 - EXIF 与 GPS 元数据在本机后台分批分析，支持全量/增量、暂停/继续、取消、失败项重试、重启恢复与每日计划；任务中心按区块展示进度、预计剩余时间、产出明细与按原因分组的失败项。照片侧按 GPS 坐标生成离线地点相册，不调用在线地图或地理编码服务。
+- 照片侧提供本机中文语义搜索与以图搜图：Chinese-CLIP 为媒体库建立向量索引，按中文描述、相似图片、相册、EXIF 年份与 GPS 地点筛选；任务中心负责全量/增量索引和每日计划。
 - 视频原生播放与 Range；可选 ffmpeg 提供封面、元数据、faststart、按需 H.264 + AAC 转码及特殊图片格式转换。
 - 缩略图、预览图和视频派生缓存分层存储，可分别清理；收藏、最近、阅读/播放活动与偏好通过服务端 JSON 持久化；图片进度串行合并并跳过重复落盘，设置页可导出备份、预览并按类别覆盖恢复。
 - 界面采用中性灰阶的视觉表达：首页阅读与发现区、照片卡片、相册摘要、分组设置和暗场阅读器共用一套无彩灰阶，照片是页面上唯一的彩色，仅品牌标记与页眉眉标用琥珀点缀（工作台模式会给品牌点缀换成冷/暖两套色调）；支持明暗/跟随系统主题、键盘与触摸操作。主页面按 `R` 随机打开一本、`Ctrl+S` 扫描、`?` 查看当前场景的快捷键。
@@ -83,6 +84,19 @@ pwsh -File scripts/install-ffmpeg.ps1
 
 其他平台或自定义安装位置需设置 `ffmpegPath` 为可执行文件路径。工具缺失时图片浏览与原生可播放视频仍可用，视频封面回退浏览器抽帧；需转码的视频和特殊图片格式可能无法显示。
 
+## 本机语义搜索
+
+Windows 首次使用时，在仓库根目录执行以下命令，安装独立 Python 3.11 环境并下载固定 revision 的 Chinese-CLIP ViT-B/16 权重：
+
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File backend/aiworker/setup.ps1
+pwsh -NoProfile -ExecutionPolicy Bypass -File backend/aiworker/download-model.ps1
+```
+
+运行环境使用 PyTorch 2.7.1 + CUDA 12.6；RTX 3060 可在 CUDA 上推理，显存不足时会缩小批次并回退 CPU。权重约 753 MB，下载脚本会校验 SHA256 `5997ef32c50de18f3ac06eb5d746c324a639053c3bed8f2986f97ebb22b2ecde`，保存到 `cacheDir/derived/ai/models/`；权重和 Python 虚拟环境都不入仓。非 Windows 平台需使用 Python 3.11 与对应平台的官方 PyTorch 安装命令，再安装 `backend/aiworker/requirements.txt` 中的模型包及推理依赖，并将同一权重放入上述缓存目录。
+
+启动后可从照片侧的「智能搜索」使用中文描述或上传图片检索。首次搜索前需在任务中心运行「向量索引」全量任务；新图片和变更图片可用增量任务更新。当前采用精确余弦检索，运行状态、CUDA、权重校验与索引覆盖率都在页面显示。
+
 ## 开发验证
 
 | 工作目录    | 命令                             | 用途                                   |
@@ -108,10 +122,11 @@ pwsh -File scripts/install-ffmpeg.ps1
 ```text
 backend/
   cmd/server/         Go 入口与服务装配
+  aiworker/           Python 3.11 常驻推理 Worker、隔离环境和权重安装脚本
   internal/           config、pathutil、models、middleware、handlers、services、store
   tests/integration/  真实 HTTP 路由测试
 frontend/
-  src/                api、hooks、store、routes、components、styles、utils（含 `/tasks` 与 `/photo/locations`）
+  src/                api、hooks、store、routes、components、styles、utils（含 `/tasks`、`/photo/locations` 与 `/photo/semantic`）
   scripts/            布局/对比度审计、截图、崩溃探针
   tests/e2e/          Playwright 全栈用例
 scripts/              开发、构建、E2E、ffmpeg 安装与手动发布工具

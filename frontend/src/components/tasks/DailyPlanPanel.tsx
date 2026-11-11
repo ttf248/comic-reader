@@ -1,14 +1,16 @@
-import type { AIJobModule } from "../../api/aiJobs";
+import type { AIJobModule, AnalysisType } from "../../api/aiJobs";
 import Toggle from "../common/Toggle";
 import ModuleList from "./ModuleList";
 
 interface Props {
   enabled: boolean;
   time: string;
+  selectedModules: AnalysisType[];
   /** 服务器设置还没到之前不允许编辑。 */
   ready: boolean;
   onEnabledChange: (value: boolean) => void;
   onTimeChange: (value: string) => void;
+  onModulesChange: (value: AnalysisType[]) => void;
   onSave: () => void;
   saving: boolean;
   saved: boolean;
@@ -22,9 +24,11 @@ interface Props {
 export default function DailyPlanPanel({
   enabled,
   time,
+  selectedModules,
   ready,
   onEnabledChange,
   onTimeChange,
+  onModulesChange,
   onSave,
   saving,
   saved,
@@ -64,7 +68,37 @@ export default function DailyPlanPanel({
           />
         </label>
 
-        <button className="btn btn-outline" type="submit" disabled={disabled}>
+        <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-2 text-meta text-fg-muted">
+          <legend className="sr-only">每日分析模块</legend>
+          <span aria-hidden="true">运行模块</span>
+          {modules
+            .filter((module) => module.installed)
+            .map((module) => (
+              <label
+                key={module.type}
+                className="inline-flex items-center gap-2 text-fg"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedModules.includes(module.type)}
+                  disabled={disabled}
+                  onChange={(event) => {
+                    const next = event.target.checked
+                      ? [...selectedModules, module.type]
+                      : selectedModules.filter((type) => type !== module.type);
+                    onModulesChange(next);
+                  }}
+                />
+                {module.name}
+              </label>
+            ))}
+        </fieldset>
+
+        <button
+          className="btn btn-outline"
+          type="submit"
+          disabled={disabled || (enabled && selectedModules.length === 0)}
+        >
           {saving ? "保存中…" : "保存计划"}
         </button>
 
@@ -75,6 +109,11 @@ export default function DailyPlanPanel({
         </span>
 
         {saved ? <span className="text-meta text-fg-muted">已保存</span> : null}
+        {enabled && selectedModules.length === 0 ? (
+          <span className="text-meta text-fg-muted">
+            自动运行至少选择一个已安装模块。
+          </span>
+        ) : null}
         {error ? (
           <p role="alert" className="text-meta text-danger">
             保存失败，请检查时间后重试。
