@@ -276,6 +276,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("初始化本地语义搜索 Worker 失败")
 	}
+	workerStatusCtx, workerStatusCancel := context.WithTimeout(context.Background(), 20*time.Second)
+	_, _ = aiWorker.Status(workerStatusCtx)
+	workerStatusCancel()
 	vectorIndex, err := services.OpenVectorIndex(cacheLayout.AIVectorsDir, services.ChineseCLIPModelVersion)
 	if err != nil {
 		log.Fatalf("初始化语义向量索引失败: %v", err)
@@ -284,12 +287,20 @@ func main() {
 	if err != nil {
 		log.Fatalf("初始化向量分析模块失败")
 	}
+	ocrAnalyzer, err := services.NewOCRAnalyzer(aiWorker)
+	if err != nil {
+		log.Fatalf("初始化文字识别模块失败")
+	}
+	faceAnalyzer, err := services.NewFaceAnalyzer(aiWorker)
+	if err != nil {
+		log.Fatalf("初始化人脸识别模块失败")
+	}
 	aiJobs, err := services.NewAIJobService(services.AIJobServiceOptions{
 		StatePath:    cacheLayout.AIJobsPath,
 		MetadataDir:  cacheLayout.MetadataDir,
 		Catalog:      resourceCatalog,
 		ValidatePath: safetyState.Validate,
-		Analyzers:    []services.AIAnalyzer{services.MetadataAnalyzer{}, embeddingAnalyzer},
+		Analyzers:    []services.AIAnalyzer{services.MetadataAnalyzer{}, embeddingAnalyzer, ocrAnalyzer, faceAnalyzer},
 	})
 	if err != nil {
 		log.Fatalf("初始化媒体分析任务服务失败: %v", err)
@@ -363,6 +374,7 @@ func main() {
 	api.Post("/ai/jobs", handlers.AIJobStartHandler(aiJobs))
 	api.Get("/ai/semantic/status", handlers.AIEmbeddingStatusHandler(embeddingAnalyzer, aiJobs, resourceCatalog))
 	api.Post("/ai/search", handlers.SemanticSearchHandler(embeddingAnalyzer, aiJobs, resourceCatalog, safetyState.Validate, cacheLayout.TempDir))
+	api.Post("/ai/faces/search", handlers.FaceSimilaritySearchHandler(aiJobs, resourceCatalog, safetyState.Validate))
 	api.Get("/ai/jobs/settings", handlers.AIJobSettingsHandler(aiJobs))
 	api.Put("/ai/jobs/settings", handlers.AIJobSettingsHandler(aiJobs))
 	api.Get("/ai/jobs/:id/events", handlers.AIJobEventsHandler(aiJobs))
@@ -396,6 +408,7 @@ func main() {
 	api.Get("/previews/:id", resourceParam, handlers.PreviewHandler(thumbs))
 	api.Get("/images/:id/info", resourceParam, handlers.ImageInfoHandler(resourceCatalog))
 	api.Get("/images/:id/metadata", resourceParam, handlers.ImageMetadataHandler(aiJobs))
+	api.Get("/images/:id/analysis", resourceParam, handlers.ImageAnalysisHandler(aiJobs))
 	// 视频流 + 元信息（前端 <video> 元素 / HoverPreview / 时长显示使用）
 	api.Get("/videos/:id/info", resourceParam, handlers.VideoInfoHandler(videoInfo, transcode, resourceCatalog))
 	api.Post("/videos/info/batch", handlers.VideoInfoBatchHandler(videoInfo, transcode, resourceCatalog, safetyState))

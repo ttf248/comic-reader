@@ -2,6 +2,7 @@ import os
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -130,6 +131,37 @@ class WorkerTests(unittest.TestCase):
 
         self.assertEqual("image_unreadable", results[0]["error"])
         self.assertEqual(worker.DIMENSION, len(results[1]["vector"]))
+
+    def test_image_analysis_preserves_success_and_failure_per_item(self):
+        results = worker.run_image_analysis(
+            ["one.jpg", "two.jpg"],
+            lambda path: {"data": {"path": path}, "error": "image_unreadable"}
+            if path == "two.jpg"
+            else {"data": {"text": "入口"}},
+        )
+
+        self.assertEqual("入口", results["items"][0]["data"]["text"])
+        self.assertEqual("image_unreadable", results["items"][1]["error"])
+        self.assertIn("modules", results["status"])
+
+    def test_image_analysis_rejects_invalid_batches(self):
+        self.assertEqual("invalid_image_batch", worker.run_image_analysis([], lambda _: {})["error"])
+        self.assertEqual("invalid_image_batch", worker.run_image_analysis([object()], lambda _: {})["error"])
+
+    def test_worker_stdio_is_utf8(self):
+        class Stream:
+            encoding = "cp1252"
+
+            def reconfigure(self, *, encoding):
+                self.encoding = encoding
+
+        stdin = Stream()
+        stdout = Stream()
+        with patch.object(worker.sys, "stdin", stdin), patch.object(worker.sys, "stdout", stdout):
+            worker.configure_worker_stdio()
+
+        self.assertEqual("utf-8", stdin.encoding)
+        self.assertEqual("utf-8", stdout.encoding)
 
 
 if __name__ == "__main__":

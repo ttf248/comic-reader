@@ -215,6 +215,76 @@ describe("任务中心", () => {
     );
   });
 
+  it("已安装 OCR 与人脸模块时显示对应任务入口", async () => {
+    vi.mocked(aiJobsApi.list).mockResolvedValue({
+      ok: true,
+      snapshot: snapshot({
+        jobs: [],
+        active: undefined,
+        modules: [
+          modules[0],
+          {
+            type: "ocr",
+            name: "文字识别",
+            installed: true,
+            version: "rapidocr-v1",
+          },
+          {
+            type: "face",
+            name: "人脸识别",
+            installed: true,
+            version: "sface-v1",
+          },
+        ],
+      }),
+    });
+    vi.mocked(aiJobsApi.embeddingStatus).mockResolvedValue({
+      ok: true,
+      status: {
+        pythonAvailable: true,
+        cudaAvailable: false,
+        device: "cpu",
+        runtimeReady: false,
+        modelAvailable: false,
+        modelValid: false,
+        modelLoaded: false,
+        modelVersion: "clip-v1",
+        index: {
+          modelVersion: "clip-v1",
+          dimension: 512,
+          vectors: 0,
+          shards: 0,
+          indexVersion: 1,
+          ready: false,
+        },
+        coverage: { indexed: 0, total: 0 },
+        modules: {
+          ocr: { ready: true, version: "rapidocr-v1" },
+          face: { ready: true, version: "sface-v1" },
+        },
+      },
+    });
+    renderCenter();
+
+    await screen.findByText("队列空闲");
+    fireEvent.change(screen.getByRole("combobox", { name: "分析模块" }), {
+      target: { value: "ocr" },
+    });
+    expect(await screen.findByText(/OCR 识别照片中的文字/)).toBeInTheDocument();
+    expect(
+      screen.getByText("文字识别已就绪 · rapidocr-v1"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "全量识别文字" })).toBeEnabled();
+
+    fireEvent.change(screen.getByRole("combobox", { name: "分析模块" }), {
+      target: { value: "face" },
+    });
+    expect(
+      await screen.findByText(/检测照片中的人脸并生成本机特征向量/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "全量识别人脸" })).toBeEnabled();
+  });
+
   it("每日计划用开关与时间输入，保存后写回设置", async () => {
     vi.mocked(aiJobsApi.list).mockResolvedValue({
       ok: true,

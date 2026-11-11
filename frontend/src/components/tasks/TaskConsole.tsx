@@ -78,6 +78,8 @@ export default function TaskConsole({
     const selectedName =
       installedModules.find((module) => module.type === selectedModule)?.name ??
       "照片元数据";
+    const description = moduleDescription(selectedModule);
+    const startLabels = moduleStartLabels(selectedModule);
     return (
       <div className="rounded-xl border border-border bg-bg-elevated px-5 py-6 shadow-xs sm:px-6">
         <div className="flex items-center gap-3">
@@ -85,9 +87,7 @@ export default function TaskConsole({
           <span className="text-label font-medium text-fg">队列空闲</span>
         </div>
         <p className="mt-3 max-w-2xl text-body leading-relaxed text-fg-muted">
-          {isEmbedding
-            ? "使用本机 Chinese-CLIP 为照片建立中文语义向量，可按描述搜索，也能按照片查找相似画面。向量只写入本机派生索引。"
-            : "分析完全在本机运行：读取照片拍摄时间、相机信息与 GPS 坐标，结果只写进本机的派生缓存。"}
+          {description}
         </p>
         <label className="mt-5 flex flex-wrap items-center gap-3 text-meta text-fg-muted">
           <span>分析模块</span>
@@ -110,10 +110,18 @@ export default function TaskConsole({
             <span className="text-fg-subtle">{embeddingStatus.gpuName}</span>
           ) : null}
         </label>
-        <EmbeddingRuntimeStatus
-          status={embeddingStatus}
-          loading={embeddingStatusLoading}
-        />
+        {isEmbedding ? (
+          <EmbeddingRuntimeStatus
+            status={embeddingStatus}
+            loading={embeddingStatusLoading}
+          />
+        ) : selectedModule === "ocr" || selectedModule === "face" ? (
+          <ImageModuleRuntimeStatus
+            moduleType={selectedModule}
+            status={embeddingStatus}
+            loading={embeddingStatusLoading}
+          />
+        ) : null}
         <div className="mt-5 flex flex-wrap gap-3">
           <button
             type="button"
@@ -121,7 +129,7 @@ export default function TaskConsole({
             disabled={busy || (isEmbedding && !embeddingReady)}
             onClick={() => onStart(selectedModule, "incremental")}
           >
-            {isEmbedding ? "增量更新向量" : "增量分析"}
+            {startLabels.incremental}
           </button>
           <button
             type="button"
@@ -129,13 +137,15 @@ export default function TaskConsole({
             disabled={busy || (isEmbedding && !embeddingReady)}
             onClick={() => onStart(selectedModule, "full")}
           >
-            {isEmbedding ? "全量生成向量" : "全量分析"}
+            {startLabels.full}
           </button>
         </div>
         <p className="mt-3 text-meta leading-relaxed text-fg-subtle">
           {isEmbedding
             ? `增量更新只处理新增、修改或模型版本变化的图片；全量会重新生成当前媒体库的${selectedName}结果。`
-            : "增量只处理新增、修改或解析器更新的图片；全量重新解析当前媒体库的全部图片。"}
+            : selectedModule === "metadata"
+              ? "增量只处理新增、修改或解析器更新的图片；全量重新解析当前媒体库的全部图片。"
+              : `增量只处理新增或变更图片；全量重新运行${selectedName}分析。`}
         </p>
         {lastJob ? (
           <p className="mt-5 border-t border-border-faint pt-4 text-meta text-fg-subtle">
@@ -288,6 +298,35 @@ function jobModuleName(type: AnalysisType, modules: AIJobModule[]): string {
   return modules.find((module) => module.type === type)?.name ?? type;
 }
 
+function moduleDescription(type: AnalysisType): string {
+  switch (type) {
+    case "embedding":
+      return "使用本机 Chinese-CLIP 为照片建立中文语义向量，可按描述搜索，也能按照片查找相似画面。向量只写入本机派生索引。";
+    case "ocr":
+      return "使用本机 OCR 识别照片中的文字，并保存识别内容与文字位置，结果可在图片详情中查看。";
+    case "face":
+      return "检测照片中的人脸并生成本机特征向量，可在图片详情中查找相似人脸；不会推断或标注真实姓名。";
+    default:
+      return "读取照片拍摄时间、相机信息与 GPS 坐标，结果只写进本机的派生缓存。";
+  }
+}
+
+function moduleStartLabels(type: AnalysisType): {
+  incremental: string;
+  full: string;
+} {
+  switch (type) {
+    case "embedding":
+      return { incremental: "增量更新向量", full: "全量生成向量" };
+    case "ocr":
+      return { incremental: "增量识别文字", full: "全量识别文字" };
+    case "face":
+      return { incremental: "增量识别人脸", full: "全量识别人脸" };
+    default:
+      return { incremental: "增量分析", full: "全量分析" };
+  }
+}
+
 function EmbeddingRuntimeStatus({
   status,
   loading,
@@ -303,7 +342,7 @@ function EmbeddingRuntimeStatus({
   if (!status) {
     return (
       <p role="status" className="mt-3 text-meta text-warning">
-        本机 AI 状态暂不可读；元数据分析仍可使用。
+        本机语义模型状态暂不可读，请检查 AI Worker 运行环境。
       </p>
     );
   }
@@ -338,4 +377,62 @@ function EmbeddingRuntimeStatus({
       </p>
     </div>
   );
+}
+
+function ImageModuleRuntimeStatus({
+  moduleType,
+  status,
+  loading,
+}: {
+  moduleType: "ocr" | "face";
+  status?: AIWorkerStatus;
+  loading: boolean;
+}) {
+  const label = moduleType === "ocr" ? "文字识别" : "人脸识别";
+  if (loading) {
+    return (
+      <p className="mt-3 text-meta text-fg-subtle">正在检查{label}运行环境…</p>
+    );
+  }
+  if (!status) {
+    return (
+      <p role="status" className="mt-3 text-meta text-warning">
+        本机 AI 状态暂不可读，无法确认{label}环境。
+      </p>
+    );
+  }
+  const module = status.modules?.[moduleType];
+  if (module?.ready) {
+    return (
+      <p role="status" className="mt-3 text-meta text-success">
+        {label}已就绪 · {module.version}
+      </p>
+    );
+  }
+  return (
+    <p role="status" className="mt-3 text-meta text-warning">
+      {moduleUnavailableMessage(module?.error)}
+    </p>
+  );
+}
+
+function moduleUnavailableMessage(code?: string): string {
+  switch (code) {
+    case "python_runtime_unavailable":
+      return "Python 3.11 环境不可用，请运行 backend/aiworker/setup.ps1。";
+    case "ocr_dependencies_missing":
+      return "OCR 依赖未安装，请运行 backend/aiworker/setup.ps1 并重启应用。";
+    case "ocr_dependency_version_mismatch":
+      return "OCR 依赖版本不匹配，请重新运行 backend/aiworker/setup.ps1。";
+    case "ocr_model_load_failed":
+      return "OCR 模型加载失败，请重新运行安装脚本并查看终端错误。";
+    case "face_dependencies_missing":
+      return "人脸识别依赖未安装，请运行 backend/aiworker/setup.ps1。";
+    case "face_model_missing_or_checksum_invalid":
+      return "人脸权重缺失或校验失败，请运行 backend/aiworker/download-model.ps1。";
+    case "face_model_load_failed":
+      return "人脸模型加载失败，请重新运行安装脚本并查看终端错误。";
+    default:
+      return "本机识别运行环境未就绪，请运行 backend/aiworker/setup.ps1 并重启应用。";
+  }
 }

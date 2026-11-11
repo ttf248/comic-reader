@@ -1,13 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   render as testingRender,
+  fireEvent,
   screen,
   waitFor,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactElement } from "react";
+import { MemoryRouter } from "react-router-dom";
 import ImageInfoPanel from "./ImageInfoPanel";
 import { imageInfoApi, type ImageInfo } from "../../api/imageInfo";
+import { aiJobsApi } from "../../api/aiJobs";
 import { ApiError } from "../../api/client";
 
 vi.mock("../../api/imageInfo", () => ({
@@ -15,7 +18,16 @@ vi.mock("../../api/imageInfo", () => ({
 }));
 
 vi.mock("../../api/aiJobs", () => ({
-  aiJobsApi: { metadata: vi.fn().mockResolvedValue({ status: "pending" }) },
+  aiJobsApi: {
+    metadata: vi.fn().mockResolvedValue({ status: "pending" }),
+    analysis: vi.fn().mockResolvedValue({
+      ok: true,
+      resourceId: "f_1",
+      ocr: { status: "pending" },
+      face: { status: "pending" },
+    }),
+    faceSearch: vi.fn(),
+  },
 }));
 
 function render(ui: ReactElement) {
@@ -24,7 +36,9 @@ function render(ui: ReactElement) {
   });
   return testingRender(ui, {
     wrapper: ({ children }) => (
-      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      <MemoryRouter>
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      </MemoryRouter>
     ),
   });
 }
@@ -77,9 +91,11 @@ describe("ImageInfoPanel", () => {
 
   // 面板跟着阅读器的深色画布走，不跟随应用主题：主题色会让浅色主题下
   // 出现"黑底阅读器里嵌一块白板"。
-  it("面板使用阅读器的深色底，不跟随应用主题", () => {
+  it("面板使用阅读器的深色底，不跟随应用主题", async () => {
     vi.mocked(imageInfoApi.get).mockResolvedValue(sampleInfo);
     render(<ImageInfoPanel absPath="f_1" onClose={() => {}} />);
+
+    expect(await screen.findByText("a.png")).toBeInTheDocument();
 
     const panel = screen.getByTestId("image-info-panel");
     expect(panel.className).toContain("bg-overlay-panel");
@@ -87,13 +103,69 @@ describe("ImageInfoPanel", () => {
     expect(panel.className).not.toContain("border-border-faint");
   });
 
-  it("关闭按钮有可访问名，点击后回调关闭", () => {
+  it("关闭按钮有可访问名，点击后回调关闭", async () => {
     const onClose = vi.fn();
     vi.mocked(imageInfoApi.get).mockResolvedValue(sampleInfo);
     render(<ImageInfoPanel absPath="f_1" onClose={onClose} />);
 
+    expect(await screen.findByText("a.png")).toBeInTheDocument();
     const close = screen.getByRole("button", { name: "关闭图片信息" });
     close.click();
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("显示已保存的 OCR 文字和人脸识别状态", async () => {
+    vi.mocked(imageInfoApi.get).mockResolvedValue(sampleInfo);
+    vi.mocked(aiJobsApi.analysis).mockResolvedValue({
+      ok: true,
+      resourceId: "f_1",
+      ocr: { status: "recognized", text: "海边散步", lines: [] },
+      face: { status: "no_faces", faces: [] },
+    });
+    render(<ImageInfoPanel absPath="f_1" onClose={() => {}} />);
+
+    expect(await screen.findByText("海边散步")).toBeInTheDocument();
+    expect(screen.getByText("未检测到人脸")).toBeInTheDocument();
+  });
+
+  it("可查询相似人脸并展示匹配照片", async () => {
+    vi.mocked(imageInfoApi.get).mockResolvedValue(sampleInfo);
+    vi.mocked(aiJobsApi.analysis).mockResolvedValue({
+      ok: true,
+      resourceId: "f_1",
+      ocr: { status: "no_text", text: "", lines: [] },
+      face: {
+        status: "faces_found",
+        faces: [{ box: [10, 12, 40, 42], score: 0.9 }],
+      },
+    });
+    vi.mocked(aiJobsApi.faceSearch).mockResolvedValue({
+      ok: true,
+      threshold: 0.363,
+      total: 1,
+      results: [
+        {
+          item: {
+            id: "f_2",
+            kind: "image",
+            name: "聚会.jpg",
+            index: 0,
+            kindIndex: 0,
+            albumId: "album_1",
+            albumName: "家庭聚会",
+          },
+          faceIndex: 0,
+          similarity: 0.78,
+        },
+      ],
+    });
+    render(<ImageInfoPanel absPath="f_1" onClose={() => {}} />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "人脸 1 · 找相似" }),
+    );
+    expect(await screen.findByText("聚会.jpg")).toBeInTheDocument();
+    expect(screen.getByText("78%")).toBeInTheDocument();
+    expect(aiJobsApi.faceSearch).toHaveBeenCalledWith("f_1", 0);
   });
 });

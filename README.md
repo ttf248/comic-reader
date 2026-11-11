@@ -10,8 +10,8 @@ Local Gallery 是一款在本机运行的照片、漫画与视频画廊。Go 后
 | --- | --- |
 | 照片 | 多目录合并为媒体库；按相册、集合、标签、年份和 GPS 地点浏览；中文语义搜索与以图搜图；照片墙、大图预览、并排对比、精选、收藏、最近浏览。 |
 | 漫画 | 独立作品列表；单页、连续、双页与 RTL 阅读；缩放、旋转、目录、阅读进度恢复、未读列表与最近阅读。 |
-| 后台任务 | 扫描进度与取消；EXIF/GPS 元数据全量或增量分析；任务暂停、继续、取消、失败项重试、重启恢复与每日计划。任务中心记录进度、产出和失败图片的相对路径。 |
-| 本机 AI | Chinese-CLIP 中文语义搜索和图片相似检索；可按相册、年份与 GPS 地点筛选，显示模型运行状态、设备和向量覆盖率。 |
+| 后台任务 | 扫描进度与取消；EXIF/GPS、OCR、人脸分析和语义向量的全量或增量任务；暂停、继续、失败项重试、重启恢复与每日计划。任务中心记录进度、产出和失败图片的相对路径。 |
+| 本机 AI | Chinese-CLIP 中文语义搜索和图片相似检索；RapidOCR 识别文字并在图片详情查看；YuNet + SFace 检测人脸、生成本地特征并查找相似照片。 |
 | 视频与媒体 | 浏览器原生播放和 Range 请求；可选 FFmpeg 提供视频封面、元数据、faststart、H.264/AAC 转码及 HEIC/HEIF/TIFF 转换。 |
 | 本机管理 | 多媒体根目录、缓存清理、状态备份与恢复、明暗主题、键盘与触摸操作。照片级「精选」与相册级「收藏」分开保存。 |
 
@@ -130,45 +130,35 @@ npm run dev
 
 ## 可选功能安装
 
-### 中文语义搜索与以图搜图
+### 本机 AI 安装（一次执行）
 
-Chinese-CLIP 权重约 753 MB。模型和推理都在本机运行，首次下载需要网络；下载后检索不依赖在线 AI 服务。
+首次安装会准备 Chinese-CLIP、中文 OCR 与人脸检测/相似检索所需的 Python 运行环境和权重。需要 Python 3.11、PowerShell 7 与网络；Windows 使用项目独立虚拟环境和 CUDA 12.6 版 PyTorch，无可用 NVIDIA GPU 时仍可用 CPU。OCR 和人脸分析使用本机 ONNX Runtime CPU 推理。
 
-源码目录的 Windows 用户从仓库根目录运行：
+源码目录从仓库根目录运行一次：
 
 ~~~powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File backend/aiworker/setup.ps1
-pwsh -NoProfile -ExecutionPolicy Bypass -File backend/aiworker/download-model.ps1
 ~~~
 
-发布包的 Windows 用户从解压目录运行：
+发布包从解压目录运行一次：
 
 ~~~powershell
 pwsh -NoProfile -ExecutionPolicy Bypass -File aiworker/setup.ps1
-pwsh -NoProfile -ExecutionPolicy Bypass -File aiworker/download-model.ps1
 ~~~
 
-setup.ps1 为 Python 3.11 创建独立虚拟环境，并安装 Windows CUDA 12.6 版 PyTorch；无可用 GPU 时支持 CPU 推理。download-model.ps1 会校验固定 revision 的官方权重 SHA256 `5997ef32c50de18f3ac06eb5d746c324a639053c3bed8f2986f97ebb22b2ecde`，再将模型保存到：
+脚本安装 RapidOCR、ONNX Runtime、OpenCV，并下载/校验 Chinese-CLIP、YuNet 和 SFace 权重；最后实际运行 OCR 识别、YuNet 检测与 SFace 特征提取检查。安装完成后重启 Local Gallery，在「任务中心」运行「文字识别」或「人脸识别」的全量任务；之后可用增量任务处理新增或变更图片。图片详情会展示识别文字、人脸框，并可按人脸查找相似照片。识别组件见 [RapidOCR 安装与用法](https://rapidai.github.io/RapidOCRDocs/main/en/install_usage/rapidocr/install/)；人脸权重固定来自 [OpenCV Zoo YuNet](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet) 和 [SFace](https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface)。
+
+Python 虚拟环境位于 Worker 目录的 `.venv/`，模型按配置保存在 `<cacheDir>/derived/ai/models/`：
 
 ~~~text
-<cacheDir>/derived/ai/models/clip_cn_vit-b-16.pt
+clip_cn_vit-b-16.pt
+face/face_detection_yunet_2023mar.onnx
+face/face_recognition_sface_2021dec.onnx
 ~~~
 
-默认 cacheDir 是进程工作目录下的 .local-gallery。权重不会放进 Python 的 site-packages，也不包含在发布压缩包内。
+默认 `cacheDir` 是进程工作目录下的 `.local-gallery`。权重不会放进系统 Python 或 `site-packages`，也不包含在发布压缩包中。Chinese-CLIP 权重约 753 MB；OCR 模型随 RapidOCR 安装；两个人脸模型合计约 37 MB。
 
-setup.ps1 会把 Python 虚拟环境建在 Worker 目录的 `.venv/` 下；程序优先使用这个项目内环境，不会把模型存到系统 Python 目录。源码目录对应 `backend/aiworker/.venv/`，发布包对应 `aiworker/.venv/`。若未创建该环境，程序才会尝试查找系统 Python 3.11。
-
-macOS / Linux 用户需自行安装 Python 3.11、PowerShell 7（提供 `pwsh`）和平台对应的 PyTorch，再安装 Worker 依赖并下载权重。发布包从包根目录执行：
-
-~~~sh
-python3.11 -m venv aiworker/.venv
-. aiworker/.venv/bin/activate
-# 按 PyTorch 官方安装页面选择系统与 CPU/CUDA，然后执行页面生成的命令
-python -m pip install -r aiworker/requirements.txt
-pwsh -NoProfile -File aiworker/download-model.ps1
-~~~
-
-源码目录将命令中的 `aiworker/` 改为 `backend/aiworker/`。PyTorch 安装命令需按系统和 CPU/CUDA 设备选择，见 [PyTorch 官方安装说明](https://pytorch.org/get-started/locally/)。完成后启动程序，在「任务中心」选择「向量索引」并运行一次全量任务；之后可用增量任务处理新增或变更的照片。EXIF/GPS 元数据分析不需要 Chinese-CLIP。
+macOS / Linux 可在安装 Python 3.11 和 PowerShell 7 后运行同一安装脚本；脚本会建立 Worker 独立环境并使用 PyTorch 默认平台 wheel。若要单独重下或校验权重，可运行 `backend/aiworker/download-model.ps1`（发布包路径为 `aiworker/download-model.ps1`）。
 
 ### FFmpeg 媒体增强
 
@@ -193,10 +183,10 @@ pwsh -NoProfile -File scripts/install-ffmpeg.ps1
 
 - 这是单用户本地画廊，不包含账号系统、云端同步、在线分享、协作或数据库。
 - 只扫描配置的文件夹，不导入 ZIP/RAR 等压缩包。
-- 语义检索目前面向照片；OCR 与人脸识别尚未提供，任务中心会显示未安装状态。
+- 语义检索与人脸相似检索目前面向照片；人脸功能只按本机特征查找相似照片，不识别或推断真实姓名。
 - GPS 地点相册按照片坐标在本机生成，不调用在线地图或地理编码服务。
 - 发布包是便携压缩包，不安装系统服务或配置登录自启；需要手动启动程序并保持进程运行。
-- 发布包会附带本机 AI Worker、依赖清单和安装脚本，但不会打包 Python 虚拟环境或大体积模型。基本浏览无需 Python；启用语义搜索需按上文手动安装。
+- 发布包会附带本机 AI Worker、依赖清单和一键安装脚本，但不会打包 Python 虚拟环境或模型权重。基本浏览无需 Python；启用 OCR、人脸分析或语义搜索前需运行上文安装脚本。
 
 ## 开发验证
 

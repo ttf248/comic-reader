@@ -4,6 +4,7 @@ import {
   formatTaskSpeed,
   groupFailures,
   jobProgressPercent,
+  taskFieldLabel,
   taskResultLabel,
 } from "./taskFormat";
 import type { AIJob, AIJobError } from "../api/aiJobs";
@@ -64,6 +65,10 @@ describe("任务格式化", () => {
 
   it("解析状态有中文名", () => {
     expect(taskResultLabel("no_exif")).toBe("无 EXIF");
+    expect(taskResultLabel("recognized")).toBe("检出文字");
+    expect(taskResultLabel("faces_found")).toBe("检出人脸");
+    expect(taskFieldLabel("ocrText")).toBe("文字内容");
+    expect(taskFieldLabel("faces")).toBe("人脸特征");
     expect(taskResultLabel("unknown_status")).toBe("unknown_status");
   });
 

@@ -124,6 +124,14 @@ export function taskResultLabel(key: string): string {
       return "已处理";
     case "indexed":
       return "已建向量";
+    case "recognized":
+      return "检出文字";
+    case "no_text":
+      return "未检出文字";
+    case "faces_found":
+      return "检出人脸";
+    case "no_faces":
+      return "未检出人脸";
     default:
       return key;
   }
@@ -138,6 +146,10 @@ export function taskFieldLabel(key: string): string {
       return "相机信息";
     case "gps":
       return "GPS 坐标";
+    case "ocrText":
+      return "文字内容";
+    case "faces":
+      return "人脸特征";
     case "embedding":
       return "语义向量";
     default:

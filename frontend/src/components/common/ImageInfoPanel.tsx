@@ -1,3 +1,5 @@
+import { useEffect, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import { CloseIcon } from "./Icon";
 import CopyButton from "./CopyButton";
 import { useImageInfo } from "../../hooks/useImageInfo";
@@ -6,6 +8,8 @@ import { formatDateTime } from "../../utils/date";
 import { apiErrorMessage } from "../../utils/apiError";
 import { useQuery } from "@tanstack/react-query";
 import { aiJobsApi } from "../../api/aiJobs";
+import { previewUrl } from "../../api/images";
+import { albumRoute } from "../../utils/path";
 
 interface Props {
   absPath: string | null;
@@ -22,6 +26,8 @@ interface Props {
 // 面板同样按阅读器的深色约定渲染，不用应用主题色——否则浅色主题下会
 // 出现"黑底阅读器里嵌一块白板"，且白底上的深色小字与深色画布割裂。
 export default function ImageInfoPanel({ absPath, onClose }: Props) {
+  const [selectedFace, setSelectedFace] = useState<number | null>(null);
+  const previousAbsPath = useRef(absPath);
   const { info, err, loading } = useImageInfo(absPath);
   const metadataQuery = useQuery({
     queryKey: ["image-exif", absPath],
@@ -30,6 +36,27 @@ export default function ImageInfoPanel({ absPath, onClose }: Props) {
     refetchInterval: (query) =>
       query.state.data?.status === "pending" ? 5_000 : false,
   });
+  const analysisQuery = useQuery({
+    queryKey: ["image-ai-analysis", absPath],
+    queryFn: () => aiJobsApi.analysis(absPath ?? ""),
+    enabled: Boolean(absPath),
+    refetchInterval: (query) =>
+      query.state.data?.ocr.status === "pending" ||
+      query.state.data?.face.status === "pending"
+        ? 5_000
+        : false,
+  });
+  const faceSearchQuery = useQuery({
+    queryKey: ["face-similarity", absPath, selectedFace],
+    queryFn: () => aiJobsApi.faceSearch(absPath ?? "", selectedFace ?? 0),
+    enabled: Boolean(absPath) && selectedFace !== null,
+  });
+
+  useEffect(() => {
+    if (previousAbsPath.current === absPath) return;
+    previousAbsPath.current = absPath;
+    setSelectedFace(null);
+  }, [absPath]);
 
   if (!absPath) return null;
 
@@ -137,6 +164,116 @@ export default function ImageInfoPanel({ absPath, onClose }: Props) {
             ) : (
               <Row label="分析状态" value="尚未分析" />
             )}
+            <AnalysisHeading>文字识别</AnalysisHeading>
+            <ImageAnalysisStatus
+              status={analysisQuery.data?.ocr.status}
+              error={analysisQuery.data?.ocr.error?.message}
+              loading={analysisQuery.isLoading}
+              pendingLabel="尚未识别；可在任务中心运行文字识别。"
+              emptyLabel="未检测到可辨认文字"
+            />
+            {analysisQuery.data?.ocr.status === "recognized" ? (
+              <div className="py-2 text-white/90">
+                <p className="whitespace-pre-wrap break-words text-body leading-relaxed">
+                  {analysisQuery.data.ocr.text}
+                </p>
+                <p className="mt-1 text-meta text-white/50">
+                  检出 {analysisQuery.data.ocr.lines?.length ?? 0} 行文字
+                </p>
+              </div>
+            ) : null}
+            <AnalysisHeading>人脸识别</AnalysisHeading>
+            <ImageAnalysisStatus
+              status={analysisQuery.data?.face.status}
+              error={analysisQuery.data?.face.error?.message}
+              loading={analysisQuery.isLoading}
+              pendingLabel="尚未分析；可在任务中心运行人脸识别。"
+              emptyLabel="未检测到人脸"
+            />
+            {analysisQuery.data?.face.status === "faces_found" ? (
+              <div className="py-2">
+                <p className="text-meta text-white/70">
+                  检测到 {analysisQuery.data.face.faces?.length ?? 0} 张人脸
+                </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {analysisQuery.data.face.faces?.map((face, index) => (
+                    <button
+                      key={`${index}-${face.box.join(",")}`}
+                      type="button"
+                      className="rounded border border-white/15 px-2.5 py-1.5 text-meta text-white/80 transition-colors hover:bg-white/10"
+                      onClick={() => setSelectedFace(index)}
+                    >
+                      人脸 {index + 1} · 找相似
+                    </button>
+                  ))}
+                </div>
+                {selectedFace !== null ? (
+                  <div className="mt-3 rounded-md border border-white/10 bg-black/15 p-2.5">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-meta font-medium text-white/80">
+                        相似照片
+                      </p>
+                      <button
+                        type="button"
+                        className="text-meta text-white/50 hover:text-white"
+                        onClick={() => setSelectedFace(null)}
+                      >
+                        收起
+                      </button>
+                    </div>
+                    {faceSearchQuery.isLoading ? (
+                      <p className="mt-2 text-meta text-white/55">正在检索…</p>
+                    ) : faceSearchQuery.isError ? (
+                      <p className="mt-2 text-meta text-overlay-danger">
+                        {apiErrorMessage(
+                          faceSearchQuery.error,
+                          "相似人脸检索失败",
+                        )}
+                      </p>
+                    ) : faceSearchQuery.data?.results.length ? (
+                      <ul className="mt-2 space-y-2">
+                        {faceSearchQuery.data.results.map((hit) => (
+                          <li key={hit.item.id}>
+                            <Link
+                              to={albumRoute("photo", hit.item.albumId)}
+                              className="flex items-center gap-2 rounded p-1 transition-colors hover:bg-white/10"
+                            >
+                              <img
+                                src={previewUrl(
+                                  hit.item.id,
+                                  160,
+                                  hit.item.version,
+                                )}
+                                alt=""
+                                className="h-12 w-12 shrink-0 rounded object-cover"
+                              />
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-meta text-white/85">
+                                  {hit.item.name}
+                                </span>
+                                <span className="block truncate text-meta text-white/50">
+                                  {hit.item.albumName}
+                                </span>
+                              </span>
+                              <span className="font-mono text-meta tabular-nums text-white/55">
+                                {Math.round(hit.similarity * 100)}%
+                              </span>
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="mt-2 text-meta text-white/55">
+                        没有找到相似人脸
+                      </p>
+                    )}
+                    <p className="mt-2 text-meta leading-relaxed text-white/40">
+                      相似度用于找回同一人物的照片，不代表身份确认。
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             <Row
               label="目录"
               value={info.dir}
@@ -163,6 +300,46 @@ export default function ImageInfoPanel({ absPath, onClose }: Props) {
       </div>
     </aside>
   );
+}
+
+function AnalysisHeading({ children }: { children: string }) {
+  return (
+    <div className="my-2 border-t border-white/10 pt-2 text-meta font-medium text-white/70">
+      {children}
+    </div>
+  );
+}
+
+function ImageAnalysisStatus({
+  status,
+  error,
+  loading,
+  pendingLabel,
+  emptyLabel,
+}: {
+  status?: string;
+  error?: string;
+  loading: boolean;
+  pendingLabel: string;
+  emptyLabel: string;
+}) {
+  if (loading)
+    return <p className="py-1 text-meta text-white/45">正在读取分析结果…</p>;
+  if (status === "pending")
+    return <p className="py-1 text-meta text-white/45">{pendingLabel}</p>;
+  if (status === "no_text" || status === "no_faces") {
+    return <p className="py-1 text-meta text-white/45">{emptyLabel}</p>;
+  }
+  if (status === "failed") {
+    return (
+      <p className="py-1 text-meta text-overlay-danger">
+        {error ?? "分析失败，可在任务中心重试。"}
+      </p>
+    );
+  }
+  if (!status)
+    return <p className="py-1 text-meta text-white/45">分析状态暂不可用</p>;
+  return null;
 }
 
 interface RowProps {

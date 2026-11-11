@@ -56,6 +56,9 @@ func AIJobStartHandler(service *services.AIJobService) fiber.Handler {
 			if errors.Is(err, services.ErrAIModelUnavailable) {
 				return writeError(c, fiber.StatusServiceUnavailable, "ai_model_missing", "local semantic model is missing or checksum verification failed")
 			}
+			if errors.Is(err, services.ErrAIAnalyzerUnavailable) {
+				return writeError(c, fiber.StatusServiceUnavailable, "ai_module_unavailable", "local analysis module or model is unavailable")
+			}
 			if errors.Is(err, services.ErrAIRuntimeUnavailable) || errors.Is(err, services.ErrAIWorkerUnavailable) {
 				return writeError(c, fiber.StatusServiceUnavailable, "ai_runtime_unavailable", "local AI runtime is unavailable")
 			}

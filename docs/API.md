@@ -200,7 +200,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 ### `GET /api/ai/jobs` / `POST /api/ai/jobs`
 
-读取任务历史、活动任务与每日计划；启动请求为 `{ "type": "metadata" | "embedding", "mode": "full" | "incremental" }`。全量分析当前库中的图片，增量分析新增、修改或模块版本变化的图片。`metadata` 读取 EXIF/GPS；`embedding` 使用本机 Chinese-CLIP 生成语义向量。向量任务需要可用的 Python 运行环境与已校验权重，缺失时返回 `503 ai_runtime_unavailable` 或 `503 ai_model_missing`。已有其他任务活动时返回 `409 analysis_job_active`；模块类型或模式无效时返回 `400 analysis_start_failed`。响应含任务快照与 `reused`。
+读取任务历史、活动任务与每日计划；启动请求为 `{ "type": "metadata" | "embedding" | "ocr" | "face", "mode": "full" | "incremental" }`。全量分析当前库中的图片，增量分析新增、修改或模块版本变化的图片。`metadata` 读取 EXIF/GPS；`embedding` 使用本机 Chinese-CLIP 生成语义向量；`ocr` 使用 RapidOCR 识别文字；`face` 使用 YuNet 检测人脸并由 SFace 生成相似检索特征。后三者需要对应本机 Python 依赖与权重，缺失时返回 `503 ai_runtime_unavailable`、`503 ai_model_missing` 或 `503 ai_module_unavailable`。已有其他任务活动时返回 `409 analysis_job_active`；模块类型或模式无效时返回 `400 analysis_start_failed`。响应含任务快照与 `reused`。
 
 任务状态为 `pending`、`running`、`paused`、`completed`、`failed`、`cancelled`。快照包含阶段、总数、已处理/跳过/失败/完成数、检查点、耗时、速度、开始/结束时间及错误项。错误项包含资源 ID、根目录别名下的相对图片路径、稳定错误码、脱敏原因和时间；不返回文件系统绝对路径。任务在后台按 32 张一批提交，重启后自动恢复运行中任务。
 
@@ -210,12 +210,12 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 - `completed`：已处理张数（成功与失败都算）。
 - `estimatedRemainingMs`：运行中任务的预计剩余毫秒。只在 `running` 时给出；暂停时耗时仍在增长、速度已失真，因此返回 0。队列、暂停与终态同样返回 0。
 - `speedPerSecond`：每秒实际处理张数，不含被跳过的文件（增量任务的 `done` 从跳过数起步，按它算速度会在任务开头虚高）。
-- `results`：按解析结果分类的计数，键为 `parsed`、`no_exif`、`unsupported`、`failed`。四类之和等于 `completed`。
-- `fields`：按字段统计的产出计数，键为 `exifTime`、`camera`、`gps`。只统计实际取到值的字段。
+- `results`：按处理结果分类的计数。元数据使用 `parsed`、`no_exif`、`unsupported`、`failed`；OCR 使用 `recognized`、`no_text`、`failed`；人脸使用 `faces_found`、`no_faces`、`failed`；向量使用 `indexed`、`failed`。每组键的计数和等于 `completed`。
+- `fields`：按字段统计的产出计数，键包括 `exifTime`、`camera`、`gps`、`embedding`、`ocrText`、`faces`。只统计实际取得内容的图片，不报告空结果。
 
 `planned`、`completed`、`estimatedRemainingMs` 与速度都是快照派生值，不写入 `state/ai_jobs.json`；`results` 与 `fields` 是事实，随批次一并落盘，重启后按批次文件重放恢复。
 
-快照还带 `modules`：后端已知的全部分析模块及其安装情况，元素为 `{ "type", "name", "installed", "version" }`。`type` 为 `metadata`、`embedding`、`ocr`、`face`；`installed` 表示该模块是否注册了分析器，`version` 只在已安装时给出。客户端据此渲染模块清单，不再自行硬编码模块名。
+快照还带 `modules`：后端已知的全部分析模块及其安装情况，元素包含 `{ "type", "name", "installed", "version", "reason" }`。`type` 为 `metadata`、`embedding`、`ocr`、`face`；对 OCR 与人脸模块，`installed` 表示对应本机运行依赖和权重已就绪，缺失时可用 `reason` 诊断。`version` 只在已就绪时给出。客户端据此渲染模块清单，不再自行硬编码模块名。
 
 ### `GET /api/ai/jobs/:jobId` / `GET /api/ai/jobs/:jobId/events`
 
@@ -232,11 +232,11 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 ### `GET /api/ai/jobs/settings` / `PUT /api/ai/jobs/settings`
 
-每日计划字段为 `{ "dailyEnabled": true, "dailyTime": "03:00", "dailyModules": ["metadata", "embedding"] }`。默认开启，模块默认为 `metadata`，按服务所在设备本地时间每天凌晨 3 点运行。时间格式为 24 小时 `HH:MM`；开启计划时至少选择一个已安装模块。未安装模块、空模块选择或无效时间返回 `400 invalid_analysis_settings`。到时后按配置顺序排入所选模块的增量任务，并复用现有任务队列逐项执行；运行环境或权重未就绪的模块会跳过。服务错过计划日期后启动时补跑一次，同一天不重复创建。旧状态文件缺少 `dailyModules` 时按 metadata 恢复。
+每日计划字段为 `{ "dailyEnabled": true, "dailyTime": "03:00", "dailyModules": ["metadata", "ocr", "face"] }`。默认开启，模块默认为 `metadata`，按服务所在设备本地时间每天凌晨 3 点运行。时间格式为 24 小时 `HH:MM`；开启计划时至少选择一个已安装模块。未安装模块、空模块选择或无效时间返回 `400 invalid_analysis_settings`。到时后按配置顺序排入所选模块的增量任务，并复用现有任务队列逐项执行；运行环境或权重未就绪的模块会跳过。服务错过计划日期后启动时补跑一次，同一天不重复创建。旧状态文件缺少 `dailyModules` 时按 metadata 恢复。
 
 ### `GET /api/ai/semantic/status`
 
-返回本机 Python、PyTorch、CUDA/GPU、模型 SHA256 校验、向量索引版本与覆盖率。`runtimeReady` 表示推理依赖可导入，`modelValid` 表示权重匹配固定 revision；`cudaAvailable` 为 false 时仍可使用 CPU。`coverage` 按当前资源快照和有效文件指纹统计已索引数/照片数。
+返回本机 Python、PyTorch、CUDA/GPU、Chinese-CLIP SHA256 校验、向量索引版本与覆盖率，以及 `modules.ocr` 与 `modules.face` 的依赖/权重状态。`runtimeReady` 表示 Chinese-CLIP 推理依赖可导入，`modelValid` 表示权重匹配固定 revision；`cudaAvailable` 为 false 时仍可使用 CPU。OCR 和人脸检测通过 `modules` 独立报告就绪状态，不受 Chinese-CLIP 权重缺失影响。`coverage` 按当前资源快照和有效文件指纹统计已索引数/照片数。
 
 ### `POST /api/ai/search`
 
@@ -247,6 +247,14 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 ### `GET /api/images/:fileId/metadata`
 
 在现有图片资源路径重新校验后，读取匹配当前文件大小、修改时间与解析器版本的元数据；尚未分析或结果已过期时返回 `status: "pending"`。结果包含 EXIF 拍摄墙上时间、方向、相机信息及可用时的 GPS 坐标、海拔、时间、方向和精度字段。无 EXIF、格式不支持是正常状态。EXIF 日期不会覆盖相册现有的业务日期。文件 ID 无效返回 `404 resource_not_found`，非图片返回 `415 invalid_metadata_resource`。
+
+### `GET /api/images/:fileId/analysis`
+
+读取与当前文件大小、修改时间及模块版本匹配的 OCR 与人脸结果。`ocr` 包含 `status`、识别文本和文字框；`face` 包含 `status`、人脸框与检测置信度。尚未分析或文件已变化时状态为 `pending`。SFace 特征向量只保存在本机派生记录中，不通过此接口返回。文件 ID 无效返回 `404 resource_not_found`，非图片返回 `415 invalid_analysis_resource`。
+
+### `POST /api/ai/faces/search`
+
+请求为 `{ "resourceId": "…", "faceIndex": 0 }`，用当前图片中指定的人脸查找媒体库相似照片。响应按 SFace 余弦相似度降序，最多返回 40 个结果；低于 `0.363` 的匹配会过滤。候选仅包含当前快照内记录版本和文件指纹匹配、路径通过当前媒体根重新验证的照片。每项返回当前照片 DTO、匹配的人脸序号与相似度，不包含特征向量或绝对路径。结果是相似度线索，不代表已确认人物身份。无效请求返回 `400 invalid_face_search`，没有可用的人脸源记录返回 `404 face_search_source_unavailable`。
 
 ### `GET /api/locations` / `GET /api/locations/:locationId/media`
 

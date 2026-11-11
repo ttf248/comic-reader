@@ -36,6 +36,11 @@ const CODE_MESSAGES: Record<string, string> = {
   directory_access_denied: "没有权限访问该目录",
   directory_not_found: "目录不存在",
   // 系统
+  ai_module_unavailable:
+    "本机识别模块或模型未就绪，请运行 AI 安装脚本并重启应用",
+  ai_runtime_unavailable:
+    "本机 AI 运行环境未就绪，请运行 AI 安装脚本并重启应用",
+  ai_model_missing: "本机语义模型缺失或校验失败，请运行 AI 安装脚本",
   os_open_disabled: "当前环境不允许打开系统文件管理器",
   os_open_failed: "系统文件管理器未能打开",
   // 其它

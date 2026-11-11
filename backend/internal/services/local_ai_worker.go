@@ -31,23 +31,30 @@ var (
 )
 
 type AIWorkerStatus struct {
-	PythonAvailable bool              `json:"pythonAvailable"`
-	PythonVersion   string            `json:"pythonVersion,omitempty"`
-	TorchVersion    string            `json:"torchVersion,omitempty"`
-	CUDAAvailable   bool              `json:"cudaAvailable"`
-	CUDAVersion     string            `json:"cudaVersion,omitempty"`
-	GPUName         string            `json:"gpuName,omitempty"`
-	GPUMemoryBytes  int64             `json:"gpuMemoryBytes,omitempty"`
-	Device          string            `json:"device"`
-	RuntimeReady    bool              `json:"runtimeReady"`
-	RuntimeError    string            `json:"runtimeError,omitempty"`
-	ModelAvailable  bool              `json:"modelAvailable"`
-	ModelValid      bool              `json:"modelValid"`
-	ModelLoaded     bool              `json:"modelLoaded"`
-	ModelVersion    string            `json:"modelVersion"`
-	ModelSHA256     string            `json:"modelSha256,omitempty"`
-	Index           VectorIndexStatus `json:"index"`
-	Coverage        AIIndexCoverage   `json:"coverage"`
+	PythonAvailable bool                            `json:"pythonAvailable"`
+	PythonVersion   string                          `json:"pythonVersion,omitempty"`
+	TorchVersion    string                          `json:"torchVersion,omitempty"`
+	CUDAAvailable   bool                            `json:"cudaAvailable"`
+	CUDAVersion     string                          `json:"cudaVersion,omitempty"`
+	GPUName         string                          `json:"gpuName,omitempty"`
+	GPUMemoryBytes  int64                           `json:"gpuMemoryBytes,omitempty"`
+	Device          string                          `json:"device"`
+	RuntimeReady    bool                            `json:"runtimeReady"`
+	RuntimeError    string                          `json:"runtimeError,omitempty"`
+	ModelAvailable  bool                            `json:"modelAvailable"`
+	ModelValid      bool                            `json:"modelValid"`
+	ModelLoaded     bool                            `json:"modelLoaded"`
+	ModelVersion    string                          `json:"modelVersion"`
+	ModelSHA256     string                          `json:"modelSha256,omitempty"`
+	Index           VectorIndexStatus               `json:"index"`
+	Coverage        AIIndexCoverage                 `json:"coverage"`
+	Modules         map[string]AIWorkerModuleStatus `json:"modules,omitempty"`
+}
+
+type AIWorkerModuleStatus struct {
+	Ready   bool   `json:"ready"`
+	Version string `json:"version,omitempty"`
+	Error   string `json:"error,omitempty"`
 }
 
 type AIIndexCoverage struct {
@@ -60,11 +67,23 @@ type AIWorkerVector struct {
 	Error  string
 }
 
+type AIWorkerAnalysis struct {
+	Data  json.RawMessage
+	Error string
+}
+
 type AIEmbeddingWorker interface {
 	Status(context.Context) (AIWorkerStatus, error)
 	EmbedImages(context.Context, []string) ([]AIWorkerVector, error)
 	EmbedTexts(context.Context, []string) ([]AIWorkerVector, error)
 	Close() error
+}
+
+type AIImageAnalysisWorker interface {
+	AIEmbeddingWorker
+	AnalyzeOCR(context.Context, []string) ([]AIWorkerAnalysis, error)
+	AnalyzeFaces(context.Context, []string) ([]AIWorkerAnalysis, error)
+	ModuleStatus(string) AIWorkerModuleStatus
 }
 
 type LocalAIWorkerOptions struct {
@@ -82,8 +101,9 @@ type workerRequest struct {
 }
 
 type workerItemResponse struct {
-	Vector []float32 `json:"vector"`
-	Error  string    `json:"error"`
+	Vector []float32       `json:"vector"`
+	Data   json.RawMessage `json:"data"`
+	Error  string          `json:"error"`
 }
 
 type workerResponse struct {
@@ -108,6 +128,7 @@ type localAIWorker struct {
 	mu      sync.Mutex
 	process *workerProcess
 	closed  bool
+	status  AIWorkerStatus
 }
 
 func NewLocalAIWorker(options LocalAIWorkerOptions) (*localAIWorker, error) {
@@ -166,11 +187,29 @@ func (w *localAIWorker) Status(ctx context.Context) (AIWorkerStatus, error) {
 	response, err := w.send(ctx, workerRequest{Action: "status"})
 	if err != nil {
 		if errors.Is(err, ErrAIWorkerUnavailable) {
-			return AIWorkerStatus{ModelVersion: ChineseCLIPModelVersion, Device: "unavailable", RuntimeError: "python_runtime_unavailable"}, nil
+			status := AIWorkerStatus{ModelVersion: ChineseCLIPModelVersion, Device: "unavailable", RuntimeError: "python_runtime_unavailable", Modules: unavailableImageModules("python_runtime_unavailable")}
+			w.cacheStatus(status)
+			return status, nil
 		}
 		return AIWorkerStatus{}, err
 	}
+	w.cacheStatus(response.Status)
 	return response.Status, nil
+}
+
+func (w *localAIWorker) ModuleStatus(moduleType string) AIWorkerModuleStatus {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if status, ok := w.status.Modules[moduleType]; ok {
+		return status
+	}
+	return AIWorkerModuleStatus{Error: "runtime_status_not_checked"}
+}
+
+func (w *localAIWorker) cacheStatus(status AIWorkerStatus) {
+	w.mu.Lock()
+	w.status = status
+	w.mu.Unlock()
 }
 
 func (w *localAIWorker) EmbedImages(ctx context.Context, paths []string) ([]AIWorkerVector, error) {
@@ -187,6 +226,40 @@ func (w *localAIWorker) EmbedTexts(ctx context.Context, texts []string) ([]AIWor
 		return nil, err
 	}
 	return workerVectors(response)
+}
+
+func (w *localAIWorker) AnalyzeOCR(ctx context.Context, paths []string) ([]AIWorkerAnalysis, error) {
+	return w.analyzeImages(ctx, "ocr_images", paths)
+}
+
+func (w *localAIWorker) AnalyzeFaces(ctx context.Context, paths []string) ([]AIWorkerAnalysis, error) {
+	return w.analyzeImages(ctx, "face_images", paths)
+}
+
+func (w *localAIWorker) analyzeImages(ctx context.Context, action string, paths []string) ([]AIWorkerAnalysis, error) {
+	response, err := w.send(ctx, workerRequest{Action: action, Paths: paths})
+	if err != nil {
+		return nil, err
+	}
+	if response.Status.Modules != nil {
+		w.cacheStatus(response.Status)
+	}
+	if response.Error != "" {
+		code := safeWorkerError(response.Error)
+		return nil, fmt.Errorf("%w: %s", ErrAIWorkerUnavailable, code)
+	}
+	result := make([]AIWorkerAnalysis, len(response.Items))
+	for index, item := range response.Items {
+		result[index] = AIWorkerAnalysis{Data: item.Data, Error: item.Error}
+	}
+	return result, nil
+}
+
+func unavailableImageModules(code string) map[string]AIWorkerModuleStatus {
+	return map[string]AIWorkerModuleStatus{
+		AIJobTypeOCR:  {Error: code},
+		AIJobTypeFace: {Error: code},
+	}
 }
 
 func workerVectors(response workerResponse) ([]AIWorkerVector, error) {

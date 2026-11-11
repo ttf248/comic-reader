@@ -20,6 +20,7 @@ export interface AIJobModule {
   name: string;
   installed: boolean;
   version?: string;
+  reason?: string;
 }
 
 export interface AIJob {
@@ -103,6 +104,40 @@ export interface AIWorkerStatus {
     ready: boolean;
   };
   coverage: { indexed: number; total: number };
+  modules?: Partial<Record<"ocr" | "face", AIWorkerModuleStatus>>;
+}
+
+export interface AIWorkerModuleStatus {
+  ready: boolean;
+  version?: string;
+  error?: string;
+}
+
+export interface ImageAnalysisResponse {
+  ok: boolean;
+  resourceId: string;
+  ocr: {
+    status: "pending" | "recognized" | "no_text" | "failed";
+    text?: string;
+    lines?: { text: string; confidence: number; box: number[][] }[];
+    error?: { code: string; message: string };
+  };
+  face: {
+    status: "pending" | "faces_found" | "no_faces" | "failed";
+    faces?: { box: number[]; score: number }[];
+    error?: { code: string; message: string };
+  };
+}
+
+export interface FaceSearchResponse {
+  ok: boolean;
+  threshold: number;
+  total: number;
+  results: {
+    item: LibraryFeedItem;
+    faceIndex: number;
+    similarity: number;
+  }[];
 }
 
 export interface SemanticSearchRequest {
@@ -203,6 +238,16 @@ export const aiJobsApi = {
     api<ImageMetadataResponse>(
       `/api/images/${encodeURIComponent(id)}/metadata`,
     ),
+  analysis: (id: string) =>
+    api<ImageAnalysisResponse>(
+      `/api/images/${encodeURIComponent(id)}/analysis`,
+    ),
+  faceSearch: (resourceId: string, faceIndex: number) =>
+    api<FaceSearchResponse>("/api/ai/faces/search", {
+      method: "POST",
+      body: { resourceId, faceIndex },
+      nonIdempotent: true,
+    }),
   embeddingStatus: () =>
     api<{ ok: boolean; status: AIWorkerStatus }>("/api/ai/semantic/status"),
   semanticSearch: (request: SemanticSearchRequest, image?: File) => {

@@ -42,6 +42,8 @@ const (
 	AIFieldCamera    = "camera"
 	AIFieldGPS       = "gps"
 	AIFieldEmbedding = "embedding"
+	AIFieldOCRText   = "ocrText"
+	AIFieldFaces     = "faces"
 
 	aiJobStoreVersion = 1
 	aiBatchSize       = 32
@@ -49,6 +51,7 @@ const (
 )
 
 var ErrAIJobActive = errors.New("an analysis job is already active")
+var ErrAIAnalyzerUnavailable = errors.New("analysis module runtime or model is unavailable")
 
 // AIAnalysisOutput 是一个分析模块对单个媒体返回的可序列化结果。
 type AIAnalysisOutput struct {
@@ -82,6 +85,11 @@ type AIAnalysisInput struct {
 
 type AIAnalyzerReadiness interface {
 	Ready(context.Context) error
+}
+
+// AIAnalyzerAvailability reports whether an optional module's local runtime and models are ready.
+type AIAnalyzerAvailability interface {
+	Available() (bool, string)
 }
 
 type AIAnalyzerRecordValidator interface {
@@ -209,6 +217,7 @@ type AIJobModule struct {
 	Name      string `json:"name"`
 	Installed bool   `json:"installed"`
 	Version   string `json:"version,omitempty"`
+	Reason    string `json:"reason,omitempty"`
 }
 
 // AIAnalysisRecord 是 derived/metadata 中可重建的单资源分析结果。
@@ -355,6 +364,9 @@ func (s *AIJobService) Start(moduleType, mode string) (AIJob, bool, error) {
 			return AIJob{}, false, fmt.Errorf("analysis module %q is not installed", moduleType)
 		}
 		return AIJob{}, false, errors.New("unknown analysis module")
+	}
+	if !aiAnalyzerAvailable(analyzer) {
+		return AIJob{}, false, ErrAIAnalyzerUnavailable
 	}
 	s.mu.Lock()
 	closed := s.closed
@@ -546,12 +558,26 @@ func (s *AIJobService) modulesLocked() []AIJobModule {
 	for _, moduleType := range known {
 		module := AIJobModule{Type: moduleType, Name: aiJobModuleName(moduleType)}
 		if analyzer, exists := s.analyzers[moduleType]; exists {
-			module.Installed = true
-			module.Version = analyzer.Version()
+			module.Installed, module.Reason = aiAnalyzerAvailability(analyzer)
+			if module.Installed {
+				module.Version = analyzer.Version()
+			}
 		}
 		modules = append(modules, module)
 	}
 	return modules
+}
+
+func aiAnalyzerAvailable(analyzer AIAnalyzer) bool {
+	available, _ := aiAnalyzerAvailability(analyzer)
+	return available
+}
+
+func aiAnalyzerAvailability(analyzer AIAnalyzer) (bool, string) {
+	if availability, ok := analyzer.(AIAnalyzerAvailability); ok {
+		return availability.Available()
+	}
+	return true, ""
 }
 
 // aiJobModuleName 给分析模块一个中文显示名。
@@ -607,7 +633,8 @@ func (s *AIJobService) normalizeDailyModulesLocked(modules []string, enabled boo
 		if !validAIJobType(moduleType) {
 			return nil, fmt.Errorf("unknown analysis module %q", moduleType)
 		}
-		if _, installed := s.analyzers[moduleType]; !installed {
+		analyzer, installed := s.analyzers[moduleType]
+		if !installed || !aiAnalyzerAvailable(analyzer) {
 			return nil, fmt.Errorf("analysis module %q is not installed", moduleType)
 		}
 		selected[moduleType] = struct{}{}
