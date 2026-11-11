@@ -107,11 +107,11 @@ const PRELOAD_AHEAD = 3;
 /**
  * 最多记住多少次「下一张」等着补。
  *
- * 按住不放时用户可能按上百次 —— 上限要留得住这些次数，否则按住不放
+ * 按住不放时用户可能按几百次 —— 上限要留得住这些次数，否则按住不放
  * 翻到分页边界就会「吃掉」一截按键。真正补多少由已加载的条目决定：
- * 没有那么多照片就补那么多。
+ * 没有那么多照片就补那么多，所以这个上限只是防住荒谬的数字。
  */
-const MAX_PENDING_ADVANCE = 1000;
+const MAX_PENDING_ADVANCE = 10000;
 
 /**
  * 照片模式的沉浸式大图预览。
@@ -186,9 +186,6 @@ export default function PhotoViewer({
   // 渲染要等这一拍结束）：按 props 算会把好几次按键算成同一张，
   // 照片就在原地不动。这里记的是「已经翻到哪儿」，按键时立刻记账。
   const indexRef = useRef(index);
-  // 最近一次向上层要的位置：用来分辨「这个序号是我们要的」与
-  // 「上层把位置换到别处了」。
-  const requestedIndexRef = useRef(index);
 
   const current = items[index];
   const isVideo = current?.kind === "video";
@@ -274,7 +271,6 @@ export default function PhotoViewer({
       if (next < items.length) {
         // 已加载的范围内：直接换。
         indexRef.current = next;
-        requestedIndexRef.current = next;
         pendingRef.current = 0;
         onIndexChange(next);
         return;
@@ -306,20 +302,19 @@ export default function PhotoViewer({
     if (advance <= 0) return;
     const next = indexRef.current + advance;
     indexRef.current = next;
-    requestedIndexRef.current = next;
     onIndexChange(next);
   }, [items.length, onIndexChange]);
 
-  // 位置以 props 为准，除非父组件给的就是我们要的那一张。
+  // 位置只在真的被换到更靠后时才跟回去。
   //
-  // 连按的时候 props 只追到最近一次渲染，ref 里记的可能是更靠后的
-  // 位置；这时不能被 props 拉回去。父组件把序号换到别处（重新定位）
-  // 时才跟回去。
+  // props 有可能是先前那次请求的回声（渲染慢了一拍）：连按到分页边界
+  // 时，预览一次跳过十几张，父组件渲染出来的中间值会落在 ref 后面。
+  // 跟回去就等于把已经翻过去的照片又退回来。父组件把位置换到别处
+  // （重新定位）时给的是更靠后的序号，那时才跟。
   useEffect(() => {
-    if (index !== requestedIndexRef.current) {
+    if (index > indexRef.current) {
       indexRef.current = index;
     }
-    requestedIndexRef.current = index;
   }, [index]);
 
   // 预加载：离末尾还有三张时就先把下一页取来，翻到末尾时不必等。
@@ -433,13 +428,11 @@ export default function PhotoViewer({
         case "Home":
           event.preventDefault();
           indexRef.current = 0;
-          requestedIndexRef.current = 0;
           onIndexChange(0);
           break;
         case "End":
           event.preventDefault();
           indexRef.current = items.length - 1;
-          requestedIndexRef.current = items.length - 1;
           onIndexChange(items.length - 1);
           break;
         case "+":
@@ -709,7 +702,13 @@ export default function PhotoViewer({
         >
           {isVideo ? (
             <div className="h-full w-full p-4">
-              <VideoPlayer src={current.id} className="h-full w-full" />
+              {/* 方向键在这一侧是「上一张 / 下一张」：视频若也抢这两个键，
+                  翻到视频时照片就再也翻不动了。 */}
+              <VideoPlayer
+                src={current.id}
+                className="h-full w-full"
+                seekWithArrows={false}
+              />
             </div>
           ) : failed ? (
             <div className="px-6 text-center text-body text-white/60">

@@ -21,6 +21,14 @@ interface Props {
   onEnded?: () => void;
   /** 父组件传入的额外 className（用于容器布局） */
   className?: string;
+  /**
+   * 左右方向键是否用来快进 / 快退（默认是）。
+   *
+   * 照片侧的大图预览里方向键是「上一张 / 下一张」：预览翻到一张视频时，
+   * 视频若也抢这两个键，方向键就变成了「视频快进」，照片再也翻不动。
+   * 那一侧关掉它，视频仍然可以用原生控件里的进度条定位。
+   */
+  seekWithArrows?: boolean;
 }
 
 /**
@@ -49,6 +57,7 @@ export default function VideoPlayer({
   initialPositionSec,
   onEnded,
   className,
+  seekWithArrows = true,
 }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const restoredSourceRef = useRef<string | null>(null);
@@ -136,10 +145,13 @@ export default function VideoPlayer({
           }
           break;
         case "ArrowLeft":
+          // 这一侧的方向键归宿主（照片预览用它翻照片）。
+          if (!seekWithArrows) break;
           e.preventDefault();
           v.currentTime = Math.max(0, v.currentTime - 5);
           break;
         case "ArrowRight":
+          if (!seekWithArrows) break;
           e.preventDefault();
           v.currentTime = Math.min(
             v.duration || v.currentTime + 5,
@@ -183,7 +195,7 @@ export default function VideoPlayer({
       window.removeEventListener("keydown", onKey);
       window.removeEventListener("keyup", onKeyUp);
     };
-  }, []);
+  }, [seekWithArrows]);
 
   // 把 HTMLMediaElement 的 MediaError 翻译成对人友好的中文消息。
   //

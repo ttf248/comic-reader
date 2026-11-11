@@ -312,8 +312,31 @@ describe("大图预览的连续浏览", () => {
     ]);
   });
 
-  it("按住不放时，页到了就一次翻过按过的那几次", async () => {
+  it("翻到视频时方向键仍然翻照片，不会被视频的快进抢走", () => {
     const onIndexChange = vi.fn();
+    const withVideo: LibraryMediaItem[] = [
+      { id: "f_1", kind: "image", name: "a.jpg", index: 0, kindIndex: 0 },
+      { id: "f_2", kind: "video", name: "b.mp4", index: 1, kindIndex: 0 },
+      { id: "f_3", kind: "image", name: "c.jpg", index: 2, kindIndex: 1 },
+    ] as LibraryMediaItem[];
+    render(
+      <PhotoViewer
+        items={withVideo}
+        index={1}
+        albumName="测试相册"
+        onIndexChange={onIndexChange}
+        onClose={vi.fn()}
+      />,
+    );
+    // 视频那一格：方向键仍然是「上一张 / 下一张」。
+    // （位置记在预览自己身上，所以上一个是第 2 张 —— 上一格。）
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    expect(onIndexChange).toHaveBeenCalledWith(2);
+    fireEvent.keyDown(window, { key: "ArrowLeft" });
+    expect(onIndexChange).toHaveBeenCalledWith(1);
+  });
+
+  it("按住不放时，页到了就一次翻过按过的那几次", async () => {    const onIndexChange = vi.fn();
     const onLoadMore = vi.fn();
     const { rerender } = render(
       <PhotoViewer
