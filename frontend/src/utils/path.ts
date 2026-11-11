@@ -59,6 +59,12 @@ export function picksRoute(): string {
   return `${MODE_PREFIX.photo}/picks`;
 }
 
+/** 照片侧的 GPS 地点智能相册。 */
+export function locationsRoute(locationId?: string): string {
+  const base = `${MODE_PREFIX.photo}/locations`;
+  return locationId ? `${base}/${encodeURIComponent(locationId)}` : base;
+}
+
 /**
  * 按年份浏览照片。
  *

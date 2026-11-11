@@ -25,7 +25,7 @@ func TestRunServerGracefulShutdownFlushesRuntime(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := runServer(ctx, fiber.New(), "127.0.0.1:0", runner, transcode, cache); err != nil {
+	if err := runServer(ctx, fiber.New(), "127.0.0.1:0", runner, transcode, cache, nil); err != nil {
 		t.Fatalf("runServer: %v", err)
 	}
 	if _, err := os.Stat(cachePath); err != nil {

@@ -25,11 +25,13 @@ type CacheLayout struct {
 	ThumbnailDir       string
 	ConvertedDir       string
 	PreviewDir         string
+	MetadataDir        string
 	ScanCachePath      string
 	PreferencesPath    string
 	ActivityPath       string
 	CoverOverridesPath string
 	PicksPath          string
+	AIJobsPath         string
 }
 
 // ResolveCacheLayout 只计算路径，不访问文件系统。
@@ -45,11 +47,13 @@ func ResolveCacheLayout(root string) CacheLayout {
 		ThumbnailDir:       filepath.Join(derivedDir, thumbnailDirName),
 		ConvertedDir:       filepath.Join(derivedDir, convertedDirName),
 		PreviewDir:         filepath.Join(derivedDir, previewDirName),
+		MetadataDir:        filepath.Join(derivedDir, "metadata"),
 		ScanCachePath:      filepath.Join(stateDir, "scan_cache.json"),
 		PreferencesPath:    filepath.Join(stateDir, "web_settings.json"),
 		ActivityPath:       filepath.Join(stateDir, "activity.json"),
 		CoverOverridesPath: filepath.Join(stateDir, "cover_overrides.json"),
 		PicksPath:          filepath.Join(stateDir, "picks.json"),
+		AIJobsPath:         filepath.Join(stateDir, "ai_jobs.json"),
 	}
 }
 
@@ -62,7 +66,7 @@ func EnsureCacheLayout(root string) (CacheLayout, error) {
 		return CacheLayout{}, fmt.Errorf("cache root is required")
 	}
 	layout := ResolveCacheLayout(root)
-	for _, dir := range []string{layout.Root, layout.StateDir, layout.DerivedDir, layout.TempDir, layout.ThumbnailDir, layout.ConvertedDir, layout.PreviewDir} {
+	for _, dir := range []string{layout.Root, layout.StateDir, layout.DerivedDir, layout.TempDir, layout.ThumbnailDir, layout.ConvertedDir, layout.PreviewDir, layout.MetadataDir} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return CacheLayout{}, fmt.Errorf("create cache layout: %w", err)
 		}

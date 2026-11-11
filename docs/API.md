@@ -196,6 +196,39 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 取消活动扫描，使它的提交令牌失效，并清除内存资源快照与磁盘扫描缓存；不会立即发起新扫描。
 
+## 媒体分析任务与地点相册
+
+### `GET /api/ai/jobs` / `POST /api/ai/jobs`
+
+读取任务历史、活动任务与每日计划；启动请求为 `{ "type": "metadata", "mode": "full" | "incremental" }`。当前只安装 `metadata` 模块。全量分析当前库中的图片，增量分析新增、修改或解析器版本变化的图片。已有其他任务活动时返回 `409 analysis_job_active`；模块类型或模式无效时返回 `400 analysis_start_failed`。响应含任务快照与 `reused`。
+
+任务状态为 `pending`、`running`、`paused`、`completed`、`failed`、`cancelled`。快照包含阶段、总数、已处理/跳过/失败/完成数、检查点、耗时、速度、开始/结束时间及错误项。错误项只公开资源 ID、稳定错误码、脱敏原因和时间，不含路径。任务在后台按 32 张一批提交，重启后自动恢复运行中任务。
+
+### `GET /api/ai/jobs/:jobId` / `GET /api/ai/jobs/:jobId/events`
+
+单项读取持久任务。SSE 事件名与状态一致；每条 `data` 为完整快照。`pending`、`running` 与 `paused` 保持订阅，终态事件（`completed`、`failed`、`cancelled`）后关闭。每 15 秒发送注释心跳；断开只释放订阅，不会暂停或取消任务。未知 ID 返回 `404 analysis_job_not_found`。
+
+### 任务控制
+
+- `POST /api/ai/jobs/:jobId/pause`：在当前批次原子提交后暂停。
+- `POST /api/ai/jobs/:jobId/resume`：继续暂停或重启恢复的任务。
+- `POST /api/ai/jobs/:jobId/cancel`：取消任务；已提交结果保留，未提交批次不写入。
+- `POST /api/ai/jobs/:jobId/retry`：从旧任务创建新历史项，只处理失败记录与未提交尾段；有其他任务活动时返回 `409 analysis_job_active`。
+
+不存在的任务返回 `404 analysis_job_not_found`；状态不支持该操作返回 `409 analysis_action_unavailable`。
+
+### `GET /api/ai/jobs/settings` / `PUT /api/ai/jobs/settings`
+
+每日计划字段为 `{ "dailyEnabled": true, "dailyTime": "03:00" }`。默认开启，按服务所在设备本地时间每天凌晨 3 点运行。时间格式为 24 小时 `HH:MM`；无效请求返回 `400 invalid_analysis_settings`。每天创建 metadata 增量任务；服务错过计划日期后启动时补跑一次，同一天不重复创建。
+
+### `GET /api/images/:fileId/metadata`
+
+在现有图片资源路径重新校验后，读取匹配当前文件大小、修改时间与解析器版本的元数据；尚未分析或结果已过期时返回 `status: "pending"`。结果包含 EXIF 拍摄墙上时间、方向、相机信息及可用时的 GPS 坐标、海拔、时间、方向和精度字段。无 EXIF、格式不支持是正常状态。EXIF 日期不会覆盖相册现有的业务日期。文件 ID 无效返回 `404 resource_not_found`，非图片返回 `415 invalid_metadata_resource`。
+
+### `GET /api/locations` / `GET /api/locations/:locationId/media`
+
+地点索引仅汇总当前扫描快照中仍存在、版本指纹匹配且路径通过当前媒体根校验的照片 GPS 结果。响应按有限坐标网格聚合，并给出坐标、照片数、来源相册数与封面 ID；媒体页额外返回地点摘要、照片分页与来源相册 ID/名称。游标绑定当前 library revision。失效地点返回 `404 location_not_found`。地点不做在线反向地理编码；没有可靠离线地名数据时显示坐标，不请求外部地图服务。`locationId` 是聚类 ID，不是资源授权凭据。
+
 ## 相册与搜索
 
 ### `GET /api/search?q=<keyword>&limit=50&kind=photo|comic`

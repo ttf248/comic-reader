@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import {
+  render as testingRender,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactElement } from "react";
 import ImageInfoPanel from "./ImageInfoPanel";
 import { imageInfoApi, type ImageInfo } from "../../api/imageInfo";
 import { ApiError } from "../../api/client";
@@ -7,6 +13,21 @@ import { ApiError } from "../../api/client";
 vi.mock("../../api/imageInfo", () => ({
   imageInfoApi: { get: vi.fn() },
 }));
+
+vi.mock("../../api/aiJobs", () => ({
+  aiJobsApi: { metadata: vi.fn().mockResolvedValue({ status: "pending" }) },
+}));
+
+function render(ui: ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return testingRender(ui, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  });
+}
 
 const sampleInfo: ImageInfo = {
   name: "a.png",

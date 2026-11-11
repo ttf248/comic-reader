@@ -22,6 +22,8 @@ const Album = lazy(() => import("./routes/Album"));
 const Tag = lazy(() => import("./routes/Tag"));
 const Reader = lazy(() => import("./routes/Reader"));
 const Settings = lazy(() => import("./routes/Settings"));
+const TaskCenter = lazy(() => import("./routes/TaskCenter"));
+const GPSLocations = lazy(() => import("./routes/GPSLocations"));
 
 function lazyPage(Page: ComponentType) {
   return (
@@ -79,6 +81,12 @@ export default function App() {
             <Route path="/photo/picks" element={lazyPage(Picks)} />
             {/* 年份墙也只属于照片侧：漫画按作品与卷组织，年份对它没有意义。 */}
             <Route path="/photo/years/:year" element={lazyPage(YearPhotos)} />
+            <Route path="/photo/locations" element={lazyPage(GPSLocations)} />
+            <Route
+              path="/photo/locations/:locationId"
+              element={lazyPage(GPSLocations)}
+            />
+            <Route path="/tasks" element={lazyPage(TaskCenter)} />
             <Route path="/settings" element={lazyPage(Settings)} />
           </Route>
           {/* 漫画阅读器：/comic/read/<album id>。它不在 AppShell 下，

@@ -390,6 +390,21 @@ func (s CatalogSnapshot) Resolve(id string) (string, bool) {
 	return ref.AbsolutePath, ok
 }
 
+// FileIDs 返回快照内按资源 ID 稳定排序的文件 ID 列表；绝对路径仍留在目录索引内。
+func (s CatalogSnapshot) FileIDs() []string {
+	if s.state == nil {
+		return nil
+	}
+	ids := make([]string, 0, len(s.state.byID))
+	for id, ref := range s.state.byID {
+		if ref.Kind == ResourceFile {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	return ids
+}
+
 func (s CatalogSnapshot) Lookup(id string) (ResourceRef, bool) {
 	if s.state == nil {
 		return ResourceRef{}, false

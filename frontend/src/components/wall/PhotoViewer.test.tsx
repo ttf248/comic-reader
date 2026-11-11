@@ -1,4 +1,12 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render as testingRender,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactElement } from "react";
 import { MemoryRouter } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { LibraryMediaItem } from "../../api/library";
@@ -20,6 +28,21 @@ vi.mock("../../hooks/useImageInfo", () => ({
     refetch: vi.fn(),
   }),
 }));
+
+vi.mock("../../api/aiJobs", () => ({
+  aiJobsApi: { metadata: vi.fn().mockResolvedValue({ status: "pending" }) },
+}));
+
+function render(ui: ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return testingRender(ui, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  });
+}
 
 const items: LibraryMediaItem[] = [
   {
@@ -336,7 +359,8 @@ describe("大图预览的连续浏览", () => {
     expect(onIndexChange).toHaveBeenCalledWith(1);
   });
 
-  it("按住不放时，页到了就一次翻过按过的那几次", async () => {    const onIndexChange = vi.fn();
+  it("按住不放时，页到了就一次翻过按过的那几次", async () => {
+    const onIndexChange = vi.fn();
     const onLoadMore = vi.fn();
     const { rerender } = render(
       <PhotoViewer

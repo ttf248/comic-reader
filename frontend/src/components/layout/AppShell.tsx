@@ -3,7 +3,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { useUIStore } from "../../store/uiStore";
 import { useKeyboard } from "../../hooks/useKeyboard";
-import { albumRoute, decodePathTail, favoritesRoute, homeRoute, isReaderPath, recentsRoute, unreadRoute } from "../../utils/path";
+import {
+  albumRoute,
+  decodePathTail,
+  favoritesRoute,
+  homeRoute,
+  isReaderPath,
+  recentsRoute,
+  unreadRoute,
+} from "../../utils/path";
 import { workbenchCopy } from "../../utils/workbench";
 import { useFsCapabilities } from "../../hooks/useFsCapabilities";
 import { useAppMode } from "../../hooks/useAppMode";
@@ -64,6 +72,8 @@ export default function AppShell() {
       [recentsRoute(mode)]: mode === "comic" ? "最近阅读" : "最近浏览",
       [favoritesRoute(mode)]: mode === "comic" ? "收藏漫画" : "收藏照片",
       [unreadRoute()]: "未读",
+      "/tasks": "任务中心",
+      "/photo/locations": "拍摄地点",
       "/settings": "设置",
     };
     const path = location.pathname;
@@ -73,6 +83,8 @@ export default function AppShell() {
         // 标签段只解码一次：路径里可能是字面 %xx。
         const raw = decodePathTail(path, "/tags/");
         base = raw || "标签";
+      } else if (path.startsWith("/photo/locations/")) {
+        base = "拍摄地点";
       } else {
         base = workbenchCopy(mode).albumTypeLabel;
       }

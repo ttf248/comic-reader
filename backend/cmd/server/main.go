@@ -268,6 +268,17 @@ func main() {
 	} else if mismatch {
 		log.Printf("  扫描缓存与当前媒体根不一致或内容无效，已清空旧缓存")
 	}
+	aiJobs, err := services.NewAIJobService(services.AIJobServiceOptions{
+		StatePath:    cacheLayout.AIJobsPath,
+		MetadataDir:  cacheLayout.MetadataDir,
+		Catalog:      resourceCatalog,
+		ValidatePath: safetyState.Validate,
+		Analyzers:    []services.AIAnalyzer{services.MetadataAnalyzer{}},
+	})
+	if err != nil {
+		log.Fatalf("初始化媒体分析任务服务失败: %v", err)
+	}
+	aiJobs.StartPending()
 
 	// 启动时若缓存为空（首次启动 / 缓存根目录不匹配被清空 / 磁盘无缓存），
 	// 自动跑一次扫描，避免前端打开时看到 404 或空数据。
@@ -330,6 +341,18 @@ func main() {
 	api.Get("/library/dashboard", handlers.LibraryHomeDashboardHandler(resourceCatalog, activities, unreadIndex))
 	api.Get("/library/unread", handlers.LibraryUnreadAlbumsPageHandler(resourceCatalog, activities, unreadIndex))
 	api.Delete("/library", handlers.ScanCacheClearHandler(scanCache, resourceCatalog, runner))
+	api.Get("/locations", handlers.GPSLocationsHandler(resourceCatalog, aiJobs, safetyState.Validate, picks))
+	api.Get("/locations/:id/media", handlers.GPSLocationsHandler(resourceCatalog, aiJobs, safetyState.Validate, picks))
+	api.Get("/ai/jobs", handlers.AIJobsHandler(aiJobs))
+	api.Post("/ai/jobs", handlers.AIJobStartHandler(aiJobs))
+	api.Get("/ai/jobs/settings", handlers.AIJobSettingsHandler(aiJobs))
+	api.Put("/ai/jobs/settings", handlers.AIJobSettingsHandler(aiJobs))
+	api.Get("/ai/jobs/:id/events", handlers.AIJobEventsHandler(aiJobs))
+	api.Get("/ai/jobs/:id", handlers.AIJobStatusHandler(aiJobs))
+	api.Post("/ai/jobs/:id/pause", handlers.AIJobActionHandler(aiJobs, "pause"))
+	api.Post("/ai/jobs/:id/resume", handlers.AIJobActionHandler(aiJobs, "resume"))
+	api.Post("/ai/jobs/:id/cancel", handlers.AIJobActionHandler(aiJobs, "cancel"))
+	api.Post("/ai/jobs/:id/retry", handlers.AIJobActionHandler(aiJobs, "retry"))
 	resourceParam := middleware.ResourceParam(resourceCatalog, safetyState)
 	api.Get("/albums/random", handlers.LibraryRandomAlbumHandler(resourceCatalog, activities, unreadIndex))
 	api.Get("/albums/:id/media", handlers.AlbumMediaPageHandler(resourceCatalog, mediaDimensions, picks))
@@ -354,6 +377,7 @@ func main() {
 	api.Get("/media/:id", resourceParam, handlers.MediaHandler(transcode, faststart, thumbs))
 	api.Get("/previews/:id", resourceParam, handlers.PreviewHandler(thumbs))
 	api.Get("/images/:id/info", resourceParam, handlers.ImageInfoHandler(resourceCatalog))
+	api.Get("/images/:id/metadata", resourceParam, handlers.ImageMetadataHandler(aiJobs))
 	// 视频流 + 元信息（前端 <video> 元素 / HoverPreview / 时长显示使用）
 	api.Get("/videos/:id/info", resourceParam, handlers.VideoInfoHandler(videoInfo, transcode, resourceCatalog))
 	api.Post("/videos/info/batch", handlers.VideoInfoBatchHandler(videoInfo, transcode, resourceCatalog, safetyState))
@@ -414,6 +438,7 @@ func main() {
 	// ---- 启动与优雅退出 ----
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	aiJobs.StartScheduler(ctx)
 	maintenanceDone := make(chan struct{})
 	go func() {
 		defer close(maintenanceDone)
@@ -429,7 +454,7 @@ func main() {
 			return err
 		})
 	}()
-	err = runServer(ctx, app, cfg.Addr(), runner, transcode, scanCache)
+	err = runServer(ctx, app, cfg.Addr(), runner, transcode, scanCache, aiJobs)
 	stop()
 	<-maintenanceDone
 	if err != nil {
@@ -447,12 +472,13 @@ func runServer(
 	runner *services.AsyncScanRunner,
 	transcode *services.TranscodeService,
 	scanCache *services.ScanResultCache,
+	aiJobs *services.AIJobService,
 ) error {
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		return errors.Join(fmt.Errorf("监听失败: %w", err), shutdownRuntime(cleanupCtx, runner, transcode, scanCache))
+		return errors.Join(fmt.Errorf("监听失败: %w", err), shutdownRuntime(cleanupCtx, runner, transcode, scanCache, aiJobs))
 	}
 
 	listenDone := make(chan error, 1)
@@ -464,7 +490,7 @@ func runServer(
 	case listenErr := <-listenDone:
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		return errors.Join(listenErr, shutdownRuntime(cleanupCtx, runner, transcode, scanCache))
+		return errors.Join(listenErr, shutdownRuntime(cleanupCtx, runner, transcode, scanCache, aiJobs))
 	case <-ctx.Done():
 		log.Printf("收到退出信号，正在停止后台任务并刷新缓存…")
 	}
@@ -473,7 +499,7 @@ func runServer(
 	defer cancel()
 	runtimeDone := make(chan error, 1)
 	go func() {
-		runtimeDone <- shutdownRuntime(cleanupCtx, runner, transcode, scanCache)
+		runtimeDone <- shutdownRuntime(cleanupCtx, runner, transcode, scanCache, aiJobs)
 	}()
 
 	httpErr := app.ShutdownWithTimeout(5 * time.Second)
@@ -487,8 +513,9 @@ func shutdownRuntime(
 	runner *services.AsyncScanRunner,
 	transcode *services.TranscodeService,
 	scanCache *services.ScanResultCache,
+	aiJobs *services.AIJobService,
 ) error {
-	var scanErr, transcodeErr, cacheErr error
+	var scanErr, transcodeErr, cacheErr, aiJobsErr error
 	if runner != nil {
 		scanErr = runner.Shutdown(ctx)
 	}
@@ -498,7 +525,10 @@ func shutdownRuntime(
 	if scanCache != nil {
 		cacheErr = scanCache.Flush()
 	}
-	return errors.Join(scanErr, transcodeErr, cacheErr)
+	if aiJobs != nil {
+		aiJobsErr = aiJobs.Shutdown(ctx)
+	}
+	return errors.Join(scanErr, transcodeErr, cacheErr, aiJobsErr)
 }
 
 // isCompressiblePath 判断静态资源是否值得压缩。

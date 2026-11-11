@@ -4,6 +4,8 @@ import { useImageInfo } from "../../hooks/useImageInfo";
 import { formatSize } from "../../utils/format";
 import { formatDateTime } from "../../utils/date";
 import { apiErrorMessage } from "../../utils/apiError";
+import { useQuery } from "@tanstack/react-query";
+import { aiJobsApi } from "../../api/aiJobs";
 
 interface Props {
   absPath: string | null;
@@ -21,6 +23,13 @@ interface Props {
 // 出现"黑底阅读器里嵌一块白板"，且白底上的深色小字与深色画布割裂。
 export default function ImageInfoPanel({ absPath, onClose }: Props) {
   const { info, err, loading } = useImageInfo(absPath);
+  const metadataQuery = useQuery({
+    queryKey: ["image-exif", absPath],
+    queryFn: () => aiJobsApi.metadata(absPath ?? ""),
+    enabled: Boolean(absPath),
+    refetchInterval: (query) =>
+      query.state.data?.status === "pending" ? 5_000 : false,
+  });
 
   if (!absPath) return null;
 
@@ -70,6 +79,64 @@ export default function ImageInfoPanel({ absPath, onClose }: Props) {
             <Row label="格式" value={info.format.toUpperCase()} />
             <Row label="大小" value={formatSize(info.size)} />
             <Row label="修改时间" value={formatDateTime(info.mtime)} />
+            <div className="my-2 border-t border-white/10 pt-2 text-meta font-medium text-white/70">
+              EXIF 与 GPS
+            </div>
+            {metadataQuery.data?.status === "pending" ? (
+              <Row label="分析状态" value="等待元数据分析任务" />
+            ) : metadataQuery.data?.status === "no_exif" ? (
+              <Row label="分析状态" value="没有可用 EXIF 信息" />
+            ) : metadataQuery.data?.status === "unsupported" ? (
+              <Row label="分析状态" value="该图片格式暂无 EXIF 支持" />
+            ) : metadataQuery.data?.status === "failed" ? (
+              <Row label="分析状态" value="解析失败，可在任务中心重试" />
+            ) : metadataQuery.data?.metadata ? (
+              <>
+                {metadataQuery.data.metadata.dateTimeOriginal && (
+                  <Row
+                    label="拍摄时间"
+                    value={metadataQuery.data.metadata.dateTimeOriginal}
+                  />
+                )}
+                {(metadataQuery.data.metadata.cameraMake ||
+                  metadataQuery.data.metadata.cameraModel) && (
+                  <Row
+                    label="相机"
+                    value={[
+                      metadataQuery.data.metadata.cameraMake,
+                      metadataQuery.data.metadata.cameraModel,
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                  />
+                )}
+                {metadataQuery.data.metadata.orientation !== undefined && (
+                  <Row
+                    label="方向"
+                    value={String(metadataQuery.data.metadata.orientation)}
+                  />
+                )}
+                {metadataQuery.data.metadata.gps && (
+                  <>
+                    <Row
+                      label="GPS 坐标"
+                      value={`${metadataQuery.data.metadata.gps.latitude.toFixed(6)}, ${metadataQuery.data.metadata.gps.longitude.toFixed(6)}`}
+                    />
+                    {metadataQuery.data.metadata.gps.altitudeMeters !==
+                      undefined && (
+                      <Row
+                        label="海拔"
+                        value={`${metadataQuery.data.metadata.gps.altitudeMeters.toFixed(1)} 米`}
+                      />
+                    )}
+                  </>
+                )}
+              </>
+            ) : metadataQuery.isError ? (
+              <Row label="分析状态" value="元数据暂不可用" />
+            ) : (
+              <Row label="分析状态" value="尚未分析" />
+            )}
             <Row
               label="目录"
               value={info.dir}

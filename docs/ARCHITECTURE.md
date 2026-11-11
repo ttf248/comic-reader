@@ -23,6 +23,7 @@ Fiber middleware → handlers → services/store → models + 本地文件
 | [internal/handlers/](../backend/internal/handlers/)                                                                                         | HTTP/SSE 输入输出、状态码与公共 DTO                        |
 | [services/scanner.go](../backend/internal/services/scanner.go)、[scan_runner.go](../backend/internal/services/scan_runner.go)               | 目录工作池、扫描生命周期与进度订阅                         |
 | [resource_catalog.go](../backend/internal/services/resource_catalog.go)、[library_page.go](../backend/internal/services/library_page.go)    | 不可变库快照、资源 ID、分页/搜索索引                       |
+| [ai_jobs.go](../backend/internal/services/ai_jobs.go)、[exif_metadata.go](../backend/internal/services/exif_metadata.go)                     | 持久分析任务、EXIF/GPS 解析、模块结果与地点相册            |
 | [thumbnail.go](../backend/internal/services/thumbnail.go)、[video_transcode.go](../backend/internal/services/video_transcode.go) 等媒体服务 | 缩略图、预览、格式转换、视频封面、元数据、faststart 与转码 |
 | [internal/store/](../backend/internal/store/)                                                                                               | 偏好与媒体活动分文件持久化，锁内部分更新、原子写入         |
 | [frontend/src/App.tsx](../frontend/src/App.tsx)、[main.tsx](../frontend/src/main.tsx)                                                       | 应用入口、懒加载路由、访问门禁、主题、活动同步与错误边界   |
@@ -68,6 +69,18 @@ ID 只能证明扫描时的身份。每次媒体、批量元数据及系统打�
 - SSE 每连接显式订阅并持有释放函数，独立缓冲避免慢客户端阻塞扫描；连接关闭释放订阅与心跳，不取消共享任务。每 15 秒注释心跳，终态或通道关闭结束连接。
 - 订阅注册与最新快照取得保持一致，重连恢复原阶段、耗时、数量、进度与 revision。任务终态短期保留后回收，不能重新启动扫描来恢复进度。
 - 进度按根与阶段估算且不回退，根读取累计 0–95%、整理 99%，成功发布才为 100%；取消/失败保留最后有效进度与脱敏路径，不发布部分结果。
+
+## 媒体分析任务
+
+`AIJobService` 与扫描任务分开运行：扫描负责发布当前资源快照，分析服务只处理快照内的图片文件。模块通过 `AIAnalyzer` 注册并各自维护版本；目前只注册 metadata（EXIF/GPS），embedding、OCR 与人脸识别保留扩展接口，不启动或下载 AI 模型。全量任务重算全部图片，增量任务按资源 ID、大小、纳秒修改时间与模块版本筛出新增或变化项。
+
+任务状态与每日计划写在 `state/ai_jobs.json`，每 32 张图片提交一个批次检查点；批次结果使用同目录内的原子 JSON 文件，位于 `derived/metadata/<模块>/batches/<任务 ID>/`，可重建且与用户状态分开。结果文件先原子发布，再写检查点；启动时扫描结果批次并修复“结果已写、检查点未写”的崩溃窗口。任务恢复只从最近已提交的批次继续，未提交的尾批会重跑。失败记录写入同一批次，错误仅含资源 ID、稳定错误码和脱敏原因。
+
+每个任务最多使用 4 个 worker。暂停在批次边界生效；取消不提交当前未完成批次；退出将运行中任务恢复为 pending，暂停任务保持 paused。启动时自动恢复 pending；活动任务只有一个，断开 SSE 只释放订阅，不影响共享任务。每日增量计划使用服务本机时钟，初始时间为 03:00、默认关闭；错过前一计划日后启动时补跑一次，计划状态持久化避免同一天重复创建。
+
+EXIF 解析器保存拍摄墙上时间、朝向、相机信息和 GPS 附属字段。缺少 EXIF/不支持格式属于正常解析状态，损坏文件计入单项失败。EXIF 日期只作为元数据返回；相册业务日期仍维持 `filename > folder > modified`，不会被 EXIF 改写。
+
+地点相册只由当前快照中仍存在、大小与修改时间匹配、路径再次通过 `PathValidator` 的照片结果生成。坐标按 Geohash 精度 5 分组，地点卡片显示聚合坐标与照片数，并保留来源相册 ID/名称。当前不附带可靠的离线地名数据，因此只显示坐标；不调用在线地图、反向地理编码或外部 AI 服务。
 
 ## 媒体管线
 
@@ -119,10 +132,12 @@ ID 只能证明扫描时的身份。每次媒体、批量元数据及系统打�
 | `state/web_settings.json`                        | 收藏、历史与服务端偏好（含工作台模式）                       |
 | `state/activity.json`                            | 漫画阅读、视频播放活动                                       |
 | `state/picks.json`                               | 照片级精选（媒体文件 ID 集合）                               |
+| `state/ai_jobs.json`                             | 媒体分析任务历史、检查点与每日计划                         |
 | `state/cover_overrides.json`                     | 自定义封面                                                   |
 | `derived/thumbnails/`、`converted/`、`previews/` | 缩略图、整图格式转换、阅读器预览，各自独立统计/清理          |
 | `derived/media_dimensions.jsonl`                  | 媒体像素宽高（照片墙排布用），可由源文件重建                |
 | `derived/video-faststart/`、`video-transcode/`   | 可重建视频产物                                               |
+| `derived/metadata/`                              | EXIF/GPS 等模块分析批次；由源文件与分析器版本重建             |
 | `temp/`                                          | 通用临时目录；需原子发布的媒体任务在目标目录创建独占临时文件 |
 
 `state/backups/` 保存用户手动恢复前的备份，不属于派生缓存，不参与缓存清理。对外备份仅使用资源 ID；另存的内部封面映射仅供本机恢复旧状态，不对外下载。

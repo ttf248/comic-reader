@@ -506,3 +506,19 @@ export const ThumbIcon = (p: IconProps) => (
     <path d="m4 18 5-5 4 4 3-3 4 4" />
   </svg>
 )
+
+/** 拍摄地点 */
+export const MapPinIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M20 10c0 5-8 11-8 11S4 15 4 10a8 8 0 1 1 16 0Z" />
+    <circle cx="12" cy="10" r="2.5" />
+  </svg>
+)
+
+/** 任务列表 */
+export const TasksIcon = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M9 6h11M9 12h11M9 18h11" />
+    <path d="m3.5 6 1 1 2-2M3.5 12l1 1 2-2M3.5 18l1 1 2-2" />
+  </svg>
+)

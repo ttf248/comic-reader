@@ -32,10 +32,13 @@ func TestEnsureCacheLayoutCreatesCurrentLayoutAndLeavesLegacyEntries(t *testing.
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, dir := range []string{layout.StateDir, layout.DerivedDir, layout.TempDir, layout.ThumbnailDir} {
+	for _, dir := range []string{layout.StateDir, layout.DerivedDir, layout.TempDir, layout.ThumbnailDir, layout.MetadataDir} {
 		if info, err := os.Stat(dir); err != nil || !info.IsDir() {
 			t.Errorf("current cache directory missing: %s (%v)", dir, err)
 		}
+	}
+	if filepath.Dir(layout.AIJobsPath) != layout.StateDir || filepath.Dir(layout.MetadataDir) != layout.DerivedDir {
+		t.Fatalf("AI task data crossed state/derived boundary: jobs=%q metadata=%q", layout.AIJobsPath, layout.MetadataDir)
 	}
 	for name := range legacyState {
 		if _, err := os.Stat(filepath.Join(root, name)); err != nil {

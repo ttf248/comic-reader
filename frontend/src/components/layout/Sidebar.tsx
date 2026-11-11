@@ -11,6 +11,8 @@ import {
   ChevronRightIcon,
   ShuffleIcon,
   SparkleIcon,
+  MapPinIcon,
+  TasksIcon,
 } from "../common/Icon";
 import { useNavigate } from "react-router-dom";
 import { useUIStore } from "../../store/uiStore";
@@ -22,12 +24,25 @@ import { useHistoryCards } from "../../hooks/useHistory";
 import { useAppMode } from "../../hooks/useAppMode";
 import { useMediaQuery, WIDE_LAYOUT_QUERY } from "../../hooks/useMediaQuery";
 import { libraryApi } from "../../api/library";
-import { albumRoute, favoritesRoute, homeRoute, picksRoute, recentsRoute, unreadRoute } from "../../utils/path";
+import {
+  albumRoute,
+  favoritesRoute,
+  homeRoute,
+  locationsRoute,
+  picksRoute,
+  recentsRoute,
+  unreadRoute,
+} from "../../utils/path";
 import RenditionImage from "../common/RenditionImage";
 import { nodeSummaryToCard } from "../../utils/libraryCard";
 import type { CardData } from "../album/AlbumGrid";
 import { timeAgo } from "../../utils/date";
-import { albumCountUnit, comicCopy, photoCopy, workbenchCopy } from "../../utils/workbench";
+import {
+  albumCountUnit,
+  comicCopy,
+  photoCopy,
+  workbenchCopy,
+} from "../../utils/workbench";
 import {
   continueReadingTarget,
   readingPercent,
@@ -60,6 +75,7 @@ const PHOTO_GROUP: NavEntry[] = [
   { to: recentsRoute("photo"), label: "最近浏览", Icon: ClockIcon },
   { to: favoritesRoute("photo"), label: "收藏照片", Icon: StarIcon },
   { to: picksRoute(), label: "精选照片", Icon: PickIcon },
+  { to: locationsRoute(), label: "拍摄地点", Icon: MapPinIcon },
 ];
 
 const COMIC_GROUP: NavEntry[] = [
@@ -71,6 +87,7 @@ const COMIC_GROUP: NavEntry[] = [
 
 // 设置沉到底部组：它是低频入口，不该和「主页 / 最近 / 收藏」平级。
 const secondaryItems = [
+  { to: "/tasks", label: "任务中心", Icon: TasksIcon, end: false },
   { to: "/settings", label: "设置", Icon: SettingsIcon, end: false },
 ];
 
@@ -94,7 +111,8 @@ export default function Sidebar({
   // 若把宽屏折叠过的状态带进抽屉，抽屉会既没有品牌名又没有展开按钮。
   const collapsed = isWide && collapsedProp;
   // 未读只属于漫画工作台：照片侧栏没有未读入口，也就没有它的徽标。
-  const unreadCount = useLibraryActivitySummary().data?.summary.unreadCount ?? 0;
+  const unreadCount =
+    useLibraryActivitySummary().data?.summary.unreadCount ?? 0;
   const navRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -108,8 +126,7 @@ export default function Sidebar({
       const album = albums[0];
       if (album) navigate(albumRoute(mode, album.id));
     },
-    onError: () =>
-      pushToast({ kind: "info", message: "没有可随机打开的相册" }),
+    onError: () => pushToast({ kind: "info", message: "没有可随机打开的相册" }),
   });
 
   const onShuffle = () => {
@@ -123,9 +140,7 @@ export default function Sidebar({
   const dashboard = useLibraryDashboard();
   const inProgress = useMemo(
     () =>
-      mode === "comic"
-        ? (dashboard.data?.dashboard.inProgress ?? [])
-        : [],
+      mode === "comic" ? (dashboard.data?.dashboard.inProgress ?? []) : [],
     [dashboard.data, mode],
   );
   // 照片侧：最近看过的相册（访问历史里按当前侧收敛的那部分）。
