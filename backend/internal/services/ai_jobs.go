@@ -1356,10 +1356,18 @@ func writeAIJSONAtomic(path string, value any) error {
 	if err := temporary.Close(); err != nil {
 		return err
 	}
-	if err := os.Rename(temporaryPath, path); err != nil {
-		return err
+	var renameErr error
+	// Windows 实时扫描可能短暂占用目标文件；原子替换失败时做有限退避重试。
+	for attempt := 0; attempt < 6; attempt++ {
+		renameErr = os.Rename(temporaryPath, path)
+		if renameErr == nil {
+			return nil
+		}
+		if attempt < 5 {
+			time.Sleep(time.Duration(10<<attempt) * time.Millisecond)
+		}
 	}
-	return nil
+	return renameErr
 }
 
 func digestAITargets(targets []aiJobTarget) string {
