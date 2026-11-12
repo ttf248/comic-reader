@@ -32,6 +32,13 @@ type CacheStatsResponse struct {
 	Previews       services.SubUsage `json:"previews"`
 	VideoFaststart services.SubUsage `json:"videoFaststart"`
 	VideoTranscode services.SubUsage `json:"videoTranscode"`
+	// MediaBytes / MediaFileCount 是上面五类媒体缓存的和。
+	//
+	// TotalBytes 统计的是整棵 derived/ 子树,里面还有 AI 分析产物与媒体
+	// 尺寸缓存,所以五类细分加起来并不等于 TotalBytes。前端要展示
+	// 「媒体派生缓存占多少」时用这两个字段,才是真能对账的数。
+	MediaBytes     int64 `json:"mediaBytes"`
+	MediaFileCount int   `json:"mediaFileCount"`
 }
 
 // CacheStatsHandler 返回 /api/cache/stats 处理函数。
@@ -64,6 +71,10 @@ func CacheStatsHandler(mgr *config.Manager, stats *services.CacheStatsService) f
 		resp.Previews.Path = "previews"
 		resp.VideoFaststart.Path = "video-faststart"
 		resp.VideoTranscode.Path = "video-transcode"
+		resp.MediaBytes = resp.Thumbs.Bytes + resp.Converted.Bytes +
+			resp.Previews.Bytes + resp.VideoFaststart.Bytes + resp.VideoTranscode.Bytes
+		resp.MediaFileCount = resp.Thumbs.FileCount + resp.Converted.FileCount +
+			resp.Previews.FileCount + resp.VideoFaststart.FileCount + resp.VideoTranscode.FileCount
 		if expiresAt != nil {
 			left := int(time.Until(*expiresAt).Seconds())
 			if left > 0 {

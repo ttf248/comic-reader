@@ -307,6 +307,10 @@ func main() {
 		log.Fatalf("初始化人物索引失败: %v", err)
 	}
 	var aiJobs *services.AIJobService
+	// 本机存储统计：模型权重与各模块产物的占用。批次提交后产物字节变了，
+	// 让缓存失效，下一次读取重新统计。
+	storageUsage := services.NewAIStorageService(30 * time.Second)
+	jobOutputs := services.NewJobOutputService(cacheLayout.Root, 60*time.Second)
 	aiJobs, err = services.NewAIJobService(services.AIJobServiceOptions{
 		StatePath:    cacheLayout.AIJobsPath,
 		MetadataDir:  cacheLayout.MetadataDir,
@@ -322,6 +326,12 @@ func main() {
 					log.Printf("更新人物索引失败: %v", indexErr)
 				}
 			}
+			storageUsage.Invalidate()
+			jobOutputs.Invalidate()
+		},
+		OnRecordsCleared: func() {
+			storageUsage.Invalidate()
+			jobOutputs.Invalidate()
 		},
 	})
 	if err != nil {
@@ -417,6 +427,7 @@ func main() {
 	api.Delete("/ai/jobs/queue", handlers.AIJobQueueHandler(aiJobs))
 	api.Delete("/ai/jobs/history", handlers.AIJobHistoryHandler(aiJobs))
 	api.Get("/ai/jobs/:id/events", handlers.AIJobEventsHandler(aiJobs))
+	api.Get("/ai/jobs/:jobId/output", handlers.AIJobOutputHandler(aiJobs, jobOutputs))
 	api.Get("/ai/jobs/:id", handlers.AIJobStatusHandler(aiJobs))
 	api.Post("/ai/jobs/:id/move", handlers.AIJobQueueMoveHandler(aiJobs))
 	api.Delete("/ai/jobs/:id", handlers.AIJobHistoryItemHandler(aiJobs))
@@ -468,7 +479,11 @@ func main() {
 	api.Get("/admin/state/export", middleware.LoopbackOnly(), handlers.StateExportHandler(backupService))
 	api.Post("/admin/state/import/preview", middleware.LoopbackOnly(), handlers.StatePreviewHandler(backupService))
 	api.Post("/admin/state/import", middleware.LoopbackOnly(), handlers.StateImportHandler(backupService))
-	api.Get("/config/storage", middleware.LoopbackOnly(), handlers.AIStorageHandler(handlers.AIStorageOptions{
+	api.Get("/storage/usage", handlers.StorageUsageHandler(storageUsage, handlers.StorageHandlerOptions{
+		CacheRoot:       cacheLayout.Root,
+		WorkerDirectory: filepath.Dir(workerOptions.ScriptPath),
+	}))
+	api.Get("/storage/paths", middleware.LoopbackOnly(), handlers.StoragePathsHandler(storageUsage, services.AIStoragePathOptions{
 		ConfigPath:       mgr.Path(),
 		WorkingDirectory: ".",
 		CacheRoot:        cacheLayout.Root,

@@ -46,8 +46,9 @@ const (
 	AIFieldFaces     = "faces"
 
 	aiJobStoreVersion = 1
-	aiBatchSize       = 32
-	aiMaxWorkers      = 4
+	// AIBatchSize 是一批提交的图片数；批次文件按这个粒度落在派生目录里。
+	AIBatchSize  = 32
+	aiMaxWorkers = 4
 )
 
 var ErrAIJobActive = errors.New("an analysis job is already active")
@@ -251,6 +252,9 @@ type AIJobServiceOptions struct {
 	WorkerCount        int
 	Now                func() time.Time
 	OnRecordsCommitted func([]AIAnalysisRecord)
+	// OnRecordsCleared 在某个模块的派生结果被整体删除后调用，
+	// 让按目录统计的占用缓存重新扫描。
+	OnRecordsCleared func()
 }
 
 type aiJobDiskState struct {
@@ -298,6 +302,7 @@ type AIJobService struct {
 	workerCount        int
 	now                func() time.Time
 	onRecordsCommitted func([]AIAnalysisRecord)
+	onRecordsCleared   func()
 	jobs               map[string]*AIJob
 	order              []string
 	queue              []string
@@ -333,6 +338,7 @@ func NewAIJobService(options AIJobServiceOptions) (*AIJobService, error) {
 		workerCount:        options.WorkerCount,
 		now:                options.Now,
 		onRecordsCommitted: options.OnRecordsCommitted,
+		onRecordsCleared:   options.OnRecordsCleared,
 		jobs:               make(map[string]*AIJob),
 		records:            make(map[string]AIAnalysisRecord),
 		runtimes:           make(map[string]*aiJobRuntime),
@@ -1007,7 +1013,13 @@ func (s *AIJobService) ClearModuleRecords(moduleType string) error {
 		keptOrder = append(keptOrder, id)
 	}
 	s.order = keptOrder
-	return s.persistLocked()
+	if err := s.persistLocked(); err != nil {
+		return err
+	}
+	if s.onRecordsCleared != nil {
+		s.onRecordsCleared()
+	}
+	return nil
 }
 
 func hasActiveAIJobType(jobs map[string]*AIJob, moduleType string) bool {
@@ -1333,7 +1345,7 @@ func (s *AIJobService) run(id string, runtimeState *aiJobRuntime) {
 		return
 	}
 
-	for start := 0; start < len(candidates); start += aiBatchSize {
+	for start := 0; start < len(candidates); start += AIBatchSize {
 		if runtimeState.ctx.Err() != nil {
 			s.finishInterrupted(id, runtimeState, runtimeState.ctx.Err())
 			return
@@ -1344,7 +1356,7 @@ func (s *AIJobService) run(id string, runtimeState *aiJobRuntime) {
 				return
 			}
 		}
-		end := min(start+aiBatchSize, len(candidates))
+		end := min(start+AIBatchSize, len(candidates))
 		batch := candidates[start:end]
 		records := s.processBatch(runtimeState.ctx, id, batch)
 		if runtimeState.ctx.Err() != nil {

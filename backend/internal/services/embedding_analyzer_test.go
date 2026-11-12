@@ -62,7 +62,7 @@ func TestEmbeddingAnalyzerUsesExistingTaskBatchesAndIncrementalRecords(t *testin
 	}
 	job = waitForAIJob(t, service, job.ID, AIJobStatusCompleted)
 	waitForAIJobIdle(t, service)
-	expectedBatches := (len(files) + aiBatchSize - 1) / aiBatchSize
+	expectedBatches := (len(files) + AIBatchSize - 1) / AIBatchSize
 	if job.Processed != 1000 || int(worker.imageBatches.Load()) != expectedBatches || index.Status().Vectors != 1000 {
 		t.Fatalf("embedding job=%+v batches=%d index=%+v", job, worker.imageBatches.Load(), index.Status())
 	}

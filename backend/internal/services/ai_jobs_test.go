@@ -343,7 +343,7 @@ func TestAIJobServiceRetriesOnlyFailedAndUncommittedResources(t *testing.T) {
 
 func TestAIJobServicePauseResumeAndShutdownRecovery(t *testing.T) {
 	root := t.TempDir()
-	files := writeAIJobImages(t, root, aiBatchSize+3)
+	files := writeAIJobImages(t, root, AIBatchSize+3)
 	catalog := aiJobCatalog(root, files)
 	statePath := filepath.Join(t.TempDir(), "state", "ai_jobs.json")
 	metadataDir := filepath.Join(t.TempDir(), "derived", "metadata")
@@ -364,7 +364,7 @@ func TestAIJobServicePauseResumeAndShutdownRecovery(t *testing.T) {
 	}
 	close(blocking.release)
 	job = waitForAIJob(t, service, job.ID, AIJobStatusPaused)
-	if job.Done != aiBatchSize || job.Checkpoint.Offset != aiBatchSize {
+	if job.Done != AIBatchSize || job.Checkpoint.Offset != AIBatchSize {
 		t.Fatalf("paused checkpoint = %+v", job)
 	}
 	if !service.Resume(job.ID) {
@@ -408,7 +408,7 @@ func TestAIJobServicePauseResumeAndShutdownRecovery(t *testing.T) {
 	shutdownAIJobService(t, resumed)
 
 	pausedRoot := t.TempDir()
-	pausedFiles := writeAIJobImages(t, pausedRoot, aiBatchSize+1)
+	pausedFiles := writeAIJobImages(t, pausedRoot, AIBatchSize+1)
 	pausedCatalog := aiJobCatalog(pausedRoot, pausedFiles)
 	pausedState := filepath.Join(t.TempDir(), "state", "ai_jobs.json")
 	pausedMetadata := filepath.Join(t.TempDir(), "derived", "metadata")
@@ -480,7 +480,7 @@ func TestAIJobServiceCancelsAndRetryCreatesNewHistoryItem(t *testing.T) {
 
 func TestAIJobServiceCanCancelPausedJobAfterRestart(t *testing.T) {
 	root := t.TempDir()
-	files := writeAIJobImages(t, root, aiBatchSize+1)
+	files := writeAIJobImages(t, root, AIBatchSize+1)
 	catalog := aiJobCatalog(root, files)
 	statePath := filepath.Join(t.TempDir(), "state", "jobs.json")
 	metadataDir := filepath.Join(t.TempDir(), "derived")
@@ -729,9 +729,9 @@ func TestAIJobServiceReportsPlannedProgressAndOutputBreakdown(t *testing.T) {
 
 func TestAIJobServiceEstimatesRemainingTimeWhileRunning(t *testing.T) {
 	root := t.TempDir()
-	files := writeAIJobImages(t, root, aiBatchSize+8)
+	files := writeAIJobImages(t, root, AIBatchSize+8)
 	catalog := aiJobCatalog(root, files)
-	gate := &gateAnalyzer{gate: int32(aiBatchSize + 1), blocked: make(chan struct{}), release: make(chan struct{})}
+	gate := &gateAnalyzer{gate: int32(AIBatchSize + 1), blocked: make(chan struct{}), release: make(chan struct{})}
 	var clock atomic.Int64
 	clock.Store(time.Now().UnixMilli())
 	service, err := NewAIJobService(AIJobServiceOptions{
@@ -766,14 +766,14 @@ func TestAIJobServiceEstimatesRemainingTimeWhileRunning(t *testing.T) {
 	if running.Status != AIJobStatusRunning {
 		t.Fatalf("job status = %s", running.Status)
 	}
-	if running.Completed != aiBatchSize || running.Planned != aiBatchSize+8 {
+	if running.Completed != AIBatchSize || running.Planned != AIBatchSize+8 {
 		t.Fatalf("running job progress = planned %d, completed %d", running.Planned, running.Completed)
 	}
-	wantRemaining := int64(8) * 5000 / int64(aiBatchSize)
+	wantRemaining := int64(8) * 5000 / int64(AIBatchSize)
 	if running.EstimatedRemainingMs != wantRemaining {
 		t.Fatalf("estimated remaining = %d, want %d", running.EstimatedRemainingMs, wantRemaining)
 	}
-	if running.SpeedPerSecond != float64(aiBatchSize)*1000/5000 {
+	if running.SpeedPerSecond != float64(AIBatchSize)*1000/5000 {
 		t.Fatalf("speed per second = %v", running.SpeedPerSecond)
 	}
 
@@ -782,7 +782,7 @@ func TestAIJobServiceEstimatesRemainingTimeWhileRunning(t *testing.T) {
 	if finished.EstimatedRemainingMs != 0 {
 		t.Fatalf("finished job still reports remaining time: %d", finished.EstimatedRemainingMs)
 	}
-	if finished.Completed != aiBatchSize+8 {
+	if finished.Completed != AIBatchSize+8 {
 		t.Fatalf("finished job completed = %d", finished.Completed)
 	}
 }
