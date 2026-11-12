@@ -315,6 +315,16 @@ test("设置页可加载服务端配置", async ({ page }) => {
   ).toBeVisible();
 });
 
+// 存储信息搬到任务中心之后，设置页不再摆这些。
+test("设置页不再展示模型路径与派生缓存占用", async ({ page }) => {
+  await page.goto("/settings");
+  await expect(page.getByText("媒体库索引")).toBeVisible();
+  await expect(page.getByText("本机 AI 与存储")).toHaveCount(0);
+  await expect(page.getByText("模型与缓存路径")).toHaveCount(0);
+  await expect(page.getByText("缓存占用")).toHaveCount(0);
+  await expect(page.getByText("一键全清")).toHaveCount(0);
+});
+
 test("设置读取失败可重试，恢复后显示阅读设置", async ({ page }) => {
   let blocked = true;
   await page.route("**/api/prefs", async (route) => {

@@ -24,6 +24,13 @@ export interface CacheStats {
   previews: SubUsage;
   videoFaststart: SubUsage;
   videoTranscode: SubUsage;
+  // mediaBytes / mediaFileCount 是上面五类媒体缓存的和。
+  //
+  // totalBytes 统计的是整棵 derived/ 子树,里面还有 AI 分析产物与媒体
+  // 尺寸缓存,所以五类细分加起来并不等于 totalBytes。要说清「媒体派生
+  // 缓存占多少」,用这两个字段。
+  mediaBytes: number;
+  mediaFileCount: number;
 }
 
 // 单个子目录的占用快照。

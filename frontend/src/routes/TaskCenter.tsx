@@ -4,6 +4,7 @@ import TaskConsole from "../components/tasks/TaskConsole";
 import TaskQueuePanel from "../components/tasks/TaskQueuePanel";
 import DailyPlanPanel from "../components/tasks/DailyPlanPanel";
 import JobHistoryPanel from "../components/tasks/JobHistoryPanel";
+import StorageSection from "../components/tasks/StorageSection";
 import { Link } from "react-router-dom";
 
 export default function TaskCenter() {
@@ -17,8 +18,8 @@ export default function TaskCenter() {
         title="任务中心"
         description="查看本机分析进度，管理等待队列与任务记录，安排每日增量更新。分析完全在本机运行。"
         action={
-          <Link className="btn btn-outline" to="/settings#ai-storage">
-            设置与存储路径
+          <Link className="btn btn-outline" to="/settings">
+            服务设置
           </Link>
         }
       />
@@ -56,7 +57,7 @@ export default function TaskCenter() {
             <p role="status" className="mt-3 text-meta text-warning">
               本次按序启动已跳过未就绪模块：
               {center.sequenceSkipped.map((module) => module.name).join("、")}。
-              可前往设置查看模型与运行环境路径。
+              可在本页下方「本机存储」查看模型与运行环境。
             </p>
           ) : null}
           {center.operationError ? (
@@ -120,6 +121,15 @@ export default function TaskCenter() {
             onDelete={center.deleteHistoryItem}
             onClear={center.clearHistory}
           />
+        </section>
+
+        <section>
+          <div className="section-heading">
+            <span className="section-index">05</span>
+            <h2 className="section-title">本机存储</h2>
+            <span className="section-meta">派生缓存、模型权重与分析产物</span>
+          </div>
+          <StorageSection />
         </section>
       </div>
     </div>

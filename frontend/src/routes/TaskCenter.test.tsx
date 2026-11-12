@@ -11,6 +11,12 @@ import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import TaskCenter from "./TaskCenter";
 import { aiJobsApi, type AIJob, type AIJobSnapshot } from "../api/aiJobs";
+import { cacheApi } from "../api/cache";
+import {
+  storageApi,
+  type StorageAbsolutePaths,
+  type StorageUsage,
+} from "../api/storage";
 
 vi.mock("../api/aiJobs", () => ({
   aiJobsApi: {
@@ -27,6 +33,15 @@ vi.mock("../api/aiJobs", () => ({
     metadata: vi.fn(),
     embeddingStatus: vi.fn(),
   },
+}));
+
+vi.mock("../api/cache", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../api/cache")>();
+  return { ...actual, cacheApi: { stats: vi.fn(), clearCache: vi.fn() } };
+});
+
+vi.mock("../api/storage", () => ({
+  storageApi: { usage: vi.fn(), paths: vi.fn(), jobOutput: vi.fn() },
 }));
 
 const sseHarness = vi.hoisted(() => ({
@@ -118,6 +133,47 @@ function renderCenter() {
   );
 }
 
+const emptySubUsage = {
+  path: "",
+  bytes: 0,
+  fileCount: 0,
+  available: false,
+};
+
+const emptyUsage: StorageUsage = {
+  scannedAt: "",
+  durationMs: 0,
+  available: true,
+  cacheTtlSeconds: 0,
+  summary: {
+    modelBytes: 0,
+    modelFileCount: 0,
+    outputBytes: 0,
+    outputFileCount: 0,
+  },
+  modules: [],
+  paths: {
+    relativeTo: "cacheRoot",
+    stateDirectory: "state",
+    jobsFile: "state/ai_jobs.json",
+    metadataDirectory: "derived/metadata",
+    aiDerivedDirectory: "derived/ai",
+    vectorDirectory: "derived/ai/vectors",
+    modelDirectory: "derived/ai/models",
+  },
+};
+
+const emptyAbsolutePaths: StorageAbsolutePaths = {
+  workingDirectory: "",
+  configFile: "",
+  cacheRoot: "",
+  stateDirectory: "",
+  jobsFile: "",
+  pythonEnvironment: "",
+  pythonExecutable: "",
+  modules: [],
+};
+
 describe("任务中心", () => {
   afterEach(() => vi.restoreAllMocks());
 
@@ -196,19 +252,55 @@ describe("任务中心", () => {
         coverage: { indexed: 100, total: 100 },
       },
     });
+    vi.mocked(cacheApi.stats).mockResolvedValue({
+      path: "cache",
+      totalBytes: 0,
+      fileCount: 0,
+      scannedAt: "",
+      durationMs: 0,
+      available: false,
+      cacheTtlSeconds: 0,
+      thumbs: emptySubUsage,
+      converted: emptySubUsage,
+      previews: emptySubUsage,
+      videoFaststart: emptySubUsage,
+      videoTranscode: emptySubUsage,
+      mediaBytes: 0,
+      mediaFileCount: 0,
+    });
+    vi.mocked(storageApi.usage).mockResolvedValue({ ok: true, usage: emptyUsage });
+    vi.mocked(storageApi.paths).mockResolvedValue({
+      ok: true,
+      paths: emptyAbsolutePaths,
+    });
+    vi.mocked(storageApi.jobOutput).mockResolvedValue({
+      ok: true,
+      output: {
+        jobId: "job-completed",
+        type: "metadata",
+        batchSize: 32,
+        path: "derived/metadata/metadata/batches/job-completed",
+        bytes: 2048,
+        fileCount: 2,
+        available: true,
+        scannedAt: "2026-11-11T02:05:00Z",
+      },
+    });
   });
 
-  it("按编号区块呈现状态、等待队列、每日计划与任务记录", async () => {
+  it("按编号区块呈现状态、等待队列、每日计划、任务记录与本机存储", async () => {
     renderCenter();
 
     expect(await screen.findByText("状态")).toBeInTheDocument();
     expect(screen.getByText("等待队列")).toBeInTheDocument();
     expect(screen.getByText("每日计划")).toBeInTheDocument();
     expect(screen.getByText("任务记录")).toBeInTheDocument();
+    expect(screen.getByText("本机存储")).toBeInTheDocument();
     expect(screen.getByText("01")).toBeInTheDocument();
     expect(screen.getByText("02")).toBeInTheDocument();
     expect(screen.getByText("03")).toBeInTheDocument();
     expect(screen.getByText("04")).toBeInTheDocument();
+    expect(screen.getByText("05")).toBeInTheDocument();
   });
 
   it("运行中显示阶段、进度口径、速度与预计剩余，并支持暂停", async () => {
@@ -268,7 +360,7 @@ describe("任务中心", () => {
     expect(screen.getAllByTestId("task-queue-row")).toHaveLength(1);
   });
 
-  it("按所选模式一键排入全部模块，并提供设置页入口", async () => {
+  it("按所选模式一键排入全部模块，并提供服务端设置入口", async () => {
     vi.mocked(aiJobsApi.list).mockResolvedValue({
       ok: true,
       snapshot: snapshot({ jobs: [], active: undefined }),
@@ -277,8 +369,8 @@ describe("任务中心", () => {
 
     await screen.findByText("队列空闲");
     expect(
-      screen.getByRole("link", { name: "设置与存储路径" }),
-    ).toHaveAttribute("href", "/settings#ai-storage");
+      screen.getByRole("link", { name: "服务设置" }),
+    ).toHaveAttribute("href", "/settings");
     fireEvent.change(screen.getByRole("combobox", { name: "全部任务模式" }), {
       target: { value: "full" },
     });
@@ -716,8 +808,7 @@ describe("任务中心", () => {
     );
   });
 
-  it("失败项展开后给出可复制的路径", async () => {
-    const failedJob: AIJob = {
+  it("失败项展开后给出可复制的路径", async () => {    const failedJob: AIJob = {
       ...currentJob,
       id: "job-failed",
       status: "failed",
@@ -751,5 +842,37 @@ describe("任务中心", () => {
     expect(
       within(group as HTMLElement).getByRole("button", { name: /复制/ }),
     ).toBeInTheDocument();
+  });
+  // 任务记录展开后才去取这次任务自己的产物占用；折叠的列表不该发请求。
+  it("任务记录展开后显示本次产物，折叠时不请求", async () => {
+    const completedJob: AIJob = {
+      ...currentJob,
+      id: "job-completed",
+      status: "completed",
+      finishedAt: "2026-11-11T02:02:00Z",
+    };
+    vi.mocked(aiJobsApi.list).mockResolvedValue({
+      ok: true,
+      snapshot: snapshot({ jobs: [completedJob], active: undefined }),
+    });
+    renderCenter();
+
+    const row = (await screen.findAllByTestId("task-history-row"))[0];
+    // 还没展开：一次请求都不该发。
+    expect(storageApi.jobOutput).not.toHaveBeenCalled();
+
+    fireEvent.click(within(row).getByText("手动 元数据分析"));
+    expect(
+      await screen.findByText("本次产物"),
+    ).toBeInTheDocument();
+    await waitFor(() =>
+      expect(storageApi.jobOutput).toHaveBeenCalledWith("job-completed"),
+    );
+    expect(
+      screen.getByText(
+        "derived/metadata/metadata/batches/job-completed",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/2 KB · 2 个批次文件/)).toBeInTheDocument();
   });
 });

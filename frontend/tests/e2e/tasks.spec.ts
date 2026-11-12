@@ -2,15 +2,31 @@ import { expect, test } from "@playwright/test";
 import { scannedNodes } from "./helpers/library";
 
 test.describe("任务中心", () => {
-  test("按区块呈现状态、等待队列、每日计划与任务记录", async ({ page }) => {
+  test("按区块呈现状态、等待队列、每日计划、任务记录与本机存储", async ({ page }) => {
     await page.goto("/tasks");
     await expect(page.getByRole("heading", { name: "状态" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "等待队列" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "每日计划" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "任务记录" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "本机存储" })).toBeVisible();
     // 空闲态给出开始分析的入口。
     await expect(page.getByRole("button", { name: "增量分析" })).toBeVisible();
     await expect(page.getByRole("button", { name: "全量分析" })).toBeVisible();
+  });
+
+  test("本机存储给出派生缓存占用、模型与产物路径", async ({ page }) => {
+    await page.goto("/tasks");
+    await expect(
+      page.getByRole("heading", { name: "媒体派生缓存" }),
+    ).toBeVisible();
+    // 「缩略图」在重建范围勾选项里也有一份，这里认的是占用徽章。
+    await expect(
+      page.locator("span.text-fg-muted", { hasText: /^缩略图$/ }),
+    ).toBeVisible();
+    await expect(page.getByText("转换图", { exact: true })).toBeVisible();
+    // 相对路径对所有设备可见；本机浏览器还能看到绝对锚点。
+    await expect(page.getByText("state/ai_jobs.json")).toBeVisible();
+    await expect(page.getByText("缓存根目录")).toBeVisible();
   });
 
   test("每日计划的时间可以保存并在刷新后保留", async ({ page }) => {
@@ -67,6 +83,11 @@ test.describe("任务中心", () => {
     await history.locator(":scope > summary").click();
     await expect(history.getByText("产出明细")).toBeVisible();
     await expect(history.getByText("解析结果")).toBeVisible();
+    // 展开后给出这次任务自己的产物位置与占用。
+    await expect(history.getByText("本次产物")).toBeVisible();
+    await expect(
+      history.getByText(/derived\/metadata\/metadata\/batches\//),
+    ).toBeVisible();
     // 临时库的图都是无 EXIF 的 1×1 PNG，取不到拍摄时间 / 相机 / GPS，
     // 因此这里只断言解析结果这一行；字段产出的渲染由 Vitest 覆盖。
 

@@ -8,7 +8,6 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { favoritesApi, historyApi, prefsApi, type Prefs } from "../api/prefs";
-import { cacheApi } from "../api/cache";
 import { useUIStore } from "../store/uiStore";
 import Settings from "./Settings";
 
@@ -16,10 +15,6 @@ vi.mock("../api/prefs", () => ({
   prefsApi: { get: vi.fn(), patch: vi.fn() },
   favoritesApi: { prune: vi.fn() },
   historyApi: { clear: vi.fn() },
-}));
-vi.mock("../api/cache", () => ({
-  cacheApi: { stats: vi.fn(), clearCache: vi.fn() },
-  formatBytes: (value: number) => `${value} B`,
 }));
 vi.mock("../hooks/useScanSSE", () => ({
   useScanSSE: () => ({ isRunning: false, startWith: vi.fn() }),
@@ -63,21 +58,6 @@ beforeEach(() => {
   }));
   vi.mocked(favoritesApi.prune).mockResolvedValue({ removed: [] });
   vi.mocked(historyApi.clear).mockResolvedValue({ ok: true });
-  const sub = { path: "cache", bytes: 0, fileCount: 0, available: false };
-  vi.mocked(cacheApi.stats).mockResolvedValue({
-    path: "cache",
-    totalBytes: 0,
-    fileCount: 0,
-    scannedAt: "",
-    durationMs: 0,
-    available: false,
-    cacheTtlSeconds: 0,
-    thumbs: sub,
-    converted: sub,
-    previews: sub,
-    videoFaststart: sub,
-    videoTranscode: sub,
-  });
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -375,88 +355,21 @@ for (const kind of ["prune", "history"] as const) {
   });
 }
 
-// 缓存占用必须按类型细分列全：整图转换产物(HEIC/HEIF/TIFF → JPEG)单张
-// 可达 MB 级，少列一类，用户既看不到大头在哪，各细分之和也与总占用对不上。
-it("缓存占用列出转换图分类，并能单独清理", async () => {
-  const empty = { path: "cache", bytes: 0, fileCount: 0, available: false };
-  vi.mocked(cacheApi.stats).mockResolvedValue({
-    path: "cache",
-    totalBytes: 5000,
-    fileCount: 3,
-    scannedAt: "",
-    durationMs: 0,
-    available: true,
-    cacheTtlSeconds: 0,
-    thumbs: { path: "thumbs", bytes: 1000, fileCount: 2, available: true },
-    converted: {
-      path: "converted",
-      bytes: 3000,
-      fileCount: 1,
-      available: true,
-    },
-    previews: empty,
-    videoFaststart: empty,
-    videoTranscode: empty,
-  });
-  vi.mocked(cacheApi.clearCache).mockResolvedValue({
-    scope: "converted",
-    converted: { deleted: 1, freedBytes: 3000 },
-    totalDeleted: 1,
-    totalFreedBytes: 3000,
-  });
-
-  renderSettings();
-  expect(await screen.findByText("转换图")).toBeInTheDocument();
-
-  fireEvent.click(screen.getByRole("button", { name: "清空 转换图 缓存" }));
-  await waitFor(() =>
-    expect(cacheApi.clearCache).toHaveBeenCalledWith("converted"),
-  );
-});
-
-// 预览图（阅读器按宽度缩放的中间产物）必须单独列出并能单独清理。
+// 存储信息搬到任务中心之后，设置页就不该再摆这些。
 //
-// 它单张几百 KB，与缩略图混在一起时「缩略图」一栏会随翻页剧烈波动，
-// 用户既看不清大头在哪，也没法只清这一类。
-it("缓存占用列出预览图分类，并能单独清理", async () => {
-  const empty = { path: "cache", bytes: 0, fileCount: 0, available: false };
-  vi.mocked(cacheApi.stats).mockResolvedValue({
-    path: "cache",
-    totalBytes: 6000,
-    fileCount: 4,
-    scannedAt: "",
-    durationMs: 0,
-    available: true,
-    cacheTtlSeconds: 0,
-    thumbs: { path: "thumbs", bytes: 1000, fileCount: 2, available: true },
-    converted: empty,
-    previews: {
-      path: "previews",
-      bytes: 5000,
-      fileCount: 1,
-      available: true,
-    },
-    videoFaststart: empty,
-    videoTranscode: empty,
-  });
-  vi.mocked(cacheApi.clearCache).mockResolvedValue({
-    scope: "previews",
-    previews: { deleted: 1, freedBytes: 5000 },
-    totalDeleted: 1,
-    totalFreedBytes: 5000,
-  });
-
+// 两页各叫「缓存」会让用户分不清说的是哪一个：设置页留下的是媒体库
+// 索引与派生缓存的清理入口，模型权重与分析产物在任务中心。
+it("设置页不再展示模型、路径与派生缓存占用", async () => {
   renderSettings();
-  // 「预览图」在页面里出现两处：缓存占用分类与重建范围勾选项。
-  // 这里要认的是占用分类，按角色取它的可访问名。
-  expect(
-    await screen.findByText("预览图", {
-      selector: "span.text-fg-muted.text-meta",
-    }),
-  ).toBeInTheDocument();
+  await screen.findByText("媒体库索引");
 
-  fireEvent.click(screen.getByRole("button", { name: "清空 预览图 缓存" }));
-  await waitFor(() =>
-    expect(cacheApi.clearCache).toHaveBeenCalledWith("previews"),
-  );
+  expect(screen.queryByText("缓存占用")).not.toBeInTheDocument();
+  expect(screen.queryByText("本机 AI 与存储")).not.toBeInTheDocument();
+  expect(screen.queryByText("模型与缓存路径")).not.toBeInTheDocument();
+  expect(screen.queryByText("一键全清")).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: /清空 .* 缓存/ })).toBeNull();
+
+  // 设置页仍然保留它自己的东西。
+  expect(screen.getByText("媒体库索引")).toBeInTheDocument();
+  expect(screen.getByText("关于")).toBeInTheDocument();
 });

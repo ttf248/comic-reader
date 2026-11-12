@@ -14,6 +14,7 @@ import {
 import EmptyState from "../common/EmptyState";
 import { ChevronDownIcon, TasksIcon } from "../common/Icon";
 import FailureGroupList from "./FailureGroupList";
+import JobOutputSummary from "./JobOutputSummary";
 import TaskStatusDot from "./TaskStatusDot";
 
 interface Props {
@@ -36,6 +37,22 @@ export default function JobHistoryPanel({
   onClear,
 }: Props) {
   const [filter, setFilter] = useState<HistoryFilter>("all");
+  // 展开态：只有展开的记录才去取它的产物占用。details 本身仍由浏览器
+  // 控制（受控写法会让展开延迟到 React 状态回写，用户点下去要等一拍
+  // 才看到内容），这里只监听 toggle 事件记住谁开着。
+  const [expandedIds, setExpandedIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+
+  function handleToggle(jobId: string, open: boolean) {
+    setExpandedIds((current) => {
+      if (current.has(jobId) === open) return current;
+      const next = new Set(current);
+      if (open) next.add(jobId);
+      else next.delete(jobId);
+      return next;
+    });
+  }
   const counts: Record<HistoryFilter, number> = {
     all: jobs.length,
     completed: jobs.filter((job) => job.status === "completed").length,
@@ -114,6 +131,9 @@ export default function JobHistoryPanel({
           {visibleJobs.map((job) => (
             <details
               key={job.id}
+              onToggle={(event) =>
+                handleToggle(job.id, event.currentTarget.open)
+              }
               className="group px-5 py-4"
               data-testid="task-history-row"
               data-job-id={job.id}
@@ -183,6 +203,11 @@ export default function JobHistoryPanel({
                     任务原因：{job.error}
                   </p>
                 ) : null}
+
+                <JobOutputSummary
+                  jobId={job.id}
+                  enabled={expandedIds.has(job.id)}
+                />
 
                 <OutputBreakdown job={job} />
 
