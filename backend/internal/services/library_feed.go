@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"math/rand/v2"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -612,6 +613,9 @@ func selectFeedAlbums(index *libraryPageIndex, kind models.ContentKind, count in
 	for key := range buckets {
 		keys = append(keys, key)
 	}
+	// map 的遍历顺序每次都不同；不先排一遍，shuffle 的输入顺序就会飘，
+	// 同一个种子给出的批次不再可复现 —— 「换一批」会换出乱序。
+	sort.Ints(keys)
 	rnd.shuffle(keys)
 
 	picked := make([]int, 0, count)
