@@ -35,6 +35,7 @@ vi.mock("../api/aiJobs", () => ({
     clearHistory: vi.fn(),
     settings: vi.fn(),
     updateSettings: vi.fn(),
+    updateHardware: vi.fn(),
     metadata: vi.fn(),
     embeddingStatus: vi.fn(),
     estimate: vi.fn(),
@@ -71,6 +72,7 @@ const currentJob: AIJob = {
   id: "job-current",
   type: "metadata",
   mode: "incremental",
+  computeDevice: "cpu",
   status: "running",
   stage: "metadata",
   moduleVersion: "metadata-v1",
@@ -120,6 +122,7 @@ function snapshot(overrides: Partial<AIJobSnapshot> = {}): AIJobSnapshot {
       dailyTime: "03:00",
       dailyModules: ["metadata"],
       peopleEnabled: false,
+      gpuEnabled: true,
     },
     modules,
     ...overrides,
@@ -127,7 +130,9 @@ function snapshot(overrides: Partial<AIJobSnapshot> = {}): AIJobSnapshot {
 }
 
 /** 空闲时的核算结果样例：元数据模块有历史，向量模块没装。 */
-function estimateFixture(overrides: Partial<AIJobEstimate> = {}): AIJobEstimate {
+function estimateFixture(
+  overrides: Partial<AIJobEstimate> = {},
+): AIJobEstimate {
   return {
     generatedAt: "2026-11-11T02:00:00Z",
     libraryRevision: 7,
@@ -283,8 +288,15 @@ describe("任务中心", () => {
         dailyTime: "04:15",
         dailyModules: ["metadata"],
         peopleEnabled: false,
+        gpuEnabled: true,
       },
     });
+    vi.mocked(aiJobsApi.updateHardware).mockImplementation(
+      async (gpuEnabled) => ({
+        ok: true,
+        settings: { ...snapshot().settings, gpuEnabled },
+      }),
+    );
     vi.mocked(aiJobsApi.estimate).mockResolvedValue({
       ok: true,
       estimate: estimateFixture(),
@@ -296,6 +308,7 @@ describe("任务中心", () => {
         pythonVersion: "3.11.9",
         torchVersion: "2.7.1",
         cudaAvailable: true,
+        cudaExecutionProviderAvailable: true,
         cudaVersion: "12.6",
         gpuName: "NVIDIA GeForce RTX 3060",
         device: "cuda",
@@ -331,7 +344,10 @@ describe("任务中心", () => {
       mediaBytes: 0,
       mediaFileCount: 0,
     });
-    vi.mocked(storageApi.usage).mockResolvedValue({ ok: true, usage: emptyUsage });
+    vi.mocked(storageApi.usage).mockResolvedValue({
+      ok: true,
+      usage: emptyUsage,
+    });
     vi.mocked(storageApi.paths).mockResolvedValue({
       ok: true,
       paths: emptyAbsolutePaths,
@@ -354,10 +370,18 @@ describe("任务中心", () => {
   it("按编号区块呈现运行、任务记录、每日计划与本机存储", async () => {
     renderCenter();
 
-    expect(await screen.findByRole("heading", { name: "运行" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "任务记录" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "每日计划" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "本机存储" })).toBeInTheDocument();
+    expect(
+      await screen.findByRole("heading", { name: "运行" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "任务记录" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "每日计划" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: "本机存储" }),
+    ).toBeInTheDocument();
     // 编号写在各自的区块标题里。
     ["run", "history", "plan", "storage"].forEach((id, index) => {
       const section = document.getElementById(id);
@@ -398,14 +422,12 @@ describe("任务中心", () => {
 
     expect(await screen.findByText("队列空闲")).toBeInTheDocument();
     const moduleGroup = within(screen.getByRole("group", { name: "分析模块" }));
-    expect(moduleGroup.getByRole("button", { name: "照片元数据" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(moduleGroup.getByRole("button", { name: "向量索引" })).toHaveAttribute(
-      "title",
-      expect.stringContaining("未安装"),
-    );
+    expect(
+      moduleGroup.getByRole("button", { name: "照片元数据" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      moduleGroup.getByRole("button", { name: "向量索引" }),
+    ).toHaveAttribute("title", expect.stringContaining("未安装"));
     fireEvent.click(screen.getByRole("radio", { name: "全量" }));
     fireEvent.click(screen.getByRole("button", { name: /开始分析/ }));
     await waitFor(() =>
@@ -427,8 +449,12 @@ describe("任务中心", () => {
     expect(within(table).getByText("约 45 秒")).toBeInTheDocument();
     expect(within(table).getByText("约 29 分钟")).toBeInTheDocument();
     // 两行都在，当前模式那一行由圆点标出。
-    expect(within(table).getByRole("rowheader", { name: "增量" })).toBeInTheDocument();
-    expect(within(table).getByRole("rowheader", { name: "全量" })).toBeInTheDocument();
+    expect(
+      within(table).getByRole("rowheader", { name: "增量" }),
+    ).toBeInTheDocument();
+    expect(
+      within(table).getByRole("rowheader", { name: "全量" }),
+    ).toBeInTheDocument();
   });
 
   it("切换处理方式时数字就地变化，不重新核算", async () => {
@@ -472,15 +498,19 @@ describe("任务中心", () => {
         },
       },
     ];
-    vi.mocked(aiJobsApi.estimate).mockResolvedValue({ ok: true, estimate: noHistory });
+    vi.mocked(aiJobsApi.estimate).mockResolvedValue({
+      ok: true,
+      estimate: noHistory,
+    });
     vi.mocked(aiJobsApi.list).mockResolvedValue({
       ok: true,
       snapshot: snapshot({ jobs: [], active: undefined }),
     });
     renderCenter();
 
-    // 表格两行与按钮下方各说一次：这里算不出来，别让人以为很快。
-    expect(await screen.findAllByText("暂无历史记录，无法预估")).toHaveLength(3);
+    // 表格用紧凑标签，说明与按钮仍明确提示无法预估。
+    expect(await screen.findAllByText("暂不可估")).toHaveLength(2);
+    expect(screen.getByText("暂无历史记录，无法预估")).toBeInTheDocument();
     expect(screen.getByText("320 张")).toBeInTheDocument();
   });
 
@@ -492,9 +522,7 @@ describe("任务中心", () => {
     });
     renderCenter();
 
-    expect(
-      await screen.findByText(/本次规模核算失败/),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/本次规模核算失败/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /开始分析/ })).toBeEnabled();
   });
 
@@ -509,6 +537,7 @@ describe("任务中心", () => {
           dailyTime: "03:00",
           dailyModules: ["metadata"],
           peopleEnabled: false,
+          gpuEnabled: true,
         },
       }),
     });
@@ -537,8 +566,50 @@ describe("任务中心", () => {
     renderCenter();
 
     expect(await screen.findByText("队列等待中 · 1 项")).toBeInTheDocument();
-    expect(screen.getByText("接下来 · 1 项")).toBeInTheDocument();
+    expect(screen.getByText("等待队列 · 1 项")).toBeInTheDocument();
     expect(screen.getAllByTestId("task-queue-row")).toHaveLength(1);
+  });
+
+  it("队列为空时仍明确显示空状态", async () => {
+    vi.mocked(aiJobsApi.list).mockResolvedValue({
+      ok: true,
+      snapshot: snapshot({ jobs: [], active: undefined, queue: [] }),
+    });
+    renderCenter();
+
+    expect(await screen.findByText("等待队列 · 0 项")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "当前没有等待中的任务。按序启动多个模块后，后续任务会显示在这里。",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("硬件方案默认强制 GPU，并持久化用户切换", async () => {
+    let resolveSave: (settings: AIJobSnapshot["settings"]) => void = () => {};
+    vi.mocked(aiJobsApi.updateHardware).mockReturnValue(
+      new Promise((resolve) => {
+        resolveSave = (settings) => resolve({ ok: true, settings });
+      }),
+    );
+    vi.mocked(aiJobsApi.list).mockResolvedValue({
+      ok: true,
+      snapshot: snapshot(),
+    });
+    renderCenter();
+
+    const pauseButton = await screen.findByRole("button", { name: "暂停" });
+    const gpuToggle = await screen.findByRole("checkbox", {
+      name: "强制使用 GPU",
+    });
+    expect(gpuToggle).toBeChecked();
+    fireEvent.click(gpuToggle);
+    await waitFor(() =>
+      expect(aiJobsApi.updateHardware).toHaveBeenCalledWith(false),
+    );
+    expect(pauseButton).toBeDisabled();
+    resolveSave({ ...snapshot().settings, gpuEnabled: false });
+    await waitFor(() => expect(pauseButton).toBeEnabled());
   });
 
   it("按所选模式一键排入全部模块，并提供服务端设置入口", async () => {
@@ -549,9 +620,10 @@ describe("任务中心", () => {
     renderCenter();
 
     await screen.findByText("队列空闲");
-    expect(
-      screen.getByRole("link", { name: "服务设置" }),
-    ).toHaveAttribute("href", "/settings");
+    expect(screen.getByRole("link", { name: "服务设置" })).toHaveAttribute(
+      "href",
+      "/settings",
+    );
     fireEvent.click(screen.getByRole("radio", { name: "全量" }));
     fireEvent.click(screen.getByRole("button", { name: "按序启动全部任务" }));
     await waitFor(() =>
@@ -658,9 +730,13 @@ describe("任务中心", () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     renderCenter();
 
-    fireEvent.click(
-      await screen.findByRole("button", { name: "清空队列" }),
-    );
+    await screen.findByText("等待队列 · 1 项");
+    const clearButton = await screen.findByRole("button", {
+      name: "清空队列",
+    });
+    expect(screen.getByText("等待队列 · 1 项")).toBeInTheDocument();
+    expect(clearButton).toBeEnabled();
+    fireEvent.click(clearButton);
     expect(confirm).toHaveBeenCalledWith(
       expect.stringContaining("当前任务不会受影响"),
     );
@@ -789,6 +865,7 @@ describe("任务中心", () => {
           dailyTime: "03:00",
           dailyModules: ["metadata"],
           peopleEnabled: true,
+          gpuEnabled: true,
         },
         modules: [
           modules[0],
@@ -816,6 +893,7 @@ describe("任务中心", () => {
       status: {
         pythonAvailable: true,
         cudaAvailable: false,
+        cudaExecutionProviderAvailable: false,
         device: "cpu",
         runtimeReady: false,
         modelAvailable: false,
@@ -896,9 +974,10 @@ describe("任务中心", () => {
     renderCenter();
 
     fireEvent.click(
-      within(
-        await screen.findByRole("group", { name: "运行模块" }),
-      ).getByRole("button", { name: "向量索引" }),
+      within(await screen.findByRole("group", { name: "运行模块" })).getByRole(
+        "button",
+        { name: "向量索引" },
+      ),
     );
     fireEvent.click(screen.getByRole("button", { name: "保存计划" }));
     await waitFor(() =>
@@ -999,7 +1078,8 @@ describe("任务中心", () => {
     );
   });
 
-  it("失败项展开后给出可复制的路径", async () => {    const failedJob: AIJob = {
+  it("失败项展开后给出可复制的路径", async () => {
+    const failedJob: AIJob = {
       ...currentJob,
       id: "job-failed",
       status: "failed",
@@ -1053,16 +1133,12 @@ describe("任务中心", () => {
     expect(storageApi.jobOutput).not.toHaveBeenCalled();
 
     fireEvent.click(within(row).getByText("手动 元数据分析"));
-    expect(
-      await screen.findByText("本次产物"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("本次产物")).toBeInTheDocument();
     await waitFor(() =>
       expect(storageApi.jobOutput).toHaveBeenCalledWith("job-completed"),
     );
     expect(
-      screen.getByText(
-        "derived/metadata/metadata/batches/job-completed",
-      ),
+      screen.getByText("derived/metadata/metadata/batches/job-completed"),
     ).toBeInTheDocument();
     expect(screen.getByText(/2 KB · 2 个批次文件/)).toBeInTheDocument();
   });

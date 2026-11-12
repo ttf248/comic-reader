@@ -205,7 +205,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 任务快照的 `jobs` 按创建时间倒序提供任务记录，`active` 是当前执行或暂停的任务，`queue` 是按执行顺序排列的等待任务 ID，不包含 `active`。任务记录包含等待队列任务以及所有终态记录。队列 ID 与任务状态会一起持久化到 `state/ai_jobs.json`；旧状态文件缺少 `queue` 时会按待执行任务的创建顺序恢复，服务重启时未完成的当前任务会插回队首续跑。
 
-任务状态为 `pending`、`running`、`paused`、`completed`、`failed`、`cancelled`。快照包含阶段、总数、已处理/跳过/失败/完成数、检查点、耗时、速度、开始/结束时间及错误项。错误项包含资源 ID、根目录别名下的相对图片路径、稳定错误码、脱敏原因和时间；不返回文件系统绝对路径。任务在后台按 32 张一批提交，重启后自动恢复运行中任务。
+任务状态为 `pending`、`running`、`paused`、`completed`、`failed`、`cancelled`。快照包含阶段、总数、已处理/跳过/失败/完成数、检查点、耗时、速度、开始/结束时间及错误项。任务的 `computeDevice` 是创建时记录的 `cpu` 或 `gpu`：元数据始终使用 CPU，其他模型任务默认强制使用 GPU；关闭 GPU 设置后新任务改用 CPU，已排队任务不变。设备不可用或 GPU 推理失败时，任务以 `failed` 结束，并在 `errorCode` 与 `error` 中记录原因。错误项包含资源 ID、根目录别名下的相对图片路径、稳定错误码、脱敏原因和时间；不返回文件系统绝对路径。任务在后台按 32 张一批提交，重启后自动恢复运行中任务。
 
 快照里另有几个按持久化计数推导的进度字段，以及两份产出统计：
 
@@ -324,11 +324,15 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 ### `GET /api/ai/jobs/settings` / `PUT /api/ai/jobs/settings`
 
-每日计划字段为 `{ "dailyEnabled": true, "dailyTime": "03:00", "dailyModules": ["metadata", "ocr"], "peopleEnabled": false }`。`peopleEnabled` 默认关闭；开启后才允许启动 `face` 任务，也可将其加入每日计划。关闭时会从计划模块中移除 `face`；若人脸任务仍在排队、运行或暂停，返回 `409 analysis_job_active`。时间格式为 24 小时 `HH:MM`；开启计划时至少选择一个已安装模块。未安装模块、空模块选择或无效时间返回 `400 invalid_analysis_settings`。到时后按配置顺序排入所选模块的增量任务，并复用现有任务队列逐项执行；运行环境或权重未就绪的模块会跳过。服务错过计划日期后启动时补跑一次，同一天不重复创建。旧状态文件缺少 `dailyModules` 时按 metadata 恢复，缺少 `peopleEnabled` 时按关闭处理。
+每日计划请求字段为 `{ "dailyEnabled": true, "dailyTime": "03:00", "dailyModules": ["metadata", "ocr"], "peopleEnabled": false }`。响应设置还包含 `gpuEnabled`，默认 `true`。`peopleEnabled` 默认关闭；开启后才允许启动 `face` 任务，也可将其加入每日计划。关闭时会从计划模块中移除 `face`；若人脸任务仍在排队、运行或暂停，返回 `409 analysis_job_active`。时间格式为 24 小时 `HH:MM`；开启计划时至少选择一个已安装模块。未安装模块、空模块选择或无效时间返回 `400 invalid_analysis_settings`。到时后按配置顺序排入所选模块的增量任务，并复用现有任务队列逐项执行；运行环境或权重未就绪的模块会跳过。服务错过计划日期后启动时补跑一次，同一天不重复创建。旧状态文件缺少 `dailyModules` 时按 metadata 恢复，缺少 `peopleEnabled` 时按关闭处理，缺少 `gpuEnabled` 时启用 GPU。
+
+### `PUT /api/ai/jobs/hardware`
+
+请求为 `{ "gpuEnabled": true | false }`，持久化新任务的硬件偏好。默认开启；向量、OCR 与人脸任务强制使用 NVIDIA GPU，不自动切换到 CPU，GPU 不可用或推理失败时任务记录 `gpu_unavailable` 或 `gpu_inference_failed`。关闭后新建任务使用 CPU。元数据解析始终使用 CPU，修改偏好不会改变已排队任务。缺少布尔字段或 JSON 无效返回 `400 invalid_analysis_hardware`；保存失败返回 `500 analysis_hardware_update_failed`。
 
 ### `GET /api/ai/semantic/status`
 
-返回本机 Python、PyTorch、CUDA/GPU、Chinese-CLIP SHA256 校验、向量索引版本与覆盖率，以及 `modules.ocr` 与 `modules.face` 的依赖/权重状态。`runtimeReady` 表示 Chinese-CLIP 推理依赖可导入，`modelValid` 表示权重匹配固定 revision；`cudaAvailable` 为 false 时仍可使用 CPU。OCR 和人脸检测通过 `modules` 独立报告就绪状态，不受 Chinese-CLIP 权重缺失影响。`coverage` 按当前资源快照和有效文件指纹统计已索引数/照片数。
+返回本机 Python、PyTorch、CUDA/GPU、ONNX Runtime CUDA Execution Provider、Chinese-CLIP SHA256 校验、向量索引版本与覆盖率，以及 `modules.ocr` 与 `modules.face` 的依赖/权重状态。`runtimeReady` 表示 Chinese-CLIP 推理依赖可导入，`modelValid` 表示权重匹配固定 revision；`cudaAvailable` 与 `cudaExecutionProviderAvailable` 分别报告 PyTorch CUDA 和 ONNX Runtime CUDA 是否可用。关闭 GPU 强制设置时仍可使用 CPU。OCR 和人脸检测通过 `modules` 独立报告依赖与权重就绪状态，不受 Chinese-CLIP 权重缺失影响。`coverage` 按当前资源快照和有效文件指纹统计已索引数/照片数。
 
 ### `GET /api/storage/usage`
 

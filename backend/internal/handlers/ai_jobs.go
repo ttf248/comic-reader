@@ -38,6 +38,10 @@ type aiJobSettingsRequest struct {
 	PeopleEnabled bool     `json:"peopleEnabled"`
 }
 
+type aiJobHardwareRequest struct {
+	GPUEnabled *bool `json:"gpuEnabled"`
+}
+
 // AIJobsHandler 返回任务历史、活动任务与每日调度设置。
 func AIJobsHandler(service *services.AIJobService) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -309,6 +313,24 @@ func AIJobSettingsHandler(service *services.AIJobService, people *services.Peopl
 			if err := people.Sync(service.Records(services.AIJobTypeFace)); err != nil {
 				return writeError(c, fiber.StatusInternalServerError, "people_index_unavailable", "people index could not be prepared")
 			}
+		}
+		return c.JSON(fiber.Map{"ok": true, "settings": settings})
+	}
+}
+
+// AIJobHardwareHandler saves the device policy used by newly created analysis jobs.
+func AIJobHardwareHandler(service *services.AIJobService) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		if service == nil {
+			return writeError(c, fiber.StatusServiceUnavailable, "analysis_unavailable", "analysis service is unavailable")
+		}
+		var body aiJobHardwareRequest
+		if err := c.BodyParser(&body); err != nil || body.GPUEnabled == nil {
+			return writeError(c, fiber.StatusBadRequest, "invalid_analysis_hardware", "gpuEnabled must be a boolean")
+		}
+		settings, err := service.SetGPUEnabled(*body.GPUEnabled)
+		if err != nil {
+			return writeError(c, fiber.StatusInternalServerError, "analysis_hardware_update_failed", "hardware settings could not be saved")
 		}
 		return c.JSON(fiber.Map{"ok": true, "settings": settings})
 	}

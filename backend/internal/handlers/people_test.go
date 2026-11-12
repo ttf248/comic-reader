@@ -101,6 +101,9 @@ func TestPeopleHTTPGroupingCorrectionsAndClear(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := jobs.SetGPUEnabled(false); err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()

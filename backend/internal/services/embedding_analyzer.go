@@ -39,6 +39,17 @@ func (a *EmbeddingAnalyzer) Ready(ctx context.Context) error {
 	return nil
 }
 
+func (a *EmbeddingAnalyzer) ValidateHardware(ctx context.Context, device string) error {
+	if device != "gpu" {
+		return nil
+	}
+	status, err := a.worker.Status(ctx)
+	if err != nil || !status.CUDAAvailable || !status.RuntimeReady {
+		return ErrAIGPUUnavailable
+	}
+	return nil
+}
+
 func (a *EmbeddingAnalyzer) AnalyzeBatch(ctx context.Context, inputs []AIAnalysisInput) ([]AIAnalysisOutput, error) {
 	if len(inputs) == 0 {
 		return []AIAnalysisOutput{}, nil
@@ -47,7 +58,20 @@ func (a *EmbeddingAnalyzer) AnalyzeBatch(ctx context.Context, inputs []AIAnalysi
 	for index, input := range inputs {
 		paths[index] = input.Path
 	}
-	embeddings, err := a.worker.EmbedImages(ctx, paths)
+	var embeddings []AIWorkerVector
+	var err error
+	device := inputs[0].ComputeDevice
+	if device != "" {
+		if computeWorker, ok := a.worker.(AIWorkerCompute); ok {
+			embeddings, err = computeWorker.EmbedImagesOnDevice(ctx, paths, device)
+		} else if device == "gpu" {
+			return nil, ErrAIGPUUnavailable
+		} else {
+			embeddings, err = a.worker.EmbedImages(ctx, paths)
+		}
+	} else {
+		embeddings, err = a.worker.EmbedImages(ctx, paths)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -59,8 +83,17 @@ func (a *EmbeddingAnalyzer) AnalyzeBatch(ctx context.Context, inputs []AIAnalysi
 	vectorPositions := make([]int, 0, len(inputs))
 	for index, embedding := range embeddings {
 		if embedding.Error != "" || len(embedding.Vector) != AIEmbeddingDimension {
+			code := "image_embedding_failed"
+			message := "图片无法读取或向量生成失败"
+			if embedding.Error == "gpu_unavailable" {
+				code = "gpu_unavailable"
+				message = "GPU 推理环境不可用；已按 GPU 强制模式停止任务"
+			} else if embedding.Error == "gpu_inference_failed" || embedding.Error == "gpu_out_of_memory" {
+				code = "gpu_inference_failed"
+				message = "GPU 推理失败；未切换到 CPU"
+			}
 			outputs[index] = AIAnalysisOutput{
-				Status: "failed", ErrorCode: "image_embedding_failed", ErrorMessage: "图片无法读取或向量生成失败",
+				Status: "failed", ErrorCode: code, ErrorMessage: message,
 			}
 			continue
 		}

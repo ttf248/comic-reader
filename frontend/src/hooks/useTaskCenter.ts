@@ -68,6 +68,10 @@ export interface TaskCenterState {
   operationError: boolean;
   embeddingStatus?: AIWorkerStatus;
   embeddingStatusLoading: boolean;
+  gpuEnabled: boolean;
+  setGPUEnabled: (enabled: boolean) => void;
+  gpuSaving: boolean;
+  gpuSaveError: boolean;
   /** 空闲时的规模与耗时核算。 */
   estimate?: AIJobEstimate;
   estimateLoading: boolean;
@@ -143,7 +147,8 @@ export function useTaskCenter(): TaskCenterState {
 
   // 选中的模块与处理方式。放在这里是因为规模估算表、按钮上的张数说明与
   // 启动请求都要读它 —— 分开存必然漂移。
-  const [selectedModule, setSelectedModule] = useState<AnalysisType>("metadata");
+  const [selectedModule, setSelectedModule] =
+    useState<AnalysisType>("metadata");
   const [mode, setMode] = useState<AnalysisMode>("incremental");
   // 人物开关按草稿走：芯片在草稿里解锁了，选中项就不该被弹回去。
   const peopleEnabled = planDraft?.peopleEnabled ?? false;
@@ -282,6 +287,45 @@ export function useTaskCenter(): TaskCenterState {
       void queryClient.invalidateQueries({ queryKey: ESTIMATE_KEY });
     },
   });
+  const hardwareMutation = useMutation({
+    mutationFn: (gpuEnabled: boolean) => aiJobsApi.updateHardware(gpuEnabled),
+    onMutate: async (gpuEnabled) => {
+      await queryClient.cancelQueries({ queryKey: JOBS_KEY });
+      const previous = queryClient.getQueryData<{
+        ok: boolean;
+        snapshot: AIJobSnapshot;
+      }>(JOBS_KEY);
+      queryClient.setQueryData<{ ok: boolean; snapshot: AIJobSnapshot }>(
+        JOBS_KEY,
+        (current) =>
+          current
+            ? {
+                ...current,
+                snapshot: {
+                  ...current.snapshot,
+                  settings: { ...current.snapshot.settings, gpuEnabled },
+                },
+              }
+            : current,
+      );
+      return { previous };
+    },
+    onError: (_error, _gpuEnabled, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(JOBS_KEY, context.previous);
+      }
+    },
+    onSuccess: ({ settings }) => {
+      queryClient.setQueryData<{ ok: boolean; snapshot: AIJobSnapshot }>(
+        JOBS_KEY,
+        (current) =>
+          current
+            ? { ...current, snapshot: { ...current.snapshot, settings } }
+            : current,
+      );
+    },
+    onSettled: () => void queryClient.invalidateQueries({ queryKey: JOBS_KEY }),
+  });
 
   const queue = useMemo(() => {
     const jobsById = new Map(snapshot?.jobs.map((job) => [job.id, job]) ?? []);
@@ -368,6 +412,10 @@ export function useTaskCenter(): TaskCenterState {
       managementMutation.isError,
     embeddingStatus: embeddingStatusQuery.data?.status,
     embeddingStatusLoading: embeddingStatusQuery.isLoading,
+    gpuEnabled: snapshot?.settings.gpuEnabled ?? true,
+    setGPUEnabled: (enabled: boolean) => hardwareMutation.mutate(enabled),
+    gpuSaving: hardwareMutation.isPending,
+    gpuSaveError: hardwareMutation.isError,
     selection: {
       module: selectedModule,
       mode,

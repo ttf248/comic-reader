@@ -47,6 +47,8 @@ export interface AIJob {
   scheduled?: boolean;
   retryOf?: string;
   retryFailedOnly?: boolean;
+  computeDevice: "cpu" | "gpu";
+  errorCode?: string;
   startedAt?: string;
   finishedAt?: string;
   createdAt: string;
@@ -70,8 +72,14 @@ export interface AIJobSettings {
   dailyTime: string;
   dailyModules: AnalysisType[];
   peopleEnabled: boolean;
+  gpuEnabled: boolean;
   lastScheduledDate?: string;
 }
+
+export type AIJobSettingsUpdate = Pick<
+  AIJobSettings,
+  "dailyEnabled" | "dailyTime" | "dailyModules" | "peopleEnabled"
+>;
 
 /** 某个模块在一种模式下的核算结果。 */
 export interface AIJobEstimateMode {
@@ -135,6 +143,7 @@ export interface AIWorkerStatus {
   pythonVersion?: string;
   torchVersion?: string;
   cudaAvailable: boolean;
+  cudaExecutionProviderAvailable: boolean;
   cudaVersion?: string;
   gpuName?: string;
   gpuMemoryBytes?: number;
@@ -343,10 +352,16 @@ export const aiJobsApi = {
     ),
   settings: () =>
     api<{ ok: boolean; settings: AIJobSettings }>("/api/ai/jobs/settings"),
-  updateSettings: (settings: AIJobSettings) =>
+  updateSettings: (settings: AIJobSettingsUpdate) =>
     api<{ ok: boolean; settings: AIJobSettings }>("/api/ai/jobs/settings", {
       method: "PUT",
       body: settings,
+      nonIdempotent: true,
+    }),
+  updateHardware: (gpuEnabled: boolean) =>
+    api<{ ok: boolean; settings: AIJobSettings }>("/api/ai/jobs/hardware", {
+      method: "PUT",
+      body: { gpuEnabled },
       nonIdempotent: true,
     }),
   metadata: (id: string) =>

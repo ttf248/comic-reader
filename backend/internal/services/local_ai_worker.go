@@ -28,27 +28,30 @@ var (
 	ErrAIWorkerUnavailable  = errors.New("local AI worker is unavailable")
 	ErrAIModelUnavailable   = errors.New("local semantic model is missing or invalid")
 	ErrAIRuntimeUnavailable = errors.New("local AI runtime is unavailable")
+	ErrAIGPUUnavailable     = errors.New("required NVIDIA GPU runtime is unavailable")
+	ErrAIGPUInferenceFailed = errors.New("required GPU inference failed")
 )
 
 type AIWorkerStatus struct {
-	PythonAvailable bool                            `json:"pythonAvailable"`
-	PythonVersion   string                          `json:"pythonVersion,omitempty"`
-	TorchVersion    string                          `json:"torchVersion,omitempty"`
-	CUDAAvailable   bool                            `json:"cudaAvailable"`
-	CUDAVersion     string                          `json:"cudaVersion,omitempty"`
-	GPUName         string                          `json:"gpuName,omitempty"`
-	GPUMemoryBytes  int64                           `json:"gpuMemoryBytes,omitempty"`
-	Device          string                          `json:"device"`
-	RuntimeReady    bool                            `json:"runtimeReady"`
-	RuntimeError    string                          `json:"runtimeError,omitempty"`
-	ModelAvailable  bool                            `json:"modelAvailable"`
-	ModelValid      bool                            `json:"modelValid"`
-	ModelLoaded     bool                            `json:"modelLoaded"`
-	ModelVersion    string                          `json:"modelVersion"`
-	ModelSHA256     string                          `json:"modelSha256,omitempty"`
-	Index           VectorIndexStatus               `json:"index"`
-	Coverage        AIIndexCoverage                 `json:"coverage"`
-	Modules         map[string]AIWorkerModuleStatus `json:"modules,omitempty"`
+	PythonAvailable                bool                            `json:"pythonAvailable"`
+	PythonVersion                  string                          `json:"pythonVersion,omitempty"`
+	TorchVersion                   string                          `json:"torchVersion,omitempty"`
+	CUDAAvailable                  bool                            `json:"cudaAvailable"`
+	CUDAExecutionProviderAvailable bool                            `json:"cudaExecutionProviderAvailable"`
+	CUDAVersion                    string                          `json:"cudaVersion,omitempty"`
+	GPUName                        string                          `json:"gpuName,omitempty"`
+	GPUMemoryBytes                 int64                           `json:"gpuMemoryBytes,omitempty"`
+	Device                         string                          `json:"device"`
+	RuntimeReady                   bool                            `json:"runtimeReady"`
+	RuntimeError                   string                          `json:"runtimeError,omitempty"`
+	ModelAvailable                 bool                            `json:"modelAvailable"`
+	ModelValid                     bool                            `json:"modelValid"`
+	ModelLoaded                    bool                            `json:"modelLoaded"`
+	ModelVersion                   string                          `json:"modelVersion"`
+	ModelSHA256                    string                          `json:"modelSha256,omitempty"`
+	Index                          VectorIndexStatus               `json:"index"`
+	Coverage                       AIIndexCoverage                 `json:"coverage"`
+	Modules                        map[string]AIWorkerModuleStatus `json:"modules,omitempty"`
 }
 
 type AIWorkerModuleStatus struct {
@@ -86,6 +89,14 @@ type AIImageAnalysisWorker interface {
 	ModuleStatus(string) AIWorkerModuleStatus
 }
 
+// AIWorkerCompute adds per-request device selection while preserving the legacy
+// CPU/automatic methods used by search and older test workers.
+type AIWorkerCompute interface {
+	EmbedImagesOnDevice(context.Context, []string, string) ([]AIWorkerVector, error)
+	AnalyzeOCROnDevice(context.Context, []string, string) ([]AIWorkerAnalysis, error)
+	AnalyzeFacesOnDevice(context.Context, []string, string) ([]AIWorkerAnalysis, error)
+}
+
 type LocalAIWorkerOptions struct {
 	PythonPath string
 	PythonArgs []string
@@ -96,6 +107,7 @@ type LocalAIWorkerOptions struct {
 type workerRequest struct {
 	ID     string   `json:"id"`
 	Action string   `json:"action"`
+	Device string   `json:"device,omitempty"`
 	Paths  []string `json:"paths,omitempty"`
 	Texts  []string `json:"texts,omitempty"`
 }
@@ -213,7 +225,11 @@ func (w *localAIWorker) cacheStatus(status AIWorkerStatus) {
 }
 
 func (w *localAIWorker) EmbedImages(ctx context.Context, paths []string) ([]AIWorkerVector, error) {
-	response, err := w.send(ctx, workerRequest{Action: "embed_images", Paths: paths})
+	return w.EmbedImagesOnDevice(ctx, paths, "auto")
+}
+
+func (w *localAIWorker) EmbedImagesOnDevice(ctx context.Context, paths []string, device string) ([]AIWorkerVector, error) {
+	response, err := w.send(ctx, workerRequest{Action: "embed_images", Paths: paths, Device: device})
 	if err != nil {
 		return nil, err
 	}
@@ -229,15 +245,23 @@ func (w *localAIWorker) EmbedTexts(ctx context.Context, texts []string) ([]AIWor
 }
 
 func (w *localAIWorker) AnalyzeOCR(ctx context.Context, paths []string) ([]AIWorkerAnalysis, error) {
-	return w.analyzeImages(ctx, "ocr_images", paths)
+	return w.AnalyzeOCROnDevice(ctx, paths, "auto")
 }
 
 func (w *localAIWorker) AnalyzeFaces(ctx context.Context, paths []string) ([]AIWorkerAnalysis, error) {
-	return w.analyzeImages(ctx, "face_images", paths)
+	return w.AnalyzeFacesOnDevice(ctx, paths, "auto")
 }
 
-func (w *localAIWorker) analyzeImages(ctx context.Context, action string, paths []string) ([]AIWorkerAnalysis, error) {
-	response, err := w.send(ctx, workerRequest{Action: action, Paths: paths})
+func (w *localAIWorker) AnalyzeOCROnDevice(ctx context.Context, paths []string, device string) ([]AIWorkerAnalysis, error) {
+	return w.analyzeImages(ctx, "ocr_images", paths, device)
+}
+
+func (w *localAIWorker) AnalyzeFacesOnDevice(ctx context.Context, paths []string, device string) ([]AIWorkerAnalysis, error) {
+	return w.analyzeImages(ctx, "face_images", paths, device)
+}
+
+func (w *localAIWorker) analyzeImages(ctx context.Context, action string, paths []string, device string) ([]AIWorkerAnalysis, error) {
+	response, err := w.send(ctx, workerRequest{Action: action, Paths: paths, Device: device})
 	if err != nil {
 		return nil, err
 	}
@@ -245,8 +269,7 @@ func (w *localAIWorker) analyzeImages(ctx context.Context, action string, paths 
 		w.cacheStatus(response.Status)
 	}
 	if response.Error != "" {
-		code := safeWorkerError(response.Error)
-		return nil, fmt.Errorf("%w: %s", ErrAIWorkerUnavailable, code)
+		return nil, workerResponseError(response.Error)
 	}
 	result := make([]AIWorkerAnalysis, len(response.Items))
 	for index, item := range response.Items {
@@ -264,20 +287,30 @@ func unavailableImageModules(code string) map[string]AIWorkerModuleStatus {
 
 func workerVectors(response workerResponse) ([]AIWorkerVector, error) {
 	if response.Error != "" {
-		code := safeWorkerError(response.Error)
-		if code == "model_missing_or_checksum_invalid" {
-			return nil, fmt.Errorf("%w: %s", ErrAIModelUnavailable, code)
-		}
-		if code == "python_dependencies_missing" {
-			return nil, fmt.Errorf("%w: %s", ErrAIRuntimeUnavailable, code)
-		}
-		return nil, fmt.Errorf("%w: %s", ErrAIWorkerUnavailable, code)
+		return nil, workerResponseError(response.Error)
 	}
 	result := make([]AIWorkerVector, len(response.Items))
 	for index, item := range response.Items {
 		result[index] = AIWorkerVector{Vector: item.Vector, Error: item.Error}
 	}
 	return result, nil
+}
+
+func workerResponseError(rawCode string) error {
+	code := safeWorkerError(rawCode)
+	if code == "gpu_unavailable" {
+		return fmt.Errorf("%w: %s", ErrAIGPUUnavailable, code)
+	}
+	if code == "gpu_inference_failed" {
+		return fmt.Errorf("%w: %s", ErrAIGPUInferenceFailed, code)
+	}
+	if code == "model_missing_or_checksum_invalid" {
+		return fmt.Errorf("%w: %s", ErrAIModelUnavailable, code)
+	}
+	if code == "python_dependencies_missing" {
+		return fmt.Errorf("%w: %s", ErrAIRuntimeUnavailable, code)
+	}
+	return fmt.Errorf("%w: %s", ErrAIWorkerUnavailable, code)
 }
 
 func safeWorkerError(code string) string {
@@ -288,6 +321,10 @@ func safeWorkerError(code string) string {
 		return "python_dependencies_missing"
 	case "model_load_failed":
 		return "model_load_failed"
+	case "gpu_unavailable":
+		return "gpu_unavailable"
+	case "gpu_inference_failed", "gpu_out_of_memory":
+		return "gpu_inference_failed"
 	case "invalid_image_batch", "invalid_text_batch", "unknown_action":
 		return code
 	default:

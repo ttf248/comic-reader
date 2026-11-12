@@ -98,9 +98,7 @@ describe("TaskEstimatePanel", () => {
     );
 
     const table = screen.getByRole("table");
-    expect(within(table).getAllByText("暂无历史记录，无法预估")).toHaveLength(
-      2,
-    );
+    expect(within(table).getAllByText("暂不可估")).toHaveLength(2);
     // 张数照常给出。
     expect(within(table).getByText("320 张")).toBeInTheDocument();
     expect(screen.getByText(/这个模块还没有跑过/)).toBeInTheDocument();

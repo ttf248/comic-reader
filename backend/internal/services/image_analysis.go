@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	OCRAnalyzerVersion  = "rapidocr-3.10.0-onnxruntime-1.31.1"
+	OCRAnalyzerVersion  = "rapidocr-3.10.0-onnxruntime-1.20.2"
 	FaceAnalyzerVersion = "yunet-2023mar+sface-2021dec"
 )
 
@@ -39,11 +39,16 @@ func (a *OCRAnalyzer) Ready(ctx context.Context) error {
 	}
 	return nil
 }
+func (a *OCRAnalyzer) ValidateHardware(ctx context.Context, device string) error {
+	return validateImageGPU(ctx, a.worker, device)
+}
 func (a *OCRAnalyzer) Analyze(context.Context, io.ReadSeeker) (AIAnalysisOutput, error) {
 	return AIAnalysisOutput{}, errors.New("OCR analyzer requires validated batch inputs")
 }
 func (a *OCRAnalyzer) AnalyzeBatch(ctx context.Context, inputs []AIAnalysisInput) ([]AIAnalysisOutput, error) {
-	return analyzeImageBatch(ctx, inputs, a.worker.AnalyzeOCR, AIFieldOCRText, func(data json.RawMessage) bool {
+	return analyzeImageBatch(ctx, inputs, func(ctx context.Context, paths []string, device string) ([]AIWorkerAnalysis, error) {
+		return runImageAnalysis(a.worker, "ocr", ctx, paths, device)
+	}, AIFieldOCRText, func(data json.RawMessage) bool {
 		var result struct {
 			Text string `json:"text"`
 		}
@@ -80,11 +85,16 @@ func (a *FaceAnalyzer) Ready(ctx context.Context) error {
 	}
 	return nil
 }
+func (a *FaceAnalyzer) ValidateHardware(ctx context.Context, device string) error {
+	return validateImageGPU(ctx, a.worker, device)
+}
 func (a *FaceAnalyzer) Analyze(context.Context, io.ReadSeeker) (AIAnalysisOutput, error) {
 	return AIAnalysisOutput{}, errors.New("face analyzer requires validated batch inputs")
 }
 func (a *FaceAnalyzer) AnalyzeBatch(ctx context.Context, inputs []AIAnalysisInput) ([]AIAnalysisOutput, error) {
-	return analyzeImageBatch(ctx, inputs, a.worker.AnalyzeFaces, AIFieldFaces, func(data json.RawMessage) bool {
+	return analyzeImageBatch(ctx, inputs, func(ctx context.Context, paths []string, device string) ([]AIWorkerAnalysis, error) {
+		return runImageAnalysis(a.worker, "face", ctx, paths, device)
+	}, AIFieldFaces, func(data json.RawMessage) bool {
 		var result struct {
 			Faces []json.RawMessage `json:"faces"`
 		}
@@ -95,7 +105,7 @@ func (a *FaceAnalyzer) RecordCurrent(record AIAnalysisRecord) bool {
 	return record.Type == AIJobTypeFace && (record.Status == "faces_found" || record.Status == "no_faces") && record.ModuleVersion == a.Version()
 }
 
-type imageBatchAnalyzer func(context.Context, []string) ([]AIWorkerAnalysis, error)
+type imageBatchAnalyzer func(context.Context, []string, string) ([]AIWorkerAnalysis, error)
 
 func analyzeImageBatch(
 	ctx context.Context,
@@ -111,7 +121,8 @@ func analyzeImageBatch(
 	for index, input := range inputs {
 		paths[index] = input.Path
 	}
-	results, err := analyze(ctx, paths)
+	device := inputs[0].ComputeDevice
+	results, err := analyze(ctx, paths, device)
 	if err != nil {
 		return nil, err
 	}
@@ -121,8 +132,17 @@ func analyzeImageBatch(
 	outputs := make([]AIAnalysisOutput, len(results))
 	for index, result := range results {
 		if result.Error != "" || !json.Valid(result.Data) {
+			code := "image_analysis_failed"
+			message := "图片无法读取或分析失败"
+			if result.Error == "gpu_unavailable" {
+				code = "gpu_unavailable"
+				message = "GPU 推理环境不可用；已按 GPU 强制模式停止任务"
+			} else if result.Error == "gpu_inference_failed" || result.Error == "gpu_out_of_memory" {
+				code = "gpu_inference_failed"
+				message = "GPU 推理失败；未切换到 CPU"
+			}
 			outputs[index] = AIAnalysisOutput{
-				Status: "failed", ErrorCode: "image_analysis_failed", ErrorMessage: "图片无法读取或分析失败",
+				Status: "failed", ErrorCode: code, ErrorMessage: message,
 			}
 			continue
 		}
@@ -143,6 +163,39 @@ func analyzeImageBatch(
 	return outputs, nil
 }
 
+func runImageAnalysis(worker AIImageAnalysisWorker, module string, ctx context.Context, paths []string, device string) ([]AIWorkerAnalysis, error) {
+	if device == "" {
+		switch module {
+		case AIJobTypeOCR:
+			return worker.AnalyzeOCR(ctx, paths)
+		default:
+			return worker.AnalyzeFaces(ctx, paths)
+		}
+	}
+	computeWorker, ok := worker.(AIWorkerCompute)
+	if !ok {
+		if device == "gpu" {
+			return nil, ErrAIGPUUnavailable
+		}
+		return runImageAnalysis(worker, module, ctx, paths, "")
+	}
+	if module == AIJobTypeOCR {
+		return computeWorker.AnalyzeOCROnDevice(ctx, paths, device)
+	}
+	return computeWorker.AnalyzeFacesOnDevice(ctx, paths, device)
+}
+
+func validateImageGPU(ctx context.Context, worker AIImageAnalysisWorker, device string) error {
+	if device != "gpu" {
+		return nil
+	}
+	status, err := worker.Status(ctx)
+	if err != nil || !status.CUDAAvailable || !status.CUDAExecutionProviderAvailable {
+		return ErrAIGPUUnavailable
+	}
+	return nil
+}
+
 var _ AIAnalyzer = (*OCRAnalyzer)(nil)
 var _ AIAnalyzerBatch = (*OCRAnalyzer)(nil)
 var _ AIAnalyzerReadiness = (*OCRAnalyzer)(nil)
@@ -153,3 +206,5 @@ var _ AIAnalyzerBatch = (*FaceAnalyzer)(nil)
 var _ AIAnalyzerReadiness = (*FaceAnalyzer)(nil)
 var _ AIAnalyzerAvailability = (*FaceAnalyzer)(nil)
 var _ AIAnalyzerRecordValidator = (*FaceAnalyzer)(nil)
+var _ AIAnalyzerHardware = (*OCRAnalyzer)(nil)
+var _ AIAnalyzerHardware = (*FaceAnalyzer)(nil)

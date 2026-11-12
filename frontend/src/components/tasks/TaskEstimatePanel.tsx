@@ -105,25 +105,25 @@ export default function TaskEstimatePanel({
       </div>
 
       {/* 表格按内容收紧：三个列头各自挨着它的数字，摊满整幅会读成三处孤立的数据。 */}
-      <div className="mt-2 w-fit max-w-full overflow-hidden rounded-lg border border-border-faint">
-        <table className="w-full border-collapse text-left">
+      <div className="mt-2 w-fit max-w-full overflow-x-auto rounded-lg border border-border-faint sm:overflow-hidden">
+        <table className="w-max min-w-full border-collapse text-left sm:w-auto sm:min-w-0">
           <thead>
             <tr className="border-b border-border-faint bg-bg-subtle/50">
               <th
                 scope="col"
-                className="px-3.5 py-2 text-meta font-medium text-fg-subtle"
+                className="whitespace-nowrap px-3.5 py-2 text-meta font-medium text-fg-subtle"
               >
                 模式
               </th>
               <th
                 scope="col"
-                className="px-3.5 py-2 text-meta font-medium text-fg-subtle"
+                className="whitespace-nowrap px-3.5 py-2 text-meta font-medium text-fg-subtle"
               >
                 本次张数
               </th>
               <th
                 scope="col"
-                className="px-3.5 py-2 text-meta font-medium text-fg-subtle"
+                className="whitespace-nowrap px-3.5 py-2 text-meta font-medium text-fg-subtle"
               >
                 预计耗时
               </th>
@@ -143,7 +143,7 @@ export default function TaskEstimatePanel({
                 >
                   <th
                     scope="row"
-                    className="px-3.5 py-2 text-label font-normal text-fg"
+                    className="whitespace-nowrap px-3.5 py-2 text-label font-normal text-fg"
                   >
                     <span className="flex items-center gap-2">
                       {selected ? (
@@ -157,11 +157,13 @@ export default function TaskEstimatePanel({
                       {taskModeLabel(row.mode)}
                     </span>
                   </th>
-                  <td className="px-3.5 py-2 font-mono text-label tabular-nums text-fg">
+                  <td className="whitespace-nowrap px-3.5 py-2 font-mono text-label tabular-nums text-fg">
                     {formatCount(row.value.count)} 张
                   </td>
-                  <td className="px-3.5 py-2 font-mono text-label tabular-nums text-fg">
-                    {formatEstimateDuration(row.value.estimatedDurationMs)}
+                  <td className="whitespace-nowrap px-3.5 py-2 font-mono text-label tabular-nums text-fg">
+                    {row.value.estimatedDurationMs === null
+                      ? "暂不可估"
+                      : formatEstimateDuration(row.value.estimatedDurationMs)}
                   </td>
                 </tr>
               );

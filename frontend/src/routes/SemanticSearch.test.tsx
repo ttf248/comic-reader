@@ -66,6 +66,7 @@ describe("智能搜索", () => {
         pythonVersion: "3.11.9",
         torchVersion: "2.7.1+cu126",
         cudaAvailable: true,
+        cudaExecutionProviderAvailable: true,
         cudaVersion: "12.6",
         gpuName: "NVIDIA GeForce RTX 3060",
         device: "cuda",

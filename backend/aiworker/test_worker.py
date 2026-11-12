@@ -53,10 +53,13 @@ class WorkerTests(unittest.TestCase):
         self.originals = {
             "device": worker.device,
             "model": worker.model,
+            "model_device": worker.model_device,
             "model_dir": worker.model_dir,
             "model_validation": worker.model_validation,
             "runtime_error": worker.runtime_error,
             "torch": worker.torch,
+            "rapid_ocr": worker.rapid_ocr,
+            "face_models": worker.face_models,
         }
         worker.device = "cuda"
         worker.model = FakeModel()
@@ -121,6 +124,17 @@ class WorkerTests(unittest.TestCase):
         self.assertEqual("cpu", worker.device)
         self.assertEqual("cpu", worker.model.device)
         self.assertTrue(worker.model.is_float)
+
+    def test_forced_gpu_oom_never_retries_on_cpu(self):
+        model = worker.model
+
+        def encode(_items):
+            raise FakeOutOfMemoryError("CUDA out of memory")
+
+        results = worker.run_with_fallback(["image"], encode, lambda item: item, "gpu")
+
+        self.assertEqual("gpu_out_of_memory", results[0]["error"])
+        self.assertEqual("cuda", model.device)
 
     def test_unreadable_image_does_not_abort_other_items(self):
         results = worker.run_with_fallback(

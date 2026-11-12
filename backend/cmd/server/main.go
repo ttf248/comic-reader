@@ -424,6 +424,7 @@ func main() {
 	api.Post("/ai/faces/search", handlers.FaceSimilaritySearchHandler(aiJobs, resourceCatalog, safetyState.Validate))
 	api.Get("/ai/jobs/settings", handlers.AIJobSettingsHandler(aiJobs, peopleService))
 	api.Put("/ai/jobs/settings", handlers.AIJobSettingsHandler(aiJobs, peopleService))
+	api.Put("/ai/jobs/hardware", handlers.AIJobHardwareHandler(aiJobs))
 	// 核算要排在 /ai/jobs/:id 之前：那条是带参数的路由，静态段先注册
 	// 才不会落到参数路由上。
 	api.Get("/ai/jobs/estimate", handlers.AIJobEstimateHandler(aiJobs))

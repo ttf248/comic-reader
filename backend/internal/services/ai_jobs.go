@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -85,11 +86,17 @@ type AIAnalyzerBatch interface {
 	AnalyzeBatch(context.Context, []AIAnalysisInput) ([]AIAnalysisOutput, error)
 }
 
+// AIAnalyzerHardware validates and executes a task using its captured device mode.
+type AIAnalyzerHardware interface {
+	ValidateHardware(context.Context, string) error
+}
+
 type AIAnalysisInput struct {
-	ResourceID string
-	Path       string
-	Size       int64
-	MTimeNs    int64
+	ResourceID    string
+	Path          string
+	Size          int64
+	MTimeNs       int64
+	ComputeDevice string
 }
 
 type AIAnalyzerReadiness interface {
@@ -183,6 +190,8 @@ type AIJob struct {
 	Checkpoint        AIJobCheckpoint `json:"checkpoint"`
 	Errors            []AIJobError    `json:"errors,omitempty"`
 	Error             string          `json:"error,omitempty"`
+	ErrorCode         string          `json:"errorCode,omitempty"`
+	ComputeDevice     string          `json:"computeDevice"`
 	Scheduled         bool            `json:"scheduled,omitempty"`
 	RetryOf           string          `json:"retryOf,omitempty"`
 	RetryFailedOnly   bool            `json:"retryFailedOnly,omitempty"`
@@ -210,7 +219,24 @@ type AIJobSettings struct {
 	DailyTime         string   `json:"dailyTime"`
 	DailyModules      []string `json:"dailyModules"`
 	PeopleEnabled     bool     `json:"peopleEnabled"`
+	GPUEnabled        bool     `json:"gpuEnabled"`
 	LastScheduledDate string   `json:"lastScheduledDate,omitempty"`
+	gpuEnabledSet     bool
+}
+
+func (s *AIJobSettings) UnmarshalJSON(data []byte) error {
+	type plain AIJobSettings
+	var value plain
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	*s = AIJobSettings(value)
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	_, s.gpuEnabledSet = fields["gpuEnabled"]
+	return nil
 }
 
 type AIJobSnapshot struct {
@@ -358,7 +384,7 @@ func NewAIJobService(options AIJobServiceOptions) (*AIJobService, error) {
 		records:            make(map[string]AIAnalysisRecord),
 		runtimes:           make(map[string]*aiJobRuntime),
 		subs:               make(map[string]map[chan AIJob]struct{}),
-		settings:           AIJobSettings{DailyEnabled: true, DailyTime: "03:00", DailyModules: []string{AIJobTypeMetadata}},
+		settings:           AIJobSettings{DailyEnabled: true, DailyTime: "03:00", DailyModules: []string{AIJobTypeMetadata}, GPUEnabled: true},
 	}
 	for _, analyzer := range options.Analyzers {
 		if analyzer == nil || !validAIJobType(analyzer.Type()) || strings.TrimSpace(analyzer.Version()) == "" {
@@ -968,6 +994,24 @@ func (s *AIJobService) ConfigureDaily(enabled bool, dailyTime string, dailyModul
 	return s.copySettingsLocked(), nil
 }
 
+// SetGPUEnabled updates the hardware plan for newly created jobs. Existing queued
+// jobs keep the device mode captured when they were created.
+func (s *AIJobService) SetGPUEnabled(enabled bool) (AIJobSettings, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return AIJobSettings{}, errors.New("AI job service is shutting down")
+	}
+	previous := s.settings
+	s.settings.GPUEnabled = enabled
+	s.settings.gpuEnabledSet = true
+	if err := s.persistLocked(); err != nil {
+		s.settings = previous
+		return AIJobSettings{}, err
+	}
+	return s.copySettingsLocked(), nil
+}
+
 // PeopleEnabled reports whether face analysis has been explicitly enabled.
 func (s *AIJobService) PeopleEnabled() bool {
 	s.mu.Lock()
@@ -1272,10 +1316,15 @@ func (s *AIJobService) closeAnalyzers() {
 func (s *AIJobService) newJobLocked(moduleType, mode string) AIJob {
 	now := s.now()
 	version := s.analyzers[moduleType].Version()
+	computeDevice := "cpu"
+	if moduleType != AIJobTypeMetadata && s.settings.GPUEnabled {
+		computeDevice = "gpu"
+	}
 	return AIJob{
 		ID:            uuid.NewString(),
 		Type:          moduleType,
 		Mode:          mode,
+		ComputeDevice: computeDevice,
 		Status:        AIJobStatusPending,
 		Stage:         "pending",
 		ModuleVersion: version,
@@ -1316,6 +1365,8 @@ func (s *AIJobService) run(id string, runtimeState *aiJobRuntime) {
 		s.mu.Unlock()
 		return
 	}
+	analyzer := s.analyzers[job.Type]
+	computeDevice := job.ComputeDevice
 	now := s.now()
 	job.Status = AIJobStatusRunning
 	job.Stage = "waiting_for_library"
@@ -1335,6 +1386,20 @@ func (s *AIJobService) run(id string, runtimeState *aiJobRuntime) {
 	}
 	s.publishLocked(*job)
 	s.mu.Unlock()
+
+	if computeDevice == "gpu" {
+		validator, ok := analyzer.(AIAnalyzerHardware)
+		if !ok {
+			s.failGPUJob(id, "gpu_backend_unsupported", "此分析模块没有可用的 GPU 推理实现")
+			return
+		}
+		if err := validator.ValidateHardware(runtimeState.ctx, computeDevice); err != nil {
+			code, message := analysisFailure(err, analyzer.Type())
+			log.Printf("AI job failed: type=%s code=%s", analyzer.Type(), code)
+			s.failGPUJob(id, code, message)
+			return
+		}
+	}
 
 	snapshot, err := s.waitForCatalog(runtimeState.ctx)
 	if err != nil {
@@ -1569,12 +1634,14 @@ func (s *AIJobService) processBatch(ctx context.Context, jobID string, targets [
 	s.mu.Lock()
 	job := s.jobs[jobID]
 	var analyzer AIAnalyzer
+	computeDevice := "cpu"
 	if job != nil {
 		analyzer = s.analyzers[job.Type]
+		computeDevice = job.ComputeDevice
 	}
 	s.mu.Unlock()
 	if batchAnalyzer, ok := analyzer.(AIAnalyzerBatch); ok {
-		return s.processAnalyzerBatch(ctx, analyzer, batchAnalyzer, targets)
+		return s.processAnalyzerBatch(ctx, analyzer, batchAnalyzer, computeDevice, targets)
 	}
 	results := make([]AIAnalysisRecord, len(targets))
 	workers := min(s.workerCount, len(targets))
@@ -1606,7 +1673,7 @@ sendLoop:
 	return results
 }
 
-func (s *AIJobService) processAnalyzerBatch(ctx context.Context, analyzer AIAnalyzer, batchAnalyzer AIAnalyzerBatch, targets []aiJobTarget) []AIAnalysisRecord {
+func (s *AIJobService) processAnalyzerBatch(ctx context.Context, analyzer AIAnalyzer, batchAnalyzer AIAnalyzerBatch, computeDevice string, targets []aiJobTarget) []AIAnalysisRecord {
 	version := analyzer.Version()
 	results := make([]AIAnalysisRecord, len(targets))
 	inputs := make([]AIAnalysisInput, 0, len(targets))
@@ -1633,7 +1700,7 @@ func (s *AIJobService) processAnalyzerBatch(ctx context.Context, analyzer AIAnal
 			results[index] = failedAIRecord(results[index], "source_changed", "分析期间图片已发生变化")
 			continue
 		}
-		inputs = append(inputs, AIAnalysisInput{ResourceID: target.resourceID, Path: validated, Size: target.size, MTimeNs: target.mtimeNs})
+		inputs = append(inputs, AIAnalysisInput{ResourceID: target.resourceID, Path: validated, Size: target.size, MTimeNs: target.mtimeNs, ComputeDevice: computeDevice})
 		inputPositions = append(inputPositions, index)
 	}
 	if len(inputs) == 0 || ctx.Err() != nil {
@@ -1641,8 +1708,9 @@ func (s *AIJobService) processAnalyzerBatch(ctx context.Context, analyzer AIAnal
 	}
 	outputs, err := batchAnalyzer.AnalyzeBatch(ctx, inputs)
 	if err != nil || len(outputs) != len(inputs) {
+		code, message := analysisFailure(err, analyzer.Type())
 		for _, index := range inputPositions {
-			results[index] = failedAIRecord(results[index], "analysis_failed", analysisFailureMessage(analyzer.Type()))
+			results[index] = failedAIRecord(results[index], code, message)
 		}
 		return results
 	}
@@ -1745,6 +1813,16 @@ func analysisFailureMessage(moduleType string) string {
 	default:
 		return "分析模块处理失败"
 	}
+}
+
+func analysisFailure(err error, moduleType string) (string, string) {
+	if errors.Is(err, ErrAIGPUUnavailable) {
+		return "gpu_unavailable", "未检测到可用的 NVIDIA CUDA 推理环境；已按 GPU 强制模式停止任务"
+	}
+	if errors.Is(err, ErrAIGPUInferenceFailed) {
+		return "gpu_inference_failed", "GPU 推理失败；已按 GPU 强制模式停止任务"
+	}
+	return "analysis_failed", analysisFailureMessage(moduleType)
 }
 
 func (s *AIJobService) commitBatch(jobID string, runtimeState *aiJobRuntime, targets []aiJobTarget, records []AIAnalysisRecord, digest string) error {
@@ -1896,6 +1974,14 @@ func (s *AIJobService) finishInterrupted(id string, runtimeState *aiJobRuntime, 
 }
 
 func (s *AIJobService) finishJob(id, status, stage, message string) {
+	s.finishJobWithCode(id, status, stage, "", message)
+}
+
+func (s *AIJobService) failGPUJob(id, code, message string) {
+	s.finishJobWithCode(id, AIJobStatusFailed, "failed", code, message)
+}
+
+func (s *AIJobService) finishJobWithCode(id, status, stage, errorCode, message string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	job := s.jobs[id]
@@ -1905,6 +1991,7 @@ func (s *AIJobService) finishJob(id, status, stage, message string) {
 	job.Status = status
 	job.Stage = stage
 	job.Error = message
+	job.ErrorCode = errorCode
 	finished := s.now()
 	job.FinishedAt = &finished
 	job.UpdatedAt = finished
@@ -1915,6 +2002,7 @@ func (s *AIJobService) finishJob(id, status, stage, message string) {
 		job.Status = AIJobStatusFailed
 		job.Stage = "failed"
 		job.Error = "任务状态未能持久化"
+		job.ErrorCode = "job_state_persist_failed"
 		job.FinishedAt = &finished
 		_ = s.persistLocked()
 	}
@@ -2116,16 +2204,21 @@ func (s *AIJobService) loadState() error {
 	if state.Version != aiJobStoreVersion {
 		return fmt.Errorf("unsupported AI job state version %d", state.Version)
 	}
+	settingsChanged := false
 	if state.Settings.DailyTime != "" {
 		if _, err := time.Parse("15:04", state.Settings.DailyTime); err != nil {
 			return errors.New("invalid daily analysis time in state")
 		}
 		s.settings = state.Settings
+		if !state.Settings.gpuEnabledSet {
+			s.settings.GPUEnabled = true
+			s.settings.gpuEnabledSet = true
+			settingsChanged = true
+		}
 	}
 	if s.settings.DailyModules == nil {
 		s.settings.DailyModules = []string{AIJobTypeMetadata}
 	}
-	settingsChanged := false
 	if !s.settings.PeopleEnabled {
 		modules := withoutModule(s.settings.DailyModules, AIJobTypeFace)
 		if len(modules) != len(s.settings.DailyModules) {
@@ -2136,6 +2229,10 @@ func (s *AIJobService) loadState() error {
 	for _, job := range state.Jobs {
 		if job.ID == "" || !validAIJobType(job.Type) || (job.Mode != AIJobModeFull && job.Mode != AIJobModeIncremental) {
 			continue
+		}
+		if job.ComputeDevice == "" || (job.ComputeDevice != "cpu" && job.ComputeDevice != "gpu") {
+			job.ComputeDevice = "cpu"
+			settingsChanged = true
 		}
 		if job.Errors == nil {
 			job.Errors = []AIJobError{}

@@ -92,6 +92,41 @@ func TestEmbeddingAnalyzerUsesExistingTaskBatchesAndIncrementalRecords(t *testin
 	}
 }
 
+func TestEmbeddingAnalyzerPreservesGPUFailureCodes(t *testing.T) {
+	index, err := OpenVectorIndex(filepath.Join(t.TempDir(), "vectors"), ChineseCLIPModelVersion)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer index.Close()
+
+	worker := &gpuFailureEmbeddingWorker{fakeEmbeddingWorker: &fakeEmbeddingWorker{}}
+	analyzer, err := NewEmbeddingAnalyzer(worker, index)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outputs, err := analyzer.AnalyzeBatch(context.Background(), []AIAnalysisInput{
+		{ResourceID: "f_unavailable", Path: "first.jpg", ComputeDevice: "cpu"},
+		{ResourceID: "f_inference", Path: "second.jpg", ComputeDevice: "cpu"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(outputs) != 2 || outputs[0].ErrorCode != "gpu_unavailable" || outputs[1].ErrorCode != "gpu_inference_failed" {
+		t.Fatalf("GPU failure outputs = %+v", outputs)
+	}
+}
+
+type gpuFailureEmbeddingWorker struct {
+	*fakeEmbeddingWorker
+}
+
+func (*gpuFailureEmbeddingWorker) EmbedImages(context.Context, []string) ([]AIWorkerVector, error) {
+	return []AIWorkerVector{
+		{Error: "gpu_unavailable"},
+		{Error: "gpu_inference_failed"},
+	}, nil
+}
+
 func TestEmbeddingAnalyzerDoesNotStartWithoutVerifiedModel(t *testing.T) {
 	index, err := OpenVectorIndex(filepath.Join(t.TempDir(), "vectors"), ChineseCLIPModelVersion)
 	if err != nil {

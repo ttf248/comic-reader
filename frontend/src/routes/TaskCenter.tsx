@@ -4,6 +4,7 @@ import { useSectionSpy } from "../hooks/useSectionSpy";
 import { TASK_SECTIONS } from "../utils/pageSections";
 import TaskConsole from "../components/tasks/TaskConsole";
 import TaskQueuePanel from "../components/tasks/TaskQueuePanel";
+import ComputeHardwarePanel from "../components/tasks/ComputeHardwarePanel";
 import DailyPlanPanel from "../components/tasks/DailyPlanPanel";
 import JobHistoryPanel from "../components/tasks/JobHistoryPanel";
 import StorageSection from "../components/tasks/StorageSection";
@@ -19,6 +20,7 @@ import { Link } from "react-router-dom";
 export default function TaskCenter() {
   const center = useTaskCenter();
   const { snapshot, active, queue, history, plan } = center;
+  const taskActionsBusy = center.busy || center.gpuSaving;
   // 分区由侧栏显示，这里只负责把当前分区记进 store。
   useSectionSpy(TASK_SECTIONS, "/tasks");
 
@@ -55,7 +57,7 @@ export default function TaskCenter() {
             active={active}
             lastJob={history[0]}
             loading={center.loading}
-            busy={center.busy}
+            busy={taskActionsBusy}
             modules={snapshot?.modules ?? []}
             peopleEnabled={plan.peopleEnabled}
             queuedCount={queue.length}
@@ -70,6 +72,25 @@ export default function TaskCenter() {
             onAction={center.act}
             onRefreshEstimate={center.refreshEstimate}
           />
+          <div className="mt-4">
+            <TaskQueuePanel
+              jobs={queue}
+              busy={center.busy}
+              loading={center.loading}
+              onMove={center.moveQueued}
+              onCancel={(id) => center.act(id, "cancel")}
+              onClear={center.clearQueue}
+            />
+          </div>
+          <ComputeHardwarePanel
+            gpuEnabled={center.gpuEnabled}
+            disabled={center.loading}
+            saving={center.gpuSaving}
+            saveError={center.gpuSaveError}
+            status={center.embeddingStatus}
+            statusLoading={center.embeddingStatusLoading}
+            onChange={center.setGPUEnabled}
+          />
           {center.sequenceSkipped && center.sequenceSkipped.length > 0 ? (
             <p role="status" className="mt-3 text-meta text-warning">
               本次按序启动已跳过未就绪模块：
@@ -82,15 +103,6 @@ export default function TaskCenter() {
               操作未完成，请稍后重试。
             </p>
           ) : null}
-          <div className="mt-4">
-            <TaskQueuePanel
-              jobs={queue}
-              busy={center.busy}
-              onMove={center.moveQueued}
-              onCancel={(id) => center.act(id, "cancel")}
-              onClear={center.clearQueue}
-            />
-          </div>
         </section>
 
         <section id="history" className="scroll-mt-14">
@@ -102,8 +114,8 @@ export default function TaskCenter() {
           </div>
           <JobHistoryPanel
             jobs={history}
-            retryDisabled={Boolean(active) || center.busy}
-            busy={center.busy}
+            retryDisabled={Boolean(active) || taskActionsBusy}
+            busy={taskActionsBusy}
             onRetry={(id) => center.act(id, "retry")}
             onDelete={center.deleteHistoryItem}
             onClear={center.clearHistory}

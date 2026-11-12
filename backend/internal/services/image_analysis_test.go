@@ -68,6 +68,31 @@ func TestImageAnalyzersProducePersistentModuleResults(t *testing.T) {
 	}
 }
 
+func TestImageAnalyzersPreserveGPUFailureCodes(t *testing.T) {
+	inputs := []AIAnalysisInput{
+		{ResourceID: "f_unavailable", Path: "first.jpg"},
+		{ResourceID: "f_inference", Path: "second.jpg"},
+	}
+	outputs, err := analyzeImageBatch(
+		context.Background(),
+		inputs,
+		func(context.Context, []string, string) ([]AIWorkerAnalysis, error) {
+			return []AIWorkerAnalysis{
+				{Error: "gpu_unavailable"},
+				{Error: "gpu_inference_failed"},
+			}, nil
+		},
+		AIFieldOCRText,
+		func(json.RawMessage) bool { return false },
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(outputs) != 2 || outputs[0].ErrorCode != "gpu_unavailable" || outputs[1].ErrorCode != "gpu_inference_failed" {
+		t.Fatalf("GPU failure outputs = %+v", outputs)
+	}
+}
+
 func TestImageAnalyzersReportUnavailableModules(t *testing.T) {
 	worker := &fakeImageAnalysisWorker{modules: map[string]AIWorkerModuleStatus{
 		AIJobTypeOCR:  {Error: "ocr_dependencies_missing"},

@@ -10,11 +10,7 @@ import {
   taskFieldLabel,
   taskResultLabel,
 } from "./taskFormat";
-import type {
-  AIJob,
-  AIJobError,
-  AIJobEstimateMode,
-} from "../api/aiJobs";
+import type { AIJob, AIJobError, AIJobEstimateMode } from "../api/aiJobs";
 
 function job(overrides: Partial<AIJob> = {}): AIJob {
   return {
@@ -23,6 +19,7 @@ function job(overrides: Partial<AIJob> = {}): AIJob {
     mode: "incremental",
     status: "running",
     stage: "metadata",
+    computeDevice: "cpu",
     moduleVersion: "metadata-v1",
     total: 100,
     processed: 0,
@@ -104,7 +101,10 @@ describe("任务格式化", () => {
   });
 
   it("合计张数相加；任一模块没有历史，整体就估不出来", () => {
-    const mode = (count: number, duration: number | null): AIJobEstimateMode => ({
+    const mode = (
+      count: number,
+      duration: number | null,
+    ): AIJobEstimateMode => ({
       count,
       estimatedDurationMs: duration,
       sampleCount: duration === null ? 0 : 1,

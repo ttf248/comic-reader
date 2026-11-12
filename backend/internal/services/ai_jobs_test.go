@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -598,6 +599,9 @@ func TestAIJobSchedulerQueuesConfiguredModules(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if _, err := service.SetGPUEnabled(false); err != nil {
+		t.Fatal(err)
+	}
 	settings, err := service.ConfigureDaily(true, "03:00", []string{AIJobTypeEmbedding, AIJobTypeMetadata, AIJobTypeEmbedding}, false)
 	if err != nil {
 		t.Fatal(err)
@@ -630,6 +634,72 @@ func TestAIJobSchedulerQueuesConfiguredModules(t *testing.T) {
 		t.Fatalf("scheduled date = %q", service.List().Settings.LastScheduledDate)
 	}
 	shutdownAIJobService(t, service)
+}
+
+func TestAIJobGPUPreferenceDefaultsOnAndUnavailableGPUIsRecorded(t *testing.T) {
+	root := t.TempDir()
+	catalog := aiJobCatalog(root, nil)
+	statePath := filepath.Join(t.TempDir(), "state", "jobs.json")
+	metadataDir := filepath.Join(t.TempDir(), "derived")
+	service, err := NewAIJobService(AIJobServiceOptions{
+		StatePath:    statePath,
+		MetadataDir:  metadataDir,
+		Catalog:      catalog,
+		ValidatePath: aiTestPathValidator(t, root),
+		Analyzers: []AIAnalyzer{
+			MetadataAnalyzer{},
+			gpuTestAnalyzer{unavailable: true},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer shutdownAIJobService(t, service)
+
+	if !service.List().Settings.GPUEnabled {
+		t.Fatal("GPU preference should default to enabled")
+	}
+	job, _, err := service.Start(AIJobTypeEmbedding, AIJobModeFull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	job = waitForAIJob(t, service, job.ID, AIJobStatusFailed)
+	if job.ComputeDevice != "gpu" || job.ErrorCode != "gpu_unavailable" || !strings.Contains(job.Error, "GPU") {
+		t.Fatalf("unavailable GPU failure was not recorded: %+v", job)
+	}
+	waitForAIJobIdle(t, service)
+
+	settings, err := service.SetGPUEnabled(false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.GPUEnabled {
+		t.Fatal("GPU preference remained enabled after update")
+	}
+	shutdownAIJobService(t, service)
+
+	restarted, err := NewAIJobService(AIJobServiceOptions{
+		StatePath:    statePath,
+		MetadataDir:  metadataDir,
+		Catalog:      catalog,
+		ValidatePath: aiTestPathValidator(t, root),
+		Analyzers:    []AIAnalyzer{MetadataAnalyzer{}, gpuTestAnalyzer{}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer shutdownAIJobService(t, restarted)
+	if restarted.List().Settings.GPUEnabled {
+		t.Fatal("GPU preference did not survive restart")
+	}
+	cpuJob, _, err := restarted.Start(AIJobTypeEmbedding, AIJobModeFull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cpuJob = waitForAIJob(t, restarted, cpuJob.ID, AIJobStatusCompleted)
+	if cpuJob.ComputeDevice != "cpu" {
+		t.Fatalf("CPU preference was not captured by the new job: %+v", cpuJob)
+	}
 }
 
 func TestAIJobModuleVersionsAreIndependent(t *testing.T) {
@@ -888,6 +958,9 @@ func newTestAIJobService(t *testing.T, statePath, metadataDir string, catalog *R
 	if err != nil {
 		t.Fatalf("NewAIJobService() error = %v", err)
 	}
+	if _, err := service.SetGPUEnabled(false); err != nil {
+		t.Fatalf("SetGPUEnabled(false) error = %v", err)
+	}
 	t.Cleanup(func() { shutdownAIJobService(t, service) })
 	return service
 }
@@ -1005,6 +1078,28 @@ func shutdownAIJobService(t *testing.T, service *AIJobService) {
 type testJSONAnalyzer struct {
 	module  string
 	version string
+}
+
+type gpuTestAnalyzer struct {
+	unavailable bool
+}
+
+func (gpuTestAnalyzer) Type() string    { return AIJobTypeEmbedding }
+func (gpuTestAnalyzer) Version() string { return "gpu-test-v1" }
+func (gpuTestAnalyzer) Analyze(ctx context.Context, _ io.ReadSeeker) (AIAnalysisOutput, error) {
+	if err := ctx.Err(); err != nil {
+		return AIAnalysisOutput{}, err
+	}
+	return AIAnalysisOutput{Status: "processed", Data: json.RawMessage(`{"ok":true}`)}, nil
+}
+func (a gpuTestAnalyzer) ValidateHardware(ctx context.Context, device string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if device == "gpu" && a.unavailable {
+		return ErrAIGPUUnavailable
+	}
+	return nil
 }
 
 type versionedMetadataAnalyzer struct {

@@ -3,6 +3,7 @@ $ErrorActionPreference = "Stop"
 $workerDir = $PSScriptRoot
 $venvDir = Join-Path $workerDir ".venv"
 $isWindowsHost = $env:OS -eq "Windows_NT"
+$isLinuxHost = $IsLinux
 if ($isWindowsHost) {
     $python = Join-Path $venvDir "Scripts\python.exe"
     $launcher = Get-Command py -ErrorAction SilentlyContinue
@@ -29,11 +30,15 @@ if ($LASTEXITCODE -ne 0) { throw "aiworker/.venv 必须使用 Python 3.11；请�
 if ($LASTEXITCODE -ne 0) { throw "升级 pip 失败。" }
 
 $torchReady = $false
-& $python -c "import torch, torchvision; raise SystemExit(0 if torch.__version__.startswith('2.7.1') and torchvision.__version__.startswith('0.22.1') else 1)" 2>$null
+if ($isWindowsHost -or $isLinuxHost) {
+    & $python -c "import torch, torchvision; raise SystemExit(0 if torch.__version__.startswith('2.7.1') and torchvision.__version__.startswith('0.22.1') and torch.version.cuda and torch.version.cuda.startswith('12.6') else 1)" 2>$null
+} else {
+    & $python -c "import torch, torchvision; raise SystemExit(0 if torch.__version__.startswith('2.7.1') and torchvision.__version__.startswith('0.22.1') and torch.version.cuda is None else 1)" 2>$null
+}
 if ($LASTEXITCODE -eq 0) { $torchReady = $true }
 if (-not $torchReady) {
-    if ($isWindowsHost) {
-        # PyTorch 官方 Windows CUDA 12.6 wheel；没有可用 GPU 时仍可回退到 CPU。
+    if ($isWindowsHost -or $isLinuxHost) {
+        # PyTorch 官方 Windows/Linux CUDA 12.6 wheel；没有可用 GPU 时可关闭任务中心的 GPU 强制选项。
         & $python -m pip install torch==2.7.1 torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cu126
     } else {
         & $python -m pip install torch==2.7.1 torchvision==0.22.1
@@ -45,7 +50,9 @@ if (-not $torchReady) {
 & $python -m pip install --no-deps cn_clip==1.6.0
 if ($LASTEXITCODE -ne 0) { throw "安装 Chinese-CLIP 推理包失败。" }
 
-# OCR 和人脸识别都走本机 ONNX Runtime；CPU 可用，不依赖 CUDA。
+# OCR 与人脸识别使用与 PyTorch CUDA 12 兼容的 ONNX Runtime 1.20.2；macOS 安装 CPU 版。
+& $python -m pip uninstall -y onnxruntime onnxruntime-gpu
+if ($LASTEXITCODE -ne 0) { throw "移除旧版 ONNX Runtime 失败。" }
 & $python -m pip install -r (Join-Path $workerDir "requirements.txt")
 if ($LASTEXITCODE -ne 0) { throw "安装 OCR 与人脸识别依赖失败。" }
 
