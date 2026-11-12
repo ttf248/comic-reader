@@ -33,6 +33,7 @@
   - `thumbnail_error` (500) - 缩略图生成失败
   - `invalid_resource_id` (400) - 资源 ID 解析失败
   - `album_not_found` (404) - 相册路径不在当前扫描结果中
+  - `local_access_required` (403) - 本机管理接口只接受回环请求
 
 ### ETag / 304 协商
 
@@ -257,9 +258,76 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 返回本机 Python、PyTorch、CUDA/GPU、Chinese-CLIP SHA256 校验、向量索引版本与覆盖率，以及 `modules.ocr` 与 `modules.face` 的依赖/权重状态。`runtimeReady` 表示 Chinese-CLIP 推理依赖可导入，`modelValid` 表示权重匹配固定 revision；`cudaAvailable` 为 false 时仍可使用 CPU。OCR 和人脸检测通过 `modules` 独立报告就绪状态，不受 Chinese-CLIP 权重缺失影响。`coverage` 按当前资源快照和有效文件指纹统计已索引数/照片数。
 
-### `GET /api/config/storage`
+### `GET /api/storage/usage`
 
-本机存储信息接口，仅允许回环访问，并经过现有 API 访问门禁；响应设置 `Cache-Control: no-store`。返回当前工作目录、配置文件、缓存根目录、状态/任务状态/分析结果/模型/向量目录、Python 环境与启动器路径，以及四个模块的模型文件路径、文件大小和分析结果缓存占用。路径是完整本机路径，只用于本机设置页，不应写入浏览器持久状态或对 LAN 客户端开放。照片元数据由 Go 内置 EXIF/GPS 解析器处理，没有独立模型权重；Chinese-CLIP、RapidOCR 和 YuNet/SFace 按各自实际权重文件统计。
+本机分析存储的占用接口，经过现有 API 访问门禁即可访问（局域网客户端认证后同样可用），响应设置 `Cache-Control: no-store`。
+
+响应里的路径**一律相对缓存根目录**，不含任何绝对路径；绝对路径只由 `GET /api/storage/paths` 给出。
+
+```json
+{
+  "ok": true,
+  "usage": {
+    "scannedAt": "2026-11-12T02:03:04Z",
+    "durationMs": 26,
+    "available": true,
+    "cacheTtlSeconds": 30,
+    "summary": { "modelBytes": 0, "modelFileCount": 0, "outputBytes": 0, "outputFileCount": 0 },
+    "modules": [
+      {
+        "type": "embedding", "name": "向量索引",
+        "modelDirectory": "derived/ai/models",
+        "modelLocation": "cache",
+        "modelFiles": [
+          { "name": "clip_cn_vit-b-16.pt", "path": "derived/ai/models/clip_cn_vit-b-16.pt",
+            "location": "cache", "sizeBytes": 0, "exists": true }
+        ],
+        "modelBytes": 0, "outputBytes": 0, "outputFileCount": 0,
+        "outputs": [
+          { "kind": "batches", "label": "批次结果", "path": "derived/metadata/embedding",
+            "bytes": 0, "fileCount": 0, "available": true },
+          { "kind": "vectors", "label": "向量索引", "path": "derived/ai/vectors",
+            "bytes": 0, "fileCount": 0, "available": true }
+        ]
+      }
+    ],
+    "paths": {
+      "relativeTo": "cacheRoot",
+      "stateDirectory": "state", "jobsFile": "state/ai_jobs.json",
+      "metadataDirectory": "derived/metadata", "aiDerivedDirectory": "derived/ai",
+      "vectorDirectory": "derived/ai/vectors", "modelDirectory": "derived/ai/models"
+    }
+  }
+}
+```
+
+- `modules` 按 `metadata`、`embedding`、`ocr`、`face` 固定顺序给出，与模块清单一致。
+- `modelLocation` 为 `none`（无权重）、`cache`（权重在缓存根目录内，`path` 相对缓存根目录）或 `python`（权重随 RapidOCR 安装在 Python 环境里，`path` 相对该环境）。
+- `outputs[].kind` 为 `batches`（每次任务新增的批次结果）、`vectors`（向量分片）或 `index`（模块共享的搜索索引）。产物目录尚未产生时 `available=false`、`bytes` 与 `fileCount` 为 0。
+- 照片元数据由 Go 内置 EXIF/GPS 解析器处理，没有独立模型权重；Chinese-CLIP、RapidOCR 与 YuNet/SFace 按各自实际权重文件统计。
+- 占用统计带 30 秒内存 TTL，批次提交与人物分析结果清理后失效重算。
+
+### `GET /api/storage/paths`
+
+本机绝对路径接口，**仅允许回环访问**，并经过现有 API 访问门禁；响应设置 `Cache-Control: no-store`。非回环请求返回 `403 local_access_required`。
+
+返回 `{ "ok": true, "paths": { "workingDirectory", "configFile", "cacheRoot", "stateDirectory", "jobsFile", "pythonEnvironment", "pythonExecutable", "modules": [{ "type", "name", "modelDirectory", "modelFiles": [{ "name", "path", "sizeBytes", "exists" }] }] } }`。
+
+完整路径只用于运行服务的这台计算机上的显示，不应写入浏览器持久状态，也不向局域网客户端开放；局域网客户端改用 `GET /api/storage/usage` 的相对路径。
+
+### `GET /api/ai/jobs/:jobId/output`
+
+单次分析任务已提交批次的占用，经过现有 API 访问门禁即可访问，响应设置 `Cache-Control: no-store`。
+
+```json
+{ "ok": true, "output": {
+  "jobId": "…", "type": "ocr", "batchSize": 32,
+  "path": "derived/metadata/ocr/batches/…",
+  "bytes": 0, "fileCount": 0, "available": true, "scannedAt": "2026-11-12T02:03:04Z"
+} }
+```
+
+批次目录以任务记录里的模块类型与任务 ID 推导，不取自 URL。目录已被清理时 `available=false`、`bytes` 与 `fileCount` 为 0，但仍给出它本该在的相对路径。未知任务返回 `404 analysis_job_not_found`。
 
 ### `POST /api/ai/search`
 
@@ -489,7 +557,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 ## 缓存与系统操作
 
-- `GET /api/cache/stats`：返回脱敏缓存名称、占用和文件数。除总占用 `totalBytes` / `fileCount` 外，按子目录给出 `thumbs`（缩略图）、`converted`（HEIC/HEIF/TIFF 的整图转换产物）、`previews`（阅读器按宽度缩放的预览图）、`videoFaststart`、`videoTranscode` 五项细分；各子目录的 `bytes` 之和等于 `totalBytes`。子目录尚不存在时该项 `available=false`、`bytes`/`fileCount` 为 0。
+- `GET /api/cache/stats`：返回脱敏缓存名称、占用和文件数。除总占用 `totalBytes` / `fileCount` 外，按子目录给出 `thumbs`（缩略图）、`converted`（HEIC/HEIF/TIFF 的整图转换产物）、`previews`（阅读器按宽度缩放的预览图）、`videoFaststart`、`videoTranscode` 五项细分。`totalBytes` 统计的是整棵 `derived/` 子树（含 AI 分析产物与媒体尺寸缓存），五类细分之和不等于它；`mediaBytes` / `mediaFileCount` 才是这五类媒体派生缓存的和。子目录尚不存在时该项 `available=false`、`bytes`/`fileCount` 为 0。
 - `POST /api/thumbs/cleanup`
 - `POST /api/cache/clear?scope=thumbs|converted|previews|faststart|transcode|all`：统一清空入口，按 scope 删 thumbs / converted / previews / faststart / transcode 缓存中对应的一类；scope=all 同时清理五类派生缓存和视频元数据内存摘要。响应 `{ scope, thumbs?, converted?, previews?, faststart?, transcode?, totalDeleted, totalFreedBytes }`，未涉及的 scope 字段省略。删除数量与释放字节只统计磁盘文件，不包含内存摘要。
 - `POST /api/cache/rebuild`：启动一次后台重建，请求体 `{ scopes: ["thumbs","previews"], previewWidth?: number }`。响应 `{ ok, jobId, reused, scopes, previewWidth }`；已有任务在跑时复用它（`reused=true`）。范围只接受 `thumbs` 与 `previews`，其它值返回 `400 invalid_rebuild_scope`，空范围返回 `400 missing_rebuild_scope`。

@@ -123,7 +123,7 @@ export default function TaskCenter() {
           />
         </section>
 
-        <section>
+        <section id="storage">
           <div className="section-heading">
             <span className="section-index">05</span>
             <h2 className="section-title">本机存储</h2>
