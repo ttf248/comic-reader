@@ -1,4 +1,8 @@
-import type { AIJob, AIJobError } from "../api/aiJobs";
+import type {
+  AIJob,
+  AIJobError,
+  AIJobEstimateMode,
+} from "../api/aiJobs";
 
 /** 千分位计数。 */
 export function formatCount(value: number): string {
@@ -22,6 +26,47 @@ export function formatTaskDuration(milliseconds: number): string {
 export function formatTaskSpeed(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return "—";
   return `${value.toFixed(1)} 张/秒`;
+}
+
+/**
+ * 预计耗时的说法。
+ *
+ * 没有历史记录时明说算不出来，不用 0 或猜一个值糊弄过去 —— 一个假的
+ * 「不到 1 秒」比一句「不知道」更糟。
+ */
+export function formatEstimateDuration(milliseconds: number | null): string {
+  if (milliseconds === null) return "暂无历史记录，无法预估";
+  if (!Number.isFinite(milliseconds) || milliseconds <= 0) return "无需处理";
+  const seconds = Math.round(milliseconds / 1000);
+  if (seconds < 60) return `约 ${seconds} 秒`;
+  const minutes = Math.round(milliseconds / 60000);
+  if (minutes < 60) return `约 ${minutes} 分钟`;
+  const hours = milliseconds / 3600000;
+  return `约 ${hours.toFixed(1)} 小时`;
+}
+
+/**
+ * 把几个模块的核算结果加起来。
+ *
+ * 只要有一个模块没有历史，整体就估不出来 —— 拿有历史的那部分假装能估出
+ * 整体，比说不知道更糟。
+ */
+export function sumEstimateModes(
+  modes: (AIJobEstimateMode | null | undefined)[],
+): { count: number; estimatedDurationMs: number | null } {
+  let count = 0;
+  let duration = 0;
+  let known = true;
+  for (const mode of modes) {
+    if (!mode) continue;
+    count += mode.count;
+    if (mode.estimatedDurationMs === null) {
+      known = false;
+      continue;
+    }
+    duration += mode.estimatedDurationMs;
+  }
+  return { count, estimatedDurationMs: known ? duration : null };
 }
 
 /**
@@ -124,6 +169,10 @@ export function moduleReasonLabel(reason: string): string {
       return "人脸模型加载失败";
     case "runtime_status_not_checked":
       return "正在检查本机环境";
+    case "people_analysis_disabled":
+      return "需先启用人物分析";
+    case "module_not_registered":
+      return "模块未安装";
     default:
       return "未安装";
   }

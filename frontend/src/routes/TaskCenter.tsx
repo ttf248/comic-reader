@@ -61,9 +61,14 @@ export default function TaskCenter() {
             queuedCount={queue.length}
             embeddingStatus={center.embeddingStatus}
             embeddingStatusLoading={center.embeddingStatusLoading}
+            selection={center.selection}
+            estimate={center.estimate}
+            estimateLoading={center.estimateLoading}
+            estimateError={center.estimateError}
             onStart={center.start}
             onStartAll={center.startAll}
             onAction={center.act}
+            onRefreshEstimate={center.refreshEstimate}
           />
           {center.sequenceSkipped && center.sequenceSkipped.length > 0 ? (
             <p role="status" className="mt-3 text-meta text-warning">
@@ -128,6 +133,9 @@ export default function TaskCenter() {
             error={plan.error}
             lastScheduledDate={snapshot?.settings.lastScheduledDate}
             modules={snapshot?.modules ?? []}
+            estimate={center.estimate}
+            estimateLoading={center.estimateLoading}
+            estimateError={center.estimateError}
           />
         </section>
 

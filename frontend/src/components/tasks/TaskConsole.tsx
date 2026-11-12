@@ -1,15 +1,16 @@
-import { useEffect, useState } from "react";
 import type {
   AIJob,
+  AIJobEstimate,
   AIJobModule,
   AIWorkerStatus,
   AnalysisMode,
   AnalysisType,
 } from "../../api/aiJobs";
-import type { JobAction } from "../../hooks/useTaskCenter";
+import type { JobAction, TaskCenterSelection } from "../../hooks/useTaskCenter";
 import { formatDateTime } from "../../utils/date";
 import {
   formatCount,
+  formatEstimateDuration,
   formatTaskDuration,
   formatTaskSpeed,
   jobProgressPercent,
@@ -19,6 +20,7 @@ import {
 } from "../../utils/taskFormat";
 import ModuleChips from "./ModuleChips";
 import Segmented from "../common/Segmented";
+import TaskEstimatePanel from "./TaskEstimatePanel";
 import TaskStatusDot from "./TaskStatusDot";
 
 interface Props {
@@ -35,9 +37,16 @@ interface Props {
   queuedCount: number;
   embeddingStatus?: AIWorkerStatus;
   embeddingStatusLoading: boolean;
+  /** 选中的模块与处理方式。 */
+  selection: TaskCenterSelection;
+  /** 空闲时的规模与耗时核算。 */
+  estimate?: AIJobEstimate;
+  estimateLoading: boolean;
+  estimateError: boolean;
   onStart: (type: AnalysisType, mode: AnalysisMode) => void;
   onStartAll: (mode: AnalysisMode) => void;
   onAction: (id: string, action: JobAction) => void;
+  onRefreshEstimate: () => void;
 }
 
 /**
@@ -56,23 +65,17 @@ export default function TaskConsole({
   queuedCount,
   embeddingStatus,
   embeddingStatusLoading,
+  selection,
+  estimate,
+  estimateLoading,
+  estimateError,
   onStart,
   onStartAll,
   onAction,
+  onRefreshEstimate,
 }: Props) {
+  const { module: selectedModule, mode } = selection;
   const installedModules = modules.filter((module) => module.installed);
-  const runnableModules = installedModules.filter(
-    (module) => module.type !== "face" || peopleEnabled,
-  );
-  const [selectedModule, setSelectedModule] =
-    useState<AnalysisType>("metadata");
-  const [mode, setMode] = useState<AnalysisMode>("incremental");
-
-  useEffect(() => {
-    if (!runnableModules.some((module) => module.type === selectedModule)) {
-      setSelectedModule(runnableModules[0]?.type ?? "metadata");
-    }
-  }, [runnableModules, selectedModule]);
 
   if (loading) {
     return (
@@ -99,6 +102,17 @@ export default function TaskConsole({
       !busy &&
       !(isEmbedding && !embeddingReady) &&
       !(selectedModule === "face" && !peopleEnabled);
+    // 这次要干的活：选中模块在当前模式下的张数，以及按序启动全部的合计。
+    const estimateEntry = estimate?.modules.find(
+      (item) => item.type === selectedModule,
+    );
+    const currentEstimate =
+      estimateEntry && estimateEntry.available
+        ? mode === "incremental"
+          ? estimateEntry.incremental
+          : estimateEntry.full
+        : null;
+    const sequence = estimate ? estimate.sequence[mode] : null;
     return (
       <div className="overflow-hidden rounded-xl border border-border bg-bg-elevated shadow-xs">
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border-faint px-5 py-4 sm:px-6">
@@ -115,6 +129,17 @@ export default function TaskConsole({
               {formatCount(lastJob.completed ?? lastJob.processed)} 张
             </span>
           ) : null}
+        </div>
+
+        <div className="border-b border-border-faint px-5 py-4 sm:px-6">
+          <TaskEstimatePanel
+            estimate={estimate}
+            loading={estimateLoading}
+            error={estimateError}
+            module={selectedModule}
+            mode={mode}
+            onRefresh={onRefreshEstimate}
+          />
         </div>
 
         <div className="grid gap-5 px-5 py-5 sm:px-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:gap-10">
@@ -136,7 +161,7 @@ export default function TaskConsole({
                 <ModuleChips
                   modules={modules}
                   selected={[selectedModule]}
-                  onToggle={(type) => setSelectedModule(type)}
+                  onToggle={(type) => selection.setModule(type)}
                   disabled={busy}
                   locked={peopleEnabled ? [] : ["face"]}
                 />
@@ -161,33 +186,53 @@ export default function TaskConsole({
             ) : null}
           </div>
 
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-3 lg:justify-end lg:border-l lg:border-border-faint lg:pl-10">
+          <div className="flex flex-wrap items-start gap-x-4 gap-y-3 lg:justify-end lg:border-l lg:border-border-faint lg:pl-10">
             <Segmented
               label="处理方式"
               value={mode}
-              onChange={setMode}
+              onChange={selection.setMode}
               disabled={busy}
               options={[
                 { value: "incremental", label: "增量" },
                 { value: "full", label: "全量" },
               ]}
             />
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={canStart === false}
-              onClick={() => onStart(selectedModule, mode)}
-            >
-              开始分析
-            </button>
-            <button
-              type="button"
-              className="btn btn-outline"
-              disabled={busy || installedModules.length === 0}
-              onClick={() => onStartAll(mode)}
-            >
-              按序启动全部任务
-            </button>
+            <div className="flex flex-col items-start gap-1">
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={canStart === false}
+                onClick={() => onStart(selectedModule, mode)}
+              >
+                开始分析
+                {currentEstimate ? ` · ${formatCount(currentEstimate.count)} 张` : ""}
+              </button>
+              {currentEstimate ? (
+                <span className="text-meta text-fg-subtle">
+                  {formatEstimateDuration(currentEstimate.estimatedDurationMs)}
+                </span>
+              ) : null}
+            </div>
+            <div className="flex flex-col items-start gap-1">
+              <button
+                type="button"
+                className="btn btn-outline"
+                disabled={busy || installedModules.length === 0}
+                onClick={() => onStartAll(mode)}
+              >
+                按序启动全部任务
+              </button>
+              {sequence && sequence.modules.length > 0 ? (
+                <>
+                  <span className="text-meta text-fg-subtle">
+                    {`${sequence.modules.length} 个模块 · ${formatCount(sequence.count)} 张`}
+                  </span>
+                  <span className="text-meta text-fg-subtle">
+                    {formatEstimateDuration(sequence.estimatedDurationMs)}
+                  </span>
+                </>
+              ) : null}
+            </div>
           </div>
         </div>
       </div>

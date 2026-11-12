@@ -1,9 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { sse } from "../api/client";
+import { useScanStore } from "../store/scanStore";
 import {
   aiJobsApi,
   type AIJob,
+  type AIJobEstimate,
   type AIJobSnapshot,
   type AIWorkerStatus,
   type AnalysisType,
@@ -11,6 +13,7 @@ import {
 } from "../api/aiJobs";
 
 const JOBS_KEY = ["ai-jobs"] as const;
+const ESTIMATE_KEY = ["ai-job-estimate"] as const;
 const JOB_EVENTS = [
   "pending",
   "running",
@@ -51,6 +54,8 @@ export interface TaskCenterState {
   loading: boolean;
   loadError: boolean;
   plan: TaskCenterPlan;
+  /** 当前选中的分析模块与处理方式。 */
+  selection: TaskCenterSelection;
   start: (type: AnalysisType, mode: AnalysisMode) => void;
   startAll: (mode: AnalysisMode) => void;
   act: (id: string, action: JobAction) => void;
@@ -63,6 +68,25 @@ export interface TaskCenterState {
   operationError: boolean;
   embeddingStatus?: AIWorkerStatus;
   embeddingStatusLoading: boolean;
+  /** 空闲时的规模与耗时核算。 */
+  estimate?: AIJobEstimate;
+  estimateLoading: boolean;
+  estimateError: boolean;
+  /** 重新核算一次。 */
+  refreshEstimate: () => void;
+}
+
+/**
+ * 当前选中的模块与处理方式。
+ *
+ * 选择态放在数据层而不是组件里：规模估算表、按钮上的张数说明与真正发出去的
+ * 启动请求必须读到同一个 mode，否则表格显示增量的数、启动的却是全量。
+ */
+export interface TaskCenterSelection {
+  module: AnalysisType;
+  mode: AnalysisMode;
+  setModule: (type: AnalysisType) => void;
+  setMode: (mode: AnalysisMode) => void;
 }
 
 /**
@@ -72,6 +96,12 @@ export interface TaskCenterState {
  */
 export function useTaskCenter(): TaskCenterState {
   const queryClient = useQueryClient();
+  // 任务状态变了，核算也跟着变：跑完一轮增量张数会归零，清掉历史会少掉
+  // 可参考的样本。
+  const invalidateJobs = useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: JOBS_KEY });
+    void queryClient.invalidateQueries({ queryKey: ESTIMATE_KEY });
+  }, [queryClient]);
   const jobsQuery = useQuery({
     queryKey: JOBS_KEY,
     queryFn: aiJobsApi.list,
@@ -85,9 +115,23 @@ export function useTaskCenter(): TaskCenterState {
     queryFn: aiJobsApi.embeddingStatus,
     refetchInterval: 30_000,
   });
+  const estimateQuery = useQuery({
+    queryKey: ESTIMATE_KEY,
+    queryFn: aiJobsApi.estimate,
+    staleTime: 30_000,
+    refetchOnMount: "always",
+  });
   const snapshot = jobsQuery.data?.snapshot;
   const active = snapshot?.active;
   const activeId = active?.id;
+
+  // 扫描一结束，媒体库就换了：规模核算要按新库重做。
+  const scanStatus = useScanStore((state) => state.progress?.status);
+  useEffect(() => {
+    if (scanStatus !== "complete") return;
+    void queryClient.invalidateQueries({ queryKey: ESTIMATE_KEY });
+  }, [queryClient, scanStatus]);
+
   // 每日计划是草稿：先等服务器设置到达，再允许编辑。
   // 没等就渲染会让用户改到一个随后被覆盖的假值上。
   const [planDraft, setPlanDraft] = useState<{
@@ -96,6 +140,28 @@ export function useTaskCenter(): TaskCenterState {
     modules: AnalysisType[];
     peopleEnabled: boolean;
   } | null>(null);
+
+  // 选中的模块与处理方式。放在这里是因为规模估算表、按钮上的张数说明与
+  // 启动请求都要读它 —— 分开存必然漂移。
+  const [selectedModule, setSelectedModule] = useState<AnalysisType>("metadata");
+  const [mode, setMode] = useState<AnalysisMode>("incremental");
+  // 人物开关按草稿走：芯片在草稿里解锁了，选中项就不该被弹回去。
+  const peopleEnabled = planDraft?.peopleEnabled ?? false;
+  const runnableModules = useMemo(
+    () =>
+      (snapshot?.modules ?? [])
+        .filter((module) => module.installed)
+        .filter((module) => module.type !== "face" || peopleEnabled),
+    [snapshot?.modules, peopleEnabled],
+  );
+
+  // 选中的模块不可运行时换成第一个能跑的，免得按钮一直按不下去。
+  useEffect(() => {
+    if (runnableModules.length === 0) return;
+    if (!runnableModules.some((module) => module.type === selectedModule)) {
+      setSelectedModule(runnableModules[0].type);
+    }
+  }, [runnableModules, selectedModule]);
 
   useEffect(() => {
     if (!snapshot || planDraft) return;
@@ -142,27 +208,27 @@ export function useTaskCenter(): TaskCenterState {
           value.status === "failed" ||
           value.status === "cancelled"
         ) {
-          void queryClient.invalidateQueries({ queryKey: JOBS_KEY });
+          void invalidateJobs();
         }
       },
       { events: JOB_EVENTS, signal: controller.signal },
     );
     return () => controller.abort();
-  }, [activeId, queryClient]);
+  }, [activeId, invalidateJobs, queryClient]);
 
   const startMutation = useMutation({
     mutationFn: ({ type, mode }: { type: AnalysisType; mode: AnalysisMode }) =>
       aiJobsApi.start(type, mode),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: JOBS_KEY }),
+    onSuccess: () => void invalidateJobs(),
   });
   const startAllMutation = useMutation({
     mutationFn: (mode: AnalysisMode) => aiJobsApi.startAll(mode),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: JOBS_KEY }),
+    onSuccess: () => void invalidateJobs(),
   });
   const actionMutation = useMutation({
     mutationFn: ({ id, action }: { id: string; action: JobAction }) =>
       aiJobsApi.action(id, action),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: JOBS_KEY }),
+    onSuccess: () => void invalidateJobs(),
   });
   const managementMutation = useMutation({
     mutationFn: (
@@ -183,7 +249,7 @@ export function useTaskCenter(): TaskCenterState {
           return aiJobsApi.clearHistory();
       }
     },
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: JOBS_KEY }),
+    onSuccess: () => void invalidateJobs(),
   });
   const settingsMutation = useMutation({
     mutationFn: (draft: {
@@ -212,6 +278,8 @@ export function useTaskCenter(): TaskCenterState {
             ? { ...current, snapshot: { ...current.snapshot, settings } }
             : current,
       );
+      // 人物分析开关会决定人脸模块能不能跑，核算要跟着重算。
+      void queryClient.invalidateQueries({ queryKey: ESTIMATE_KEY });
     },
   });
 
@@ -300,6 +368,17 @@ export function useTaskCenter(): TaskCenterState {
       managementMutation.isError,
     embeddingStatus: embeddingStatusQuery.data?.status,
     embeddingStatusLoading: embeddingStatusQuery.isLoading,
+    selection: {
+      module: selectedModule,
+      mode,
+      setModule: setSelectedModule,
+      setMode,
+    },
+    estimate: estimateQuery.data?.estimate,
+    estimateLoading: estimateQuery.isLoading,
+    estimateError: estimateQuery.isError,
+    refreshEstimate: () =>
+      void queryClient.invalidateQueries({ queryKey: ESTIMATE_KEY }),
   };
 }
 

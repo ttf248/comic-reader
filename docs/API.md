@@ -209,7 +209,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 快照里另有几个按持久化计数推导的进度字段，以及两份产出统计：
 
-- `planned`：本次任务实际要处理的张数。`total` 是整库规模，增量任务里绝大多数文件已经是最新的；`planned` 才是这次真正要干的活。
+- `planned`：本次任务实际要处理的张数。`total` 是整库规模，增量任务里绝大多数文件已经是最新的；`planned` 才是这次真正要干的活。它与 `GET /api/ai/jobs/estimate` 算出来的增量张数是同一个口径 —— 两边用同一条判据（大小、纳秒修改时间、模块版本）。
 - `completed`：已处理张数（成功与失败都算）。
 - `estimatedRemainingMs`：运行中任务的预计剩余毫秒。只在 `running` 时给出；暂停时耗时仍在增长、速度已失真，因此返回 0。队列、暂停与终态同样返回 0。
 - `speedPerSecond`：每秒实际处理张数，不含被跳过的文件（增量任务的 `done` 从跳过数起步，按它算速度会在任务开头虚高）。
@@ -219,6 +219,78 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 ### `POST /api/ai/jobs/sequence`
 
 请求为 `{ "mode": "full" | "incremental" }`，一次创建所有已就绪模块的任务，并按照片元数据、向量索引、OCR、人脸识别的固定顺序加入既有任务队列。任务逐项执行，单项结束后自动启动下一项；未安装或运行环境未就绪的模块列在 `skippedModules`，其余任务仍会排队。响应包含有序 `jobs` 与 `{type,name,reason}` 形式的跳过清单。队列已有活动或待执行任务时返回 `409 analysis_job_active`；没有任何可运行模块时返回 `503 ai_module_unavailable`。
+
+### `GET /api/ai/jobs/estimate`
+
+空闲时的规模与耗时核算。只读：不创建任务，不写状态文件，不碰队列。
+
+响应给出整库图片数，以及每个分析模块在增量与全量两种口径下「本次要处理多少张」和「预计要多久」。
+
+```json
+{
+  "ok": true,
+  "estimate": {
+    "generatedAt": "2026-11-12T02:10:11.482Z",
+    "libraryRevision": 42,
+    "libraryReady": true,
+    "totalImages": 12345,
+    "modules": [
+      {
+        "type": "metadata",
+        "name": "照片元数据",
+        "installed": true,
+        "available": true,
+        "version": "metadata-v1",
+        "incremental": { "count": 320, "estimatedDurationMs": 45000, "sampleCount": 3, "sampleImages": 900 },
+        "full": { "count": 12345, "estimatedDurationMs": 1740000, "sampleCount": 3, "sampleImages": 900 }
+      },
+      {
+        "type": "face",
+        "name": "人脸识别",
+        "installed": true,
+        "available": false,
+        "reason": "people_analysis_disabled",
+        "incremental": null,
+        "full": null
+      }
+    ],
+    "sequence": {
+      "incremental": { "count": 320, "estimatedDurationMs": 45000, "modules": ["metadata"] },
+      "full": { "count": 12345, "estimatedDurationMs": 1740000, "modules": ["metadata"] }
+    }
+  }
+}
+```
+
+字段含义：
+
+- `generatedAt`：本次核算的完成时刻。核算是那个时刻的快照，之后文件再变就不再准了。
+- `libraryRevision`：核算所依据的资源快照版本号；媒体库重新扫描后变化。
+- `libraryReady`：媒体库是否已扫描完成。为 `false` 时计数都是 0，界面显示「媒体库尚未就绪」而不是「0 张」。
+- `totalImages`：库内可分析的图片总数（只算图片文件）。
+- `modules[]`：固定四个模块，顺序为照片元数据、向量索引、文字识别、人脸识别。
+  - `installed`：模块已注册且运行环境就绪。
+  - `available`：现在能不能启动 —— 已就绪且没有被人物分析开关锁住。
+  - `reason`：不可用的原因，取现有词表（`python_runtime_unavailable`、`module_not_registered`、`people_analysis_disabled` 等）。
+  - `incremental` / `full`：该模块在该口径下的核算结果；模块不可用时为 `null`。
+- 口径块内：`count` 是本次真正要处理的张数；`estimatedDurationMs` 是预计耗时；`sampleCount` 与 `sampleImages` 说明这个耗时参考了几次历史任务、共多少张图。
+- `sequence`：「按序启动全部任务」在两种口径下的合计，`modules` 列出参与的模块。
+
+**张数口径**：核算与任务用同一条判据 —— 逐张 stat，比对字节大小、纳秒修改时间与模块版本，模块自己的结果有效性校验同样生效。因此增量张数就是任务开始后的 `planned`；全量张数等于 `totalImages`。
+
+**耗时口径**：来自 `state/ai_jobs.json` 里已结束任务（`completed` 与 `failed`）的 `startedAt`、`finishedAt` 与实际分析张数，取每张耗时的中位数。同模块的历史不够可信时（版本变了、样本张数太少）逐层放宽；最近几次优先。**没有历史记录时 `estimatedDurationMs` 为 `null`**，不给默认速度，也不拿 0 假装算得出来。
+
+两层 `null` 的区别：模块级的 `incremental: null` 表示该模块现在不可用（看 `reason`）；模式级的 `estimatedDurationMs: null` 表示模块可用但没有历史记录，估不出耗时。
+
+错误码：
+
+| 情况 | 状态码 | code |
+| --- | --- | --- |
+| 分析服务未装配 | 503 | `analysis_unavailable` |
+| 核算超时（超大库） | 503 | `analysis_estimate_timeout` |
+| 其它内部错误 | 500 | `analysis_estimate_failed` |
+
+界面上的「本次规模」表、按钮上的张数与每日计划的预计工作量都来自这个接口；任务真正开跑后，界面上显示的是任务快照里的 `planned` —— 那才是事实。
 
 ### 等待队列管理
 

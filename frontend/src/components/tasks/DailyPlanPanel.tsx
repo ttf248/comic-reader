@@ -1,4 +1,5 @@
-import type { AIJobModule, AnalysisType } from "../../api/aiJobs";
+import type { AIJobEstimate, AIJobModule, AnalysisType } from "../../api/aiJobs";
+import { formatCount, formatEstimateDuration, sumEstimateModes } from "../../utils/taskFormat";
 import Toggle from "../common/Toggle";
 import ModuleChips from "./ModuleChips";
 
@@ -20,6 +21,10 @@ interface Props {
   /** 后端记录的上次计划执行日期。 */
   lastScheduledDate?: string;
   modules: AIJobModule[];
+  /** 空闲时的规模与耗时核算；每日计划按增量口径看。 */
+  estimate?: AIJobEstimate;
+  estimateLoading: boolean;
+  estimateError: boolean;
 }
 
 /**
@@ -44,6 +49,9 @@ export default function DailyPlanPanel({
   error,
   lastScheduledDate,
   modules,
+  estimate,
+  estimateLoading,
+  estimateError,
 }: Props) {
   const disabled = !ready || saving;
 
@@ -126,6 +134,12 @@ export default function DailyPlanPanel({
               ? `上次运行 ${lastScheduledDate}`
               : "尚未自动运行过"}
           </span>
+          {enabled ? <DailyPlanEstimate
+            estimate={estimate}
+            loading={estimateLoading}
+            error={estimateError}
+            modules={selectedModules}
+          /> : null}
           {saved ? <span className="text-meta text-fg-muted">已保存</span> : null}
           {enabled && selectedModules.length === 0 ? (
             <span className="text-meta text-fg-muted">
@@ -144,5 +158,55 @@ export default function DailyPlanPanel({
         分析仅在本机处理，按设备本地时间运行；错过计划时间后会补跑一次。
       </p>
     </div>
+  );
+}
+
+/**
+ * 每日计划的预计工作量。
+ *
+ * 计划按增量口径逐项串行跑，所以张数与耗时都是所选模块的合计；任一模块
+ * 没有历史速度，整体就估不出来。
+ */
+function DailyPlanEstimate({
+  estimate,
+  loading,
+  error,
+  modules,
+}: {
+  estimate?: AIJobEstimate;
+  loading: boolean;
+  error: boolean;
+  modules: AnalysisType[];
+}) {
+  if (loading) {
+    return (
+      <span className="text-meta text-fg-subtle">预计下次运行：核算中…</span>
+    );
+  }
+  if (error) {
+    return (
+      <span className="text-meta text-fg-subtle">
+        预计下次运行：预估失败
+      </span>
+    );
+  }
+  if (!estimate) return null;
+  if (!estimate.libraryReady) {
+    return null;
+  }
+  const entries = modules.map((type) =>
+    estimate.modules.find((item) => item.type === type),
+  );
+  const usable = entries.filter(
+    (entry) => entry?.available && entry.incremental,
+  );
+  if (usable.length === 0) {
+    return null;
+  }
+  const total = sumEstimateModes(usable.map((entry) => entry?.incremental ?? null));
+  return (
+    <span className="text-meta text-fg-subtle">
+      {`预计下次运行：${formatCount(total.count)} 张 · ${formatEstimateDuration(total.estimatedDurationMs)}`}
+    </span>
   );
 }

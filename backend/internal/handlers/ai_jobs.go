@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -44,6 +45,32 @@ func AIJobsHandler(service *services.AIJobService) fiber.Handler {
 			return writeError(c, fiber.StatusServiceUnavailable, "analysis_unavailable", "analysis service is unavailable")
 		}
 		return c.JSON(fiber.Map{"ok": true, "snapshot": service.List()})
+	}
+}
+
+// aiEstimateTimeout 是核算的时长上限。超大库要逐张 stat，给一个确定的
+// 失败姿态比让请求一直挂着好。
+const aiEstimateTimeout = 60 * time.Second
+
+// AIJobEstimateHandler 返回各分析模块在增量与全量模式下的预计张数与耗时。
+//
+// 只读：核算不创建任务，也不写状态文件。张数与任务实际会处理的张数用同一条
+// 判据，因此这里数出来的增量张数就是任务开始后的 planned。
+func AIJobEstimateHandler(service *services.AIJobService) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		if service == nil {
+			return writeError(c, fiber.StatusServiceUnavailable, "analysis_unavailable", "analysis service is unavailable")
+		}
+		ctx, cancel := context.WithTimeout(c.UserContext(), aiEstimateTimeout)
+		defer cancel()
+		estimate, err := service.Estimate(ctx)
+		if err != nil {
+			if errors.Is(err, context.DeadlineExceeded) {
+				return writeError(c, fiber.StatusServiceUnavailable, "analysis_estimate_timeout", "estimating the analysis workload took too long")
+			}
+			return writeError(c, fiber.StatusInternalServerError, "analysis_estimate_failed", "unable to estimate the analysis workload")
+		}
+		return c.JSON(fiber.Map{"ok": true, "estimate": estimate})
 	}
 }
 

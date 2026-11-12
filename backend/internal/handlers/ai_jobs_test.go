@@ -483,3 +483,136 @@ func TestAIJobStartAPIRequiresPeopleOptIn(t *testing.T) {
 		t.Fatalf("face start error = %+v", body)
 	}
 }
+
+func TestAIJobEstimateAPIReturnsModuleCounts(t *testing.T) {
+	root := t.TempDir()
+	albumPath := filepath.Join(root, "photos")
+	if err := os.MkdirAll(albumPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	imageBytes := []byte{0xff, 0xd8, 0xff, 0xd9}
+	files := make([]string, 0, 3)
+	for index := 0; index < 3; index++ {
+		path := filepath.Join(albumPath, fmt.Sprintf("%04d.jpg", index))
+		if err := os.WriteFile(path, imageBytes, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		files = append(files, path)
+	}
+
+	catalog := services.NewResourceCatalog()
+	catalog.Publish(&models.ScanResult{
+		Roots: []string{root},
+		Albums: []models.Album{{
+			Type: "album", Name: "照片", Path: albumPath, SourceRoot: root,
+			ImageFiles: files, CoverImage: files[0],
+		}},
+	}, []string{root})
+	safety, safetyState := middleware.PathSafetyMiddleware([]string{root}, catalog)
+	service, err := services.NewAIJobService(services.AIJobServiceOptions{
+		StatePath:    filepath.Join(t.TempDir(), "state", "ai_jobs.json"),
+		MetadataDir:  filepath.Join(t.TempDir(), "derived", "metadata"),
+		Catalog:      catalog,
+		ValidatePath: safetyState.Validate,
+		Analyzers:    []services.AIAnalyzer{services.MetadataAnalyzer{}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := service.Shutdown(ctx); err != nil {
+			t.Errorf("AI job shutdown: %v", err)
+		}
+	})
+
+	app := fiber.New()
+	api := app.Group("/api")
+	api.Use(safety)
+	// 核算必须排在带参数的路由之前，否则会被 /ai/jobs/:id 吃掉。
+	api.Get("/ai/jobs/estimate", AIJobEstimateHandler(service))
+	api.Get("/ai/jobs/:id", AIJobStatusHandler(service))
+
+	response, err := app.Test(httptest.NewRequest(fiber.MethodGet, "/api/ai/jobs/estimate", nil), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != fiber.StatusOK {
+		t.Fatalf("estimate status = %d", response.StatusCode)
+	}
+	var body struct {
+		OK       bool `json:"ok"`
+		Estimate struct {
+			LibraryReady bool `json:"libraryReady"`
+			TotalImages  int  `json:"totalImages"`
+			Modules      []struct {
+				Type        string `json:"type"`
+				Name        string `json:"name"`
+				Installed   bool   `json:"installed"`
+				Available   bool   `json:"available"`
+				Incremental *struct {
+					Count               int    `json:"count"`
+					EstimatedDurationMs *int64 `json:"estimatedDurationMs"`
+					SampleCount         int    `json:"sampleCount"`
+				} `json:"incremental"`
+				Full *struct {
+					Count int `json:"count"`
+				} `json:"full"`
+			} `json:"modules"`
+			Sequence struct {
+				Incremental struct {
+					Count int `json:"count"`
+				} `json:"incremental"`
+			} `json:"sequence"`
+		} `json:"estimate"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if !body.OK || !body.Estimate.LibraryReady {
+		t.Fatalf("estimate body = %+v", body)
+	}
+	if body.Estimate.TotalImages != 3 {
+		t.Fatalf("total images = %d, want 3", body.Estimate.TotalImages)
+	}
+	if len(body.Estimate.Modules) != 4 {
+		t.Fatalf("modules = %+v, want 4", body.Estimate.Modules)
+	}
+	metadata := body.Estimate.Modules[0]
+	if metadata.Type != "metadata" || !metadata.Installed || !metadata.Available {
+		t.Fatalf("metadata module = %+v", metadata)
+	}
+	if metadata.Incremental == nil || metadata.Incremental.Count != 3 {
+		t.Fatalf("metadata incremental = %+v, want 3", metadata.Incremental)
+	}
+	if metadata.Full == nil || metadata.Full.Count != 3 {
+		t.Fatalf("metadata full = %+v, want 3", metadata.Full)
+	}
+	if body.Estimate.Sequence.Incremental.Count != 3 {
+		t.Fatalf("sequence count = %d, want 3", body.Estimate.Sequence.Incremental.Count)
+	}
+}
+
+func TestAIJobEstimateAPIFailsWithoutService(t *testing.T) {
+	app := fiber.New()
+	app.Get("/api/ai/jobs/estimate", AIJobEstimateHandler(nil))
+	response, err := app.Test(httptest.NewRequest(fiber.MethodGet, "/api/ai/jobs/estimate", nil), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != fiber.StatusServiceUnavailable {
+		t.Fatalf("estimate status = %d, want 503", response.StatusCode)
+	}
+	var body struct {
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Code != "analysis_unavailable" {
+		t.Fatalf("estimate error = %+v", body)
+	}
+}

@@ -1,13 +1,20 @@
 import { describe, expect, it } from "vitest";
 import {
+  formatEstimateDuration,
   formatTaskDuration,
   formatTaskSpeed,
   groupFailures,
   jobProgressPercent,
+  moduleReasonLabel,
+  sumEstimateModes,
   taskFieldLabel,
   taskResultLabel,
 } from "./taskFormat";
-import type { AIJob, AIJobError } from "../api/aiJobs";
+import type {
+  AIJob,
+  AIJobError,
+  AIJobEstimateMode,
+} from "../api/aiJobs";
 
 function job(overrides: Partial<AIJob> = {}): AIJob {
   return {
@@ -85,6 +92,43 @@ describe("任务格式化", () => {
     expect(groups[1].message).toBe("无法读取图片或路径校验失败");
     expect(groups[1].items).toHaveLength(1);
     expect(groups[2].message).toBe("另一个原因");
+  });
+
+  it("预计耗时按口语说法给，算不出来就明说", () => {
+    expect(formatEstimateDuration(45_000)).toBe("约 45 秒");
+    expect(formatEstimateDuration(1_740_000)).toBe("约 29 分钟");
+    expect(formatEstimateDuration(24_480_000)).toBe("约 6.8 小时");
+    // 0 是「这次不用跑」，null 是「算不出来」——两件事不能混。
+    expect(formatEstimateDuration(0)).toBe("无需处理");
+    expect(formatEstimateDuration(null)).toBe("暂无历史记录，无法预估");
+  });
+
+  it("合计张数相加；任一模块没有历史，整体就估不出来", () => {
+    const mode = (count: number, duration: number | null): AIJobEstimateMode => ({
+      count,
+      estimatedDurationMs: duration,
+      sampleCount: duration === null ? 0 : 1,
+      sampleImages: duration === null ? 0 : 10,
+    });
+    expect(sumEstimateModes([mode(10, 1000), mode(20, 2000)])).toEqual({
+      count: 30,
+      estimatedDurationMs: 3000,
+    });
+    expect(sumEstimateModes([mode(10, 1000), mode(20, null)])).toEqual({
+      count: 30,
+      estimatedDurationMs: null,
+    });
+    expect(sumEstimateModes([])).toEqual({
+      count: 0,
+      estimatedDurationMs: 0,
+    });
+  });
+
+  it("模块不可用的原因有中文名", () => {
+    expect(moduleReasonLabel("people_analysis_disabled")).toBe(
+      "需先启用人物分析",
+    );
+    expect(moduleReasonLabel("module_not_registered")).toBe("模块未安装");
   });
 
   it("没有失败项时返回空列表", () => {

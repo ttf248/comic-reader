@@ -10,7 +10,12 @@ import {
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import TaskCenter from "./TaskCenter";
-import { aiJobsApi, type AIJob, type AIJobSnapshot } from "../api/aiJobs";
+import {
+  aiJobsApi,
+  type AIJob,
+  type AIJobEstimate,
+  type AIJobSnapshot,
+} from "../api/aiJobs";
 import { cacheApi } from "../api/cache";
 import {
   storageApi,
@@ -32,6 +37,7 @@ vi.mock("../api/aiJobs", () => ({
     updateSettings: vi.fn(),
     metadata: vi.fn(),
     embeddingStatus: vi.fn(),
+    estimate: vi.fn(),
   },
 }));
 
@@ -116,6 +122,59 @@ function snapshot(overrides: Partial<AIJobSnapshot> = {}): AIJobSnapshot {
       peopleEnabled: false,
     },
     modules,
+    ...overrides,
+  };
+}
+
+/** 空闲时的核算结果样例：元数据模块有历史，向量模块没装。 */
+function estimateFixture(overrides: Partial<AIJobEstimate> = {}): AIJobEstimate {
+  return {
+    generatedAt: "2026-11-11T02:00:00Z",
+    libraryRevision: 7,
+    libraryReady: true,
+    totalImages: 12345,
+    modules: [
+      {
+        type: "metadata",
+        name: "照片元数据",
+        installed: true,
+        available: true,
+        version: "metadata-v1",
+        incremental: {
+          count: 320,
+          estimatedDurationMs: 45000,
+          sampleCount: 3,
+          sampleImages: 900,
+        },
+        full: {
+          count: 12345,
+          estimatedDurationMs: 1740000,
+          sampleCount: 3,
+          sampleImages: 900,
+        },
+      },
+      {
+        type: "embedding",
+        name: "向量索引",
+        installed: false,
+        available: false,
+        reason: "python_runtime_unavailable",
+        incremental: null,
+        full: null,
+      },
+    ],
+    sequence: {
+      incremental: {
+        count: 320,
+        estimatedDurationMs: 45000,
+        modules: ["metadata"],
+      },
+      full: {
+        count: 12345,
+        estimatedDurationMs: 1740000,
+        modules: ["metadata"],
+      },
+    },
     ...overrides,
   };
 }
@@ -225,6 +284,10 @@ describe("任务中心", () => {
         dailyModules: ["metadata"],
         peopleEnabled: false,
       },
+    });
+    vi.mocked(aiJobsApi.estimate).mockResolvedValue({
+      ok: true,
+      estimate: estimateFixture(),
     });
     vi.mocked(aiJobsApi.embeddingStatus).mockResolvedValue({
       ok: true,
@@ -344,10 +407,116 @@ describe("任务中心", () => {
       expect.stringContaining("未安装"),
     );
     fireEvent.click(screen.getByRole("radio", { name: "全量" }));
-    fireEvent.click(screen.getByRole("button", { name: "开始分析" }));
+    fireEvent.click(screen.getByRole("button", { name: /开始分析/ }));
     await waitFor(() =>
       expect(aiJobsApi.start).toHaveBeenCalledWith("metadata", "full"),
     );
+  });
+
+  it("空闲时给出增量与全量的规模对比，并标出当前模式", async () => {
+    vi.mocked(aiJobsApi.list).mockResolvedValue({
+      ok: true,
+      snapshot: snapshot({ jobs: [], active: undefined }),
+    });
+    renderCenter();
+
+    expect(await screen.findByText("本次规模")).toBeInTheDocument();
+    const table = screen.getByRole("table");
+    expect(within(table).getByText("320 张")).toBeInTheDocument();
+    expect(within(table).getByText("12,345 张")).toBeInTheDocument();
+    expect(within(table).getByText("约 45 秒")).toBeInTheDocument();
+    expect(within(table).getByText("约 29 分钟")).toBeInTheDocument();
+    // 两行都在，当前模式那一行由圆点标出。
+    expect(within(table).getByRole("rowheader", { name: "增量" })).toBeInTheDocument();
+    expect(within(table).getByRole("rowheader", { name: "全量" })).toBeInTheDocument();
+  });
+
+  it("切换处理方式时数字就地变化，不重新核算", async () => {
+    vi.mocked(aiJobsApi.list).mockResolvedValue({
+      ok: true,
+      snapshot: snapshot({ jobs: [], active: undefined }),
+    });
+    renderCenter();
+
+    expect(
+      await screen.findByRole("button", { name: /开始分析 · 320 张/ }),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "全量" }));
+    expect(
+      await screen.findByRole("button", { name: /开始分析 · 12,345 张/ }),
+    ).toBeInTheDocument();
+    // 两种口径一次核算带来，切模式不重发请求。
+    expect(aiJobsApi.estimate).toHaveBeenCalledTimes(1);
+  });
+
+  it("没有历史记录时明说算不出来，张数照常显示", async () => {
+    const noHistory = estimateFixture();
+    noHistory.modules = [
+      {
+        type: "metadata",
+        name: "照片元数据",
+        installed: true,
+        available: true,
+        version: "metadata-v1",
+        incremental: {
+          count: 320,
+          estimatedDurationMs: null,
+          sampleCount: 0,
+          sampleImages: 0,
+        },
+        full: {
+          count: 12345,
+          estimatedDurationMs: null,
+          sampleCount: 0,
+          sampleImages: 0,
+        },
+      },
+    ];
+    vi.mocked(aiJobsApi.estimate).mockResolvedValue({ ok: true, estimate: noHistory });
+    vi.mocked(aiJobsApi.list).mockResolvedValue({
+      ok: true,
+      snapshot: snapshot({ jobs: [], active: undefined }),
+    });
+    renderCenter();
+
+    // 表格两行与按钮下方各说一次：这里算不出来，别让人以为很快。
+    expect(await screen.findAllByText("暂无历史记录，无法预估")).toHaveLength(3);
+    expect(screen.getByText("320 张")).toBeInTheDocument();
+  });
+
+  it("核算失败时说明失败，但不拦住开始分析", async () => {
+    vi.mocked(aiJobsApi.estimate).mockRejectedValue(new Error("boom"));
+    vi.mocked(aiJobsApi.list).mockResolvedValue({
+      ok: true,
+      snapshot: snapshot({ jobs: [], active: undefined }),
+    });
+    renderCenter();
+
+    expect(
+      await screen.findByText(/本次规模核算失败/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /开始分析/ })).toBeEnabled();
+  });
+
+  it("每日计划段给出预计下次运行的张数与耗时", async () => {
+    vi.mocked(aiJobsApi.list).mockResolvedValue({
+      ok: true,
+      snapshot: snapshot({
+        jobs: [],
+        active: undefined,
+        settings: {
+          dailyEnabled: true,
+          dailyTime: "03:00",
+          dailyModules: ["metadata"],
+          peopleEnabled: false,
+        },
+      }),
+    });
+    renderCenter();
+
+    expect(
+      await screen.findByText("预计下次运行：320 张 · 约 45 秒"),
+    ).toBeInTheDocument();
   });
 
   it("只有等待任务时说明队列等待中并列出队列", async () => {
@@ -603,7 +772,7 @@ describe("任务中心", () => {
       ),
     );
     fireEvent.click(screen.getByRole("radio", { name: "全量" }));
-    fireEvent.click(screen.getByRole("button", { name: "开始分析" }));
+    fireEvent.click(screen.getByRole("button", { name: /开始分析/ }));
     await waitFor(() =>
       expect(aiJobsApi.start).toHaveBeenCalledWith("embedding", "full"),
     );
@@ -637,6 +806,10 @@ describe("任务中心", () => {
           },
         ],
       }),
+    });
+    vi.mocked(aiJobsApi.estimate).mockResolvedValue({
+      ok: true,
+      estimate: estimateFixture(),
     });
     vi.mocked(aiJobsApi.embeddingStatus).mockResolvedValue({
       ok: true,

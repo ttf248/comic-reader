@@ -73,6 +73,54 @@ export interface AIJobSettings {
   lastScheduledDate?: string;
 }
 
+/** 某个模块在一种模式下的核算结果。 */
+export interface AIJobEstimateMode {
+  /** 本次真正要处理的张数。 */
+  count: number;
+  /** 按历史吞吐推出的预计耗时；没有历史记录时为 null。 */
+  estimatedDurationMs: number | null;
+  /** 这个耗时参考了几次历史任务、共多少张图。 */
+  sampleCount: number;
+  sampleImages: number;
+}
+
+/** 单个分析模块的核算结果。 */
+export interface AIJobEstimateModule {
+  type: AnalysisType;
+  name: string;
+  /** 模块已注册且运行环境就绪。 */
+  installed: boolean;
+  /** 现在能不能启动：已就绪且没有被人物开关锁住。 */
+  available: boolean;
+  reason?: string;
+  version?: string;
+  /** 模块不可用时为 null。 */
+  incremental: AIJobEstimateMode | null;
+  full: AIJobEstimateMode | null;
+}
+
+/** 若干个模块的合计。 */
+export interface AIJobEstimateTotal {
+  count: number;
+  /** 任一参与模块没有历史时为 null。 */
+  estimatedDurationMs: number | null;
+  modules: AnalysisType[];
+}
+
+export interface AIJobEstimate {
+  generatedAt: string;
+  libraryRevision: number;
+  /** 媒体库是否已扫描完成。 */
+  libraryReady: boolean;
+  totalImages: number;
+  modules: AIJobEstimateModule[];
+  /** 「按序启动全部任务」在两种模式下的合计。 */
+  sequence: {
+    incremental: AIJobEstimateTotal;
+    full: AIJobEstimateTotal;
+  };
+}
+
 export interface AIJobSnapshot {
   jobs: AIJob[];
   active?: AIJob;
@@ -249,6 +297,9 @@ export interface PersonMediaPage {
 
 export const aiJobsApi = {
   list: () => api<{ ok: boolean; snapshot: AIJobSnapshot }>("/api/ai/jobs"),
+  /** 空闲时的规模与耗时核算；只读，不创建任务。 */
+  estimate: () =>
+    api<{ ok: boolean; estimate: AIJobEstimate }>("/api/ai/jobs/estimate"),
   start: (type: AnalysisType, mode: AnalysisMode) =>
     api<{ ok: boolean; job: AIJob; reused: boolean }>("/api/ai/jobs", {
       method: "POST",

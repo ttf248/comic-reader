@@ -16,13 +16,37 @@ test.describe("任务中心", () => {
     ).toBeVisible();
     await expect(page.getByRole("radio", { name: "增量" })).toBeVisible();
     await expect(page.getByRole("radio", { name: "全量" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "开始分析" })).toBeVisible();
+    // 按钮文案带上本次张数，所以按正则找。
+    await expect(page.getByRole("button", { name: /开始分析/ })).toBeVisible();
     // 页面级分区挂在侧栏里自己的入口下面：点过去，当前分区就标出来。
     const sidebar = page.locator('aside[aria-label="主导航"]');
     await sidebar.getByRole("button", { name: /本机存储/ }).click();
     await expect(
       sidebar.getByRole("button", { name: /本机存储/ }),
     ).toHaveAttribute("aria-current", "true");
+  });
+
+  test("空闲时给出增量与全量的规模对比，并带上本次张数", async ({ page }) => {
+    await page.goto("/tasks");
+    await scannedNodes(page.request);
+    await expect(page.getByText("本次规模")).toBeVisible();
+    await expect(page.getByRole("rowheader", { name: "增量" })).toBeVisible();
+    await expect(page.getByRole("rowheader", { name: "全量" })).toBeVisible();
+    await expect(
+      page.getByRole("columnheader", { name: "本次张数" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("columnheader", { name: "预计耗时" }),
+    ).toBeVisible();
+    // 开始按钮带上本次要处理的张数。
+    await expect(
+      page.getByRole("button", { name: /开始分析 · [\d,]+ 张/ }),
+    ).toBeVisible();
+    // 切到全量，按钮上的张数跟着换，表格不重新请求。
+    await page.getByRole("radio", { name: "全量" }).click();
+    await expect(
+      page.getByRole("button", { name: /开始分析 · [\d,]+ 张/ }),
+    ).toBeVisible();
   });
 
   test("本机存储给出派生缓存占用、模型与产物路径", async ({ page }) => {
@@ -57,7 +81,7 @@ test.describe("任务中心", () => {
     await page.goto("/tasks");
     await scannedNodes(page.request);
     await expect(page.getByRole("radio", { name: "全量" })).toBeVisible();
-    const start = page.getByRole("button", { name: "开始分析" });
+    const start = page.getByRole("button", { name: /开始分析/ });
     await expect(start).toBeVisible();
     const startResponse = page.waitForResponse(
       (response) =>

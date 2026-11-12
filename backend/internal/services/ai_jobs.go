@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -49,6 +50,9 @@ const (
 	// AIBatchSize 是一批提交的图片数；批次文件按这个粒度落在派生目录里。
 	AIBatchSize  = 32
 	aiMaxWorkers = 4
+	// aiStatWorkerCount 是采集文件指纹时的并发数。stat 是 IO 密集的，
+	// 单独于分析 worker 的上限。
+	aiStatWorkerCount = 8
 )
 
 var ErrAIJobActive = errors.New("an analysis job is already active")
@@ -315,6 +319,17 @@ type AIJobService struct {
 	stopSchedule       context.CancelFunc
 	closeOnce          sync.Once
 	wg                 sync.WaitGroup
+	// targetCache 是文件指纹清单的短时缓存，只服务空闲时的规模预估。
+	// 它有自己的锁，避免把 stat 的等待混进任务状态锁。
+	targetCacheMu sync.Mutex
+	targetCache   *aiTargetCache
+}
+
+// aiTargetCache 是一次文件指纹采集的结果，按媒体库 revision 归类。
+type aiTargetCache struct {
+	revision uint64
+	builtAt  time.Time
+	targets  []aiJobTarget
 }
 
 func NewAIJobService(options AIJobServiceOptions) (*AIJobService, error) {
@@ -1326,7 +1341,7 @@ func (s *AIJobService) run(id string, runtimeState *aiJobRuntime) {
 		s.finishInterrupted(id, runtimeState, err)
 		return
 	}
-	targets := s.buildTargets(snapshot)
+	targets := s.buildTargets(runtimeState.ctx, snapshot)
 	digest := digestAITargets(targets)
 	candidates, err := s.selectTargets(id, targets, digest)
 	if err != nil {
@@ -1396,7 +1411,7 @@ func (s *AIJobService) waitForCatalog(ctx context.Context) (CatalogSnapshot, err
 	}
 }
 
-func (s *AIJobService) buildTargets(snapshot CatalogSnapshot) []aiJobTarget {
+func (s *AIJobService) buildTargets(ctx context.Context, snapshot CatalogSnapshot) []aiJobTarget {
 	ids := snapshot.FileIDs()
 	targets := make([]aiJobTarget, 0, len(ids))
 	for _, id := range ids {
@@ -1404,29 +1419,83 @@ func (s *AIJobService) buildTargets(snapshot CatalogSnapshot) []aiJobTarget {
 		if !ok || !models.IsImageFile(ref.AbsolutePath) {
 			continue
 		}
-		target := aiJobTarget{
+		targets = append(targets, aiJobTarget{
 			resourceID:  id,
 			path:        ref.AbsolutePath,
 			displayPath: snapshot.RelativeLabel(id),
 			position:    len(targets),
-		}
-		validated, err := s.validatePath(ref.AbsolutePath)
-		if err != nil {
-			target.statCode = "source_unavailable"
-			targets = append(targets, target)
-			continue
-		}
-		info, err := os.Stat(validated)
-		if err != nil || !info.Mode().IsRegular() {
-			target.statCode = "source_unavailable"
-		} else {
-			target.path = validated
-			target.size = info.Size()
-			target.mtimeNs = info.ModTime().UnixNano()
-		}
-		targets = append(targets, target)
+		})
 	}
+	s.statTargets(ctx, targets)
 	return targets
+}
+
+// statTargets 并发补齐每个目标的路径校验、大小与纳秒修改时间。
+//
+// 逐张 stat 在大库上是秒级开销，而空闲时的规模预估与任务启动都要走这一步。
+// 结果写进按下标分配的切片，顺序与资源 ID 排序保持一致 —— position 与
+// 检查点都依赖这个顺序。
+func (s *AIJobService) statTargets(ctx context.Context, targets []aiJobTarget) {
+	if len(targets) == 0 {
+		return
+	}
+	workers := min(aiStatWorkerCount, len(targets))
+	var next atomic.Int64
+	var wg sync.WaitGroup
+	for worker := 0; worker < workers; worker++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				index := int(next.Add(1)) - 1
+				if index >= len(targets) {
+					return
+				}
+				if ctx.Err() != nil {
+					return
+				}
+				s.statTarget(&targets[index])
+			}
+		}()
+	}
+	wg.Wait()
+}
+
+// statTarget 校验单个目标的路径并记下当前的文件指纹。
+func (s *AIJobService) statTarget(target *aiJobTarget) {
+	validated, err := s.validatePath(target.path)
+	if err != nil {
+		target.statCode = "source_unavailable"
+		return
+	}
+	info, err := os.Stat(validated)
+	if err != nil || !info.Mode().IsRegular() {
+		target.statCode = "source_unavailable"
+		return
+	}
+	target.path = validated
+	target.size = info.Size()
+	target.mtimeNs = info.ModTime().UnixNano()
+}
+
+// aiRecordIsCurrent 判断既有结果对某个目标文件是否仍然有效。
+//
+// 增量任务跳过与否、空闲时的规模预估，用的是同一条判据 —— 只有一份实现，
+// 预估出来的张数才与任务实际的 planned 对得上。
+func aiRecordIsCurrent(record AIAnalysisRecord, exists bool, target aiJobTarget, version string, validator AIAnalyzerRecordValidator) bool {
+	if !exists || record.Status == "failed" {
+		return false
+	}
+	if record.Size != target.size || record.MTimeNs != target.mtimeNs {
+		return false
+	}
+	if record.ModuleVersion != version {
+		return false
+	}
+	if validator != nil {
+		return validator.RecordCurrent(record)
+	}
+	return true
 }
 
 func (s *AIJobService) selectTargets(jobID string, targets []aiJobTarget, digest string) ([]aiJobTarget, error) {
@@ -1467,14 +1536,10 @@ func (s *AIJobService) selectTargets(jobID string, targets []aiJobTarget, digest
 		if job.Total == 0 {
 			job.Total = len(targets)
 		}
+		validator, _ := s.analyzers[job.Type].(AIAnalyzerRecordValidator)
 		for _, target := range targets {
 			record, exists := s.records[aiRecordKey(job.Type, target.resourceID)]
-			current := exists && record.Status != "failed" && record.Size == target.size && record.MTimeNs == target.mtimeNs && record.ModuleVersion == version
-			if current {
-				if validator, ok := s.analyzers[job.Type].(AIAnalyzerRecordValidator); ok {
-					current = validator.RecordCurrent(record)
-				}
-			}
+			current := aiRecordIsCurrent(record, exists, target, version, validator)
 			if job.RetryFailedOnly {
 				if (exists && record.Status == "failed") || (target.position >= job.RetryFromOffset && !current) {
 					candidates = append(candidates, target)
