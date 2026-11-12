@@ -26,6 +26,10 @@ type aiJobSequenceStartRequest struct {
 	Mode string `json:"mode"`
 }
 
+type aiJobQueueMoveRequest struct {
+	Direction string `json:"direction"`
+}
+
 type aiJobSettingsRequest struct {
 	DailyEnabled  bool     `json:"dailyEnabled"`
 	DailyTime     string   `json:"dailyTime"`
@@ -108,6 +112,69 @@ func AIJobStatusHandler(service *services.AIJobService) fiber.Handler {
 			return writeError(c, fiber.StatusNotFound, "analysis_job_not_found", "analysis task was not found")
 		}
 		return c.JSON(job)
+	}
+}
+
+// AIJobQueueMoveHandler adjusts a waiting task's position by one slot.
+func AIJobQueueMoveHandler(service *services.AIJobService) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		var body aiJobQueueMoveRequest
+		if err := c.BodyParser(&body); err != nil {
+			return writeError(c, fiber.StatusBadRequest, "invalid_analysis_queue_request", "request body is not valid JSON")
+		}
+		err := service.MovePending(c.Params("id"), strings.TrimSpace(body.Direction))
+		if errors.Is(err, services.ErrAIJobNotFound) {
+			return writeError(c, fiber.StatusNotFound, "analysis_job_not_found", "analysis task was not found")
+		}
+		if errors.Is(err, services.ErrAIJobNotManageable) {
+			return writeError(c, fiber.StatusConflict, "analysis_queue_action_unavailable", "task cannot be moved in its current position or state")
+		}
+		if err != nil {
+			if errors.Is(err, services.ErrAIJobInvalidDirection) {
+				return writeError(c, fiber.StatusBadRequest, "invalid_analysis_queue_request", "direction must be up or down")
+			}
+			return writeError(c, fiber.StatusInternalServerError, "analysis_queue_update_failed", "task queue could not be updated")
+		}
+		return c.JSON(fiber.Map{"ok": true, "snapshot": service.List()})
+	}
+}
+
+// AIJobQueueHandler clears waiting tasks and retains the active task.
+func AIJobQueueHandler(service *services.AIJobService) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		cancelled, err := service.ClearPending()
+		if err != nil {
+			return writeError(c, fiber.StatusInternalServerError, "analysis_queue_update_failed", "task queue could not be cleared")
+		}
+		return c.JSON(fiber.Map{"ok": true, "cancelledCount": cancelled, "snapshot": service.List()})
+	}
+}
+
+// AIJobHistoryHandler deletes terminal task records without deleting analysis results.
+func AIJobHistoryHandler(service *services.AIJobService) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		deleted, err := service.ClearHistory()
+		if err != nil {
+			return writeError(c, fiber.StatusInternalServerError, "analysis_history_delete_failed", "task history could not be cleared")
+		}
+		return c.JSON(fiber.Map{"ok": true, "deletedCount": deleted, "snapshot": service.List()})
+	}
+}
+
+// AIJobHistoryItemHandler deletes one terminal task record.
+func AIJobHistoryItemHandler(service *services.AIJobService) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		err := service.DeleteHistory(c.Params("id"))
+		if errors.Is(err, services.ErrAIJobNotFound) {
+			return writeError(c, fiber.StatusNotFound, "analysis_job_not_found", "analysis task was not found")
+		}
+		if errors.Is(err, services.ErrAIJobNotManageable) {
+			return writeError(c, fiber.StatusConflict, "analysis_history_delete_unavailable", "active or waiting tasks cannot be deleted")
+		}
+		if err != nil {
+			return writeError(c, fiber.StatusInternalServerError, "analysis_history_delete_failed", "task history could not be deleted")
+		}
+		return c.JSON(fiber.Map{"ok": true})
 	}
 }
 

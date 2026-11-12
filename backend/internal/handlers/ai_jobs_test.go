@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -170,6 +171,119 @@ func TestAIJobAPIFullAnalysisOverThousandImages(t *testing.T) {
 		if _, ok := rawJob[key]; !ok {
 			t.Fatalf("job payload is missing %q: %+v", key, rawJob)
 		}
+	}
+}
+
+func TestAIJobQueueAndHistoryManagementAPI(t *testing.T) {
+	root := t.TempDir()
+	catalog := services.NewResourceCatalog()
+	catalog.Publish(&models.ScanResult{Roots: []string{root}}, []string{root})
+	_, safetyState := middleware.PathSafetyMiddleware([]string{root}, catalog)
+	statePath := filepath.Join(t.TempDir(), "state", "ai_jobs.json")
+	if err := os.MkdirAll(filepath.Dir(statePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	makeJob := func(id string) services.AIJob {
+		return services.AIJob{
+			ID: id, Type: services.AIJobTypeMetadata, Mode: services.AIJobModeFull,
+			Status: services.AIJobStatusPending, Stage: services.AIJobStatusPending,
+			ModuleVersion: "metadata-v1", CreatedAt: now, UpdatedAt: now,
+			Checkpoint: services.AIJobCheckpoint{ModuleVersion: "metadata-v1"},
+		}
+	}
+	state := map[string]any{
+		"version": 1,
+		"jobs":    []services.AIJob{makeJob("job-first"), makeJob("job-second")},
+		"queue":   []string{"job-first", "job-second"},
+		"settings": services.AIJobSettings{
+			DailyTime: "03:00", DailyModules: []string{services.AIJobTypeMetadata},
+		},
+	}
+	stateBytes, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(statePath, stateBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	service, err := services.NewAIJobService(services.AIJobServiceOptions{
+		StatePath: statePath, MetadataDir: filepath.Join(t.TempDir(), "derived"),
+		Catalog: catalog, ValidatePath: safetyState.Validate,
+		Analyzers: []services.AIAnalyzer{services.MetadataAnalyzer{}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := service.Shutdown(ctx); err != nil {
+			t.Errorf("AI job shutdown: %v", err)
+		}
+	})
+
+	app := fiber.New()
+	api := app.Group("/api")
+	api.Get("/ai/jobs", AIJobsHandler(service))
+	api.Post("/ai/jobs/:id/move", AIJobQueueMoveHandler(service))
+	api.Delete("/ai/jobs/queue", AIJobQueueHandler(service))
+	api.Delete("/ai/jobs/history", AIJobHistoryHandler(service))
+	api.Delete("/ai/jobs/:id", AIJobHistoryItemHandler(service))
+	call := func(method, path, body string) *http.Response {
+		t.Helper()
+		request := httptest.NewRequest(method, path, strings.NewReader(body))
+		if body != "" {
+			request.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+		}
+		response, err := app.Test(request, -1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return response
+	}
+
+	moveResponse := call("POST", "/api/ai/jobs/job-second/move", `{"direction":"up"}`)
+	if moveResponse.StatusCode != fiber.StatusOK {
+		t.Fatalf("queue move status = %d", moveResponse.StatusCode)
+	}
+	moveResponse.Body.Close()
+	if got := service.List().Queue; len(got) != 2 || got[0] != "job-second" || got[1] != "job-first" {
+		t.Fatalf("queue after API move = %v", got)
+	}
+	blockedDelete := call("DELETE", "/api/ai/jobs/job-first", "")
+	if blockedDelete.StatusCode != fiber.StatusConflict {
+		t.Fatalf("pending history delete status = %d, want conflict", blockedDelete.StatusCode)
+	}
+	blockedDelete.Body.Close()
+
+	clearResponse := call("DELETE", "/api/ai/jobs/queue", "")
+	var clearBody struct {
+		CancelledCount int `json:"cancelledCount"`
+	}
+	if clearResponse.StatusCode != fiber.StatusOK || json.NewDecoder(clearResponse.Body).Decode(&clearBody) != nil || clearBody.CancelledCount != 2 {
+		t.Fatalf("queue clear response = status %d, body %+v", clearResponse.StatusCode, clearBody)
+	}
+	clearResponse.Body.Close()
+	if got := service.List().Queue; len(got) != 0 {
+		t.Fatalf("queue after clear API = %v", got)
+	}
+
+	deleteResponse := call("DELETE", "/api/ai/jobs/job-first", "")
+	if deleteResponse.StatusCode != fiber.StatusOK {
+		t.Fatalf("single history delete status = %d", deleteResponse.StatusCode)
+	}
+	deleteResponse.Body.Close()
+	historyResponse := call("DELETE", "/api/ai/jobs/history", "")
+	var historyBody struct {
+		DeletedCount int `json:"deletedCount"`
+	}
+	if historyResponse.StatusCode != fiber.StatusOK || json.NewDecoder(historyResponse.Body).Decode(&historyBody) != nil || historyBody.DeletedCount != 1 {
+		t.Fatalf("history clear response = status %d, body %+v", historyResponse.StatusCode, historyBody)
+	}
+	historyResponse.Body.Close()
+	if got := service.List().Jobs; len(got) != 0 {
+		t.Fatalf("jobs after history API = %v", got)
 	}
 }
 

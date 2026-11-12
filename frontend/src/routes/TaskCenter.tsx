@@ -1,20 +1,21 @@
 import PageHeading from "../components/common/PageHeading";
 import { useTaskCenter } from "../hooks/useTaskCenter";
 import TaskConsole from "../components/tasks/TaskConsole";
+import TaskQueuePanel from "../components/tasks/TaskQueuePanel";
 import DailyPlanPanel from "../components/tasks/DailyPlanPanel";
 import JobHistoryPanel from "../components/tasks/JobHistoryPanel";
 import { Link } from "react-router-dom";
 
 export default function TaskCenter() {
   const center = useTaskCenter();
-  const { snapshot, active, history, plan } = center;
+  const { snapshot, active, queue, history, plan } = center;
 
   return (
     <div className="h-full overflow-y-auto pb-12">
       <PageHeading
         eyebrow="后台分析"
         title="任务中心"
-        description="查看照片元数据、语义向量、文字与人脸分析进度，安排每日增量更新，并在需要时暂停、继续或重试。分析完全在本机运行。"
+        description="查看本机分析进度，管理等待队列与任务记录，安排每日增量更新。分析完全在本机运行。"
         action={
           <Link className="btn btn-outline" to="/settings#ai-storage">
             设置与存储路径
@@ -39,6 +40,7 @@ export default function TaskCenter() {
           </div>
           <TaskConsole
             active={active}
+            queueCount={queue.length}
             lastJob={history[0]}
             loading={center.loading}
             busy={center.busy}
@@ -67,6 +69,21 @@ export default function TaskCenter() {
         <section>
           <div className="section-heading">
             <span className="section-index">02</span>
+            <h2 className="section-title">等待队列</h2>
+            <span className="section-meta">可调整顺序或取消等待任务</span>
+          </div>
+          <TaskQueuePanel
+            jobs={queue}
+            busy={center.busy}
+            onMove={center.moveQueued}
+            onCancel={(id) => center.act(id, "cancel")}
+            onClear={center.clearQueue}
+          />
+        </section>
+
+        <section>
+          <div className="section-heading">
+            <span className="section-index">03</span>
             <h2 className="section-title">每日计划</h2>
             <span className="section-meta">按设备本地时间自动检查新增图片</span>
           </div>
@@ -91,14 +108,17 @@ export default function TaskCenter() {
 
         <section>
           <div className="section-heading">
-            <span className="section-index">03</span>
+            <span className="section-index">04</span>
             <h2 className="section-title">任务记录</h2>
             <span className="section-meta">{history.length} 项</span>
           </div>
           <JobHistoryPanel
             jobs={history}
             retryDisabled={Boolean(active) || center.busy}
+            busy={center.busy}
             onRetry={(id) => center.act(id, "retry")}
+            onDelete={center.deleteHistoryItem}
+            onClear={center.clearHistory}
           />
         </section>
       </div>

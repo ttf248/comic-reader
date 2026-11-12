@@ -177,6 +177,24 @@ try {
   $comicPathYaml = (Join-Path $testRoot "media-comic").Replace("\", "/")
   $cachePathYaml = (Join-Path $testRoot "cache").Replace("\", "/")
   $staticPathYaml = $staticRoot.Replace("\", "/")
+$cacheStateDir = Join-Path (Join-Path $testRoot "cache") "state"
+New-Item -ItemType Directory -Path $cacheStateDir -Force | Out-Null
+$testJobState = @{
+  version = 1
+  jobs = @()
+  queue = @()
+  settings = @{
+    dailyEnabled = $false
+    dailyTime = "03:00"
+    dailyModules = @("metadata")
+    peopleEnabled = $false
+  }
+} | ConvertTo-Json -Depth 5 -Compress
+[System.IO.File]::WriteAllText(
+  (Join-Path $cacheStateDir "ai_jobs.json"),
+  $testJobState,
+  [System.Text.UTF8Encoding]::new($false)
+)
   $config = @"
 mediaRoots:
   - path: "$mediaPathYaml"

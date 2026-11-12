@@ -76,6 +76,8 @@ export interface AIJobSettings {
 export interface AIJobSnapshot {
   jobs: AIJob[];
   active?: AIJob;
+  /** 按执行顺序排列的等待任务 ID，不含当前任务。 */
+  queue: string[];
   settings: AIJobSettings;
   modules: AIJobModule[];
 }
@@ -267,6 +269,26 @@ export const aiJobsApi = {
     api<{ ok: boolean; job?: AIJob }>(
       `/api/ai/jobs/${encodeURIComponent(id)}/${action}`,
       { method: "POST", nonIdempotent: true },
+    ),
+  moveQueued: (id: string, direction: "up" | "down") =>
+    api<{ ok: boolean; snapshot: AIJobSnapshot }>(
+      `/api/ai/jobs/${encodeURIComponent(id)}/move`,
+      { method: "POST", body: { direction }, nonIdempotent: true },
+    ),
+  clearQueue: () =>
+    api<{ ok: boolean; cancelledCount: number; snapshot: AIJobSnapshot }>(
+      "/api/ai/jobs/queue",
+      { method: "DELETE", nonIdempotent: true },
+    ),
+  deleteHistoryItem: (id: string) =>
+    api<{ ok: boolean }>(`/api/ai/jobs/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+      nonIdempotent: true,
+    }),
+  clearHistory: () =>
+    api<{ ok: boolean; deletedCount: number; snapshot: AIJobSnapshot }>(
+      "/api/ai/jobs/history",
+      { method: "DELETE", nonIdempotent: true },
     ),
   settings: () =>
     api<{ ok: boolean; settings: AIJobSettings }>("/api/ai/jobs/settings"),

@@ -22,6 +22,7 @@ import TaskStatusDot from "./TaskStatusDot";
 interface Props {
   /** 当前活动任务；没有时是空闲态。 */
   active?: AIJob;
+  queueCount: number;
   /** 最近一次已结束的任务，用来给空闲态一点上下文。 */
   lastJob?: AIJob;
   loading: boolean;
@@ -44,6 +45,7 @@ interface Props {
  */
 export default function TaskConsole({
   active,
+  queueCount,
   lastJob,
   loading,
   busy,
@@ -74,6 +76,21 @@ export default function TaskConsole({
         <div className="h-4 w-32 animate-pulse rounded-full bg-bg-subtle" />
         <div className="mt-4 h-3 w-2/3 animate-pulse rounded-full bg-bg-subtle" />
         <div className="mt-6 h-2 w-full animate-pulse rounded-full bg-bg-subtle" />
+      </div>
+    );
+  }
+
+  if (!active && queueCount > 0) {
+    return (
+      <div className="rounded-xl border border-border bg-bg-elevated px-5 py-6 shadow-xs sm:px-6">
+        <div className="flex items-center gap-3">
+          <TaskStatusDot status="pending" />
+          <span className="text-label font-medium text-fg">等待队列待启动</span>
+        </div>
+        <p className="mt-3 max-w-2xl text-body leading-relaxed text-fg-muted">
+          当前没有正在执行的任务，队列中还有 {formatCount(queueCount)}{" "}
+          项。媒体库准备就绪后会按队列顺序继续；你可以在下方调整顺序或取消任务。
+        </p>
       </div>
     );
   }

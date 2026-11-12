@@ -200,7 +200,9 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 ### `GET /api/ai/jobs` / `POST /api/ai/jobs`
 
-读取任务历史、活动任务与每日计划；启动请求为 `{ "type": "metadata" | "embedding" | "ocr" | "face", "mode": "full" | "incremental" }`。全量分析当前库中的图片，增量分析新增、修改或模块版本变化的图片。`metadata` 读取 EXIF/GPS；`embedding` 使用本机 Chinese-CLIP 生成语义向量；`ocr` 使用 RapidOCR 识别文字；`face` 使用 YuNet 检测人脸并由 SFace 生成相似检索特征。后三者需要对应本机 Python 依赖与权重，缺失时返回 `503 ai_runtime_unavailable`、`503 ai_model_missing` 或 `503 ai_module_unavailable`。已有其他任务活动时返回 `409 analysis_job_active`；模块类型或模式无效时返回 `400 analysis_start_failed`。响应含任务快照与 `reused`。
+读取任务历史、活动任务、等待队列与每日计划；启动请求为 `{ "type": "metadata" | "embedding" | "ocr" | "face", "mode": "full" | "incremental" }`。全量分析当前库中的图片，增量分析新增、修改或模块版本变化的图片。`metadata` 读取 EXIF/GPS；`embedding` 使用本机 Chinese-CLIP 生成语义向量；`ocr` 使用 RapidOCR 识别文字；`face` 使用 YuNet 检测人脸并由 SFace 生成相似检索特征。后三者需要对应本机 Python 依赖与权重，缺失时返回 `503 ai_runtime_unavailable`、`503 ai_model_missing` 或 `503 ai_module_unavailable`。已有活动或等待中的任务时返回 `409 analysis_job_active`；模块类型或模式无效时返回 `400 analysis_start_failed`。响应含任务快照与 `reused`。
+
+任务快照的 `jobs` 按创建时间倒序提供任务记录，`active` 是当前执行或暂停的任务，`queue` 是按执行顺序排列的等待任务 ID，不包含 `active`。任务记录包含等待队列任务以及所有终态记录。队列 ID 与任务状态会一起持久化到 `state/ai_jobs.json`；旧状态文件缺少 `queue` 时会按待执行任务的创建顺序恢复，服务重启时未完成的当前任务会插回队首续跑。
 
 任务状态为 `pending`、`running`、`paused`、`completed`、`failed`、`cancelled`。快照包含阶段、总数、已处理/跳过/失败/完成数、检查点、耗时、速度、开始/结束时间及错误项。错误项包含资源 ID、根目录别名下的相对图片路径、稳定错误码、脱敏原因和时间；不返回文件系统绝对路径。任务在后台按 32 张一批提交，重启后自动恢复运行中任务。
 
@@ -217,6 +219,19 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 请求为 `{ "mode": "full" | "incremental" }`，一次创建所有已就绪模块的任务，并按照片元数据、向量索引、OCR、人脸识别的固定顺序加入既有任务队列。任务逐项执行，单项结束后自动启动下一项；未安装或运行环境未就绪的模块列在 `skippedModules`，其余任务仍会排队。响应包含有序 `jobs` 与 `{type,name,reason}` 形式的跳过清单。队列已有活动或待执行任务时返回 `409 analysis_job_active`；没有任何可运行模块时返回 `503 ai_module_unavailable`。
 
+### 等待队列管理
+
+- `POST /api/ai/jobs/:jobId/move`：请求 `{ "direction": "up" | "down" }`，将等待任务移动一位，成功返回最新 `snapshot`。未知任务返回 `404 analysis_job_not_found`；任务不在等待队列或已到对应边界时返回 `409 analysis_queue_action_unavailable`；方向无效返回 `400 invalid_analysis_queue_request`。
+- `POST /api/ai/jobs/:jobId/cancel`：取消活动任务，或从队列中取消等待任务。活动任务在当前批次结束后退出并保留已提交结果；等待任务立即变为 `cancelled`。
+- `DELETE /api/ai/jobs/queue`：取消全部等待任务，不影响当前任务。响应 `{ "ok": true, "cancelledCount": number, "snapshot": ... }`。
+
+### 任务记录管理
+
+- `DELETE /api/ai/jobs/:jobId`：删除单条已结束任务记录。
+- `DELETE /api/ai/jobs/history`：删除全部 `completed`、`failed` 和 `cancelled` 任务记录。
+
+历史删除只移除 `state/ai_jobs.json` 中的任务日志，不会删除 `derived/metadata` 中可重建的分析批次、语义索引、OCR 搜索数据或人脸结果。不存在的任务返回 `404 analysis_job_not_found`；活动与等待任务不可删除，返回 `409 analysis_history_delete_unavailable`。批量删除响应含 `deletedCount` 与最新 `snapshot`。
+
 `planned`、`completed`、`estimatedRemainingMs` 与速度都是快照派生值，不写入 `state/ai_jobs.json`；`results` 与 `fields` 是事实，随批次一并落盘，重启后按批次文件重放恢复。
 
 快照还带 `modules`：后端已知的全部分析模块及其安装情况，元素包含 `{ "type", "name", "installed", "version", "reason" }`。`type` 为 `metadata`、`embedding`、`ocr`、`face`；对 OCR 与人脸模块，`installed` 表示对应本机运行依赖和权重已就绪，缺失时可用 `reason` 诊断。`version` 只在已就绪时给出。客户端据此渲染模块清单，不再自行硬编码模块名。
@@ -229,7 +244,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 - `POST /api/ai/jobs/:jobId/pause`：在当前批次原子提交后暂停。
 - `POST /api/ai/jobs/:jobId/resume`：继续暂停或重启恢复的任务。
-- `POST /api/ai/jobs/:jobId/cancel`：取消任务；已提交结果保留，未提交批次不写入。
+- `POST /api/ai/jobs/:jobId/cancel`：取消活动或等待任务；活动任务的已提交结果保留，未提交批次不写入，等待任务不再执行。
 - `POST /api/ai/jobs/:jobId/retry`：从旧任务创建新历史项，只处理失败记录与未提交尾段；有其他任务活动时返回 `409 analysis_job_active`。
 
 不存在的任务返回 `404 analysis_job_not_found`；状态不支持该操作返回 `409 analysis_action_unavailable`。

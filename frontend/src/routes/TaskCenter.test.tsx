@@ -8,7 +8,7 @@ import {
   within,
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import TaskCenter from "./TaskCenter";
 import { aiJobsApi, type AIJob, type AIJobSnapshot } from "../api/aiJobs";
 
@@ -18,6 +18,10 @@ vi.mock("../api/aiJobs", () => ({
     start: vi.fn(),
     startAll: vi.fn(),
     action: vi.fn(),
+    moveQueued: vi.fn(),
+    clearQueue: vi.fn(),
+    deleteHistoryItem: vi.fn(),
+    clearHistory: vi.fn(),
     settings: vi.fn(),
     updateSettings: vi.fn(),
     metadata: vi.fn(),
@@ -89,6 +93,7 @@ function snapshot(overrides: Partial<AIJobSnapshot> = {}): AIJobSnapshot {
   return {
     jobs: [currentJob],
     active: currentJob,
+    queue: [],
     settings: {
       dailyEnabled: false,
       dailyTime: "03:00",
@@ -114,6 +119,8 @@ function renderCenter() {
 }
 
 describe("任务中心", () => {
+  afterEach(() => vi.restoreAllMocks());
+
   beforeEach(() => {
     vi.clearAllMocks();
     sseHarness.onEvent = null;
@@ -139,6 +146,21 @@ describe("任务中心", () => {
       ],
     });
     vi.mocked(aiJobsApi.action).mockResolvedValue({ ok: true });
+    vi.mocked(aiJobsApi.moveQueued).mockResolvedValue({
+      ok: true,
+      snapshot: snapshot(),
+    });
+    vi.mocked(aiJobsApi.clearQueue).mockResolvedValue({
+      ok: true,
+      cancelledCount: 0,
+      snapshot: snapshot(),
+    });
+    vi.mocked(aiJobsApi.deleteHistoryItem).mockResolvedValue({ ok: true });
+    vi.mocked(aiJobsApi.clearHistory).mockResolvedValue({
+      ok: true,
+      deletedCount: 0,
+      snapshot: snapshot(),
+    });
     vi.mocked(aiJobsApi.updateSettings).mockResolvedValue({
       ok: true,
       settings: {
@@ -176,15 +198,17 @@ describe("任务中心", () => {
     });
   });
 
-  it("按编号区块呈现状态、每日计划与任务记录", async () => {
+  it("按编号区块呈现状态、等待队列、每日计划与任务记录", async () => {
     renderCenter();
 
     expect(await screen.findByText("状态")).toBeInTheDocument();
+    expect(screen.getByText("等待队列")).toBeInTheDocument();
     expect(screen.getByText("每日计划")).toBeInTheDocument();
     expect(screen.getByText("任务记录")).toBeInTheDocument();
     expect(screen.getByText("01")).toBeInTheDocument();
     expect(screen.getByText("02")).toBeInTheDocument();
     expect(screen.getByText("03")).toBeInTheDocument();
+    expect(screen.getByText("04")).toBeInTheDocument();
   });
 
   it("运行中显示阶段、进度口径、速度与预计剩余，并支持暂停", async () => {
@@ -218,6 +242,30 @@ describe("任务中心", () => {
     await waitFor(() =>
       expect(aiJobsApi.start).toHaveBeenCalledWith("metadata", "full"),
     );
+  });
+
+  it("只有等待任务而无活动任务时不显示空闲启动入口", async () => {
+    const pendingJob: AIJob = {
+      ...currentJob,
+      id: "job-pending",
+      status: "pending",
+      stage: "pending",
+    };
+    vi.mocked(aiJobsApi.list).mockResolvedValue({
+      ok: true,
+      snapshot: snapshot({
+        jobs: [pendingJob],
+        active: undefined,
+        queue: [pendingJob.id],
+      }),
+    });
+    renderCenter();
+
+    expect(await screen.findByText("等待队列待启动")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "全量分析" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getAllByTestId("task-queue-row")).toHaveLength(1);
   });
 
   it("按所选模式一键排入全部模块，并提供设置页入口", async () => {
@@ -273,7 +321,7 @@ describe("任务中心", () => {
     await waitFor(() => expect(aiJobsApi.list).toHaveBeenCalledTimes(2));
   });
 
-  it("任务记录按执行顺序排列等待中的模块", async () => {
+  it("等待队列按服务端顺序展示并提供调整与取消操作", async () => {
     const queuedOCR: AIJob = {
       ...currentJob,
       id: "job-ocr",
@@ -297,14 +345,138 @@ describe("任务中心", () => {
       snapshot: snapshot({
         jobs: [queuedFace, queuedOCR, currentJob, previous],
         active: currentJob,
+        queue: [queuedOCR.id, queuedFace.id],
       }),
     });
     renderCenter();
 
-    const rows = await screen.findAllByTestId("task-history-row");
+    const rows = await screen.findAllByTestId("task-queue-row");
     expect(rows[0].textContent).toContain("文字识别");
     expect(rows[1].textContent).toContain("人脸识别");
-    expect(rows[2].textContent).toContain("元数据分析");
+    expect(screen.getAllByTestId("task-history-row")).toHaveLength(1);
+    fireEvent.click(
+      within(rows[1]).getByRole("button", { name: "上移 手动 人脸识别" }),
+    );
+    await waitFor(() =>
+      expect(aiJobsApi.moveQueued).toHaveBeenCalledWith(queuedFace.id, "up"),
+    );
+    fireEvent.click(
+      within(rows[0]).getByRole("button", { name: "取消排队 手动 文字识别" }),
+    );
+    await waitFor(() =>
+      expect(aiJobsApi.action).toHaveBeenCalledWith(queuedOCR.id, "cancel"),
+    );
+  });
+
+  it("清空等待队列前提示当前任务会继续执行", async () => {
+    const queued: AIJob = {
+      ...currentJob,
+      id: "job-queued",
+      type: "ocr",
+      status: "pending",
+      stage: "pending",
+    };
+    vi.mocked(aiJobsApi.list).mockResolvedValue({
+      ok: true,
+      snapshot: snapshot({
+        jobs: [queued, currentJob],
+        active: currentJob,
+        queue: [queued.id],
+      }),
+    });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderCenter();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "清空等待队列" }),
+    );
+    expect(confirm).toHaveBeenCalledWith(
+      expect.stringContaining("当前任务不会受影响"),
+    );
+    await waitFor(() => expect(aiJobsApi.clearQueue).toHaveBeenCalled());
+  });
+
+  it("可按状态筛选历史并删除单条任务记录", async () => {
+    const failedJob: AIJob = {
+      ...currentJob,
+      id: "job-failed",
+      status: "failed",
+      finishedAt: "2026-11-11T02:03:00Z",
+    };
+    const completedJob: AIJob = {
+      ...currentJob,
+      id: "job-completed",
+      status: "completed",
+      finishedAt: "2026-11-11T02:02:00Z",
+    };
+    vi.mocked(aiJobsApi.list).mockResolvedValue({
+      ok: true,
+      snapshot: snapshot({
+        jobs: [failedJob, completedJob],
+        active: undefined,
+      }),
+    });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderCenter();
+
+    fireEvent.click(await screen.findByRole("button", { name: "失败 1" }));
+    const rows = await screen.findAllByTestId("task-history-row");
+    expect(rows).toHaveLength(1);
+    fireEvent.click(within(rows[0]).getByText("手动 元数据分析"));
+    fireEvent.click(
+      await within(rows[0]).findByRole("button", {
+        name: "删除任务记录",
+      }),
+    );
+    await waitFor(() =>
+      expect(aiJobsApi.deleteHistoryItem).toHaveBeenCalledWith(failedJob.id),
+    );
+  });
+
+  it("已取消任务可重新运行未完成部分", async () => {
+    const cancelledJob: AIJob = {
+      ...currentJob,
+      id: "job-cancelled",
+      status: "cancelled",
+      finishedAt: "2026-11-11T02:03:00Z",
+    };
+    vi.mocked(aiJobsApi.list).mockResolvedValue({
+      ok: true,
+      snapshot: snapshot({ jobs: [cancelledJob], active: undefined }),
+    });
+    renderCenter();
+
+    const row = (await screen.findAllByTestId("task-history-row"))[0];
+    fireEvent.click(within(row).getByText("手动 元数据分析"));
+    fireEvent.click(
+      await within(row).findByRole("button", { name: "重新运行未完成项" }),
+    );
+    await waitFor(() =>
+      expect(aiJobsApi.action).toHaveBeenCalledWith(cancelledJob.id, "retry"),
+    );
+  });
+
+  it("清理历史前提示结果不会删除", async () => {
+    const completedJob: AIJob = {
+      ...currentJob,
+      id: "job-completed",
+      status: "completed",
+      finishedAt: "2026-11-11T02:02:00Z",
+    };
+    vi.mocked(aiJobsApi.list).mockResolvedValue({
+      ok: true,
+      snapshot: snapshot({ jobs: [completedJob], active: undefined }),
+    });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderCenter();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "清理已结束记录" }),
+    );
+    expect(confirm).toHaveBeenCalledWith(
+      expect.stringContaining("分析结果和索引数据会保留"),
+    );
+    await waitFor(() => expect(aiJobsApi.clearHistory).toHaveBeenCalled());
   });
 
   it("已安装向量模块时可从同一任务服务启动全量建索引", async () => {

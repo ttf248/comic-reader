@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { AIJob } from "../../api/aiJobs";
 import { formatDateTime } from "../../utils/date";
 import {
@@ -19,121 +20,238 @@ interface Props {
   jobs: AIJob[];
   /** 有任务在跑时不能重试：后端同一时间只允许一个活动任务。 */
   retryDisabled: boolean;
+  busy: boolean;
   onRetry: (id: string) => void;
+  onDelete: (id: string) => void;
+  onClear: () => void;
 }
 
 /** 任务记录：每一行一次任务，展开后是它的规格、产出与失败项。 */
 export default function JobHistoryPanel({
   jobs,
   retryDisabled,
+  busy,
   onRetry,
+  onDelete,
+  onClear,
 }: Props) {
-  if (jobs.length === 0) {
-    return (
-      <div className="rounded-lg border border-border bg-bg-elevated shadow-xs">
-        <EmptyState
-          title="还没有已结束的任务"
-          description="运行一次全量或增量分析后，历史记录、耗时和失败原因会显示在这里。"
-          icon={<TasksIcon size={28} />}
-          dense
-        />
-      </div>
-    );
+  const [filter, setFilter] = useState<HistoryFilter>("all");
+  const counts: Record<HistoryFilter, number> = {
+    all: jobs.length,
+    completed: jobs.filter((job) => job.status === "completed").length,
+    failed: jobs.filter((job) => job.status === "failed").length,
+    cancelled: jobs.filter((job) => job.status === "cancelled").length,
+  };
+  const visibleJobs =
+    filter === "all" ? jobs : jobs.filter((job) => job.status === filter);
+
+  function clearHistory() {
+    if (
+      jobs.length > 0 &&
+      window.confirm(
+        `删除全部 ${jobs.length} 条已结束任务记录？分析结果和索引数据会保留。`,
+      )
+    ) {
+      onClear();
+    }
   }
 
   return (
-    <div className="divide-y divide-border-faint rounded-lg border border-border bg-bg-elevated shadow-xs">
-      {jobs.map((job) => (
-        <details
-          key={job.id}
-          className="group px-5 py-4"
-          data-testid="task-history-row"
-        >
-          <summary className="flex cursor-pointer list-none items-start gap-3 [&::-webkit-details-marker]:hidden">
-            <TaskStatusDot status={job.status} className="mt-2" />
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span className="text-label font-medium text-fg">
-                  {taskTitle(job)}
-                </span>
-                <span className="text-meta text-fg-muted">
-                  {taskModeLabel(job.mode)}
-                </span>
-                <span className="text-meta text-fg-subtle">
-                  {taskStatusLabel(job.status)}
-                </span>
+    <div className="overflow-hidden rounded-xl border border-border bg-bg-elevated shadow-xs">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-faint px-5 py-4 sm:px-6">
+        <div>
+          <p className="text-label font-medium text-fg">
+            已结束记录 · {jobs.length} 项
+          </p>
+          <p className="mt-1 text-meta text-fg-subtle">
+            删除记录只清理任务日志，不会删除已生成的元数据、向量、文字或人脸结果。
+          </p>
+        </div>
+        {jobs.length > 0 ? (
+          <button
+            type="button"
+            className="btn btn-sm btn-outline"
+            disabled={busy}
+            onClick={clearHistory}
+          >
+            清理已结束记录
+          </button>
+        ) : null}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 border-b border-border-faint px-5 py-3 sm:px-6">
+        {HISTORY_FILTERS.map(({ value, label }) => (
+          <button
+            key={value}
+            type="button"
+            className={`btn btn-sm ${filter === value ? "btn-primary" : "btn-outline"}`}
+            aria-pressed={filter === value}
+            onClick={() => setFilter(value)}
+          >
+            {label}{" "}
+            <span className="ml-1 font-mono tabular-nums">{counts[value]}</span>
+          </button>
+        ))}
+      </div>
+
+      {visibleJobs.length === 0 ? (
+        <div className="px-5 py-2 sm:px-6">
+          <EmptyState
+            title={
+              jobs.length === 0 ? "还没有已结束的任务" : "没有符合条件的记录"
+            }
+            description={
+              jobs.length === 0
+                ? "运行一次全量或增量分析后，耗时、产出和失败原因会显示在这里。"
+                : "选择其他状态查看任务记录。"
+            }
+            icon={<TasksIcon size={28} />}
+            dense
+          />
+        </div>
+      ) : (
+        <div className="divide-y divide-border-faint">
+          {visibleJobs.map((job) => (
+            <details
+              key={job.id}
+              className="group px-5 py-4"
+              data-testid="task-history-row"
+              data-job-id={job.id}
+            >
+              <summary className="flex cursor-pointer list-none items-start gap-3 [&::-webkit-details-marker]:hidden">
+                <TaskStatusDot status={job.status} className="mt-2" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <span className="text-label font-medium text-fg">
+                      {taskTitle(job)}
+                    </span>
+                    <span className="text-meta text-fg-muted">
+                      {taskModeLabel(job.mode)}
+                    </span>
+                    <span className="text-meta text-fg-subtle">
+                      {taskStatusLabel(job.status)}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-meta text-fg-subtle">
+                    <span>{formatDateTime(job.createdAt)}</span>
+                    <span>耗时 {formatTaskDuration(job.elapsedMs)}</span>
+                    <span className="tabular-nums">
+                      完成 {formatCount(job.completed)}
+                    </span>
+                    <span className="tabular-nums">
+                      跳过 {formatCount(job.skipped)}
+                    </span>
+                    <span
+                      className={`tabular-nums ${
+                        job.failed > 0 ? "text-danger" : ""
+                      }`}
+                    >
+                      失败 {formatCount(job.failed)}
+                    </span>
+                  </div>
+                </div>
+                <ChevronDownIcon
+                  size={16}
+                  className="mt-1 shrink-0 text-fg-subtle transition-transform group-open:rotate-180"
+                />
+              </summary>
+
+              <div className="mt-4 border-t border-border-faint pt-4">
+                <dl className="grid max-w-2xl gap-x-8 sm:grid-cols-2">
+                  <SpecRow label="开始" value={formatDateTime(job.startedAt)} />
+                  <SpecRow
+                    label="结束"
+                    value={formatDateTime(job.finishedAt)}
+                  />
+                  <SpecRow
+                    label="耗时"
+                    value={formatTaskDuration(job.elapsedMs)}
+                  />
+                  <SpecRow
+                    label="速度"
+                    value={formatTaskSpeed(job.speedPerSecond)}
+                  />
+                  <SpecRow
+                    label="模块版本"
+                    value={job.moduleVersion || "—"}
+                    fullWidth
+                  />
+                </dl>
+
+                {job.error ? (
+                  <p className="mt-3 text-meta text-danger">
+                    任务原因：{job.error}
+                  </p>
+                ) : null}
+
+                <OutputBreakdown job={job} />
+
+                {job.errors && job.errors.length > 0 ? (
+                  <div className="mt-4">
+                    <p className="mb-2 text-meta font-medium text-fg">
+                      失败文件
+                    </p>
+                    <FailureGroupList errors={job.errors} />
+                  </div>
+                ) : null}
+
+                {job.status === "failed" ||
+                job.status === "cancelled" ||
+                job.failed > 0 ? (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline"
+                      disabled={retryDisabled}
+                      onClick={() => onRetry(job.id)}
+                    >
+                      {job.status === "cancelled"
+                        ? "重新运行未完成项"
+                        : "仅重试失败项"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline text-danger"
+                      disabled={busy}
+                      onClick={() => deleteJob(job.id, onDelete)}
+                    >
+                      删除任务记录
+                    </button>
+                  </div>
+                ) : (
+                  <div className="mt-4">
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-outline text-danger"
+                      disabled={busy}
+                      onClick={() => deleteJob(job.id, onDelete)}
+                    >
+                      删除任务记录
+                    </button>
+                  </div>
+                )}
               </div>
-              <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-meta text-fg-subtle">
-                <span>{formatDateTime(job.createdAt)}</span>
-                <span>耗时 {formatTaskDuration(job.elapsedMs)}</span>
-                <span className="tabular-nums">
-                  完成 {formatCount(job.completed)}
-                </span>
-                <span className="tabular-nums">
-                  跳过 {formatCount(job.skipped)}
-                </span>
-                <span
-                  className={`tabular-nums ${
-                    job.failed > 0 ? "text-danger" : ""
-                  }`}
-                >
-                  失败 {formatCount(job.failed)}
-                </span>
-              </div>
-            </div>
-            <ChevronDownIcon
-              size={16}
-              className="mt-1 shrink-0 text-fg-subtle transition-transform group-open:rotate-180"
-            />
-          </summary>
-
-          <div className="mt-4 border-t border-border-faint pt-4">
-            <dl className="grid max-w-2xl gap-x-8 sm:grid-cols-2">
-              <SpecRow label="开始" value={formatDateTime(job.startedAt)} />
-              <SpecRow label="结束" value={formatDateTime(job.finishedAt)} />
-              <SpecRow label="耗时" value={formatTaskDuration(job.elapsedMs)} />
-              <SpecRow
-                label="速度"
-                value={formatTaskSpeed(job.speedPerSecond)}
-              />
-              <SpecRow
-                label="模块版本"
-                value={job.moduleVersion || "—"}
-                fullWidth
-              />
-            </dl>
-
-            {job.error ? (
-              <p className="mt-3 text-meta text-danger">
-                任务原因：{job.error}
-              </p>
-            ) : null}
-
-            <OutputBreakdown job={job} />
-
-            {job.errors && job.errors.length > 0 ? (
-              <div className="mt-4">
-                <p className="mb-2 text-meta font-medium text-fg">失败文件</p>
-                <FailureGroupList errors={job.errors} />
-              </div>
-            ) : null}
-
-            {job.status === "failed" || job.failed > 0 ? (
-              <div className="mt-4">
-                <button
-                  className="btn btn-sm btn-outline"
-                  disabled={retryDisabled}
-                  onClick={() => onRetry(job.id)}
-                >
-                  仅重试失败项
-                </button>
-              </div>
-            ) : null}
-          </div>
-        </details>
-      ))}
+            </details>
+          ))}
+        </div>
+      )}
     </div>
   );
+}
+
+type HistoryFilter = "all" | "completed" | "failed" | "cancelled";
+
+const HISTORY_FILTERS: { value: HistoryFilter; label: string }[] = [
+  { value: "all", label: "全部" },
+  { value: "completed", label: "已完成" },
+  { value: "failed", label: "失败" },
+  { value: "cancelled", label: "已取消" },
+];
+
+function deleteJob(id: string, onDelete: (id: string) => void) {
+  if (window.confirm("删除这条任务记录？已生成的分析结果会保留。")) {
+    onDelete(id);
+  }
 }
 
 function SpecRow({

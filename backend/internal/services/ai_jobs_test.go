@@ -105,6 +105,117 @@ func TestAIJobServiceStartAllQueuesModulesInOrder(t *testing.T) {
 	shutdownAIJobService(t, service)
 }
 
+func TestAIJobQueueAndHistoryManagementPreservesAnalysisResults(t *testing.T) {
+	root := t.TempDir()
+	files := writeAIJobImages(t, root, 1)
+	catalog := aiJobCatalog(root, files)
+	statePath := filepath.Join(t.TempDir(), "state", "jobs.json")
+	metadata := &blockingAnalyzer{started: make(chan struct{}), release: make(chan struct{})}
+	metadataDir := filepath.Join(t.TempDir(), "derived")
+	service := newTestAIJobService(t, statePath, metadataDir, catalog,
+		metadata,
+		testJSONAnalyzer{module: AIJobTypeEmbedding, version: "embedding-v1"},
+		testJSONAnalyzer{module: AIJobTypeOCR, version: "ocr-v1"},
+		testJSONAnalyzer{module: AIJobTypeFace, version: "face-v1"},
+	)
+	defer shutdownAIJobService(t, service)
+	var releaseOnce sync.Once
+	defer releaseOnce.Do(func() { close(metadata.release) })
+	if _, err := service.SetPeopleEnabled(true); err != nil {
+		t.Fatal(err)
+	}
+
+	jobs, _, err := service.StartAll(AIJobModeFull)
+	if err != nil {
+		t.Fatalf("StartAll() = %v", err)
+	}
+	select {
+	case <-metadata.started:
+	case <-time.After(3 * time.Second):
+		t.Fatal("first task did not start")
+	}
+	if got := service.List().Queue; !reflect.DeepEqual(got, []string{jobs[1].ID, jobs[2].ID, jobs[3].ID}) {
+		t.Fatalf("initial queue = %v", got)
+	}
+	if err := service.MovePending(jobs[3].ID, "up"); err != nil {
+		t.Fatalf("MovePending(face, up) = %v", err)
+	}
+	wantQueue := []string{jobs[1].ID, jobs[3].ID, jobs[2].ID}
+	if got := service.List().Queue; !reflect.DeepEqual(got, wantQueue) {
+		t.Fatalf("reordered queue = %v, want %v", got, wantQueue)
+	}
+	var persisted aiJobDiskState
+	stateBytes, err := os.ReadFile(statePath)
+	if err != nil || json.Unmarshal(stateBytes, &persisted) != nil || !reflect.DeepEqual(persisted.Queue, wantQueue) {
+		t.Fatalf("persisted queue = %v, read error = %v", persisted.Queue, err)
+	}
+	recoveredStatePath := filepath.Join(t.TempDir(), "state", "jobs.json")
+	if err := os.MkdirAll(filepath.Dir(recoveredStatePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(recoveredStatePath, stateBytes, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	recovered := newTestAIJobService(t, recoveredStatePath, filepath.Join(t.TempDir(), "recovered-derived"), catalog,
+		MetadataAnalyzer{},
+		testJSONAnalyzer{module: AIJobTypeEmbedding, version: "embedding-v1"},
+		testJSONAnalyzer{module: AIJobTypeOCR, version: "ocr-v1"},
+		testJSONAnalyzer{module: AIJobTypeFace, version: "face-v1"},
+	)
+	if got, want := recovered.List().Queue, append([]string{jobs[0].ID}, wantQueue...); !reflect.DeepEqual(got, want) {
+		t.Fatalf("queue restored after restart = %v, want %v", got, want)
+	}
+	shutdownAIJobService(t, recovered)
+	if err := service.MovePending(jobs[1].ID, "up"); !errors.Is(err, ErrAIJobNotManageable) {
+		t.Fatalf("moving first task up returned %v", err)
+	}
+	if err := service.DeleteHistory(jobs[2].ID); !errors.Is(err, ErrAIJobNotManageable) {
+		t.Fatalf("deleting a pending task returned %v", err)
+	}
+	if !service.Cancel(jobs[1].ID) {
+		t.Fatal("queued task could not be cancelled")
+	}
+	if got := service.List().Queue; !reflect.DeepEqual(got, []string{jobs[3].ID, jobs[2].ID}) {
+		t.Fatalf("queue after cancel = %v", got)
+	}
+	cancelled, err := service.ClearPending()
+	if err != nil || cancelled != 2 {
+		t.Fatalf("ClearPending() = (%d, %v), want (2, nil)", cancelled, err)
+	}
+	if got := service.List().Queue; len(got) != 0 {
+		t.Fatalf("queue after clear = %v", got)
+	}
+	for _, queued := range jobs[1:] {
+		if got, ok := service.Get(queued.ID); !ok || got.Status != AIJobStatusCancelled {
+			t.Fatalf("queued task %s after clear = %+v, exists=%v", queued.ID, got, ok)
+		}
+	}
+	releaseOnce.Do(func() { close(metadata.release) })
+	waitForAIJob(t, service, jobs[0].ID, AIJobStatusCompleted)
+	waitForAIJobIdle(t, service)
+	if err := service.DeleteHistory(jobs[3].ID); err != nil {
+		t.Fatalf("DeleteHistory(cancelled) = %v", err)
+	}
+	deleted, err := service.ClearHistory()
+	if err != nil || deleted != 3 {
+		t.Fatalf("ClearHistory() = (%d, %v), want (3, nil)", deleted, err)
+	}
+	if got := service.List(); len(got.Jobs) != 0 || len(got.Queue) != 0 {
+		t.Fatalf("snapshot after history cleanup = %+v", got)
+	}
+	if records := service.Records(AIJobTypeMetadata); len(records) != 1 {
+		t.Fatalf("history cleanup removed analysis results: %d metadata records", len(records))
+	}
+	restarted := newTestAIJobService(t, statePath, metadataDir, catalog, MetadataAnalyzer{})
+	defer shutdownAIJobService(t, restarted)
+	if snapshot := restarted.List(); len(snapshot.Jobs) != 0 || len(snapshot.Queue) != 0 {
+		t.Fatalf("cleaned history reappeared after restart: %+v", snapshot)
+	}
+	if records := restarted.Records(AIJobTypeMetadata); len(records) != 1 {
+		t.Fatalf("analysis results were not retained after restart: %d metadata records", len(records))
+	}
+}
+
 func TestFaceAnalysisRequiresExplicitPeopleOptIn(t *testing.T) {
 	root := t.TempDir()
 	files := writeAIJobImages(t, root, 1)
@@ -365,6 +476,43 @@ func TestAIJobServiceCancelsAndRetryCreatesNewHistoryItem(t *testing.T) {
 		t.Fatalf("retry after cancel = %+v", retry)
 	}
 	shutdownAIJobService(t, service)
+}
+
+func TestAIJobServiceCanCancelPausedJobAfterRestart(t *testing.T) {
+	root := t.TempDir()
+	files := writeAIJobImages(t, root, aiBatchSize+1)
+	catalog := aiJobCatalog(root, files)
+	statePath := filepath.Join(t.TempDir(), "state", "jobs.json")
+	metadataDir := filepath.Join(t.TempDir(), "derived")
+	analyzer := &blockingAnalyzer{started: make(chan struct{}), release: make(chan struct{})}
+	service := newTestAIJobService(t, statePath, metadataDir, catalog, analyzer)
+	job, _, err := service.Start(AIJobTypeMetadata, AIJobModeFull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-analyzer.started:
+	case <-time.After(3 * time.Second):
+		t.Fatal("analyzer did not start")
+	}
+	if !service.Pause(job.ID) {
+		t.Fatal("Pause() returned false")
+	}
+	close(analyzer.release)
+	waitForAIJob(t, service, job.ID, AIJobStatusPaused)
+	shutdownAIJobService(t, service)
+
+	restarted := newTestAIJobService(t, statePath, metadataDir, catalog, MetadataAnalyzer{})
+	defer shutdownAIJobService(t, restarted)
+	if active := restarted.List().Active; active == nil || active.Status != AIJobStatusPaused {
+		t.Fatalf("restored active job = %+v", active)
+	}
+	if !restarted.Cancel(job.ID) {
+		t.Fatal("paused job could not be cancelled after restart")
+	}
+	if got, ok := restarted.Get(job.ID); !ok || got.Status != AIJobStatusCancelled {
+		t.Fatalf("cancelled paused job = %+v, exists=%v", got, ok)
+	}
 }
 
 func TestAIJobSchedulerUsesLocalTimeAndRunsMissedDayOnce(t *testing.T) {

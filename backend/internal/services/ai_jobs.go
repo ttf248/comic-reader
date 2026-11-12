@@ -51,6 +51,9 @@ const (
 )
 
 var ErrAIJobActive = errors.New("an analysis job is already active")
+var ErrAIJobNotFound = errors.New("analysis job not found")
+var ErrAIJobNotManageable = errors.New("analysis job cannot be managed in its current state")
+var ErrAIJobInvalidDirection = errors.New("invalid queue direction")
 var ErrAIAnalyzerUnavailable = errors.New("analysis module runtime or model is unavailable")
 var ErrPeopleAnalysisDisabled = errors.New("people analysis is disabled")
 
@@ -208,6 +211,7 @@ type AIJobSettings struct {
 type AIJobSnapshot struct {
 	Jobs     []AIJob       `json:"jobs"`
 	Active   *AIJob        `json:"active,omitempty"`
+	Queue    []string      `json:"queue"`
 	Settings AIJobSettings `json:"settings"`
 	// Modules 列出全部已知分析模块及其安装状态，前端不再硬编码模块名。
 	Modules []AIJobModule `json:"modules"`
@@ -252,6 +256,7 @@ type AIJobServiceOptions struct {
 type aiJobDiskState struct {
 	Version  int           `json:"version"`
 	Jobs     []AIJob       `json:"jobs"`
+	Queue    []string      `json:"queue,omitempty"`
 	Settings AIJobSettings `json:"settings"`
 }
 
@@ -295,6 +300,7 @@ type AIJobService struct {
 	onRecordsCommitted func([]AIAnalysisRecord)
 	jobs               map[string]*AIJob
 	order              []string
+	queue              []string
 	records            map[string]AIAnalysisRecord
 	runtimes           map[string]*aiJobRuntime
 	subs               map[string]map[chan AIJob]struct{}
@@ -405,6 +411,9 @@ func (s *AIJobService) Start(moduleType, mode string) (AIJob, bool, error) {
 		}
 		return AIJob{}, false, ErrAIJobActive
 	}
+	if s.hasPendingJobsLocked() {
+		return AIJob{}, false, ErrAIJobActive
+	}
 	job := s.newJobLocked(moduleType, mode)
 	s.jobs[job.ID] = &job
 	s.order = append(s.order, job.ID)
@@ -493,6 +502,7 @@ func (s *AIJobService) StartAll(mode string) ([]AIJob, []AIJobModule, error) {
 		return nil, nil, ErrAIJobActive
 	}
 	previousOrderLength := len(s.order)
+	previousQueue := append([]string(nil), s.queue...)
 	jobIDs := make([]string, 0, len(readyModules))
 	for _, moduleType := range readyModules {
 		job := s.newJobLocked(moduleType, mode)
@@ -501,11 +511,13 @@ func (s *AIJobService) StartAll(mode string) ([]AIJob, []AIJobModule, error) {
 		jobIDs = append(jobIDs, job.ID)
 	}
 	s.activeID = jobIDs[0]
+	s.queue = append([]string(nil), jobIDs[1:]...)
 	if err := s.persistLocked(); err != nil {
 		for _, id := range jobIDs {
 			delete(s.jobs, id)
 		}
 		s.order = s.order[:previousOrderLength]
+		s.queue = previousQueue
 		s.activeID = ""
 		return nil, nil, err
 	}
@@ -522,7 +534,7 @@ func (s *AIJobService) hasPendingJobsLocked() bool {
 		return true
 	}
 	for _, job := range s.jobs {
-		if isAIJobActive(job.Status) {
+		if isAIJobActive(job.Status) || job.Status == AIJobStatusPending {
 			return true
 		}
 	}
@@ -596,15 +608,200 @@ func (s *AIJobService) Resume(id string) bool {
 // Cancel 取消任务；已提交批次保留，未提交的当前批次会幂等重跑。
 func (s *AIJobService) Cancel(id string) bool {
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	job := s.jobs[id]
 	runtimeState := s.runtimes[id]
-	if job == nil || runtimeState == nil || !isAIJobActive(job.Status) {
+	if job == nil || !isAIJobActive(job.Status) {
+		s.mu.Unlock()
 		return false
+	}
+	if job.Status == AIJobStatusPending && runtimeState == nil {
+		queueIndex := slices.Index(s.queue, id)
+		if queueIndex < 0 {
+			s.mu.Unlock()
+			return false
+		}
+		previousQueue := append([]string(nil), s.queue...)
+		previousStatus, previousStage, previousUpdated, previousFinished := job.Status, job.Stage, job.UpdatedAt, job.FinishedAt
+		s.queue = slices.Delete(s.queue, queueIndex, queueIndex+1)
+		job.Status = AIJobStatusCancelled
+		job.Stage = AIJobStatusCancelled
+		finished := s.now()
+		job.FinishedAt = &finished
+		job.UpdatedAt = finished
+		if err := s.persistLocked(); err != nil {
+			s.queue = previousQueue
+			job.Status, job.Stage, job.UpdatedAt, job.FinishedAt = previousStatus, previousStage, previousUpdated, previousFinished
+			s.mu.Unlock()
+			return false
+		}
+		s.publishLocked(*job)
+		s.mu.Unlock()
+		return true
+	}
+	if runtimeState == nil {
+		if job.Status != AIJobStatusPaused {
+			s.mu.Unlock()
+			return false
+		}
+		previousStatus, previousStage, previousUpdated, previousFinished, previousActive := job.Status, job.Stage, job.UpdatedAt, job.FinishedAt, s.activeID
+		job.Status = AIJobStatusCancelled
+		job.Stage = AIJobStatusCancelled
+		finished := s.now()
+		job.FinishedAt = &finished
+		job.UpdatedAt = finished
+		if s.activeID == id {
+			s.activeID = ""
+		}
+		if err := s.persistLocked(); err != nil {
+			job.Status, job.Stage, job.UpdatedAt, job.FinishedAt = previousStatus, previousStage, previousUpdated, previousFinished
+			s.activeID = previousActive
+			s.mu.Unlock()
+			return false
+		}
+		s.publishLocked(*job)
+		s.mu.Unlock()
+		s.StartPending()
+		return true
 	}
 	runtimeState.stopReason = "user"
 	runtimeState.cancel()
+	s.mu.Unlock()
 	return true
+}
+
+// MovePending moves a queued task one position up or down.
+func (s *AIJobService) MovePending(id, direction string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	job := s.jobs[id]
+	if job == nil {
+		return ErrAIJobNotFound
+	}
+	if job.Status != AIJobStatusPending {
+		return ErrAIJobNotManageable
+	}
+	index := slices.Index(s.queue, id)
+	if index < 0 {
+		return ErrAIJobNotManageable
+	}
+	target := index
+	switch direction {
+	case "up":
+		target--
+	case "down":
+		target++
+	default:
+		return ErrAIJobInvalidDirection
+	}
+	if target < 0 || target >= len(s.queue) {
+		return ErrAIJobNotManageable
+	}
+	s.queue[index], s.queue[target] = s.queue[target], s.queue[index]
+	if err := s.persistLocked(); err != nil {
+		s.queue[index], s.queue[target] = s.queue[target], s.queue[index]
+		return err
+	}
+	return nil
+}
+
+// ClearPending cancels all waiting tasks while leaving the active task untouched.
+func (s *AIJobService) ClearPending() (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.queue) == 0 {
+		return 0, nil
+	}
+	previousQueue := append([]string(nil), s.queue...)
+	type previousJobState struct {
+		job      *AIJob
+		status   string
+		stage    string
+		updated  time.Time
+		finished *time.Time
+	}
+	previous := make([]previousJobState, 0, len(s.queue))
+	finished := s.now()
+	for _, id := range s.queue {
+		job := s.jobs[id]
+		if job == nil || job.Status != AIJobStatusPending {
+			continue
+		}
+		previous = append(previous, previousJobState{job: job, status: job.Status, stage: job.Stage, updated: job.UpdatedAt, finished: job.FinishedAt})
+		job.Status = AIJobStatusCancelled
+		job.Stage = AIJobStatusCancelled
+		job.FinishedAt = &finished
+		job.UpdatedAt = finished
+	}
+	s.queue = nil
+	if err := s.persistLocked(); err != nil {
+		s.queue = previousQueue
+		for _, state := range previous {
+			state.job.Status, state.job.Stage, state.job.UpdatedAt, state.job.FinishedAt = state.status, state.stage, state.updated, state.finished
+		}
+		return 0, err
+	}
+	for _, state := range previous {
+		s.publishLocked(*state.job)
+	}
+	return len(previous), nil
+}
+
+// DeleteHistory deletes one terminal task record without touching its analysis results.
+func (s *AIJobService) DeleteHistory(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	job := s.jobs[id]
+	if job == nil {
+		return ErrAIJobNotFound
+	}
+	if !isAIJobTerminal(job.Status) {
+		return ErrAIJobNotManageable
+	}
+	previousOrder := append([]string(nil), s.order...)
+	delete(s.jobs, id)
+	s.order = slices.DeleteFunc(s.order, func(value string) bool { return value == id })
+	if err := s.persistLocked(); err != nil {
+		s.jobs[id] = job
+		s.order = previousOrder
+		return err
+	}
+	return nil
+}
+
+// ClearHistory deletes terminal task records while preserving pending and active tasks.
+func (s *AIJobService) ClearHistory() (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	deleted := make(map[string]*AIJob)
+	keptOrder := make([]string, 0, len(s.order))
+	for _, id := range s.order {
+		job := s.jobs[id]
+		if job != nil && isAIJobTerminal(job.Status) {
+			deleted[id] = job
+			continue
+		}
+		keptOrder = append(keptOrder, id)
+	}
+	if len(deleted) == 0 {
+		return 0, nil
+	}
+	previousOrder := s.order
+	for id := range deleted {
+		delete(s.jobs, id)
+	}
+	s.order = keptOrder
+	if err := s.persistLocked(); err != nil {
+		for id, job := range deleted {
+			s.jobs[id] = job
+		}
+		s.order = previousOrder
+		return 0, err
+	}
+	return len(deleted), nil
+}
+
+func isAIJobTerminal(status string) bool {
+	return status == AIJobStatusCompleted || status == AIJobStatusFailed || status == AIJobStatusCancelled
 }
 
 // Retry 从失败或取消任务创建新的历史项，只重试失败记录与未提交尾段。
@@ -614,7 +811,7 @@ func (s *AIJobService) Retry(id string) (AIJob, error) {
 	if s.closed {
 		return AIJob{}, errors.New("AI job service is shutting down")
 	}
-	if s.activeID != "" {
+	if s.hasPendingJobsLocked() {
 		return AIJob{}, ErrAIJobActive
 	}
 	previous := s.jobs[id]
@@ -657,6 +854,7 @@ func (s *AIJobService) List() AIJobSnapshot {
 	result := AIJobSnapshot{
 		Settings: s.copySettingsLocked(),
 		Jobs:     make([]AIJob, 0, len(s.order)),
+		Queue:    append([]string{}, s.queue...),
 		Modules:  s.modulesLocked(),
 	}
 	for index := len(s.order) - 1; index >= 0; index-- {
@@ -941,14 +1139,34 @@ func (s *AIJobService) StartPending() {
 	if s.closed || s.activeID != "" {
 		return
 	}
-	for _, id := range s.order {
-		job := s.jobs[id]
-		if job != nil && job.Status == AIJobStatusPending {
-			s.activeID = id
-			s.launchLocked(id)
-			return
+	queue := s.queue
+	if len(queue) == 0 {
+		for _, id := range s.order {
+			if job := s.jobs[id]; job != nil && job.Status == AIJobStatusPending {
+				s.queue = append(s.queue, id)
+			}
 		}
+		queue = s.queue
 	}
+	if len(queue) == 0 {
+		return
+	}
+	id := queue[0]
+	job := s.jobs[id]
+	if job == nil || job.Status != AIJobStatusPending {
+		s.queue = slices.Delete(s.queue, 0, 1)
+		_ = s.persistLocked()
+		return
+	}
+	previousQueue := append([]string(nil), s.queue...)
+	s.queue = slices.Delete(s.queue, 0, 1)
+	s.activeID = id
+	if err := s.persistLocked(); err != nil {
+		s.queue = previousQueue
+		s.activeID = ""
+		return
+	}
+	s.launchLocked(id)
 }
 
 // StartScheduler 启动本地时钟调度器；服务关闭或 context 取消时退出。
@@ -1628,7 +1846,7 @@ func (s *AIJobService) finishJob(id, status, stage, message string) {
 
 func (s *AIJobService) scheduleTick(now time.Time) {
 	s.mu.Lock()
-	if s.closed || s.activeID != "" || !dailyScheduleDue(s.settings, now) {
+	if s.closed || s.hasPendingJobsLocked() || !dailyScheduleDue(s.settings, now) {
 		s.mu.Unlock()
 		return
 	}
@@ -1658,12 +1876,13 @@ func (s *AIJobService) scheduleTick(now time.Time) {
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.closed || s.activeID != "" || !dailyScheduleDue(s.settings, now) || !slices.Equal(s.settings.DailyModules, modules) {
+	if s.closed || s.hasPendingJobsLocked() || !dailyScheduleDue(s.settings, now) || !slices.Equal(s.settings.DailyModules, modules) {
 		return
 	}
 	today := now.In(time.Local).Format("2006-01-02")
 	previousDate := s.settings.LastScheduledDate
 	previousOrderLength := len(s.order)
+	previousQueue := append([]string(nil), s.queue...)
 	created := make([]string, 0, len(readyModules))
 	for _, moduleType := range readyModules {
 		if _, installed := s.analyzers[moduleType]; !installed {
@@ -1675,6 +1894,9 @@ func (s *AIJobService) scheduleTick(now time.Time) {
 		s.order = append(s.order, job.ID)
 		created = append(created, job.ID)
 	}
+	if len(created) > 1 {
+		s.queue = append(s.queue, created[1:]...)
+	}
 	s.settings.LastScheduledDate = today
 	if err := s.persistLocked(); err != nil {
 		s.settings.LastScheduledDate = previousDate
@@ -1682,6 +1904,7 @@ func (s *AIJobService) scheduleTick(now time.Time) {
 			delete(s.jobs, id)
 		}
 		s.order = s.order[:previousOrderLength]
+		s.queue = previousQueue
 		return
 	}
 	if len(created) > 0 {
@@ -1844,6 +2067,37 @@ func (s *AIJobService) loadState() error {
 		s.jobs[job.ID] = &copy
 		s.order = append(s.order, job.ID)
 	}
+	if state.Queue == nil {
+		for _, id := range s.order {
+			if job := s.jobs[id]; job != nil && job.Status == AIJobStatusPending {
+				s.queue = append(s.queue, id)
+			}
+		}
+	} else {
+		seen := make(map[string]struct{}, len(state.Queue))
+		for _, id := range state.Queue {
+			job := s.jobs[id]
+			if job == nil || job.Status != AIJobStatusPending {
+				continue
+			}
+			if _, exists := seen[id]; exists {
+				continue
+			}
+			seen[id] = struct{}{}
+			s.queue = append(s.queue, id)
+		}
+		activePending := make([]string, 0, len(s.order))
+		for _, id := range s.order {
+			job := s.jobs[id]
+			if job == nil || job.Status != AIJobStatusPending {
+				continue
+			}
+			if _, exists := seen[id]; !exists {
+				activePending = append(activePending, id)
+			}
+		}
+		s.queue = append(activePending, s.queue...)
+	}
 	if settingsChanged {
 		return s.persistLocked()
 	}
@@ -1872,6 +2126,7 @@ func (s *AIJobService) recoverInterruptedJobs() {
 			job.Stage = "pending"
 			job.CurrentResourceID = ""
 			job.UpdatedAt = s.now()
+			s.queue = append([]string{id}, s.queue...)
 			changed = true
 		}
 		if job.Status == AIJobStatusPaused && s.activeID == "" {
@@ -1955,6 +2210,7 @@ func (s *AIJobService) persistLocked() error {
 	state := aiJobDiskState{
 		Version:  aiJobStoreVersion,
 		Settings: s.settings,
+		Queue:    append([]string(nil), s.queue...),
 		Jobs:     make([]AIJob, 0, len(s.order)),
 	}
 	for _, id := range s.order {
