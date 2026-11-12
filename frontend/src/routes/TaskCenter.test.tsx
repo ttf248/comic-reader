@@ -288,19 +288,17 @@ describe("任务中心", () => {
     });
   });
 
-  it("按编号区块呈现状态、等待队列、每日计划、任务记录与本机存储", async () => {
+  it("按编号区块呈现运行、任务记录、每日计划与本机存储", async () => {
     renderCenter();
 
-    expect(await screen.findByText("状态")).toBeInTheDocument();
-    expect(screen.getByText("等待队列")).toBeInTheDocument();
-    expect(screen.getByText("每日计划")).toBeInTheDocument();
+    expect(await screen.findByText("运行")).toBeInTheDocument();
     expect(screen.getByText("任务记录")).toBeInTheDocument();
+    expect(screen.getByText("每日计划")).toBeInTheDocument();
     expect(screen.getByText("本机存储")).toBeInTheDocument();
     expect(screen.getByText("01")).toBeInTheDocument();
     expect(screen.getByText("02")).toBeInTheDocument();
     expect(screen.getByText("03")).toBeInTheDocument();
     expect(screen.getByText("04")).toBeInTheDocument();
-    expect(screen.getByText("05")).toBeInTheDocument();
   });
 
   it("运行中显示阶段、进度口径、速度与预计剩余，并支持暂停", async () => {
@@ -326,17 +324,23 @@ describe("任务中心", () => {
     renderCenter();
 
     expect(await screen.findByText("队列空闲")).toBeInTheDocument();
-    expect(
-      screen.getByRole("option", { name: "照片元数据" }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("未安装")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "全量分析" }));
+    const moduleGroup = within(screen.getByRole("group", { name: "分析模块" }));
+    expect(moduleGroup.getByRole("button", { name: "照片元数据" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    expect(moduleGroup.getByRole("button", { name: "向量索引" })).toHaveAttribute(
+      "title",
+      expect.stringContaining("未安装"),
+    );
+    fireEvent.click(screen.getByRole("radio", { name: "全量" }));
+    fireEvent.click(screen.getByRole("button", { name: "开始分析" }));
     await waitFor(() =>
       expect(aiJobsApi.start).toHaveBeenCalledWith("metadata", "full"),
     );
   });
 
-  it("只有等待任务而无活动任务时不显示空闲启动入口", async () => {
+  it("只有等待任务时说明队列等待中并列出队列", async () => {
     const pendingJob: AIJob = {
       ...currentJob,
       id: "job-pending",
@@ -353,10 +357,8 @@ describe("任务中心", () => {
     });
     renderCenter();
 
-    expect(await screen.findByText("等待队列待启动")).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "全量分析" }),
-    ).not.toBeInTheDocument();
+    expect(await screen.findByText("队列等待中 · 1 项")).toBeInTheDocument();
+    expect(screen.getByText("接下来 · 1 项")).toBeInTheDocument();
     expect(screen.getAllByTestId("task-queue-row")).toHaveLength(1);
   });
 
@@ -371,9 +373,7 @@ describe("任务中心", () => {
     expect(
       screen.getByRole("link", { name: "服务设置" }),
     ).toHaveAttribute("href", "/settings");
-    fireEvent.change(screen.getByRole("combobox", { name: "全部任务模式" }), {
-      target: { value: "full" },
-    });
+    fireEvent.click(screen.getByRole("radio", { name: "全量" }));
     fireEvent.click(screen.getByRole("button", { name: "按序启动全部任务" }));
     await waitFor(() =>
       expect(aiJobsApi.startAll).toHaveBeenCalledWith("full"),
@@ -480,7 +480,7 @@ describe("任务中心", () => {
     renderCenter();
 
     fireEvent.click(
-      await screen.findByRole("button", { name: "清空等待队列" }),
+      await screen.findByRole("button", { name: "清空队列" }),
     );
     expect(confirm).toHaveBeenCalledWith(
       expect.stringContaining("当前任务不会受影响"),
@@ -586,10 +586,14 @@ describe("任务中心", () => {
     renderCenter();
 
     await screen.findByText("队列空闲");
-    fireEvent.change(screen.getByRole("combobox", { name: "分析模块" }), {
-      target: { value: "embedding" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "全量生成向量" }));
+    fireEvent.click(
+      within(screen.getByRole("group", { name: "分析模块" })).getByRole(
+        "button",
+        { name: "向量索引" },
+      ),
+    );
+    fireEvent.click(screen.getByRole("radio", { name: "全量" }));
+    fireEvent.click(screen.getByRole("button", { name: "开始分析" }));
     await waitFor(() =>
       expect(aiJobsApi.start).toHaveBeenCalledWith("embedding", "full"),
     );
@@ -653,22 +657,19 @@ describe("任务中心", () => {
     renderCenter();
 
     await screen.findByText("队列空闲");
-    fireEvent.change(screen.getByRole("combobox", { name: "分析模块" }), {
-      target: { value: "ocr" },
-    });
+    const moduleGroup = within(screen.getByRole("group", { name: "分析模块" }));
+    fireEvent.click(moduleGroup.getByRole("button", { name: "文字识别" }));
     expect(await screen.findByText(/OCR 识别照片中的文字/)).toBeInTheDocument();
     expect(
       screen.getByText("文字识别已就绪 · rapidocr-v1"),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "全量识别文字" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "开始分析" })).toBeEnabled();
 
-    fireEvent.change(screen.getByRole("combobox", { name: "分析模块" }), {
-      target: { value: "face" },
-    });
+    fireEvent.click(moduleGroup.getByRole("button", { name: "人脸识别" }));
     expect(
       await screen.findByText(/检测照片中的人脸并生成本机特征向量/),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "全量识别人脸" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "开始分析" })).toBeEnabled();
   });
 
   it("每日计划用开关与时间输入，保存后写回设置", async () => {
@@ -711,7 +712,11 @@ describe("任务中心", () => {
     });
     renderCenter();
 
-    fireEvent.click(await screen.findByRole("checkbox", { name: "向量索引" }));
+    fireEvent.click(
+      within(
+        await screen.findByRole("group", { name: "运行模块" }),
+      ).getByRole("button", { name: "向量索引" }),
+    );
     fireEvent.click(screen.getByRole("button", { name: "保存计划" }));
     await waitFor(() =>
       expect(aiJobsApi.updateSettings).toHaveBeenCalledWith({
@@ -742,7 +747,10 @@ describe("任务中心", () => {
     });
     renderCenter();
 
-    const faceModule = await screen.findByRole("checkbox", {
+    const planGroup = within(
+      await screen.findByRole("group", { name: "运行模块" }),
+    );
+    const faceModule = await planGroup.findByRole("button", {
       name: "人脸识别",
     });
     expect(faceModule).toBeDisabled();

@@ -105,6 +105,30 @@ export function taskModuleLabel(type: AIJob["type"]): string {
   }
 }
 
+/** 模块没装好时的原因说明。 */
+export function moduleReasonLabel(reason: string): string {
+  switch (reason) {
+    case "python_runtime_unavailable":
+      return "Python 环境未就绪";
+    case "ocr_dependencies_missing":
+      return "缺少 OCR 依赖";
+    case "ocr_dependency_version_mismatch":
+      return "OCR 依赖版本不匹配";
+    case "ocr_model_load_failed":
+      return "OCR 模型加载失败";
+    case "face_dependencies_missing":
+      return "缺少人脸依赖";
+    case "face_model_missing_or_checksum_invalid":
+      return "人脸权重缺失或校验失败";
+    case "face_model_load_failed":
+      return "人脸模型加载失败";
+    case "runtime_status_not_checked":
+      return "正在检查本机环境";
+    default:
+      return "未安装";
+  }
+}
+
 export function taskTitle(job: AIJob): string {
   return `${job.scheduled ? "每日" : "手动"} ${taskModuleLabel(job.type)}`;
 }

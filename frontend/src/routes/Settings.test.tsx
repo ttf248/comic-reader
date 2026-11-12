@@ -371,5 +371,7 @@ it("设置页不再展示模型、路径与派生缓存占用", async () => {
 
   // 设置页仍然保留它自己的东西。
   expect(screen.getByText("媒体库索引")).toBeInTheDocument();
-  expect(screen.getByText("关于")).toBeInTheDocument();
+  expect(screen.getByRole("heading", { name: "关于" })).toBeInTheDocument();
+  // 分区导航与分区标题同名，但导航是按钮、标题是标题。
+  expect(screen.getByRole("button", { name: "关于" })).toBeInTheDocument();
 });

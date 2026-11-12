@@ -226,24 +226,29 @@ describe("本机存储", () => {
   it("汇总数字给出合计、媒体缓存、分析产物与模型权重", async () => {
     renderSection();
 
-    expect(await screen.findByText("合计")).toBeInTheDocument();
+    expect(await screen.findByText(/合计 · \d+ 个文件/)).toBeInTheDocument();
     // 4000（媒体）+ 2048（分析产物）+ 1024（模型）= 7072 字节。
     expect(screen.getByText("6.9 KB")).toBeInTheDocument();
     expect(screen.getByText("AI 分析产物")).toBeInTheDocument();
     expect(screen.getByText("AI 模型权重")).toBeInTheDocument();
     expect(
-      screen.getByRole("heading", { name: "媒体派生缓存" }),
+      screen.getByRole("heading", { name: "派生缓存" }),
     ).toBeInTheDocument();
   });
 
   it("每个模块列出模型文件与产物目录，路径相对缓存根", async () => {
     renderSection();
 
+    // 模块行给出模型文件名，完整相对路径在路径明细里。
+    expect(await screen.findByText("clip_cn_vit-b-16.pt")).toBeInTheDocument();
     expect(
-      await screen.findByText("derived/ai/models/clip_cn_vit-b-16.pt"),
+      screen.getByText(
+        "derived/metadata/ocr、derived/ai/ocr-search-index.json",
+      ),
     ).toBeInTheDocument();
-    expect(screen.getByText("derived/metadata/ocr")).toBeInTheDocument();
-    expect(screen.getByText("derived/ai/ocr-search-index.json")).toBeInTheDocument();
+    expect(
+      screen.getByText("derived/ai/models/clip_cn_vit-b-16.pt"),
+    ).toBeInTheDocument();
     expect(screen.getByText("state/ai_jobs.json")).toBeInTheDocument();
   });
 
@@ -251,10 +256,10 @@ describe("本机存储", () => {
     renderSection();
 
     expect(
-      await screen.findByText("位于 Python 环境内，路径相对该环境"),
+      await screen.findByText(/detector\.onnx（位于 Python 环境内）/),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("使用 Go 内置 EXIF/GPS 解析器，无需额外模型文件。"),
+      screen.getByText("使用 Go 内置 EXIF/GPS 解析器，无需权重。"),
     ).toBeInTheDocument();
   });
 

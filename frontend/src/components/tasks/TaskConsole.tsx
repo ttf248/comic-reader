@@ -17,12 +17,13 @@ import {
   taskStageLabel,
   taskStatusLabel,
 } from "../../utils/taskFormat";
+import ModuleChips from "./ModuleChips";
+import Segmented from "../common/Segmented";
 import TaskStatusDot from "./TaskStatusDot";
 
 interface Props {
   /** 当前活动任务；没有时是空闲态。 */
   active?: AIJob;
-  queueCount: number;
   /** 最近一次已结束的任务，用来给空闲态一点上下文。 */
   lastJob?: AIJob;
   loading: boolean;
@@ -30,6 +31,8 @@ interface Props {
   busy: boolean;
   modules: AIJobModule[];
   peopleEnabled: boolean;
+  /** 队列里等待的任务数；为空时是真正的空闲。 */
+  queuedCount: number;
   embeddingStatus?: AIWorkerStatus;
   embeddingStatusLoading: boolean;
   onStart: (type: AnalysisType, mode: AnalysisMode) => void;
@@ -45,12 +48,12 @@ interface Props {
  */
 export default function TaskConsole({
   active,
-  queueCount,
   lastJob,
   loading,
   busy,
   modules,
   peopleEnabled,
+  queuedCount,
   embeddingStatus,
   embeddingStatusLoading,
   onStart,
@@ -63,7 +66,8 @@ export default function TaskConsole({
   );
   const [selectedModule, setSelectedModule] =
     useState<AnalysisType>("metadata");
-  const [allTasksMode, setAllTasksMode] = useState<AnalysisMode>("incremental");
+  const [mode, setMode] = useState<AnalysisMode>("incremental");
+
   useEffect(() => {
     if (!runnableModules.some((module) => module.type === selectedModule)) {
       setSelectedModule(runnableModules[0]?.type ?? "metadata");
@@ -80,21 +84,6 @@ export default function TaskConsole({
     );
   }
 
-  if (!active && queueCount > 0) {
-    return (
-      <div className="rounded-xl border border-border bg-bg-elevated px-5 py-6 shadow-xs sm:px-6">
-        <div className="flex items-center gap-3">
-          <TaskStatusDot status="pending" />
-          <span className="text-label font-medium text-fg">等待队列待启动</span>
-        </div>
-        <p className="mt-3 max-w-2xl text-body leading-relaxed text-fg-muted">
-          当前没有正在执行的任务，队列中还有 {formatCount(queueCount)}{" "}
-          项。媒体库准备就绪后会按队列顺序继续；你可以在下方调整顺序或取消任务。
-        </p>
-      </div>
-    );
-  }
-
   if (!active) {
     const isEmbedding = selectedModule === "embedding";
     const embeddingReady = Boolean(
@@ -103,123 +92,104 @@ export default function TaskConsole({
     const selectedName =
       installedModules.find((module) => module.type === selectedModule)?.name ??
       "照片元数据";
-    const description = moduleDescription(selectedModule);
-    const startLabels = moduleStartLabels(selectedModule);
+    const selectedModuleVersion =
+      installedModules.find((module) => module.type === selectedModule)
+        ?.version ?? "";
+    const canStart =
+      !busy &&
+      !(isEmbedding && !embeddingReady) &&
+      !(selectedModule === "face" && !peopleEnabled);
     return (
-      <div className="rounded-xl border border-border bg-bg-elevated px-5 py-6 shadow-xs sm:px-6">
-        <div className="flex items-center gap-3">
-          <TaskStatusDot status="idle" />
-          <span className="text-label font-medium text-fg">队列空闲</span>
-        </div>
-        <p className="mt-3 max-w-2xl text-body leading-relaxed text-fg-muted">
-          {description}
-        </p>
-        <label className="mt-5 flex flex-wrap items-center gap-3 text-meta text-fg-muted">
-          <span>分析模块</span>
-          <select
-            aria-label="分析模块"
-            value={selectedModule}
-            disabled={busy || installedModules.length < 2}
-            onChange={(event) =>
-              setSelectedModule(event.target.value as AnalysisType)
-            }
-            className="rounded-md border border-border bg-bg-elevated px-3 py-2 text-body text-fg disabled:opacity-60"
-          >
-            {installedModules.map((module) => (
-              <option
-                key={module.type}
-                value={module.type}
-                disabled={module.type === "face" && !peopleEnabled}
-              >
-                {module.name}
-                {module.type === "face" && !peopleEnabled ? "（需先启用）" : ""}
-              </option>
-            ))}
-          </select>
-          {isEmbedding && embeddingStatus?.gpuName ? (
-            <span className="text-fg-subtle">{embeddingStatus.gpuName}</span>
+      <div className="overflow-hidden rounded-xl border border-border bg-bg-elevated shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border-faint px-5 py-4 sm:px-6">
+          <div className="flex items-center gap-3">
+            <TaskStatusDot status={queuedCount > 0 ? "pending" : "idle"} />
+            <span className="text-label font-medium text-fg">
+              {queuedCount > 0 ? `队列等待中 · ${queuedCount} 项` : "队列空闲"}
+            </span>
+          </div>
+          {lastJob ? (
+            <span className="text-meta text-fg-subtle">
+              上次运行 {formatDateTime(lastJob.createdAt)} ·{" "}
+              {taskModeLabel(lastJob.mode)} · 完成{" "}
+              {formatCount(lastJob.completed ?? lastJob.processed)} 张
+            </span>
           ) : null}
-        </label>
-        {isEmbedding ? (
-          <EmbeddingRuntimeStatus
-            status={embeddingStatus}
-            loading={embeddingStatusLoading}
-          />
-        ) : selectedModule === "ocr" || selectedModule === "face" ? (
-          <ImageModuleRuntimeStatus
-            moduleType={selectedModule}
-            status={embeddingStatus}
-            loading={embeddingStatusLoading}
-          />
-        ) : null}
-        <div className="mt-5 flex flex-wrap gap-3">
-          <button
-            type="button"
-            className="btn btn-outline"
-            disabled={
-              busy ||
-              (isEmbedding && !embeddingReady) ||
-              (selectedModule === "face" && !peopleEnabled)
-            }
-            onClick={() => onStart(selectedModule, "incremental")}
-          >
-            {startLabels.incremental}
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={
-              busy ||
-              (isEmbedding && !embeddingReady) ||
-              (selectedModule === "face" && !peopleEnabled)
-            }
-            onClick={() => onStart(selectedModule, "full")}
-          >
-            {startLabels.full}
-          </button>
         </div>
-        <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-border-faint pt-5">
-          <label className="flex items-center gap-3 text-meta text-fg-muted">
-            <span>全部任务模式</span>
-            <select
-              aria-label="全部任务模式"
-              value={allTasksMode}
+
+        <div className="grid gap-5 px-5 py-5 sm:px-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:gap-10">
+          <div className="min-w-0">
+            <p className="max-w-2xl text-body leading-relaxed text-fg-muted">
+              {moduleDescription(selectedModule)}
+            </p>
+
+            <div className="mt-5">
+              <div className="flex items-baseline justify-between gap-3">
+                <p className="text-meta text-fg-subtle">分析模块</p>
+                {selectedModuleVersion ? (
+                  <p className="break-all font-mono text-meta text-fg-subtle">
+                    {selectedModuleVersion}
+                  </p>
+                ) : null}
+              </div>
+              <div className="mt-2">
+                <ModuleChips
+                  modules={modules}
+                  selected={[selectedModule]}
+                  onToggle={(type) => setSelectedModule(type)}
+                  disabled={busy}
+                  locked={peopleEnabled ? [] : ["face"]}
+                />
+              </div>
+            </div>
+
+            <p className="mt-4 text-meta text-fg-subtle">
+              {modeHint(selectedModule, mode, selectedName)}
+            </p>
+
+            {isEmbedding ? (
+              <EmbeddingRuntimeStatus
+                status={embeddingStatus}
+                loading={embeddingStatusLoading}
+              />
+            ) : selectedModule === "ocr" || selectedModule === "face" ? (
+              <ImageModuleRuntimeStatus
+                moduleType={selectedModule}
+                status={embeddingStatus}
+                loading={embeddingStatusLoading}
+              />
+            ) : null}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-3 lg:justify-end lg:border-l lg:border-border-faint lg:pl-10">
+            <Segmented
+              label="处理方式"
+              value={mode}
+              onChange={setMode}
               disabled={busy}
-              onChange={(event) =>
-                setAllTasksMode(event.target.value as AnalysisMode)
-              }
-              className="rounded-md border border-border bg-bg-elevated px-3 py-2 text-body text-fg disabled:opacity-60"
+              options={[
+                { value: "incremental", label: "增量" },
+                { value: "full", label: "全量" },
+              ]}
+            />
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={canStart === false}
+              onClick={() => onStart(selectedModule, mode)}
             >
-              <option value="incremental">增量</option>
-              <option value="full">全量</option>
-            </select>
-          </label>
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={busy || installedModules.length === 0}
-            onClick={() => onStartAll(allTasksMode)}
-          >
-            按序启动全部任务
-          </button>
+              开始分析
+            </button>
+            <button
+              type="button"
+              className="btn btn-outline"
+              disabled={busy || installedModules.length === 0}
+              onClick={() => onStartAll(mode)}
+            >
+              按序启动全部任务
+            </button>
+          </div>
         </div>
-        <p className="mt-3 text-meta leading-relaxed text-fg-subtle">
-          按照片元数据、向量索引、文字识别、人脸识别的顺序执行；未就绪的模块会跳过。增量模式只处理新增或变更图片。
-        </p>
-        <p className="mt-3 text-meta leading-relaxed text-fg-subtle">
-          {isEmbedding
-            ? `增量更新只处理新增、修改或模型版本变化的图片；全量会重新生成当前媒体库的${selectedName}结果。`
-            : selectedModule === "metadata"
-              ? "增量只处理新增、修改或解析器更新的图片；全量重新解析当前媒体库的全部图片。"
-              : `增量只处理新增或变更图片；全量重新运行${selectedName}分析。`}
-        </p>
-        {lastJob ? (
-          <p className="mt-5 border-t border-border-faint pt-4 text-meta text-fg-subtle">
-            上次运行 {formatDateTime(lastJob.createdAt)} ·{" "}
-            {taskModeLabel(lastJob.mode)} · 完成{" "}
-            {formatCount(lastJob.completed ?? lastJob.processed)} 张
-          </p>
-        ) : null}
       </div>
     );
   }
@@ -232,8 +202,8 @@ export default function TaskConsole({
     active.status === "failed";
 
   return (
-    <div className="rounded-xl border border-border bg-bg-elevated shadow-xs">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-faint px-5 py-4 sm:px-6">
+    <div className="overflow-hidden rounded-xl border border-border bg-bg-elevated shadow-xs">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3 border-b border-border-faint px-5 py-4 sm:px-6">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <TaskStatusDot status={active.status} />
           <span className="text-label font-medium text-fg">
@@ -367,30 +337,30 @@ function jobModuleName(type: AnalysisType, modules: AIJobModule[]): string {
 function moduleDescription(type: AnalysisType): string {
   switch (type) {
     case "embedding":
-      return "使用本机 Chinese-CLIP 为照片建立中文语义向量，可按描述搜索，也能按照片查找相似画面。向量只写入本机派生索引。";
+      return "用本机 Chinese-CLIP 为照片建立中文语义向量，可按描述搜索，也能按照片查找相似画面。";
     case "ocr":
-      return "使用本机 OCR 识别照片中的文字，并保存识别内容与文字位置，结果可在图片详情中查看。";
+      return "用本机 OCR 识别照片中的文字，结果可在图片详情中查看。";
     case "face":
-      return "检测照片中的人脸并生成本机特征向量，可在图片详情中查找相似人脸；不会推断或标注真实姓名。";
+      return "检测照片中的人脸并生成本机特征向量，可查找相似人脸；不会推断或标注真实姓名。";
     default:
       return "读取照片拍摄时间、相机信息与 GPS 坐标，结果只写进本机的派生缓存。";
   }
 }
 
-function moduleStartLabels(type: AnalysisType): {
-  incremental: string;
-  full: string;
-} {
-  switch (type) {
-    case "embedding":
-      return { incremental: "增量更新向量", full: "全量生成向量" };
-    case "ocr":
-      return { incremental: "增量识别文字", full: "全量识别文字" };
-    case "face":
-      return { incremental: "增量识别人脸", full: "全量识别人脸" };
-    default:
-      return { incremental: "增量分析", full: "全量分析" };
+/** 一句话说明这次会处理多少 —— 不另起一段解释文字。 */
+function modeHint(
+  type: AnalysisType,
+  mode: AnalysisMode,
+  moduleName: string,
+): string {
+  if (mode === "full") {
+    return type === "metadata"
+      ? "重新解析当前媒体库的全部图片"
+      : `重新运行${moduleName}分析`;
   }
+  return type === "metadata"
+    ? "只处理新增、修改或解析器更新的图片"
+    : "只处理新增或变更的图片";
 }
 
 function EmbeddingRuntimeStatus({
@@ -417,7 +387,7 @@ function EmbeddingRuntimeStatus({
       ? `${status.coverage.indexed.toLocaleString()} / ${status.coverage.total.toLocaleString()} 张已建向量`
       : "尚无可索引图片";
   return (
-    <div className="mt-4 grid gap-2 rounded-lg border border-border-faint bg-bg-subtle px-4 py-3 text-meta sm:grid-cols-2">
+    <div className="mt-3 grid gap-2 rounded-lg border border-border-faint bg-bg-subtle px-4 py-3 text-meta sm:grid-cols-2">
       <p className="text-fg-muted">
         运行设备：
         <span className="text-fg">
@@ -497,7 +467,7 @@ function moduleUnavailableMessage(code?: string): string {
     case "face_model_missing_or_checksum_invalid":
       return "人脸权重缺失或校验失败，请运行 backend/aiworker/download-model.ps1。";
     case "face_model_load_failed":
-      return "人脸模型加载失败，请重新运行安装脚本并查看终端错误。";
+      return "人脸模型加载失败，请运行 backend/aiworker/setup.ps1 并重启应用。";
     default:
       return "本机识别运行环境未就绪，请运行 backend/aiworker/setup.ps1 并重启应用。";
   }

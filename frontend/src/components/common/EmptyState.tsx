@@ -11,6 +11,13 @@ interface Props {
    * 再撑 52vh，会把下面的东西推到首屏之外。
    */
   dense?: boolean;
+  /**
+   * 行内模式：一行文字，放在卡片里。
+   *
+   * 「还没有任务」这种状态不值得占一屏 —— 之前三个空状态各占两百多像素，
+   * 页面一半的篇幅是空的。行内模式让空态退回它该有的分量：一句话。
+   */
+  inline?: boolean;
 }
 
 // 居中空态：图标 + 标题 + 描述 + 可选操作。
@@ -20,7 +27,17 @@ export default function EmptyState({
   action,
   icon,
   dense = false,
+  inline = false,
 }: Props) {
+  if (inline) {
+    return (
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-5 py-4 text-meta text-fg-subtle sm:px-6">
+        {icon ? <span className="shrink-0 text-fg-muted">{icon}</span> : null}
+        <span className="text-fg-muted">{title}</span>
+        {description ? <span>{description}</span> : null}
+      </div>
+    );
+  }
   return (
     <div
       className={`page-shell empty-state flex flex-col items-center justify-center py-14 text-center fade-up ${

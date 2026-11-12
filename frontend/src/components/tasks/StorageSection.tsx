@@ -1,12 +1,16 @@
-import { useStoragePaths, useStorageUsage, useMediaCache } from "../../hooks/useStorage";
+import {
+  useMediaCache,
+  useStoragePaths,
+  useStorageUsage,
+} from "../../hooks/useStorage";
 import StorageMediaCache from "./StorageMediaCache";
 import StorageModuleGrid from "./StorageModuleGrid";
 import StoragePaths from "./StoragePaths";
-import StorageSummaryTiles from "./StorageSummaryTiles";
+import StorageUsage from "./StorageUsage";
 import { RefreshIcon } from "../common/Icon";
 
 /**
- * 05 本机存储：派生缓存、AI 模型与分析产物、以及它们各自的位置。
+ * 本机存储：派生缓存、AI 模型与分析产物、以及它们各自的位置。
  *
  * 跑一次任务之后磁盘涨了多少、涨在哪、产物落在哪 —— 这些问题的答案都在
  * 这一段里，不必再去设置页找。
@@ -23,23 +27,23 @@ export default function StorageSection() {
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {usage.isLoading ? (
         <div
           role="status"
-          className="rounded-xl border border-border bg-bg-elevated p-5 text-body text-fg-muted"
+          className="rounded-xl border border-border bg-bg-elevated p-4 text-body text-fg-muted"
         >
           正在读取本机存储信息…
         </div>
       ) : usage.isError ? (
         <div
           role="alert"
-          className="rounded-xl border border-danger/30 bg-danger/5 p-5 text-body text-fg-muted"
+          className="rounded-xl border border-danger/30 bg-danger/5 p-4 text-body text-fg-muted"
         >
           本机存储信息读取失败，请检查后端是否运行，然后刷新页面。
         </div>
       ) : usage.data ? (
-        <StorageSummaryTiles
+        <StorageUsage
           mediaBytes={stats?.mediaBytes ?? 0}
           mediaFileCount={stats?.mediaFileCount ?? 0}
           outputBytes={usage.data.summary.outputBytes}
@@ -49,6 +53,7 @@ export default function StorageSection() {
         />
       ) : null}
 
+      <div className="grid gap-3 xl:grid-cols-2 xl:items-start">
       <StorageMediaCache
         loading={media.loading}
         refreshing={media.refreshing}
@@ -70,9 +75,11 @@ export default function StorageSection() {
       />
 
       {usage.data ? <StorageModuleGrid modules={usage.data.modules} /> : null}
+      </div>
 
       <StoragePaths
         relative={usage.data?.paths}
+        modules={usage.data?.modules}
         absolute={paths.data}
         absoluteError={paths.error}
         onRetryAbsolute={() => void paths.refetch()}
@@ -81,7 +88,7 @@ export default function StorageSection() {
       <div className="flex justify-end">
         <button
           type="button"
-          className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border-faint px-2.5 text-meta text-fg-muted transition-colors hover:bg-bg-subtle disabled:opacity-50"
+          className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border-faint px-2.5 text-meta text-fg-muted transition-colors hover:bg-bg-subtle disabled:opacity-50"
           onClick={refreshAll}
           disabled={usage.isFetching || media.refreshing}
         >

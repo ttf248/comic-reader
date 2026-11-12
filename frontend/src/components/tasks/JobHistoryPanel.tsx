@@ -12,7 +12,7 @@ import {
   taskTitle,
 } from "../../utils/taskFormat";
 import EmptyState from "../common/EmptyState";
-import { ChevronDownIcon, TasksIcon } from "../common/Icon";
+import { ChevronDownIcon } from "../common/Icon";
 import FailureGroupList from "./FailureGroupList";
 import JobOutputSummary from "./JobOutputSummary";
 import TaskStatusDot from "./TaskStatusDot";
@@ -76,14 +76,9 @@ export default function JobHistoryPanel({
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-bg-elevated shadow-xs">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-faint px-5 py-4 sm:px-6">
-        <div>
-          <p className="text-label font-medium text-fg">
-            已结束记录 · {jobs.length} 项
-          </p>
-          <p className="mt-1 text-meta text-fg-subtle">
-            删除记录只清理任务日志，不会删除已生成的元数据、向量、文字或人脸结果。
-          </p>
-        </div>
+        <p className="min-w-0 text-meta text-fg-subtle">
+          删除记录只清理任务日志，不会删除已生成的元数据、向量、文字或人脸结果。
+        </p>
         {jobs.length > 0 ? (
           <button
             type="button"
@@ -96,36 +91,35 @@ export default function JobHistoryPanel({
         ) : null}
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 border-b border-border-faint px-5 py-3 sm:px-6">
-        {HISTORY_FILTERS.map(({ value, label }) => (
-          <button
-            key={value}
-            type="button"
-            className={`btn btn-sm ${filter === value ? "btn-primary" : "btn-outline"}`}
-            aria-pressed={filter === value}
-            onClick={() => setFilter(value)}
-          >
-            {label}{" "}
-            <span className="ml-1 font-mono tabular-nums">{counts[value]}</span>
-          </button>
-        ))}
-      </div>
+      {jobs.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-2 border-b border-border-faint px-5 py-3 sm:px-6">
+          {HISTORY_FILTERS.map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              className={`btn btn-sm ${filter === value ? "btn-primary" : "btn-outline"}`}
+              aria-pressed={filter === value}
+              onClick={() => setFilter(value)}
+            >
+              {label}{" "}
+              <span className="ml-1 font-mono tabular-nums">{counts[value]}</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       {visibleJobs.length === 0 ? (
-        <div className="px-5 py-2 sm:px-6">
-          <EmptyState
-            title={
-              jobs.length === 0 ? "还没有已结束的任务" : "没有符合条件的记录"
-            }
-            description={
-              jobs.length === 0
-                ? "运行一次全量或增量分析后，耗时、产出和失败原因会显示在这里。"
-                : "选择其他状态查看任务记录。"
-            }
-            icon={<TasksIcon size={28} />}
-            dense
-          />
-        </div>
+        <EmptyState
+          inline
+          title={
+            jobs.length === 0 ? "还没有已结束的任务" : "没有符合条件的记录"
+          }
+          description={
+            jobs.length === 0
+              ? "运行一次分析后，耗时、产出和失败原因会显示在这里。"
+              : "选择其他状态查看任务记录。"
+          }
+        />
       ) : (
         <div className="divide-y divide-border-faint">
           {visibleJobs.map((job) => (

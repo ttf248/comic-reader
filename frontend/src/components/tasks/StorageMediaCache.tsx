@@ -1,6 +1,5 @@
-import { formatBytes, type SubUsage } from "../../api/cache";
+import { formatBytes } from "../../api/cache";
 import type { MediaCacheScope } from "../../hooks/useStorage";
-import SubUsageBadge from "../common/SubUsageBadge";
 import { RefreshIcon, TrashIcon } from "../common/Icon";
 import CacheRebuildPanel from "./CacheRebuildPanel";
 
@@ -24,6 +23,13 @@ interface Props {
   onClearAll: () => void;
 }
 
+interface SubUsage {
+  path: string;
+  bytes: number;
+  fileCount: number;
+  available: boolean;
+}
+
 const SCOPES: { scope: MediaCacheScope; label: string; key: keyof Props["sub"] }[] =
   [
     { scope: "thumbs", label: "缩略图", key: "thumbs" },
@@ -36,8 +42,8 @@ const SCOPES: { scope: MediaCacheScope; label: string; key: keyof Props["sub"] }
 /**
  * 媒体派生缓存：浏览图片时顺手算出来的那些中间产物。
  *
- * 它们可以随时重建，所以给每一类都留了单独清理的入口 —— 转码缓存涨到
- * 几十 GB 时，不必把缩略图一起清掉。
+ * 每一类一行，占用与清理按钮在同一行右侧 —— 之前是五张徽章，每张右上角
+ * 挂一个垃圾桶图标，图标挤在标签旁边，眼睛找不到哪个是哪个的。
  */
 export default function StorageMediaCache({
   loading,
@@ -53,85 +59,94 @@ export default function StorageMediaCache({
   onClearAll,
 }: Props) {
   return (
-    <section className="rounded-xl border border-border bg-bg-elevated shadow-xs">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-faint px-5 py-4 sm:px-6">
-        <div>
-          <h3 className="text-label font-medium text-fg">媒体派生缓存</h3>
-          <p className="mt-1 text-meta text-fg-subtle">
-            浏览与播放时算出来的中间产物，可以随时重建。
+    <section className="overflow-hidden rounded-xl border border-border bg-bg-elevated shadow-xs">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 border-b border-border-faint px-4 py-3">
+        <div className="min-w-0">
+          <h3 className="text-label font-medium text-fg">派生缓存</h3>
+          <p className="mt-0.5 text-meta tabular-nums text-fg-subtle">
+            {loading
+              ? "计算中…"
+              : totalBytes === undefined
+                ? "—"
+                : `${formatBytes(totalBytes)} · ${(totalFileCount ?? 0).toLocaleString()} 个文件`}
+            {scannedAt
+              ? ` · ${ttlSeconds && ttlSeconds > 0 ? `${ttlSeconds}s 内复用` : "已过期"}`
+              : ""}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <button
             type="button"
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border-faint px-2.5 text-meta text-fg-muted transition-colors hover:bg-bg-subtle disabled:opacity-50"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border-faint text-fg-muted transition-colors hover:bg-bg-subtle disabled:opacity-50"
             onClick={onRefresh}
             disabled={refreshing}
             title="重新扫描磁盘计算缓存占用"
+            aria-label="刷新派生缓存占用"
           >
             {refreshing ? (
               <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-fg-muted border-t-transparent" />
             ) : (
               <RefreshIcon size={11} />
             )}
-            <span>刷新</span>
           </button>
           <button
             type="button"
-            className="inline-flex h-8 items-center gap-1.5 rounded-md border border-danger/40 px-2.5 text-meta text-danger transition-colors hover:bg-danger/5 disabled:opacity-50"
+            className="inline-flex h-7 items-center gap-1 rounded-md border border-danger/40 px-2 text-meta text-danger transition-colors hover:bg-danger/5 disabled:opacity-50"
             onClick={onClearAll}
             disabled={clearing === "all"}
             title="清空全部派生缓存"
           >
-            <TrashIcon size={11} />
-            <span>{clearing === "all" ? "清空中…" : "一键全清"}</span>
+            <TrashIcon size={10} />
+            {clearing === "all" ? "清空中…" : "全清"}
           </button>
         </div>
       </div>
 
-      <div className="px-5 py-4 sm:px-6">
-        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 text-meta">
-          <span className="tabular-nums text-fg-muted">
-            {loading
-              ? "计算中…"
-              : totalBytes === undefined
-                ? "—"
-                : `${formatBytes(totalBytes)} · ${totalFileCount ?? 0} 个文件`}
-          </span>
-          {scannedAt ? (
-            <span className="whitespace-nowrap text-fg-subtle tabular-nums">
-              {ttlSeconds && ttlSeconds > 0
-                ? `${ttlSeconds}s 内复用 · 统计于 ${new Date(
-                    scannedAt,
-                  ).toLocaleString("zh-CN", { hour12: false })}`
-                : `统计于 ${new Date(scannedAt).toLocaleString("zh-CN", {
-                    hour12: false,
-                  })}`}
-            </span>
-          ) : null}
-        </div>
-
-        <div className="mt-3 grid w-full grid-cols-[repeat(auto-fit,minmax(112px,1fr))] gap-2 text-meta">
-          {SCOPES.map((item) => (
-            <SubUsageBadge
+      <ul className="divide-y divide-border-faint">
+        {SCOPES.map((item) => {
+          const entry = sub[item.key];
+          const canClear = entry.available && entry.bytes > 0;
+          return (
+            <li
               key={item.scope}
-              label={item.label}
-              sub={sub[item.key]}
-              onClear={() => onClear(item.scope)}
-              clearPending={clearing === item.scope}
-            />
-          ))}
-        </div>
+              className="flex items-center gap-3 px-4 py-2"
+            >
+              <span className="w-20 shrink-0 text-meta text-fg-muted">
+                {item.label}
+              </span>
+              <span className="min-w-0 flex-1 font-mono text-meta tabular-nums text-fg">
+                {entry.available ? formatBytes(entry.bytes) : "—"}
+              </span>
+              <span className="w-16 shrink-0 text-right text-meta tabular-nums text-fg-subtle">
+                {entry.available ? `${entry.fileCount.toLocaleString()} 个` : ""}
+              </span>
+              <button
+                type="button"
+                className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-fg-subtle transition-colors hover:bg-danger/10 hover:text-danger disabled:opacity-30"
+                disabled={!canClear || clearing === item.scope}
+                onClick={() => onClear(item.scope)}
+                title={canClear ? `清空 ${item.label} 缓存` : "暂无内容"}
+                aria-label={`清空 ${item.label} 缓存`}
+              >
+                {clearing === item.scope ? (
+                  <span className="inline-block h-2 w-2 animate-spin rounded-full border-2 border-fg-muted border-t-transparent" />
+                ) : (
+                  <TrashIcon size={10} />
+                )}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
 
-        <details className="group mt-4 border-t border-border-faint pt-4">
-          <summary className="cursor-pointer list-none text-meta text-fg-muted transition-colors hover:text-fg [&::-webkit-details-marker]:hidden">
-            重建渲染缓存（缩略图 / 预览图）
-          </summary>
-          <div className="mt-3">
-            <CacheRebuildPanel />
-          </div>
-        </details>
-      </div>
+      <details className="group border-t border-border-faint px-4 py-2.5">
+        <summary className="cursor-pointer list-none text-meta text-fg-muted transition-colors hover:text-fg [&::-webkit-details-marker]:hidden">
+          重建渲染缓存（缩略图 / 预览图）
+        </summary>
+        <div className="mt-3">
+          <CacheRebuildPanel />
+        </div>
+      </details>
     </section>
   );
 }

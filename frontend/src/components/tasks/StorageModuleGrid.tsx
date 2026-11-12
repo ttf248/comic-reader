@@ -6,90 +6,70 @@ interface Props {
 }
 
 /**
- * AI 模型与产物：每个分析模块一张卡。
+ * AI 模型与产物：每个分析模块一块。
  *
- * 卡片回答两个问题 —— 这个模块用哪个模型、模型多大；它跑完留下什么、
- * 落在哪、占多少。模型文件缺失时写「未找到」而不是把条目藏起来，
- * 用户要知道自己少装了什么。
+ * 之前每个模块是一张满宽大卡，模型文件路径、产物路径各占一行，四个模块
+ * 就是一千多像素的滚动条。这里压成三行：模块名与两个数字一行、模型文件
+ * 一行、产物路径一行 —— 要查的细节还在，但不占版面。
+ *
+ * 侧栏只有 360 像素，文件名再长也不断词：超出的部分用省略号收掉，
+ * 完整内容留在 title 里，断词断在 "onnx" 中间比省略号更难读。
  */
 export default function StorageModuleGrid({ modules }: Props) {
   if (modules.length === 0) return null;
   return (
-    <div className="grid gap-4 xl:grid-cols-2">
-      {modules.map((module) => (
-        <article
-          key={module.type}
-          className="min-w-0 rounded-xl border border-border bg-bg-elevated p-5 shadow-xs sm:p-6"
-        >
-          <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h3 className="text-label font-medium text-fg">{module.name}</h3>
-            <span className="font-mono text-meta tabular-nums text-fg-muted">
-              模型 {formatBytes(module.modelBytes)} · 产物{" "}
-              {formatBytes(module.outputBytes)}
-            </span>
-          </div>
-
-          <div className="mt-4">
-            <h4 className="text-meta font-medium text-fg-muted">模型文件</h4>
-            {module.modelFiles.length > 0 ? (
-              <ul className="mt-2 space-y-3">
-                {module.modelFiles.map((file) => (
-                  <li key={`${file.location}:${file.path}`} className="min-w-0">
-                    <div className="flex flex-wrap justify-between gap-x-4 gap-y-1 text-meta">
-                      <span className="text-fg">{file.name}</span>
-                      <span className="font-mono tabular-nums text-fg-muted">
-                        {file.exists ? formatBytes(file.sizeBytes) : "未找到"}
-                      </span>
-                    </div>
-                    <p className="mt-1 break-all font-mono text-meta leading-relaxed text-fg-subtle">
-                      {file.path}
-                    </p>
-                    {file.location === "python" ? (
-                      <p className="mt-0.5 text-meta text-fg-subtle">
-                        位于 Python 环境内，路径相对该环境
-                      </p>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            ) : module.modelLocation === "none" ? (
-              <p className="mt-2 text-meta leading-relaxed text-fg-subtle">
-                使用 Go 内置 EXIF/GPS 解析器，无需额外模型文件。
-              </p>
-            ) : (
-              <div className="mt-2">
-                {module.modelDirectory ? (
-                  <p className="break-all font-mono text-meta leading-relaxed text-fg-subtle">
-                    {module.modelDirectory}
-                  </p>
-                ) : null}
-                <p className="mt-1 text-meta text-warning">未发现模型文件</p>
+    <section className="overflow-hidden rounded-xl border border-border bg-bg-elevated shadow-xs">
+      <h3 className="border-b border-border-faint px-4 py-3 text-label font-medium text-fg">
+        AI 模型与产物
+      </h3>
+      <ul className="divide-y divide-border-faint">
+        {modules.map((module) => {
+          const modelNames = module.modelFiles
+            .map((file) => file.name)
+            .join("、");
+          const outputPaths = module.outputs
+            .map((output) => output.path)
+            .join("、");
+          return (
+            <li key={module.type} className="px-4 py-3">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                <span className="text-label font-medium text-fg">{module.name}</span>
+                <span className="font-mono text-meta tabular-nums text-fg-muted">
+                  模型 {formatBytes(module.modelBytes)} · 产物{" "}
+                  {formatBytes(module.outputBytes)}
+                </span>
               </div>
-            )}
-          </div>
 
-          <div className="mt-4 border-t border-border-faint pt-4">
-            <h4 className="text-meta font-medium text-fg-muted">分析产物</h4>
-            <ul className="mt-2 space-y-3">
-              {module.outputs.map((output) => (
-                <li key={`${output.kind}:${output.path}`} className="min-w-0">
-                  <div className="flex flex-wrap justify-between gap-x-4 gap-y-1 text-meta">
-                    <span className="text-fg">{output.label}</span>
-                    <span className="font-mono tabular-nums text-fg-muted">
-                      {output.available
-                        ? `${formatBytes(output.bytes)} · ${output.fileCount.toLocaleString()} 个文件`
-                        : "尚未产生"}
-                    </span>
-                  </div>
-                  <p className="mt-1 break-all font-mono text-meta leading-relaxed text-fg-subtle">
-                    {output.path}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </article>
-      ))}
-    </div>
+              {module.modelFiles.length > 0 ? (
+                <p
+                  className="mt-1 truncate font-mono text-meta text-fg-subtle"
+                  title={
+                    module.modelLocation === "python"
+                      ? `${modelNames}（位于 Python 环境内）`
+                      : modelNames
+                  }
+                >
+                  {modelNames}
+                  {module.modelLocation === "python" ? "（位于 Python 环境内）" : ""}
+                </p>
+              ) : module.modelLocation === "none" ? (
+                <p className="mt-1 text-meta text-fg-subtle">
+                  使用 Go 内置 EXIF/GPS 解析器，无需权重。
+                </p>
+              ) : (
+                <p className="mt-1 text-meta text-warning">未发现模型文件</p>
+              )}
+
+              <p
+                className="mt-1 truncate font-mono text-meta text-fg-subtle"
+                title={outputPaths}
+              >
+                {outputPaths}
+              </p>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
