@@ -291,14 +291,25 @@ describe("任务中心", () => {
   it("按编号区块呈现运行、任务记录、每日计划与本机存储", async () => {
     renderCenter();
 
-    expect(await screen.findByText("运行")).toBeInTheDocument();
-    expect(screen.getByText("任务记录")).toBeInTheDocument();
-    expect(screen.getByText("每日计划")).toBeInTheDocument();
-    expect(screen.getByText("本机存储")).toBeInTheDocument();
-    expect(screen.getByText("01")).toBeInTheDocument();
-    expect(screen.getByText("02")).toBeInTheDocument();
-    expect(screen.getByText("03")).toBeInTheDocument();
-    expect(screen.getByText("04")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "运行" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "任务记录" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "每日计划" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "本机存储" })).toBeInTheDocument();
+    // 编号写在各自的区块标题里。
+    ["run", "history", "plan", "storage"].forEach((id, index) => {
+      const section = document.getElementById(id);
+      expect(section).toBeInTheDocument();
+      expect(
+        within(section as HTMLElement).getByText(
+          String(index + 1).padStart(2, "0"),
+        ),
+      ).toBeInTheDocument();
+    });
+    // 页面顶部的分区条与四个区块标题同名，这里认的是分区条里的按钮。
+    const sectionNav = screen.getByRole("navigation", { name: "页面分区" });
+    expect(
+      within(sectionNav).getByRole("button", { name: /本机存储/ }),
+    ).toBeInTheDocument();
   });
 
   it("运行中显示阶段、进度口径、速度与预计剩余，并支持暂停", async () => {

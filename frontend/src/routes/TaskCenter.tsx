@@ -1,5 +1,8 @@
 import PageHeading from "../components/common/PageHeading";
+import SectionNav from "../components/common/SectionNav";
 import { useTaskCenter } from "../hooks/useTaskCenter";
+import { scrollToSection, useSectionSpy } from "../hooks/useSectionSpy";
+import { TASK_SECTIONS } from "../utils/pageSections";
 import TaskConsole from "../components/tasks/TaskConsole";
 import TaskQueuePanel from "../components/tasks/TaskQueuePanel";
 import DailyPlanPanel from "../components/tasks/DailyPlanPanel";
@@ -8,18 +11,19 @@ import StorageSection from "../components/tasks/StorageSection";
 import { Link } from "react-router-dom";
 
 /**
- * 任务中心：主栏放「现在发生了什么」，侧栏放「长期怎么配」。
+ * 任务中心：四个编号区块顺次往下排。
  *
  * 之前五段等权重地纵向排下来，页面四千多像素高，空队列和空记录各占一整
- * 块版面，用户要滚到第三屏才看到自己的磁盘占用。现在主栏两段（运行与
- * 记录）、侧栏两段（计划与存储），第一屏就能看完正在发生的事。
+ * 块版面，用户要滚到第三屏才看到自己的磁盘占用。现在合成四段，页面顶上
+ * 挂一条分区条 —— 竖轴归左侧栏，横轴归这一页，两条轴各管一程。
  */
 export default function TaskCenter() {
   const center = useTaskCenter();
   const { snapshot, active, queue, history, plan } = center;
+  const activeSection = useSectionSpy(TASK_SECTIONS, "/tasks");
 
   return (
-    <div className="h-full overflow-y-auto pb-12">
+    <div className="pb-12">
       <PageHeading
         eyebrow="后台分析"
         title="任务中心"
@@ -37,8 +41,14 @@ export default function TaskCenter() {
         </div>
       ) : null}
 
-      <div className="page-shell mt-6 space-y-8">
-        <section>
+      <div className="page-shell mt-6 space-y-10">
+        <SectionNav
+          sections={TASK_SECTIONS}
+          active={activeSection}
+          onSelect={scrollToSection}
+        />
+
+        <section id="run" className="scroll-mt-14">
           <div className="section-heading">
             <span className="section-index">01</span>
             <h2 className="section-title">运行</h2>
@@ -83,7 +93,7 @@ export default function TaskCenter() {
           </div>
         </section>
 
-        <section>
+        <section id="history" className="scroll-mt-14">
           <div className="section-heading">
             <span className="section-index">02</span>
             <h2 className="section-title">任务记录</h2>
@@ -99,7 +109,7 @@ export default function TaskCenter() {
           />
         </section>
 
-        <section>
+        <section id="plan" className="scroll-mt-14">
           <div className="section-heading">
             <span className="section-index">03</span>
             <h2 className="section-title">每日计划</h2>
@@ -124,7 +134,7 @@ export default function TaskCenter() {
           />
         </section>
 
-        <section>
+        <section id="storage" className="scroll-mt-14">
           <div className="section-heading">
             <span className="section-index">04</span>
             <h2 className="section-title">本机存储</h2>

@@ -83,6 +83,15 @@
     justify-content: center;
     padding-inline: 0;
   }
+  /* 条目下挂一行（当前所在分区）时不再固定高度，两行自己撑开。 */
+  .nav-entry--stacked {
+    height: auto;
+    min-height: 46px;
+    padding-block: 7px;
+  }
+  .nav-entry--stacked .text-meta {
+    line-height: 1.35;
+  }
   .app-sidebar :focus-visible {
     outline-color: var(--rail-fg);
   }

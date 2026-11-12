@@ -75,11 +75,11 @@ export default function JobHistoryPanel({
 
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-bg-elevated shadow-xs">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-faint px-5 py-4 sm:px-6">
-        <p className="min-w-0 text-meta text-fg-subtle">
-          删除记录只清理任务日志，不会删除已生成的元数据、向量、文字或人脸结果。
-        </p>
-        {jobs.length > 0 ? (
+      {jobs.length > 0 ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-faint px-5 py-4 sm:px-6">
+          <p className="min-w-0 text-meta text-fg-subtle">
+            删除记录只清理任务日志，不会删除已生成的元数据、向量、文字或人脸结果。
+          </p>
           <button
             type="button"
             className="btn btn-sm btn-outline"
@@ -88,8 +88,8 @@ export default function JobHistoryPanel({
           >
             清理已结束记录
           </button>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       {jobs.length > 0 ? (
         <div className="flex flex-wrap items-center gap-2 border-b border-border-faint px-5 py-3 sm:px-6">

@@ -4,6 +4,7 @@ import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import Sidebar from "./Sidebar";
 import { historyApi } from "../../api/prefs";
+import { useSectionNavStore } from "../../store/sectionNavStore";
 
 const dashboard = {
   dashboard: {
@@ -76,11 +77,11 @@ beforeAll(() => {
   })) as unknown as typeof window.matchMedia;
 });
 
-function renderSidebar(collapsed = false) {
+function renderSidebar(collapsed = false, path = "/") {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[path]}>
         <Sidebar collapsed={collapsed} onToggle={() => {}} />
       </MemoryRouter>
     </QueryClientProvider>,
@@ -139,6 +140,19 @@ describe("Sidebar", () => {
     ];
     renderSidebar(true);
     expect(screen.queryByText("继续阅读")).not.toBeInTheDocument();
+  });
+
+  // 侧栏与应用级导航是一套：进入设置页后，条目下方补一行当前分区，
+  // 用户在左边随时知道自己停在这一页的哪一段。
+  it("在分区页里标出当前所在分区", () => {
+    useSectionNavStore.getState().setActive("/settings", "data");
+    renderSidebar(false, "/settings");
+    expect(screen.getByText("设置")).toBeInTheDocument();
+    expect(screen.getByText("数据")).toBeInTheDocument();
+    // 不在分区页时不显示这一行。
+    useSectionNavStore.getState().setActive("/tasks", "run");
+    renderSidebar(false, "/");
+    expect(screen.queryByText("运行")).not.toBeInTheDocument();
   });
 
   // 窄屏时侧栏是抽屉：抽屉宽度不由「折叠」决定，抽屉里再摆一枚

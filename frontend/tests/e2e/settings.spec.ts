@@ -325,6 +325,20 @@ test("设置页不再展示模型路径与派生缓存占用", async ({ page }) 
   await expect(page.getByText("一键全清")).toHaveCount(0);
 });
 
+// 分区条（页面级）与侧栏条目（应用级）说的是同一份分区清单：
+// 点分区条跳过去，左侧「设置」条目下就标出当前分区。
+test("设置页的分区条与侧栏条目联动", async ({ page }) => {
+  await page.goto("/settings");
+  const nav = page.getByRole("navigation", { name: "页面分区" });
+  await expect(nav.getByRole("button", { name: "数据" })).toBeVisible();
+
+  await nav.getByRole("button", { name: "数据" }).click();
+  const sidebar = page.locator('aside[aria-label="主导航"]');
+  await expect(sidebar.getByText("数据")).toBeVisible();
+  // 分区条吸顶，不被内容顶走。
+  await expect(nav).toBeInViewport();
+});
+
 test("设置读取失败可重试，恢复后显示阅读设置", async ({ page }) => {
   let blocked = true;
   await page.route("**/api/prefs", async (route) => {

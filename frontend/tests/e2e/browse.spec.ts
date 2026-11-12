@@ -865,8 +865,7 @@ test("主题令牌在明暗模式下保持边框及透明背景", async ({ page 
     .getByRole("button", { name: "浅色", exact: true })
     .locator("..");
   const activeNavigation = page.getByRole("link", {
-    name: "设置",
-    exact: true,
+    name: /^设置/,
   });
   for (const theme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });

@@ -50,6 +50,8 @@ import {
   continueReadingTarget,
   readingPercent,
 } from "../../utils/continueReading";
+import { sectionsForPath } from "../../utils/pageSections";
+import { useSectionNavStore } from "../../store/sectionNavStore";
 import ModeSwitch from "./ModeSwitch";
 
 interface Props {
@@ -174,6 +176,19 @@ export default function Sidebar({
   // 整条导航才不会被第二个颜色带跑。
   const navItemClass = (isActive: boolean) =>
     `nav-entry group ${collapsed ? "nav-entry--compact" : ""} ${isActive ? "is-active" : ""}`;
+
+  // 当前所在分区：路由 → 分区 id → 分区名。
+  //
+  // 任务中心与设置页都有页面级分区，页面顶部的分区条负责跳转，
+  // 侧栏这一行负责回答「我在哪一段」—— 两条轴指向同一份分区清单。
+  const activeSections = useSectionNavStore((state) => state.active);
+  const sectionLabel = (path: string) => {
+    const id = activeSections[path];
+    if (!id) return "";
+    return sectionsForPath(path).find((item) => item.id === id)?.label ?? "";
+  };
+  // 次级入口的命中判定与 NavLink 一致：路径前缀相同即为当前页。
+  const isSecondaryActive = (path: string) => location.pathname.startsWith(path);
 
   // 选中态：路径完全相等才算命中。
   //
@@ -366,17 +381,39 @@ export default function Sidebar({
             key={it.to}
             to={it.to}
             end={it.end}
-            className={({ isActive }) => navItemClass(isActive)}
+            aria-label={
+              isSecondaryActive(it.to) && sectionLabel(it.to)
+                ? `${it.label}，当前分区：${sectionLabel(it.to)}`
+                : undefined
+            }
+            className={({ isActive }) =>
+              navItemClass(isActive) +
+              (isActive && sectionLabel(it.to) ? " nav-entry--stacked" : "")
+            }
           >
-            {({ isActive }) => (
-              <>
-                <it.Icon
-                  size={16}
-                  className={`shrink-0 ${isActive ? "opacity-100" : ""}`}
-                />
-                {!collapsed && <span className="truncate">{it.label}</span>}
-              </>
-            )}
+            {({ isActive }) => {
+              const sub = isActive ? sectionLabel(it.to) : "";
+              return (
+                <>
+                  <it.Icon
+                    size={16}
+                    className={`shrink-0 ${isActive ? "opacity-100" : ""}`}
+                  />
+                  {!collapsed && (
+                    <span className="flex min-w-0 flex-col">
+                      <span className="truncate">{it.label}</span>
+                      {/* 当前所在分区：侧栏与页面顶部的分区条说的是同一件事，
+                          左边这一行让用户在滚动长页面时随时知道自己停在哪一段。 */}
+                      {sub ? (
+                        <span className="truncate text-meta font-normal text-rail-muted">
+                          {sub}
+                        </span>
+                      ) : null}
+                    </span>
+                  )}
+                </>
+              );
+            }}
           </NavLink>
         ))}
         <button
