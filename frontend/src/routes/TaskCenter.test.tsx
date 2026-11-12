@@ -305,11 +305,10 @@ describe("任务中心", () => {
         ),
       ).toBeInTheDocument();
     });
-    // 页面顶部的分区条与四个区块标题同名，这里认的是分区条里的按钮。
-    const sectionNav = screen.getByRole("navigation", { name: "页面分区" });
+    // 页面级分区挂在左侧栏自己的入口下面，不再有顶上那条横导航。
     expect(
-      within(sectionNav).getByRole("button", { name: /本机存储/ }),
-    ).toBeInTheDocument();
+      screen.queryByRole("navigation", { name: "页面分区" }),
+    ).not.toBeInTheDocument();
   });
 
   it("运行中显示阶段、进度口径、速度与预计剩余，并支持暂停", async () => {

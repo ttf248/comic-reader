@@ -108,12 +108,13 @@ export default function CacheRebuildPanel() {
       className="settings-section"
     >
       <div className="settings-section__heading">
-        <span className="text-fg-muted">
+        <span className="settings-section__icon text-fg-muted">
           <RefreshIcon size={13} />
         </span>
         <h2 id="cache-rebuild-heading" className="section-title">
           缓存重建
         </h2>
+        <span className="section-rule" />
       </div>
       <div className="settings-section__body p-5 space-y-4">
         <p className="text-body text-fg-muted">

@@ -85,7 +85,10 @@ type FieldDef =
 
 const FIELDS: { section: string; defs: FieldDef[] }[] = [
   {
-    section: "媒体库",
+    // 缓存目录与缓存开关讲的是同一件事：派生产物存在哪、留多久。
+    // 之前分成「媒体库」和「缩略图」两组，「媒体库」还与上面的媒体根
+    // 目录重名，两组并排时看不出谁是谁。
+    section: "缓存",
     defs: [
       {
         key: "cacheDir",
@@ -93,11 +96,6 @@ const FIELDS: { section: string; defs: FieldDef[] }[] = [
         hint: "存放缩略图 / 扫描结果 / 用户偏好，修改后需重启",
         kind: "text",
       },
-    ],
-  },
-  {
-    section: "缩略图",
-    defs: [
       {
         key: "thumbCacheSize",
         label: "LRU 缓存项数",
@@ -467,14 +465,13 @@ export default function ServerConfigPanel() {
           </div>
         </div>
       )}
-      <fieldset disabled={save.isReading} className="min-w-0 space-y-6">
+      <fieldset
+        disabled={save.isReading}
+        className="min-w-0 xl:columns-2 xl:gap-6"
+      >
         {/* 媒体库 — 多根(独立渲染) */}
-        <div>
-          <div className="text-meta text-fg-muted font-medium mb-2 px-1">
-            媒体库
-          </div>
-          <div className="bg-bg-elevated border border-border-faint rounded-md overflow-hidden">
-            <MediaRootsField
+        <ConfigGroup title="媒体库">
+          <MediaRootsField
               // 草稿优先，其次是保存中与失败的输入，最后使用服务端确认值。
               roots={
                 draft.mediaRoots ??
@@ -501,15 +498,10 @@ export default function ServerConfigPanel() {
                 setFieldComposing("mediaRoots", active)
               }
             />
-          </div>
-        </div>
+        </ConfigGroup>
 
         {/* 扫描 — 排除规则(独立渲染,行为与 MediaRootsField 类似但用 textarea) */}
-        <div>
-          <div className="text-meta text-fg-muted font-medium mb-2 px-1">
-            扫描
-          </div>
-          <div className="bg-bg-elevated border border-border-faint rounded-md overflow-hidden">
+        <ConfigGroup title="扫描">
             <ExcludeRulesField
               patterns={
                 draft.excludePatterns ??
@@ -563,14 +555,10 @@ export default function ServerConfigPanel() {
               onPatternsCommit={() => flushPathField("excludePatterns")}
               onSystemFilesCommit={() => flushPathField("systemFiles")}
             />
-          </div>
-        </div>
+        </ConfigGroup>
 
-        <div>
-          <div className="text-meta text-fg-muted font-medium mb-2 px-1">
-            访问控制
-          </div>
-          <div className="bg-bg-elevated border border-border-faint rounded-md px-4 py-4">
+        <ConfigGroup title="访问控制">
+          <div className="px-4 py-4">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <div className="text-body text-fg">
@@ -640,14 +628,11 @@ export default function ServerConfigPanel() {
               TLS，请仅用于可信家庭网络。
             </p>
           </div>
-        </div>
+        </ConfigGroup>
 
         {FIELDS.map((group) => (
-          <div key={group.section}>
-            <div className="text-meta text-fg-muted font-medium mb-2 px-1">
-              {group.section}
-            </div>
-            <div className="bg-bg-elevated border border-border-faint rounded-md divide-y divide-border-faint overflow-hidden">
+          <ConfigGroup key={group.section} title={group.section}>
+            <div className="divide-y divide-border-faint">
               {group.defs.map((def) => {
                 const statusKey = def.key;
                 const st = fieldStatus(statusKey);
@@ -693,7 +678,7 @@ export default function ServerConfigPanel() {
                 );
               })}
             </div>
-          </div>
+          </ConfigGroup>
         ))}
 
         {save.needsScan && (
@@ -939,6 +924,32 @@ function KindRadio({
         </button>
       ))}
     </div>
+  );
+}
+
+// ---- 分组：标题是面板的顶栏，正文在下面 ----
+
+/**
+ * 服务端配置里的一组设置。
+ *
+ * 之前分组标题是一行浮在画布上的灰字，下面的内容又是白卡 —— 白卡套
+ * 白卡，标题和内容各说各的，整段看不出哪里到哪里。改成分组自带一张
+ * 面板：标题做成顶栏（压一层浅色底），正文在下面，一组一块。
+ */
+function ConfigGroup({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="mb-4 break-inside-avoid overflow-hidden rounded-xl border border-border bg-bg-elevated shadow-xs">
+      <h3 className="border-b border-border-faint bg-bg-subtle px-4 py-2.5 text-meta font-medium text-fg-muted">
+        {title}
+      </h3>
+      {children}
+    </section>
   );
 }
 

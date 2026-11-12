@@ -87,29 +87,31 @@ export default function DailyPlanPanel({
           </label>
         </div>
 
-        <div>
-          <p className="text-meta text-fg-subtle">运行模块</p>
-          <div className="mt-2">
-            <ModuleChips
-              modules={modules}
-              selected={selectedModules}
-              onToggle={toggleModule}
-              disabled={disabled}
-              locked={peopleEnabled ? [] : ["face"]}
-              label="运行模块"
-            />
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-start xl:gap-8">
+          <div className="min-w-0">
+            <p className="text-meta text-fg-subtle">运行模块</p>
+            <div className="mt-2">
+              <ModuleChips
+                modules={modules}
+                selected={selectedModules}
+                onToggle={toggleModule}
+                disabled={disabled}
+                locked={peopleEnabled ? [] : ["face"]}
+                label="运行模块"
+              />
+            </div>
           </div>
-        </div>
 
-        <label className="flex items-center gap-2 text-meta text-fg">
-          <input
-            type="checkbox"
-            checked={peopleEnabled}
-            disabled={disabled}
-            onChange={(event) => onPeopleEnabledChange(event.target.checked)}
-          />
-          启用人物分析（默认关闭）
-        </label>
+          <label className="flex items-center gap-2 text-meta text-fg">
+            <input
+              type="checkbox"
+              checked={peopleEnabled}
+              disabled={disabled}
+              onChange={(event) => onPeopleEnabledChange(event.target.checked)}
+            />
+            启用人物分析（默认关闭）
+          </label>
+        </div>
 
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border-faint pt-4">
           <button

@@ -9,8 +9,7 @@ import { useUIStore } from "../store/uiStore";
 import { libraryQueryKeys, useLibraryManifest } from "../hooks/useLibrary";
 import StateBackupPanel from "../components/settings/StateBackupPanel";
 import ServerConfigPanel from "../components/settings/ServerConfigPanel";
-import SectionNav from "../components/common/SectionNav";
-import { scrollToSection, useSectionSpy } from "../hooks/useSectionSpy";
+import { useSectionSpy } from "../hooks/useSectionSpy";
 import { SETTINGS_SECTIONS } from "../utils/pageSections";
 import ScanWarnings from "../components/common/ScanWarnings";
 import Toggle from "../components/common/Toggle";
@@ -67,7 +66,8 @@ export default function Settings() {
   const direction = useGalleryStore((s) => s.direction);
   const setDirection = useGalleryStore((s) => s.setDirection);
 
-  const activeSection = useSectionSpy(SETTINGS_SECTIONS, "/settings");
+  // 分区由侧栏显示，这里只负责把当前分区记进 store。
+  useSectionSpy(SETTINGS_SECTIONS, "/settings");
 
   const patchPrefs = useMutation({
     mutationFn: (p: Partial<Parameters<typeof prefsApi.patch>[0]>) =>
@@ -186,14 +186,9 @@ export default function Settings() {
         description="调整外观、阅读方式与本地媒体配置。"
       />
       {prefsError}
-      <div className="mt-6 min-w-0 max-w-4xl space-y-10">
-        <SectionNav
-          sections={SETTINGS_SECTIONS}
-          active={activeSection}
-          onSelect={scrollToSection}
-        />
-
-        <section id="appearance" className="scroll-mt-14">
+      {/* 短分区在宽屏排两列；服务端内容最重，另起一栏通栏。 */}
+      <div className="mt-6 xl:columns-2 xl:gap-10">
+        <section id="appearance" className="mb-10 break-inside-avoid scroll-mt-14">
           <Section title="外观" icon={<SunIcon size={13} />}>
             <Row label="主题">
               <ThemeSwitcher />
@@ -245,7 +240,7 @@ export default function Settings() {
           </Section>
         </section>
 
-        <section id="reading" className="scroll-mt-14">
+        <section id="reading" className="mb-10 break-inside-avoid scroll-mt-14">
           <Section title="阅读" icon={<ReaderIcon size={13} />}>
             <GroupLabel>照片</GroupLabel>
             <Row label="照片墙密度">
@@ -326,7 +321,7 @@ export default function Settings() {
           </Section>
         </section>
 
-        <section id="data" className="scroll-mt-14">
+        <section id="data" className="mb-10 break-inside-avoid scroll-mt-14">
           <Section title="数据" icon={<LibraryIcon size={13} />}>
             <Row label="媒体库索引">
               <div className="flex min-w-0 flex-1 flex-col items-end gap-2">
@@ -417,26 +412,11 @@ export default function Settings() {
           </Section>
         </section>
 
-        <section id="server" className="scroll-mt-14">
-          <section className="settings-section">
-            <div className="settings-section__heading">
-              <span className="text-fg-muted">
-                <ServerIcon size={13} />
-              </span>
-              <h2 className="section-title">服务端</h2>
-              <span className="text-meta text-fg-subtle ml-2">
-                修改后自动保存，部分设置需重启
-              </span>
-            </div>
-            <ServerConfigPanel />
-          </section>
-        </section>
-
-        <section id="backup" className="scroll-mt-14">
+        <section id="backup" className="mb-10 break-inside-avoid scroll-mt-14">
           <StateBackupPanel />
         </section>
 
-        <section id="about" className="scroll-mt-14">
+        <section id="about" className="mb-10 break-inside-avoid scroll-mt-14">
           <Section title="关于" icon={<InfoIcon size={13} />}>
             <div className="text-body text-fg-muted leading-relaxed">
               <div className="font-display text-label text-fg">
@@ -458,6 +438,17 @@ export default function Settings() {
           </Section>
         </section>
       </div>
+
+      <section id="server" className="mt-10 scroll-mt-14">
+        <Section
+          title="服务端"
+          icon={<ServerIcon size={13} />}
+          description="修改后自动保存，部分设置需重启"
+          plain
+        >
+          <ServerConfigPanel />
+        </Section>
+      </section>
     </div>
   );
 }
@@ -465,29 +456,57 @@ export default function Settings() {
 function Section({
   title,
   icon,
+  description,
+  plain = false,
   children,
 }: {
   title: string;
   icon?: React.ReactNode;
+  description?: React.ReactNode;
+  /**
+   * 内容自带面板时不再套一层卡。
+   *
+   * 「服务端」这一段由七张分组面板组成，再套一层大白卡就是白卡套白卡，
+   * 整段看不出哪里到哪里 —— 让每组自己当卡，区块只留标题。
+   */
+  plain?: boolean;
   children: React.ReactNode;
 }) {
   return (
     <section className="settings-section">
       <div className="settings-section__heading">
-        {icon && <span className="text-fg-muted">{icon}</span>}
+        {icon && (
+          <span className="settings-section__icon text-fg-muted">{icon}</span>
+        )}
         <h2 className="section-title">{title}</h2>
+        {description ? (
+          <span className="settings-section__desc">{description}</span>
+        ) : null}
+        <span className="section-rule" />
       </div>
-      <div className="settings-section__body divide-y divide-border-faint">
-        {children}
-      </div>
+      {plain ? (
+        children
+      ) : (
+        <div className="settings-section__body divide-y divide-border-faint">
+          {children}
+        </div>
+      )}
     </section>
   );
 }
 
-/** 一组相关设置的小标题。 */
+/**
+ * 一组相关设置的小标题。
+ *
+ * 之前是一行浮在卡片上的灰字，看不出它管的是下面哪几行。现在补一条
+ * 延伸到右边的细线：这条线就是这一组的边界。
+ */
 function GroupLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="px-5 pt-4 pb-1 text-meta text-fg-subtle">{children}</p>
+    <div className="flex items-center gap-3 px-5 pb-2 pt-5">
+      <span className="text-meta font-medium text-fg-muted">{children}</span>
+      <span className="h-px flex-1 bg-border-faint" />
+    </div>
   );
 }
 

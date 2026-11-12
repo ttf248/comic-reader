@@ -33,8 +33,8 @@ export default function StoragePaths({
     absoluteError.code === "local_access_required";
 
   return (
-    <details className="group rounded-xl border border-border bg-bg-elevated shadow-xs">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-label font-medium text-fg transition-colors hover:bg-bg-subtle/60 [&::-webkit-details-marker]:hidden">
+    <details className="group overflow-hidden rounded-xl border border-border bg-bg-elevated shadow-xs">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 border-b border-border-faint bg-bg-subtle px-4 py-2.5 text-label font-medium text-fg transition-colors hover:bg-bg-subtle [&::-webkit-details-marker]:hidden">
         <span>路径</span>
         <span className="text-meta font-normal text-fg-subtle group-open:hidden">
           相对缓存根目录 · 展开查看

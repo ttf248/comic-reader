@@ -19,7 +19,7 @@ export default function StorageModuleGrid({ modules }: Props) {
   if (modules.length === 0) return null;
   return (
     <section className="overflow-hidden rounded-xl border border-border bg-bg-elevated shadow-xs">
-      <h3 className="border-b border-border-faint px-4 py-3 text-label font-medium text-fg">
+      <h3 className="border-b border-border-faint bg-bg-subtle px-4 py-2.5 text-label font-medium text-fg">
         AI 模型与产物
       </h3>
       <ul className="divide-y divide-border-faint">

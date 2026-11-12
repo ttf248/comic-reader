@@ -24,9 +24,10 @@ export const SETTINGS_SECTIONS: PageSection[] = [
   { id: "appearance", label: "外观" },
   { id: "reading", label: "阅读" },
   { id: "data", label: "数据" },
-  { id: "server", label: "服务端" },
-  { id: "backup", label: "备份" },
+  { id: "backup", label: "备份与恢复" },
   { id: "about", label: "关于" },
+  // 服务端内容最重，宽屏上独占一栏，排在最后。
+  { id: "server", label: "服务端" },
 ];
 
 /** 按路由给出页面级分区；没有分区的路由返回空数组。 */

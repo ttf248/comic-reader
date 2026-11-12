@@ -1,7 +1,6 @@
 import PageHeading from "../components/common/PageHeading";
-import SectionNav from "../components/common/SectionNav";
 import { useTaskCenter } from "../hooks/useTaskCenter";
-import { scrollToSection, useSectionSpy } from "../hooks/useSectionSpy";
+import { useSectionSpy } from "../hooks/useSectionSpy";
 import { TASK_SECTIONS } from "../utils/pageSections";
 import TaskConsole from "../components/tasks/TaskConsole";
 import TaskQueuePanel from "../components/tasks/TaskQueuePanel";
@@ -20,7 +19,8 @@ import { Link } from "react-router-dom";
 export default function TaskCenter() {
   const center = useTaskCenter();
   const { snapshot, active, queue, history, plan } = center;
-  const activeSection = useSectionSpy(TASK_SECTIONS, "/tasks");
+  // 分区由侧栏显示，这里只负责把当前分区记进 store。
+  useSectionSpy(TASK_SECTIONS, "/tasks");
 
   return (
     <div className="pb-12">
@@ -42,12 +42,6 @@ export default function TaskCenter() {
       ) : null}
 
       <div className="page-shell mt-6 space-y-10">
-        <SectionNav
-          sections={TASK_SECTIONS}
-          active={activeSection}
-          onSelect={scrollToSection}
-        />
-
         <section id="run" className="scroll-mt-14">
           <div className="section-heading">
             <span className="section-index">01</span>
@@ -55,6 +49,7 @@ export default function TaskCenter() {
             <span className="section-meta">
               {active ? "当前任务的进度与控制" : "开始一次分析"}
             </span>
+            <span className="section-rule" />
           </div>
           <TaskConsole
             active={active}
@@ -98,6 +93,7 @@ export default function TaskCenter() {
             <span className="section-index">02</span>
             <h2 className="section-title">任务记录</h2>
             <span className="section-meta">{history.length} 项</span>
+            <span className="section-rule" />
           </div>
           <JobHistoryPanel
             jobs={history}
@@ -114,6 +110,7 @@ export default function TaskCenter() {
             <span className="section-index">03</span>
             <h2 className="section-title">每日计划</h2>
             <span className="section-meta">按设备本地时间自动检查</span>
+            <span className="section-rule" />
           </div>
           <DailyPlanPanel
             enabled={plan.enabled}
@@ -139,6 +136,7 @@ export default function TaskCenter() {
             <span className="section-index">04</span>
             <h2 className="section-title">本机存储</h2>
             <span className="section-meta">派生缓存、模型与产物</span>
+            <span className="section-rule" />
           </div>
           <StorageSection />
         </section>

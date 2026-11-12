@@ -77,7 +77,7 @@ export default function Segmented<T extends string>({
             }}
             className={`h-8 px-3 text-meta transition-colors ${
               selected
-                ? "bg-bg-elevated text-fg shadow-xs"
+                ? "bg-bg-strong text-fg"
                 : "text-fg-muted hover:bg-bg-subtle"
             } disabled:opacity-50`}
           >

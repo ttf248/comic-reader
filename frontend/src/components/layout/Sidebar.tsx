@@ -1,4 +1,4 @@
-import { Link, NavLink, useLocation } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useEffect, useMemo, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import {
@@ -52,6 +52,7 @@ import {
 } from "../../utils/continueReading";
 import { sectionsForPath } from "../../utils/pageSections";
 import { useSectionNavStore } from "../../store/sectionNavStore";
+import { scrollToSection } from "../../hooks/useSectionSpy";
 import ModeSwitch from "./ModeSwitch";
 
 interface Props {
@@ -92,10 +93,11 @@ const COMIC_GROUP: NavEntry[] = [
   { to: favoritesRoute("comic"), label: "收藏漫画", Icon: StarIcon },
 ];
 
-// 设置沉到底部组：它是低频入口，不该和「主页 / 最近 / 收藏」平级。
-const secondaryItems = [
-  { to: "/tasks", label: "任务中心", Icon: TasksIcon, end: false },
-  { to: "/settings", label: "设置", Icon: SettingsIcon, end: false },
+// 本机组：任务中心与设置。它们不属于当前工作台，单独成组，
+// 放在浏览组下面 —— 看完照片再管机器上的事，顺序不能反。
+const SECONDARY_GROUP: NavEntry[] = [
+  { to: "/tasks", label: "任务中心", Icon: TasksIcon },
+  { to: "/settings", label: "设置", Icon: SettingsIcon },
 ];
 
 // 侧栏：
@@ -177,18 +179,12 @@ export default function Sidebar({
   const navItemClass = (isActive: boolean) =>
     `nav-entry group ${collapsed ? "nav-entry--compact" : ""} ${isActive ? "is-active" : ""}`;
 
-  // 当前所在分区：路由 → 分区 id → 分区名。
+  // 当前所在分区：路由 → 分区 id。
   //
-  // 任务中心与设置页都有页面级分区，页面顶部的分区条负责跳转，
-  // 侧栏这一行负责回答「我在哪一段」—— 两条轴指向同一份分区清单。
+  // 任务中心与设置页都有页面级分区，它们挂在侧栏里自己的入口下面。
   const activeSections = useSectionNavStore((state) => state.active);
-  const sectionLabel = (path: string) => {
-    const id = activeSections[path];
-    if (!id) return "";
-    return sectionsForPath(path).find((item) => item.id === id)?.label ?? "";
-  };
-  // 次级入口的命中判定与 NavLink 一致：路径前缀相同即为当前页。
-  const isSecondaryActive = (path: string) => location.pathname.startsWith(path);
+  // 当前页面有没有自己的分区（任务中心 / 设置）。
+  const hasPageSections = sectionsForPath(location.pathname).length > 0;
 
   // 选中态：路径完全相等才算命中。
   //
@@ -220,40 +216,84 @@ export default function Sidebar({
           const isActive = isEntryActive(entry);
           const badge = badgeFor(entry);
           return (
-            <Link
-              key={`${entry.to}-${entry.label}`}
-              to={entry.to}
-              className={navItemClass(isActive)}
-              aria-current={isActive ? "page" : undefined}
-              title={`${entry.label}${badge > 0 ? ` · 还有 ${badge} ${albumCountUnit(mode)}` : ""}`}
-            >
-              <entry.Icon size={16} className="shrink-0" />
-              {!collapsed && <span className="truncate">{entry.label}</span>}
-              {!collapsed && badge > 0 && (
-                <span
-                  className="inline-flex items-center justify-center min-w-[22px] h-[20px] px-1.5 rounded-full bg-rail-hover text-rail-fg text-meta font-semibold tabular-nums"
-                  aria-label={`还有 ${badge} ${albumCountUnit(mode)}`}
-                >
-                  {badge > 999 ? "999+" : badge}
-                </span>
-              )}
-              {collapsed && badge > 0 && (
-                <span
-                  className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-rail-accent"
-                  aria-hidden
-                />
-              )}
-            </Link>
+            <div key={`${entry.to}-${entry.label}`}>
+              <Link
+                to={entry.to}
+                className={navItemClass(isActive)}
+                aria-current={isActive ? "page" : undefined}
+                title={`${entry.label}${badge > 0 ? ` · 还有 ${badge} ${albumCountUnit(mode)}` : ""}`}
+              >
+                <entry.Icon size={16} className="shrink-0" />
+                {!collapsed && <span className="truncate">{entry.label}</span>}
+                {!collapsed && badge > 0 && (
+                  <span
+                    className="inline-flex items-center justify-center min-w-[22px] h-[20px] px-1.5 rounded-full bg-rail-hover text-rail-fg text-meta font-semibold tabular-nums"
+                    aria-label={`还有 ${badge} ${albumCountUnit(mode)}`}
+                  >
+                    {badge > 999 ? "999+" : badge}
+                  </span>
+                )}
+                {collapsed && badge > 0 && (
+                  <span
+                    className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-rail-accent"
+                    aria-hidden
+                  />
+                )}
+              </Link>
+              {isActive ? renderPageSections(entry.to) : null}
+            </div>
           );
         })}
       </div>
     );
   };
 
+  /**
+   * 当前页面的分区，挂在它的入口下面。
+   *
+   * 页面级分区之前是内容顶上的一条横导航：它跟左侧的应用级导航并排站着，
+   * 像两套互不相干的菜单，宽屏上又是一条孤零零的细字。搬进侧栏之后，
+   * 导航只有一条竖轴，分区从属于它所在的页面；内容区也腾出了宽度，
+   * 宽屏上可以排两列。
+   */
+  const renderPageSections = (path: string) => {
+    const sections = sectionsForPath(path);
+    if (sections.length === 0 || collapsed) return null;
+    const current = activeSections[path];
+    return (
+      <ul className="mb-1 ml-5 mt-0.5 border-l border-rail-line pl-1">
+        {sections.map((section) => {
+          const isCurrent = section.id === current;
+          return (
+            <li key={section.id}>
+              <button
+                type="button"
+                onClick={() => scrollToSection(section.id, path)}
+                aria-current={isCurrent ? "true" : undefined}
+                className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-meta transition-colors ${
+                  isCurrent
+                    ? "font-medium text-rail-accent"
+                    : "text-rail-muted hover:bg-rail-hover hover:text-rail-fg"
+                }`}
+              >
+                {section.index ? (
+                  <span className="font-mono text-meta tabular-nums text-rail-muted">
+                    {section.index}
+                  </span>
+                ) : null}
+                <span className="truncate">{section.label}</span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  };
+
   return (
     <aside
       aria-label="主导航"
-      className={`app-sidebar flex flex-col shrink-0 transition-[width] duration-200 ease-out ${
+      className={`app-sidebar scroll-thin flex flex-col shrink-0 overflow-y-auto transition-[width] duration-200 ease-out ${
         mobileOpen
           ? "fixed inset-y-0 left-0 z-50 w-[236px]"
           : `hidden lg:flex lg:static ${collapsed ? "w-[72px]" : "w-[236px]"}`
@@ -334,14 +374,17 @@ export default function Sidebar({
           : renderGroup("照片", PHOTO_GROUP, () => 0)}
       </nav>
 
-      {/* 「继续」区：紧跟导航，填掉侧栏中段的空白。
+      {/* 「继续」区：紧跟浏览导航，填掉侧栏中段的空白。
           漫画侧是"正在翻的那本"，照片侧是"上次打开的那本"。
           两侧的措辞与线索各自成套，不共用一套词。
 
           这里只留当前这一本：完整列表由首页的首屏专区与「最近浏览 /
-          最近阅读」页承担。侧栏再挂一份，既重复又把侧栏中段塞满。 */}
-      {!collapsed && resumeFirst && (
-        <div className="px-4 pt-5 pb-2 min-h-0">
+          最近阅读」页承担。侧栏再挂一份，既重复又把侧栏中段塞满。
+
+          在任务中心与设置页不摆这一块：那里展开的是页面自己的分区，
+          侧栏已经被占满，而「接着看」是浏览的上下文，与当前页面无关。 */}
+      {!collapsed && resumeFirst && !hasPageSections && (
+        <div className="px-4 pt-1 pb-2 min-h-0">
           <div className="px-1 pb-2 flex items-baseline gap-2">
             <span className="text-meta text-rail-muted">{resumeTitle}</span>
             <span className="text-meta text-rail-muted tabular-nums">
@@ -369,53 +412,19 @@ export default function Sidebar({
         </div>
       )}
 
+      {/* 本机组：任务中心与设置。它们不属于当前工作台，单独成组，
+          放在浏览组下面 —— 看完照片再管机器上的事，顺序不能反。 */}
+      <nav className="px-4 pb-3 space-y-1.5">
+        {renderGroup("本机", SECONDARY_GROUP, () => 0)}
+      </nav>
+
       {/* 弹性留白：把次级入口压到侧栏底部，侧栏中段即使没有内容
           也是"底部对齐"的布局，而不是内容浮在中间。 */}
       <div className="flex-1 min-h-8" />
 
-      {/* 次级入口 + 随机：沉到底部一组，与主导航之间用一条细分隔线断开 */}
+      {/* 次级动作：随机翻题沉到底部，与导航之间用一条细分隔线断开 */}
       <div className="px-4 pb-3">
         <div className="h-px bg-rail-line mb-2" />
-        {secondaryItems.map((it) => (
-          <NavLink
-            key={it.to}
-            to={it.to}
-            end={it.end}
-            aria-label={
-              isSecondaryActive(it.to) && sectionLabel(it.to)
-                ? `${it.label}，当前分区：${sectionLabel(it.to)}`
-                : undefined
-            }
-            className={({ isActive }) =>
-              navItemClass(isActive) +
-              (isActive && sectionLabel(it.to) ? " nav-entry--stacked" : "")
-            }
-          >
-            {({ isActive }) => {
-              const sub = isActive ? sectionLabel(it.to) : "";
-              return (
-                <>
-                  <it.Icon
-                    size={16}
-                    className={`shrink-0 ${isActive ? "opacity-100" : ""}`}
-                  />
-                  {!collapsed && (
-                    <span className="flex min-w-0 flex-col">
-                      <span className="truncate">{it.label}</span>
-                      {/* 当前所在分区：侧栏与页面顶部的分区条说的是同一件事，
-                          左边这一行让用户在滚动长页面时随时知道自己停在哪一段。 */}
-                      {sub ? (
-                        <span className="truncate text-meta font-normal text-rail-muted">
-                          {sub}
-                        </span>
-                      ) : null}
-                    </span>
-                  )}
-                </>
-              );
-            }}
-          </NavLink>
-        ))}
         <button
           onClick={onShuffle}
           disabled={randomAlbum.isPending}

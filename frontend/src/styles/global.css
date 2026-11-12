@@ -1040,7 +1040,8 @@
     gap: 10px;
     margin-bottom: 14px;
   }
-  .settings-section__heading > span:first-child {
+  /* 图标底牌：品牌色浅底在浅色画布上几乎看不见，补一圈描边才有边界。 */
+  .settings-section__icon {
     display: grid;
     place-items: center;
     width: 32px;
@@ -1049,6 +1050,19 @@
     border-radius: var(--radius-media);
     background: var(--brand-soft);
     color: var(--brand-ink);
+    box-shadow: inset 0 0 0 1px
+      color-mix(in srgb, var(--brand) 26%, transparent);
+  }
+  .settings-section__desc {
+    font-size: var(--text-meta);
+    color: var(--fg-subtle);
+  }
+  /* 区块标题末尾的细线：这一段的内容到这里为止。 */
+  .section-rule {
+    flex: 1 1 32px;
+    height: 1px;
+    align-self: center;
+    background: var(--border-faint);
   }
   .settings-section__body {
     overflow: hidden;
@@ -1555,7 +1569,12 @@ textarea {
 }
 button {
   background: none;
-  border: 0;
+  /* 只清掉浏览器默认的边框，别动 border-style。
+     Tailwind 的 border / border-b-2 只改宽度，样式在这里被重置成 none
+     的话，按钮上的描边会整条消失 —— 分区条的下划线、芯片的边框、
+     「刷新」这类次要按钮的轮廓，全都是这样没的。 */
+  border-width: 0;
+  border-style: solid;
   cursor: pointer;
   padding: 0;
   user-select: none;

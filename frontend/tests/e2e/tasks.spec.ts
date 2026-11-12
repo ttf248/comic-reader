@@ -17,11 +17,12 @@ test.describe("任务中心", () => {
     await expect(page.getByRole("radio", { name: "增量" })).toBeVisible();
     await expect(page.getByRole("radio", { name: "全量" })).toBeVisible();
     await expect(page.getByRole("button", { name: "开始分析" })).toBeVisible();
-    // 页面顶部的分区条与侧栏条目联动：点过去，左侧就标出当前分区。
-    const nav = page.getByRole("navigation", { name: "页面分区" });
-    await nav.getByRole("button", { name: /本机存储/ }).click();
+    // 页面级分区挂在侧栏里自己的入口下面：点过去，当前分区就标出来。
     const sidebar = page.locator('aside[aria-label="主导航"]');
-    await expect(sidebar.getByText("本机存储")).toBeVisible();
+    await sidebar.getByRole("button", { name: /本机存储/ }).click();
+    await expect(
+      sidebar.getByRole("button", { name: /本机存储/ }),
+    ).toHaveAttribute("aria-current", "true");
   });
 
   test("本机存储给出派生缓存占用、模型与产物路径", async ({ page }) => {

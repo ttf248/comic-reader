@@ -144,15 +144,25 @@ describe("Sidebar", () => {
 
   // 侧栏与应用级导航是一套：进入设置页后，条目下方补一行当前分区，
   // 用户在左边随时知道自己停在这一页的哪一段。
-  it("在分区页里标出当前所在分区", () => {
+  // 页面级分区挂在侧栏里自己的入口下面：进入设置页，分区就展开在
+  // 「设置」下面，当前分区高亮。导航只有一条竖轴。
+  it("在分区页里展开该页的分区并标出当前分区", () => {
     useSectionNavStore.getState().setActive("/settings", "data");
-    renderSidebar(false, "/settings");
+    const { unmount } = renderSidebar(false, "/settings");
     expect(screen.getByText("设置")).toBeInTheDocument();
-    expect(screen.getByText("数据")).toBeInTheDocument();
-    // 不在分区页时不显示这一行。
-    useSectionNavStore.getState().setActive("/tasks", "run");
+    // 分区清单：外观 / 阅读 / 数据 / 服务端 / 备份 / 关于。
+    expect(screen.getByRole("button", { name: /外观/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /关于/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /数据/ })).toHaveAttribute(
+      "aria-current",
+      "true",
+    );
+    // 别的页面不展开分区。
+    unmount();
     renderSidebar(false, "/");
-    expect(screen.queryByText("运行")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /关于/ }),
+    ).not.toBeInTheDocument();
   });
 
   // 窄屏时侧栏是抽屉：抽屉宽度不由「折叠」决定，抽屉里再摆一枚

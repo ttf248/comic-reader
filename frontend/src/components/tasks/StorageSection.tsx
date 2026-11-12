@@ -7,7 +7,6 @@ import StorageMediaCache from "./StorageMediaCache";
 import StorageModuleGrid from "./StorageModuleGrid";
 import StoragePaths from "./StoragePaths";
 import StorageUsage from "./StorageUsage";
-import { RefreshIcon } from "../common/Icon";
 
 /**
  * 本机存储：派生缓存、AI 模型与分析产物、以及它们各自的位置。
@@ -50,6 +49,8 @@ export default function StorageSection() {
           outputFileCount={usage.data.summary.outputFileCount}
           modelBytes={usage.data.summary.modelBytes}
           modelFileCount={usage.data.summary.modelFileCount}
+          onRefresh={refreshAll}
+          refreshing={usage.isFetching || media.refreshing}
         />
       ) : null}
 
@@ -85,22 +86,7 @@ export default function StorageSection() {
         onRetryAbsolute={() => void paths.refetch()}
       />
 
-      <div className="flex justify-end">
-        <button
-          type="button"
-          className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border-faint px-2.5 text-meta text-fg-muted transition-colors hover:bg-bg-subtle disabled:opacity-50"
-          onClick={refreshAll}
-          disabled={usage.isFetching || media.refreshing}
-        >
-          {usage.isFetching ? (
-            <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-fg-muted border-t-transparent" />
-          ) : (
-            <RefreshIcon size={11} />
-          )}
-          <span>刷新占用</span>
-        </button>
       </div>
-    </div>
   );
 }
 
