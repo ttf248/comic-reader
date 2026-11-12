@@ -413,6 +413,23 @@ describe("任务中心", () => {
     );
   });
 
+  it("在活动任务标题中明确显示捕获的 GPU 设备", async () => {
+    const gpuFaceJob: AIJob = {
+      ...currentJob,
+      type: "face",
+      computeDevice: "gpu",
+      stage: "face",
+    };
+    vi.mocked(aiJobsApi.list).mockResolvedValue({
+      ok: true,
+      snapshot: snapshot({ jobs: [gpuFaceJob], active: gpuFaceJob }),
+    });
+
+    renderCenter();
+
+    expect(await screen.findByText("设备：NVIDIA GPU")).toBeInTheDocument();
+  });
+
   it("空闲时给出开始分析的入口与模块清单", async () => {
     vi.mocked(aiJobsApi.list).mockResolvedValue({
       ok: true,

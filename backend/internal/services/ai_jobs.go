@@ -2232,6 +2232,9 @@ func (s *AIJobService) loadState() error {
 		}
 		if job.ComputeDevice == "" || (job.ComputeDevice != "cpu" && job.ComputeDevice != "gpu") {
 			job.ComputeDevice = "cpu"
+			if job.Type != AIJobTypeMetadata && s.settings.GPUEnabled && isAIJobActive(job.Status) {
+				job.ComputeDevice = "gpu"
+			}
 			settingsChanged = true
 		}
 		if job.Errors == nil {

@@ -205,7 +205,9 @@ export default function TaskConsole({
                 onClick={() => onStart(selectedModule, mode)}
               >
                 开始分析
-                {currentEstimate ? ` · ${formatCount(currentEstimate.count)} 张` : ""}
+                {currentEstimate
+                  ? ` · ${formatCount(currentEstimate.count)} 张`
+                  : ""}
               </button>
               {currentEstimate ? (
                 <span className="text-meta text-fg-subtle">
@@ -257,6 +259,9 @@ export default function TaskConsole({
           </span>
           <span className="text-meta text-fg-muted">
             {taskStageLabel(active.stage)}
+          </span>
+          <span className="text-meta text-fg-muted">
+            设备：{active.computeDevice === "gpu" ? "NVIDIA GPU" : "CPU"}
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-2">

@@ -702,6 +702,44 @@ func TestAIJobGPUPreferenceDefaultsOnAndUnavailableGPUIsRecorded(t *testing.T) {
 	}
 }
 
+func TestAIJobServiceMigratesLegacyRunningModelJobsToDefaultGPU(t *testing.T) {
+	root := t.TempDir()
+	catalog := aiJobCatalog(root, nil)
+	statePath := filepath.Join(t.TempDir(), "state", "jobs.json")
+	metadataDir := filepath.Join(t.TempDir(), "derived")
+	legacyState := `{"version":1,"jobs":[{"id":"legacy-face","type":"face","mode":"full","status":"running","stage":"face"},{"id":"legacy-metadata","type":"metadata","mode":"full","status":"running","stage":"metadata"}],"settings":{"dailyTime":"03:00","dailyModules":["metadata"],"peopleEnabled":true}}`
+	if err := os.MkdirAll(filepath.Dir(statePath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(statePath, []byte(legacyState), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	service, err := NewAIJobService(AIJobServiceOptions{
+		StatePath:    statePath,
+		MetadataDir:  metadataDir,
+		Catalog:      catalog,
+		ValidatePath: aiTestPathValidator(t, root),
+		Analyzers:    []AIAnalyzer{MetadataAnalyzer{}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer shutdownAIJobService(t, service)
+
+	if !service.List().Settings.GPUEnabled {
+		t.Fatal("legacy hardware preference should default to GPU enabled")
+	}
+	face, ok := service.Get("legacy-face")
+	if !ok || face.Status != AIJobStatusPending || face.ComputeDevice != "gpu" {
+		t.Fatalf("legacy running face job was not recovered on GPU: %+v", face)
+	}
+	metadata, ok := service.Get("legacy-metadata")
+	if !ok || metadata.Status != AIJobStatusPending || metadata.ComputeDevice != "cpu" {
+		t.Fatalf("legacy metadata job should remain on CPU: %+v", metadata)
+	}
+}
+
 func TestAIJobModuleVersionsAreIndependent(t *testing.T) {
 	root := t.TempDir()
 	files := writeAIJobImages(t, root, 1)
