@@ -81,18 +81,13 @@ def model_state() -> dict:
 
 def status() -> dict:
     state = model_state()
-    cuda_provider_available = False
-    try:
-        import onnxruntime
-        cuda_provider_available = "CUDAExecutionProvider" in onnxruntime.get_available_providers()
-    except Exception:
-        pass
+    has_cuda_provider = cuda_provider_available()
     result = {
         "pythonAvailable": True,
         "pythonVersion": sys.version.split()[0],
         "device": device,
-        "cudaAvailable": bool(torch is not None and torch.cuda.is_available()),
-        "cudaExecutionProviderAvailable": cuda_provider_available,
+        "cudaAvailable": bool(torch is not None and torch.cuda.is_available()) or has_cuda_provider,
+        "cudaExecutionProviderAvailable": has_cuda_provider,
         "cudaVersion": getattr(getattr(torch, "version", None), "cuda", None),
         "runtimeReady": not runtime_error,
         "modelLoaded": model is not None,
@@ -217,9 +212,9 @@ def configure_cuda_dlls() -> None:
 
 
 def gpu_available(require_onnx: bool = False) -> bool:
-    if torch is None or not torch.cuda.is_available():
-        return False
-    return not require_onnx or cuda_provider_available()
+    if require_onnx:
+        return cuda_provider_available()
+    return bool(torch is not None and torch.cuda.is_available())
 
 
 def load_model(device_mode: str = "auto") -> None:
@@ -512,28 +507,30 @@ def detect_yunet_gpu(image, session):
                 bbox = predictions[outputs[f"bbox_{stride}"]].reshape(-1, 4)
                 keypoints = predictions[outputs[f"kps_{stride}"]].reshape(-1, 10)
                 columns = 640 // stride
-                for index, (class_score, object_score) in enumerate(zip(cls, obj)):
-                    score = float(np.sqrt(np.clip(class_score, 0.0, 1.0) * np.clip(object_score, 0.0, 1.0)))
-                    if score < 0.65:
-                        continue
-                    row, column = divmod(index, columns)
-                    center_x = (column + float(bbox[index, 0])) * stride
-                    center_y = (row + float(bbox[index, 1])) * stride
-                    box_width = float(np.exp(bbox[index, 2])) * stride
-                    box_height = float(np.exp(bbox[index, 3])) * stride
-                    face = [
-                        center_x - box_width / 2 + left,
-                        center_y - box_height / 2 + top,
-                        box_width,
-                        box_height,
-                    ]
-                    for point in range(5):
-                        face.extend([
-                            (float(keypoints[index, point * 2]) + column) * stride + left,
-                            (float(keypoints[index, point * 2 + 1]) + row) * stride + top,
-                        ])
-                    face.append(score)
-                    faces.append(face)
+                scores = np.sqrt(np.clip(cls, 0.0, 1.0) * np.clip(obj, 0.0, 1.0))
+                selected = np.flatnonzero(scores >= 0.65)
+                if selected.size == 0:
+                    continue
+                rows, grid_columns = np.divmod(selected, columns)
+                selected_boxes = bbox[selected]
+                center_x = (grid_columns + selected_boxes[:, 0]) * stride
+                center_y = (rows + selected_boxes[:, 1]) * stride
+                box_width = np.exp(selected_boxes[:, 2]) * stride
+                box_height = np.exp(selected_boxes[:, 3]) * stride
+                boxes = np.column_stack((
+                    center_x - box_width / 2 + left,
+                    center_y - box_height / 2 + top,
+                    box_width,
+                    box_height,
+                ))
+                landmarks = keypoints[selected].reshape(-1, 5, 2).copy()
+                landmarks[:, :, 0] = (landmarks[:, :, 0] + grid_columns[:, None]) * stride + left
+                landmarks[:, :, 1] = (landmarks[:, :, 1] + rows[:, None]) * stride + top
+                faces.extend(np.column_stack((
+                    boxes,
+                    landmarks.reshape(-1, 10),
+                    scores[selected],
+                )).tolist())
     return yunet_nms(faces)
 
 
@@ -644,13 +641,12 @@ def verify_installation() -> None:
             raise RuntimeError("GPU OCR smoke image produced no text")
 
         gpu_face_runtime = load_face_models("gpu")
-        detector_input = cv2.dnn.blobFromImage(np.full((640, 640, 3), 255, dtype=np.uint8))
-        detector_output = gpu_face_runtime["detector"].run(
-            None,
-            {gpu_face_runtime["detector"].get_inputs()[0].name: detector_input},
+        detected_faces = detect_yunet_gpu(
+            np.full((640, 640, 3), 255, dtype=np.uint8),
+            gpu_face_runtime["detector"],
         )
-        if len(detector_output) != 12:
-            raise RuntimeError("GPU YuNet inference returned unexpected outputs")
+        if not isinstance(detected_faces, list):
+            raise RuntimeError("GPU YuNet inference returned unexpected detections")
         recognizer_input = cv2.dnn.blobFromImage(
             np.zeros((112, 112, 3), dtype=np.uint8), 1.0, (112, 112), (0, 0, 0), True, False
         )

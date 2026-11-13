@@ -90,11 +90,21 @@ class WorkerTests(unittest.TestCase):
         worker.model_dir = Path(tempfile.gettempdir()) / "local-gallery-missing-model"
         worker.model_validation = None
 
-        state = worker.status()
+        with patch.object(worker, "cuda_provider_available", return_value=False):
+            state = worker.status()
 
         self.assertTrue(state["runtimeReady"])
         self.assertFalse(state["cudaAvailable"])
         self.assertEqual("cpu", state["device"])
+
+    def test_onnx_cuda_provider_is_available_without_torch_cuda(self):
+        with patch.object(worker, "cuda_provider_available", return_value=True):
+            state = worker.status()
+            available = worker.gpu_available(require_onnx=True)
+
+        self.assertTrue(available)
+        self.assertTrue(state["cudaAvailable"])
+        self.assertTrue(state["cudaExecutionProviderAvailable"])
 
     def test_cuda_oom_reduces_image_batch_size(self):
         batch_sizes = []
