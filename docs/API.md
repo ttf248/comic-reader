@@ -474,7 +474,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 | `photoCount`| 这段到访里的照片数                               |
 | `regions`   | 同期出现过的其它区域，每项 `{ "adcode", "name", "count" }` |
 
-`regions` 始终是数组（没有则为 `[]`）。同一区域的照片按拍摄时间排序后，相邻两张的日历日间隔不超过 2 天算作同一次到访，超过则另算一次；`visit` 序号与本列表的下标一一对应。响应同样包含 `region` 与 `untimedPhotoCount`。区划码格式错误返回 `400 invalid_region_adcode`，边界中不存在返回 `404 region_not_found`。
+`regions` 始终是数组（没有则为 `[]`）。同一区域的照片按拍摄时间排序后，相邻两张的日历日间隔不超过 2 天算作同一次到访，超过则另算一次；`visit` 序号与本列表的下标一一对应。响应同样包含 `region` 与 `untimedPhotoCount`，其中 `region.visitCount` 是这次到访的切分次数。区划码格式错误返回 `400 invalid_region_adcode`，边界中不存在返回 `404 region_not_found`。
 
 ### `GET /api/locations/china/regions/:adcode/media?cursor=…&limit=200`
 
@@ -540,10 +540,31 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 | `startedAt`/`endedAt` | 这一段的开始与结束日期                            |
 | `dayCount`        | 这一段跨的自然日天数                                   |
 | `photoCount`      | 这一段落在粒度上的照片数                               |
-| `stops`           | 停留点序列，每项 `{ "adcode", "name", "level", "at", "until", "dayCount", "photoCount" }` |
+| `stops`           | 停留点序列，每项 `{ "adcode", "name", "level", "parentAdcode", "at", "until", "dayCount", "photoCount" }` |
 | `coverResourceIds`| 代表照的资源 ID，最多 4 张                             |
+| `index`           | 这段在 `items` 里的序号（从 0 起），照片端点按它寻址   |
+| `bandResourceIds` | 照片带用的资源 ID，最多 12 张                          |
 
 **切分口径比到访宽**：相邻照片的日历日间隔超过 `gapDays` 天就断开，缺省 14 天。两天的口径是「回来算又一次到访」，拿来做行程会把出门一趟切成好几段。区别还在粒度：到访比的是同一个地方，行程比的是「去了哪些地方」；一段里只出现一个地方时它是 `stay」。市级粒度下「西湖区 → 余杭区」是同一次停留，符合人的说法。
+
+`parentAdcode` 是停留点的直接上级（省级停留点为 `null`）：界面按它去取「停留点所在的那一层轮廓」—— 停留点是市，它的直接上级就是省，轮廓取该省的城市；停留点是省，上级为空，轮廓取全国各省。
+
+`bandResourceIds` 按时间**均匀采样**，不是只取开头几张：一段行程是一个跨度，只给开头几张会把这段讲成「刚到那儿」。采样点含首尾，因此带子既看得到开头，也看得到收尾。
+
+### `GET /api/locations/china/trips/:index/media`
+
+返回某一段行程的照片分页。
+
+| 参数          | 含义                                                    |
+| ------------- | ------------------------------------------------------- |
+| `granularity` | 粒度：`province`、`city` 或 `district`，缺省 `city`    |
+| `gapDays`     | 切分两段行程的最大间隔（天），1–365，缺省 14            |
+| `from`/`to`   | 时间区间，`YYYY-MM`，左闭右闭                         |
+| `cursor`/`limit` | 分页游标与页大小，页大小缺省 60、上限 200         |
+
+`page` 的结构与区域照片墙一致（`items` / `total` / `nextCursor` / `albums`），另带 `trip`：这一段的行程信息。
+
+**段与照片必须用同一套切分口径**：行程是按「粒度 + 间隔 + 时间区间」切出来的，因此取照片时必须带上同样的 `granularity`、`gapDays` 与 `from`/`to`，否则按下标取到的不是同一段。序号越界返回 `404 trip_not_found`，序号不是非负整数返回 `400 invalid_trip_index`。
 
 ## 相册与搜索
 

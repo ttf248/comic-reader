@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"math"
 	"sort"
 )
 
@@ -42,13 +43,18 @@ type ChinaPlaces struct {
 
 // ChinaTripStop 是一次行程里的一个停留段。
 type ChinaTripStop struct {
-	Adcode     int    `json:"adcode"`
-	Name       string `json:"name"`
-	Level      string `json:"level"`
-	At         string `json:"at"`
-	Until      string `json:"until"`
-	DayCount   int    `json:"dayCount"`
-	PhotoCount int    `json:"photoCount"`
+	Adcode int    `json:"adcode"`
+	Name   string `json:"name"`
+	Level  string `json:"level"`
+	// ParentAdcode 是这个停留点的直接上级；省级停留点没有上级，是 null。
+	//
+	// 界面按它去取「停留点所在的那一层轮廓」：停留点是市，它的直接上级
+	// 就是省，轮廓取该省的城市；停留点是省，上级为空，轮廓取全国各省。
+	ParentAdcode *int   `json:"parentAdcode"`
+	At           string `json:"at"`
+	Until        string `json:"until"`
+	DayCount     int    `json:"dayCount"`
+	PhotoCount   int    `json:"photoCount"`
 }
 
 // ChinaTrip 是一段行程或一次停留。
@@ -59,6 +65,11 @@ type ChinaTripStop struct {
 type ChinaTrip struct {
 	// Id 是稳定标识：起始日 + 第一个停留点的区划码。
 	Id string `json:"id"`
+	// Index 是这段在行程列表里的序号（从 0 起）。
+	//
+	// 它是照片端点的地址：/trips/:index/media 按这个序号取回同一段的
+	// 照片。切分是纯函数，同样的粒度与间隔必然切出同样的段。
+	Index int `json:"index"`
 	// Kind 是 "trip"（走过多个地方）或 "stay"（只在一个地方）。
 	Kind             string          `json:"kind"`
 	StartedAt        string          `json:"startedAt"`
@@ -67,6 +78,11 @@ type ChinaTrip struct {
 	PhotoCount       int             `json:"photoCount"`
 	Stops            []ChinaTripStop `json:"stops"`
 	CoverResourceIDs []string        `json:"coverResourceIds"`
+	// BandResourceIDs 是照片带用的照片，最多 chinaTripBandCount 张。
+	//
+	// 行程要能被当成一段内容读出来，靠的就是这条照片带：只有文字的行程
+	// 读不出「那几天是什么样」。
+	BandResourceIDs []string `json:"bandResourceIds"`
 }
 
 // ChinaTrips 是行程的响应。
@@ -307,6 +323,128 @@ func chinaPlaceCoverIDs(photos []chinaRegionPhoto, visits []chinaVisit) []string
 // chinaCoverCount 是代表照的张数上限。
 const chinaCoverCount = 4
 
+// chinaTripSegment 是一段行程的原料：这一段的照片与它的停留点。
+type chinaTripSegment struct {
+	startedAt chinaCaptureTime
+	endedAt   chinaCaptureTime
+	photos    []chinaRegionPhoto
+	stops     []chinaStopSegment
+}
+
+// chinaTripSegments 按行程口径切段。
+//
+// 切分与到访共用同一个函数（间隔超过 gapDays 就断开），区别只在粒度：
+// 粒度决定「连续落在同一个地方」怎么算。切完按开始时间排序 —— 两段的
+// 开始日期不可能相同（中间至少隔着 gapDays 天），因此段的下标是确定的，
+// 照片端点按下标取到的必然是同一段。
+func chinaTripSegments(
+	photos []chinaRegionPhoto,
+	granularity string,
+	index *chinaAdminIndex,
+	gapDays int,
+) []chinaTripSegment {
+	segments := splitChinaVisitsByGap(photos, gapDays)
+	result := make([]chinaTripSegment, 0, len(segments))
+	for _, segment := range segments {
+		stops := chinaTrajectoryStops(segment.photos, func(photo chinaRegionPhoto) int {
+			return chinaPlaceKey(photo, granularity, index)
+		}, index)
+		if len(stops) == 0 {
+			continue
+		}
+		result = append(result, chinaTripSegment{
+			startedAt: segment.startedAt,
+			endedAt:   segment.endedAt,
+			photos:    segment.photos,
+			stops:     stops,
+		})
+	}
+	sort.SliceStable(result, func(i, j int) bool {
+		return result[i].startedAt.DayKey < result[j].startedAt.DayKey
+	})
+	return result
+}
+
+// chinaStopParentAdcode 给出停留点的直接上级；省级停留点没有上级。
+func chinaStopParentAdcode(adcode int, index *chinaAdminIndex) *int {
+	feature, exists := index.byAdcode[adcode]
+	if !exists || feature.level == chinaAdminProvinceLevel {
+		return nil
+	}
+	if feature.parentAdcode <= 0 {
+		return nil
+	}
+	parent := feature.parentAdcode
+	return &parent
+}
+
+// chinaTripOf 把一段行程的原料转成对外结构。
+func chinaTripOf(segment chinaTripSegment, position int, index *chinaAdminIndex) ChinaTrip {
+	kind := chinaTripKindStay
+	if len(segment.stops) > 1 {
+		kind = chinaTripKindTrip
+	}
+	photoCount := 0
+	for _, stop := range segment.stops {
+		photoCount += stop.count
+	}
+	trip := ChinaTrip{
+		Id:               segment.startedAt.DayKey + "-" + fmt.Sprint(segment.stops[0].adcode),
+		Index:            position,
+		Kind:             kind,
+		StartedAt:        segment.startedAt.DayKey,
+		EndedAt:          segment.endedAt.DayKey,
+		DayCount:         segment.endedAt.dayIndex() - segment.startedAt.dayIndex() + 1,
+		PhotoCount:       photoCount,
+		Stops:            make([]ChinaTripStop, 0, len(segment.stops)),
+		CoverResourceIDs: make([]string, 0, chinaCoverCount),
+		BandResourceIDs:  chinaTripBandIDs(segment.photos, chinaTripBandCount),
+	}
+	for _, stop := range segment.stops {
+		trip.Stops = append(trip.Stops, ChinaTripStop{
+			Adcode:       stop.adcode,
+			Name:         stop.name,
+			Level:        stop.level,
+			ParentAdcode: chinaStopParentAdcode(stop.adcode, index),
+			At:           stop.first.DayKey,
+			Until:        stop.last.DayKey,
+			DayCount:     stop.last.dayIndex() - stop.first.dayIndex() + 1,
+			PhotoCount:   stop.count,
+		})
+		if len(trip.CoverResourceIDs) < chinaCoverCount && stop.coverID != "" {
+			trip.CoverResourceIDs = append(trip.CoverResourceIDs, stop.coverID)
+		}
+	}
+	return trip
+}
+
+// chinaTripBandCount 是照片带的张数上限。
+const chinaTripBandCount = 12
+
+// chinaTripBandIDs 挑照片带用的照片。
+//
+// 按时间均匀采样，而不是只取开头几张：一段行程是一个跨度，只给开头
+// 几张会把这段讲成「刚到那儿」。均匀取能照顾到首尾，读者看到的是整段。
+func chinaTripBandIDs(photos []chinaRegionPhoto, limit int) []string {
+	ids := make([]string, 0, min(len(photos), limit))
+	if len(photos) == 0 || limit <= 0 {
+		return ids
+	}
+	if len(photos) <= limit {
+		for _, photo := range photos {
+			ids = append(ids, photo.resourceID)
+		}
+		return ids
+	}
+	// 采样点落在首尾之间，步长大于 1 时不会撞在一起。
+	step := float64(len(photos)-1) / float64(limit-1)
+	for i := 0; i < limit; i++ {
+		position := int(math.Round(float64(i) * step))
+		ids = append(ids, photos[position].resourceID)
+	}
+	return ids
+}
+
 // Trips 返回行程与停留。
 //
 // 切分口径与到访完全一致（相邻照片的日历日间隔超过 2 天就断开），
@@ -333,50 +471,11 @@ func (s *ChinaLocationService) Trips(
 		return ChinaTrips{}, err
 	}
 	scoped := match.scopedPhotos(match.timedPhotos, timeRange)
-	segments := splitChinaVisitsByGap(scoped, gapDays)
+	segments := chinaTripSegments(scoped, granularity, index, gapDays)
 	trips := make([]ChinaTrip, 0, len(segments))
-	for _, segment := range segments {
-		stops := chinaTrajectoryStops(segment.photos, func(photo chinaRegionPhoto) int {
-			return chinaPlaceKey(photo, granularity, index)
-		}, index)
-		if len(stops) == 0 {
-			continue
-		}
-		kind := chinaTripKindStay
-		if len(stops) > 1 {
-			kind = chinaTripKindTrip
-		}
-		photoCount := 0
-		for _, stop := range stops {
-			photoCount += stop.count
-		}
-		trip := ChinaTrip{
-			Id:               segment.startedAt.DayKey + "-" + fmt.Sprint(stops[0].adcode),
-			Kind:             kind,
-			StartedAt:        segment.startedAt.DayKey,
-			EndedAt:          segment.endedAt.DayKey,
-			DayCount:         segment.endedAt.dayIndex() - segment.startedAt.dayIndex() + 1,
-			PhotoCount:       photoCount,
-			Stops:            make([]ChinaTripStop, 0, len(stops)),
-			CoverResourceIDs: make([]string, 0, chinaCoverCount),
-		}
-		for _, stop := range stops {
-			trip.Stops = append(trip.Stops, ChinaTripStop{
-				Adcode:     stop.adcode,
-				Name:       stop.name,
-				Level:      stop.level,
-				At:         stop.first.DayKey,
-				Until:      stop.last.DayKey,
-				DayCount:   stop.last.dayIndex() - stop.first.dayIndex() + 1,
-				PhotoCount: stop.count,
-			})
-			if len(trip.CoverResourceIDs) < chinaCoverCount && stop.coverID != "" {
-				trip.CoverResourceIDs = append(trip.CoverResourceIDs, stop.coverID)
-			}
-		}
-		trips = append(trips, trip)
+	for position, segment := range segments {
+		trips = append(trips, chinaTripOf(segment, position, index))
 	}
-	sort.SliceStable(trips, func(i, j int) bool { return trips[i].StartedAt < trips[j].StartedAt })
 	return ChinaTrips{
 		Revision:          snapshot.Revision(),
 		BoundaryVersion:   chinaBoundaryVersion,

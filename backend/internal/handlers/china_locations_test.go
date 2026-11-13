@@ -51,7 +51,31 @@ func chinaLocationTestApp(t *testing.T) (*fiber.App, *services.ResourceCatalog, 
 	api.Get("/locations/china/regions/:adcode/visits", ChinaLocationRegionVisitsHandler(catalog, service, locations, safetyState.Validate))
 	api.Get("/locations/china/regions/:adcode/media", ChinaLocationRegionMediaHandler(catalog, service, locations, safetyState.Validate, nil))
 	api.Get("/locations/china/geometry/:level", ChinaGeometryHandler())
+	api.Get("/locations/china/trips/:index/media", ChinaTripMediaHandler(catalog, service, locations, safetyState.Validate, nil))
 	return app, catalog, root
+}
+
+// TestChinaTripMediaAPIRejectsUnknownTrip 守住行程序号的校验。
+//
+// 段是切分出来的，序号越界不是空页而是没有这一段。
+func TestChinaTripMediaAPIRejectsUnknownTrip(t *testing.T) {
+	app, _, _ := chinaLocationTestApp(t)
+	response, err := app.Test(httptest.NewRequest("GET", "/api/locations/china/trips/0/media", nil), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != fiber.StatusNotFound {
+		t.Fatalf("status = %d, want 404", response.StatusCode)
+	}
+	invalid, err := app.Test(httptest.NewRequest("GET", "/api/locations/china/trips/-1/media", nil), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer invalid.Body.Close()
+	if invalid.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", invalid.StatusCode)
+	}
 }
 
 func TestChinaLocationsAPIProvidesOfflineProvinceStatistics(t *testing.T) {

@@ -195,20 +195,9 @@ func ChinaTripsHandler(catalog *services.ResourceCatalog, jobs *services.AIJobSe
 		if jobs == nil || locations == nil {
 			return writeError(c, fiber.StatusServiceUnavailable, "analysis_unavailable", "analysis service is unavailable")
 		}
-		granularity := strings.TrimSpace(c.Query("granularity"))
-		if granularity == "" {
-			granularity = services.ChinaCityLevel
-		}
-		if !services.IsChinaPlaceGranularity(granularity) {
-			return writeError(c, fiber.StatusBadRequest, "invalid_region_level", "granularity must be province, city or district")
-		}
-		gapDays := services.ChinaTripMaxGapDays
-		if raw := strings.TrimSpace(c.Query("gapDays")); raw != "" {
-			value, err := strconv.Atoi(raw)
-			if err != nil || value < 1 || value > 365 {
-				return writeError(c, fiber.StatusBadRequest, "invalid_trip_gap", "gapDays must be between 1 and 365")
-			}
-			gapDays = value
+		granularity, gapDays, ok := parseChinaTripQuery(c)
+		if !ok {
+			return nil
 		}
 		timeRange, ok := parseChinaTimeRange(c)
 		if !ok {
@@ -230,6 +219,82 @@ func ChinaTripsHandler(catalog *services.ResourceCatalog, jobs *services.AIJobSe
 		c.Set(fiber.HeaderETag, etag)
 		return c.JSON(fiber.Map{"ok": true, "trips": trips})
 	}
+}
+
+// ChinaTripMediaHandler 返回某一段行程的照片分页。
+//
+// 行程序号是段在行程列表里的位置：行程与照片必须用同一套切分口径，
+// 否则按序号取回来的会是另一段。粒度与间隔因此也要跟着传。
+func ChinaTripMediaHandler(catalog *services.ResourceCatalog, jobs *services.AIJobService, locations *services.ChinaLocationService, validate func(string) (string, error), picks *store.PickStore) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		if jobs == nil || locations == nil {
+			return writeError(c, fiber.StatusServiceUnavailable, "analysis_unavailable", "analysis service is unavailable")
+		}
+		tripIndex, ok := parseChinaTripIndex(c)
+		if !ok {
+			return nil
+		}
+		granularity, gapDays, ok := parseChinaTripQuery(c)
+		if !ok {
+			return nil
+		}
+		timeRange, ok := parseChinaTimeRange(c)
+		if !ok {
+			return nil
+		}
+		limit, ok := parseLibraryPageLimit(c)
+		if !ok {
+			return nil
+		}
+		snapshot := requestCatalogSnapshot(c, catalog)
+		page, err := locations.TripMedia(snapshot, jobs.Records(services.AIJobTypeMetadata), jobs.RecordsRevision(), validate, granularity, timeRange, gapDays, tripIndex, c.Query("cursor"), limit)
+		if err != nil {
+			if errors.Is(err, services.ErrChinaTripNotFound) {
+				return writeError(c, fiber.StatusNotFound, "trip_not_found", "trip was not found")
+			}
+			if errors.Is(err, services.ErrLibraryNotReady) {
+				return writeLibraryPageError(c, err, snapshot.Revision())
+			}
+			return writeLibraryPageError(c, err, snapshot.Revision())
+		}
+		markFeedPicks(picks, page.Items)
+		return c.JSON(fiber.Map{"ok": true, "page": page})
+	}
+}
+
+// parseChinaTripQuery 读出行程的归并粒度与切分间隔。
+//
+// 两个行程端点必须用同一套参数，否则按下标取到的不是同一段。
+func parseChinaTripQuery(c *fiber.Ctx) (string, int, bool) {
+	granularity := strings.TrimSpace(c.Query("granularity"))
+	if granularity == "" {
+		granularity = services.ChinaCityLevel
+	}
+	if !services.IsChinaPlaceGranularity(granularity) {
+		writeError(c, fiber.StatusBadRequest, "invalid_region_level", "granularity must be province, city or district")
+		return "", 0, false
+	}
+	gapDays := services.ChinaTripMaxGapDays
+	if raw := strings.TrimSpace(c.Query("gapDays")); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil || value < 1 || value > 365 {
+			writeError(c, fiber.StatusBadRequest, "invalid_trip_gap", "gapDays must be between 1 and 365")
+			return "", 0, false
+		}
+		gapDays = value
+	}
+	return granularity, gapDays, true
+}
+
+// parseChinaTripIndex 读出行程序号。
+func parseChinaTripIndex(c *fiber.Ctx) (int, bool) {
+	raw := strings.TrimSpace(c.Params("index"))
+	value, err := strconv.Atoi(raw)
+	if err != nil || value < 0 {
+		writeError(c, fiber.StatusBadRequest, "invalid_trip_index", "trip index must be a non-negative integer")
+		return 0, false
+	}
+	return value, true
 }
 
 // ChinaGeometryHandler 返回绘图用的行政区轮廓。

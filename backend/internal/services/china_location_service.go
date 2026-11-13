@@ -17,6 +17,9 @@ var ErrInvalidChinaRegionAdcode = errors.New("invalid china region adcode")
 // ErrChinaVisitNotFound 表示请求的到访序号不存在。
 var ErrChinaVisitNotFound = errors.New("china region visit not found")
 
+// ErrChinaTripNotFound 表示请求的行程序号不存在。
+var ErrChinaTripNotFound = errors.New("china trip not found")
+
 // ChinaLocationSummary 是全国省级照片地图的汇总结果。
 type ChinaLocationSummary struct {
 	Revision uint64 `json:"revision"`
@@ -149,6 +152,15 @@ type ChinaLocationRegions struct {
 type ChinaRegionMediaPage struct {
 	MediaFeedPage
 	Region ChinaLocationRegionInfo `json:"region"`
+}
+
+// ChinaTripMediaPage 是某一段行程的照片分页。
+//
+// 行程的照片要能按段取到：段是切分出来的，用序号寻址最直接，也省得
+// 在地址里塞一串区划码与日期。
+type ChinaTripMediaPage struct {
+	MediaFeedPage
+	Trip ChinaTrip `json:"trip"`
 }
 
 // ChinaLocationService 复用同一次照片匹配结果，为全国地图、子区域地图与
@@ -647,6 +659,7 @@ func (s *ChinaLocationService) Visits(
 		})
 	}
 	result.Region.PhotoCount = len(scoped)
+	result.Region.VisitCount = len(visits)
 	result.Region.UnmatchedAreaPhotoCount = unmatchedChinaRegionPhotoCount(scoped, feature, index)
 	return result, nil
 }
@@ -732,6 +745,81 @@ func (s *ChinaLocationService) RegionMedia(
 			Sources: []FeedSource{},
 		},
 		Region: regionInfo,
+	}, nil
+}
+
+// TripMedia 返回某一段行程的照片分页。
+//
+// 段是按行程口径切出来的：同样的粒度、同样的间隔、同样的时间区间，
+// 必然切出同样的段序列，因此按下标取到的就是列表里的那一段。
+func (s *ChinaLocationService) TripMedia(
+	snapshot CatalogSnapshot,
+	records []AIAnalysisRecord,
+	recordsRevision uint64,
+	validatePath func(string) (string, error),
+	granularity string,
+	timeRange ChinaTimeRange,
+	gapDays int,
+	tripIndex int,
+	cursor string,
+	limit int,
+) (ChinaTripMediaPage, error) {
+	if !IsChinaPlaceGranularity(granularity) {
+		return ChinaTripMediaPage{}, fmt.Errorf("unknown trip granularity %q", granularity)
+	}
+	match, err := s.currentMatch(snapshot, records, recordsRevision, validatePath)
+	if err != nil {
+		return ChinaTripMediaPage{}, err
+	}
+	index, err := loadChinaAdminIndex()
+	if err != nil {
+		return ChinaTripMediaPage{}, err
+	}
+	scoped := match.scopedPhotos(match.timedPhotos, timeRange)
+	segments := chinaTripSegments(scoped, granularity, index, gapDays)
+	if tripIndex < 0 || tripIndex >= len(segments) {
+		return ChinaTripMediaPage{}, ErrChinaTripNotFound
+	}
+	segment := segments[tripIndex]
+	photos := segment.photos
+
+	scope := fmt.Sprintf("china-trip-media:%d:%s:%d:%s", tripIndex, granularity, gapDays, timeRange.scopeKey())
+	offset, err := pageOffset(snapshot, cursor, scope)
+	if err != nil {
+		return ChinaTripMediaPage{}, err
+	}
+	start, end, next, err := pageBounds(snapshot.Revision(), scope, cursor != "", offset, len(photos), limit)
+	if err != nil {
+		return ChinaTripMediaPage{}, err
+	}
+	ids := make([]string, 0, end-start)
+	for _, photo := range photos[start:end] {
+		ids = append(ids, photo.resourceID)
+	}
+	items := ResolveLibraryFeedItems(snapshot, ids, validatePath)
+	albums := make(map[string]*FeedAlbumRef)
+	for _, item := range items {
+		ref, exists := albums[item.AlbumID]
+		if !exists {
+			ref = &FeedAlbumRef{ID: item.AlbumID, Name: item.AlbumName}
+			albums[item.AlbumID] = ref
+		}
+		ref.Count++
+	}
+	albumRefs := make([]FeedAlbumRef, 0, len(albums))
+	for _, ref := range albums {
+		albumRefs = append(albumRefs, *ref)
+	}
+	sort.Slice(albumRefs, func(i, j int) bool { return albumRefs[i].Name < albumRefs[j].Name })
+	return ChinaTripMediaPage{
+		MediaFeedPage: MediaFeedPage{
+			LibraryPage: LibraryPage[FeedMediaItem]{
+				Revision: snapshot.Revision(), Items: items, Total: len(photos), NextCursor: next,
+			},
+			Albums:  albumRefs,
+			Sources: []FeedSource{},
+		},
+		Trip: chinaTripOf(segment, tripIndex, index),
 	}, nil
 }
 

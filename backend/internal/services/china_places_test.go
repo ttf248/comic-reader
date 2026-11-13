@@ -1,6 +1,9 @@
 package services
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 // chinaPlaceByAdcode 在地点索引里找一个地方。
 func chinaPlaceByAdcode(places []ChinaPlace, adcode int) (ChinaPlace, bool) {
@@ -233,5 +236,148 @@ func TestChinaTripsGapWidthChangesTheSegmentation(t *testing.T) {
 	}
 	if wide.GapDays != 14 {
 		t.Fatalf("gap days = %d", wide.GapDays)
+	}
+}
+
+// TestChinaTripsCarryTheirOwnPhotos 守住「行程带自己的照片」。
+//
+// 行程要能被当成一段内容读出来，靠的就是照片带；照片按序号寻址，
+// 段与照片必须用同一套切分口径，否则按序号取回的是另一段。
+func TestChinaTripsCarryTheirOwnPhotos(t *testing.T) {
+	root := t.TempDir()
+	files := writeAIJobImages(t, root, 4)
+	catalog := aiJobCatalog(root, files)
+	snapshot := catalog.Acquire()
+	validator := aiTestPathValidator(t, root)
+	records := chinaTestRecords(t, catalog, files, []chinaTestPhoto{
+		{Coordinate: [2]float64{30.259242, 120.130396}, Datum: "GCJ-02", CapturedAt: "2019-05-02T10:00:00"},
+		{Coordinate: [2]float64{30.259242, 120.130396}, Datum: "GCJ-02", CapturedAt: "2019-05-03T10:00:00"},
+		{Coordinate: [2]float64{31.230416, 121.473701}, Datum: "GCJ-02", CapturedAt: "2019-05-05T10:00:00"},
+		// 半年后：另一次行程。
+		{Coordinate: [2]float64{30.259242, 120.130396}, Datum: "GCJ-02", CapturedAt: "2021-06-12T10:00:00"},
+	})
+	service := NewChinaLocationService()
+
+	trips, err := service.Trips(snapshot, records, 1, validator, chinaAdminCityLevel, ChinaTimeRange{}, ChinaTripMaxGapDays)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if trips.Total != 2 {
+		t.Fatalf("trips = %d, want 2: %+v", trips.Total, trips.Items)
+	}
+	for position, trip := range trips.Items {
+		if trip.Index != position {
+			t.Fatalf("trip %d reports index %d", position, trip.Index)
+		}
+	}
+	if len(trips.Items[0].BandResourceIDs) != 3 {
+		t.Fatalf("first trip band = %v, want three photos", trips.Items[0].BandResourceIDs)
+	}
+	if len(trips.Items[1].BandResourceIDs) != 1 {
+		t.Fatalf("second trip band = %v, want one photo", trips.Items[1].BandResourceIDs)
+	}
+
+	// 按序号取回的就是同一段。
+	page, err := service.TripMedia(snapshot, records, 1, validator, chinaAdminCityLevel, ChinaTimeRange{}, ChinaTripMaxGapDays, 0, "", 200)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Total != 3 || len(page.Items) != 3 {
+		t.Fatalf("trip media = %d items, want 3: %+v", page.Total, page.Items)
+	}
+	if page.Trip.Id != trips.Items[0].Id {
+		t.Fatalf("trip media trip = %q, want %q", page.Trip.Id, trips.Items[0].Id)
+	}
+	if len(page.Items) > 0 && page.Items[0].ID != trips.Items[0].BandResourceIDs[0] {
+		t.Fatalf("trip media first item = %q, want %q", page.Items[0].ID, trips.Items[0].BandResourceIDs[0])
+	}
+
+	// 越界的序号是 404，不是空页。
+	if _, err := service.TripMedia(snapshot, records, 1, validator, chinaAdminCityLevel, ChinaTimeRange{}, ChinaTripMaxGapDays, 9, "", 200); err == nil {
+		t.Fatal("trip media accepted an unknown trip index")
+	}
+}
+
+// TestChinaTripBandSamplesAcrossTheWholeSegment 守住照片带的采样。
+//
+// 一段行程是一个跨度：只取开头几张会把这段讲成「刚到那儿」。
+// 均匀采样要照顾到首尾。
+func TestChinaTripBandSamplesAcrossTheWholeSegment(t *testing.T) {
+	root := t.TempDir()
+	files := writeAIJobImages(t, root, 14)
+	catalog := aiJobCatalog(root, files)
+	snapshot := catalog.Acquire()
+	validator := aiTestPathValidator(t, root)
+	photos := make([]chinaTestPhoto, 0, 14)
+	for day := 1; day <= 14; day++ {
+		photos = append(photos, chinaTestPhoto{
+			Coordinate: [2]float64{30.259242, 120.130396}, Datum: "GCJ-02",
+			CapturedAt: fmt.Sprintf("2019-05-%02dT10:00:00", day),
+		})
+	}
+	records := chinaTestRecords(t, catalog, files, photos)
+	service := NewChinaLocationService()
+
+	trips, err := service.Trips(snapshot, records, 1, validator, chinaAdminCityLevel, ChinaTimeRange{}, ChinaTripMaxGapDays)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if trips.Total != 1 {
+		t.Fatalf("trips = %d, want 1: %+v", trips.Total, trips.Items)
+	}
+	band := trips.Items[0].BandResourceIDs
+	if len(band) != chinaTripBandCount {
+		t.Fatalf("band = %d photos, want %d: %v", len(band), chinaTripBandCount, band)
+	}
+	page, err := service.TripMedia(snapshot, records, 1, validator, chinaAdminCityLevel, ChinaTimeRange{}, ChinaTripMaxGapDays, 0, "", 200)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Total != 14 {
+		t.Fatalf("trip media total = %d, want 14", page.Total)
+	}
+	if band[0] != page.Items[0].ID {
+		t.Fatalf("band starts at %q, want %q", band[0], page.Items[0].ID)
+	}
+	if band[len(band)-1] != page.Items[len(page.Items)-1].ID {
+		t.Fatalf("band ends at %q, want %q", band[len(band)-1], page.Items[len(page.Items)-1].ID)
+	}
+}
+
+// TestChinaTripStopsCarryTheirParent 守住停留点的上级。
+//
+// 段落的地图按「停留点的直接上级」去取那一层轮廓：停留点是市就取
+// 该省的城市，停留点是省就没有上级，取全国各省。
+func TestChinaTripStopsCarryTheirParent(t *testing.T) {
+	root := t.TempDir()
+	files := writeAIJobImages(t, root, 3)
+	catalog := aiJobCatalog(root, files)
+	snapshot := catalog.Acquire()
+	validator := aiTestPathValidator(t, root)
+	records := chinaTestRecords(t, catalog, files, []chinaTestPhoto{
+		{Coordinate: [2]float64{30.259242, 120.130396}, Datum: "GCJ-02", CapturedAt: "2019-05-02T10:00:00"},
+		{Coordinate: [2]float64{31.230416, 121.473701}, Datum: "GCJ-02", CapturedAt: "2019-05-05T10:00:00"},
+		{Coordinate: [2]float64{30.259242, 120.130396}, Datum: "GCJ-02", CapturedAt: "2019-05-06T10:00:00"},
+	})
+	service := NewChinaLocationService()
+
+	trips, err := service.Trips(snapshot, records, 1, validator, chinaAdminCityLevel, ChinaTimeRange{}, ChinaTripMaxGapDays)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if trips.Total != 1 {
+		t.Fatalf("trips = %d, want 1: %+v", trips.Total, trips.Items)
+	}
+	stops := trips.Items[0].Stops
+	if len(stops) != 3 {
+		t.Fatalf("stops = %d, want 3: %+v", len(stops), stops)
+	}
+	// 杭州市的上级是浙江省。
+	if stops[0].ParentAdcode == nil || *stops[0].ParentAdcode != 330000 {
+		t.Fatalf("Hangzhou stop parent = %v, want 330000", stops[0].ParentAdcode)
+	}
+	// 直辖市没有市一级，停留点就是上海本身，没有上级。
+	if stops[1].ParentAdcode != nil {
+		t.Fatalf("Shanghai stop parent = %v, want null", *stops[1].ParentAdcode)
 	}
 }
