@@ -119,3 +119,38 @@ func TestChinaOutlineIsSubstantiallySmallerThanTheMatchingBoundaries(t *testing.
 	}
 	t.Logf("outline %d points vs matching %d points", outlinePoints, matchPoints)
 }
+
+// TestChinaOutlineFeaturesByAdcode 守住「按区划码取轮廓」。
+//
+// 地图要画的是「去过的那些地方自己的形状」。直辖市的区县没有市一级
+// （310104 直接挂在 310000 下），省直辖县级市在市级粒度里会卷到省 ——
+// 前端推不出它们的父级，只能按区划码来取。
+func TestChinaOutlineFeaturesByAdcode(t *testing.T) {
+	features, hash, err := ChinaOutlineFeatures([]int{330100, 310000, 310104, 999999, 330100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hash == "" {
+		t.Fatal("outline hash is empty")
+	}
+	// 重复的区划码只给一份；查不到的区划码跳过而不是报错。
+	if len(features) != 3 {
+		t.Fatalf("features = %d, want 3: %+v", len(features), features)
+	}
+	byAdcode := make(map[int]ChinaOutlineFeature, len(features))
+	for _, feature := range features {
+		byAdcode[feature.Adcode] = feature
+	}
+	hangzhou, exists := byAdcode[330100]
+	if !exists || hangzhou.Name == "" || len(hangzhou.Geometry) == 0 {
+		t.Fatalf("Hangzhou outline = %+v", hangzhou)
+	}
+	// 直辖市的区县：它的形状在轮廓索引里，与「按父级取」是两条路。
+	district, exists := byAdcode[310104]
+	if !exists || len(district.Geometry) == 0 {
+		t.Fatalf("municipality district outline = %+v", district)
+	}
+	if district.Level != chinaAdminDistrictLevel {
+		t.Fatalf("district level = %q", district.Level)
+	}
+}

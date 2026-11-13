@@ -1,7 +1,10 @@
 package handlers
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -260,6 +263,113 @@ func ChinaTripMediaHandler(catalog *services.ResourceCatalog, jobs *services.AIJ
 		markFeedPicks(picks, page.Items)
 		return c.JSON(fiber.Map{"ok": true, "page": page})
 	}
+}
+
+// ChinaPointsHandler 返回照片位置的网格聚合。
+//
+// 点位给的是「照片具体在哪儿」：行政区匹配只知道落在哪个省、市、区县，
+// 点位才画得出城市的样子。坐标只以网格聚合下发，不还原到单张照片。
+func ChinaPointsHandler(catalog *services.ResourceCatalog, jobs *services.AIJobService, locations *services.ChinaLocationService, validate func(string) (string, error)) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		if jobs == nil || locations == nil {
+			return writeError(c, fiber.StatusServiceUnavailable, "analysis_unavailable", "analysis service is unavailable")
+		}
+		cell := services.ChinaPointDefaultCell
+		if raw := strings.TrimSpace(c.Query("cell")); raw != "" {
+			value, err := strconv.ParseFloat(raw, 64)
+			if err != nil || !services.IsChinaPointCell(value) {
+				return writeError(c, fiber.StatusBadRequest, "invalid_point_cell", "cell must be one of 0.01, 0.02, 0.05, 0.1, 0.2 or 0.5")
+			}
+			cell = value
+		}
+		timeRange, ok := parseChinaTimeRange(c)
+		if !ok {
+			return nil
+		}
+		snapshot := requestCatalogSnapshot(c, catalog)
+		revision := jobs.RecordsRevision()
+		etag := chinaLocationETag("points-"+strconv.FormatFloat(cell, 'f', -1, 64), services.ChinaLocationBoundaryHash(), snapshot.Revision(), revision, timeRange)
+		if matchETag(c.Get(fiber.HeaderIfNoneMatch), etag) {
+			return c.SendStatus(fiber.StatusNotModified)
+		}
+		points, err := locations.Points(snapshot, jobs.Records(services.AIJobTypeMetadata), revision, validate, timeRange, cell)
+		if err != nil {
+			if errors.Is(err, services.ErrLibraryNotReady) {
+				return writeLibraryPageError(c, err, snapshot.Revision())
+			}
+			return writeError(c, fiber.StatusInternalServerError, "location_map_unavailable", "offline location boundaries are unavailable")
+		}
+		c.Set(fiber.HeaderETag, etag)
+		return c.JSON(fiber.Map{"ok": true, "points": points})
+	}
+}
+
+// ChinaGeometryFeaturesHandler 按区划码返回绘图轮廓。
+//
+// 轮廓端点原本只按层级与上级取，前端要画「去过的那些地方自己的形状」
+// 时却推不出它们的父级（直辖市的区县没有市一级，省直辖县级市在市级
+// 粒度里会卷到省）。按区划码取就没有这层推导。
+//
+// 与其它轮廓端点一样：几何是静态数据，只随边界数据变化。
+func ChinaGeometryFeaturesHandler() fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		adcodes, ok := parseChinaAdcodes(c.Query("adcodes"))
+		if !ok {
+			return writeError(c, fiber.StatusBadRequest, "invalid_region_adcode", "adcodes must be a comma-separated list of positive integers")
+		}
+		features, hash, err := services.ChinaOutlineFeatures(adcodes)
+		if err != nil {
+			return writeError(c, fiber.StatusInternalServerError, "location_map_unavailable", "offline location boundaries are unavailable")
+		}
+		etag := `W/"china-outline-features-` + hash + "-" + chinaAdcodesDigest(adcodes) + `"`
+		if matchETag(c.Get(fiber.HeaderIfNoneMatch), etag) {
+			return c.SendStatus(fiber.StatusNotModified)
+		}
+		c.Set(fiber.HeaderETag, etag)
+		c.Set(fiber.HeaderCacheControl, "private, max-age=86400")
+		return c.JSON(fiber.Map{
+			"ok":              true,
+			"boundaryVersion": services.ChinaOutlineVersion(),
+			"hash":            hash,
+			"features":        features,
+		})
+	}
+}
+
+// parseChinaAdcodes 解析逗号分隔的区划码列表。
+func parseChinaAdcodes(raw string) ([]int, bool) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, false
+	}
+	parts := strings.Split(raw, ",")
+	adcodes := make([]int, 0, len(parts))
+	for _, part := range parts {
+		value, err := strconv.Atoi(strings.TrimSpace(part))
+		if err != nil || value <= 0 {
+			return nil, false
+		}
+		adcodes = append(adcodes, value)
+	}
+	if len(adcodes) == 0 {
+		return nil, false
+	}
+	return adcodes, true
+}
+
+// chinaAdcodesDigest 给区划码集合算一个短摘要，用在 ETag 里。
+//
+// 集合的顺序不影响响应内容（返回的要素按区划码排序），因此摘要按排序
+// 后的集合算。
+func chinaAdcodesDigest(adcodes []int) string {
+	sorted := append([]int(nil), adcodes...)
+	sort.Ints(sorted)
+	digest := sha256.New()
+	for _, adcode := range sorted {
+		digest.Write([]byte(strconv.Itoa(adcode)))
+		digest.Write([]byte{','})
+	}
+	return hex.EncodeToString(digest.Sum(nil)[:8])
 }
 
 // parseChinaTripQuery 读出行程的归并粒度与切分间隔。

@@ -419,7 +419,10 @@ func main() {
 	api.Get("/locations/china/regions/:adcode", boundaryGzip, handlers.ChinaLocationRegionsHandler(resourceCatalog, aiJobs, chinaLocations, safetyState.Validate))
 	api.Get("/locations/china/regions/:adcode/visits", handlers.ChinaLocationRegionVisitsHandler(resourceCatalog, aiJobs, chinaLocations, safetyState.Validate))
 	api.Get("/locations/china/regions/:adcode/media", handlers.ChinaLocationRegionMediaHandler(resourceCatalog, aiJobs, chinaLocations, safetyState.Validate, picks))
+	api.Get("/locations/china/points", boundaryGzip, handlers.ChinaPointsHandler(resourceCatalog, aiJobs, chinaLocations, safetyState.Validate))
 	// 绘图轮廓是静态数据，与媒体库无关：单独压缩，可以长期缓存。
+	// 按区划码取的那条要排在 :level 前面，否则会被它先接走。
+	api.Get("/locations/china/geometry/features", boundaryGzip, handlers.ChinaGeometryFeaturesHandler())
 	api.Get("/locations/china/geometry/:level", boundaryGzip, handlers.ChinaGeometryHandler())
 	api.Get("/locations/china/places", handlers.ChinaPlacesHandler(resourceCatalog, aiJobs, chinaLocations, safetyState.Validate))
 	api.Get("/locations/china/trips", handlers.ChinaTripsHandler(resourceCatalog, aiJobs, chinaLocations, safetyState.Validate))

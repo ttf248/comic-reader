@@ -127,6 +127,12 @@ type chinaRegionPhoto struct {
 	// 只匹配到省级时为 0。
 	provinceAdcode int
 	regionAdcode   int
+	// longitude 与 latitude 是照片的位置，与边界同一坐标系（GCJ-02）。
+	//
+	// 匹配时算出来过，用完就丢；现在留住它是为了画点位。点位只以网格
+	// 聚合下发，不还原到单张照片的坐标。
+	longitude float64
+	latitude  float64
 }
 
 // chinaCaptureTime 是按日历口径比较的拍摄时间。
@@ -311,6 +317,8 @@ func matchChinaLocations(
 			index:          fileRef.index,
 			captured:       parseChinaCaptureTime(metadata.DateTimeOriginal),
 			provinceAdcode: province.adcode,
+			longitude:      longitude,
+			latitude:       latitude,
 		}
 		// 最深命中要在归集之前定下来：省里的照片也要带着它命中了哪个
 		// 下级，否则「未细分」的数量与省级轨迹都算不出来。

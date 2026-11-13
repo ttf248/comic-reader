@@ -137,6 +137,44 @@ func ChinaOutline(level string, parentAdcode int) ([]ChinaOutlineFeature, string
 // chinaOutlineChildrenLevel 表示「取上级的全部直接下级」，不拘层级。
 const chinaOutlineChildrenLevel = "children"
 
+// ChinaOutlineFeatures 按区划码取出绘图轮廓。
+//
+// 轮廓端点原本只按层级与上级取（某省下面的市），前端要画「去过的那些
+// 地方自己的形状」时，得先知道每个地方的父级是谁 —— 而这个父级在前端
+// 推不出来：直辖市的区县没有市一级，省直辖县级市在市级粒度里会卷到省。
+// 直接按区划码取就没有这层推导。
+//
+// 查不到的区划码跳过而不是报错：台湾的区县本来就没有可用边界。
+func ChinaOutlineFeatures(adcodes []int) ([]ChinaOutlineFeature, string, error) {
+	index, err := loadChinaOutlineIndex()
+	if err != nil {
+		return nil, "", err
+	}
+	features := make([]ChinaOutlineFeature, 0, len(adcodes))
+	seen := make(map[int]struct{}, len(adcodes))
+	for _, adcode := range adcodes {
+		if adcode <= 0 {
+			continue
+		}
+		if _, exists := seen[adcode]; exists {
+			continue
+		}
+		seen[adcode] = struct{}{}
+		source, exists := index.byAdcode[adcode]
+		if !exists {
+			continue
+		}
+		features = append(features, ChinaOutlineFeature{
+			Adcode:   source.adcode,
+			Name:     source.name,
+			Level:    source.level,
+			Geometry: source.geometry,
+		})
+	}
+	sort.Slice(features, func(i, j int) bool { return features[i].Adcode < features[j].Adcode })
+	return features, index.hash, nil
+}
+
 // isChinaAdminLevel 判断是不是边界数据里的层级。
 func isChinaAdminLevel(level string) bool {
 	switch level {

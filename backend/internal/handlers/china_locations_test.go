@@ -50,7 +50,9 @@ func chinaLocationTestApp(t *testing.T) (*fiber.App, *services.ResourceCatalog, 
 	api.Get("/locations/china/regions/:adcode", ChinaLocationRegionsHandler(catalog, service, locations, safetyState.Validate))
 	api.Get("/locations/china/regions/:adcode/visits", ChinaLocationRegionVisitsHandler(catalog, service, locations, safetyState.Validate))
 	api.Get("/locations/china/regions/:adcode/media", ChinaLocationRegionMediaHandler(catalog, service, locations, safetyState.Validate, nil))
+	api.Get("/locations/china/geometry/features", ChinaGeometryFeaturesHandler())
 	api.Get("/locations/china/geometry/:level", ChinaGeometryHandler())
+	api.Get("/locations/china/points", ChinaPointsHandler(catalog, service, locations, safetyState.Validate))
 	api.Get("/locations/china/trips/:index/media", ChinaTripMediaHandler(catalog, service, locations, safetyState.Validate, nil))
 	return app, catalog, root
 }
@@ -470,5 +472,111 @@ func TestChinaGeometryAPIServesMixedLevelChildren(t *testing.T) {
 	}
 	if !levels["city"] || !levels["district"] {
 		t.Fatalf("mixed-level children are incomplete: %v", levels)
+	}
+}
+
+// TestChinaPointsAPIRejectsUnknownCell 守住格边长的白名单。
+//
+// 格边长是「画多细」的档位：只认几档，最细的一档是多少有确定的答案。
+func TestChinaPointsAPIRejectsUnknownCell(t *testing.T) {
+	app, _, _ := chinaLocationTestApp(t)
+	response, err := app.Test(httptest.NewRequest("GET", "/api/locations/china/points?cell=0.03", nil), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", response.StatusCode)
+	}
+	invalid, err := app.Test(httptest.NewRequest("GET", "/api/locations/china/points?cell=abc", nil), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer invalid.Body.Close()
+	if invalid.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", invalid.StatusCode)
+	}
+}
+
+// TestChinaPointsAPIChangesETagWithCell 守住 ETag 里带着格边长。
+//
+// 换了格边长，响应的内容就变了；ETag 不跟着变，客户端会拿到上一粒度的
+// 304，地图上画出来的点就会比请求的粗。
+func TestChinaPointsAPIChangesETagWithCell(t *testing.T) {
+	app, _, _ := chinaLocationTestApp(t)
+	coarse, err := app.Test(httptest.NewRequest("GET", "/api/locations/china/points?cell=0.5", nil), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer coarse.Body.Close()
+	if coarse.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d", coarse.StatusCode)
+	}
+	coarseETag := coarse.Header.Get("ETag")
+	if coarseETag == "" {
+		t.Fatal("points response has no ETag")
+	}
+	fine, err := app.Test(httptest.NewRequest("GET", "/api/locations/china/points?cell=0.01", nil), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer fine.Body.Close()
+	if fine.Header.Get("ETag") == coarseETag {
+		t.Fatalf("ETag %q did not change with the cell size", coarseETag)
+	}
+	// 同一个格边长再要一次：命中缓存。
+	cached, err := app.Test(httptest.NewRequest("GET", "/api/locations/china/points?cell=0.5", nil), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cached.Body.Close()
+	if cached.Header.Get("ETag") != coarseETag {
+		t.Fatalf("ETag changed for the same request: %q vs %q", cached.Header.Get("ETag"), coarseETag)
+	}
+}
+
+// TestChinaGeometryFeaturesAPIServesByAdcode 守住按区划码取轮廓的端点。
+//
+// 地图要画的是「去过的那些地方自己的形状」；直辖市的区县没有市一级，
+// 前端推不出父级，只能按区划码取。
+func TestChinaGeometryFeaturesAPIServesByAdcode(t *testing.T) {
+	app, _, _ := chinaLocationTestApp(t)
+	response, err := app.Test(httptest.NewRequest("GET", "/api/locations/china/geometry/features?adcodes=330100,310104", nil), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d", response.StatusCode)
+	}
+	var body struct {
+		BoundaryVersion string `json:"boundaryVersion"`
+		Features        []struct {
+			Adcode   int             `json:"adcode"`
+			Name     string          `json:"name"`
+			Geometry json.RawMessage `json:"geometry"`
+		} `json:"features"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body.BoundaryVersion == "" {
+		t.Fatal("outline response is missing its version")
+	}
+	if len(body.Features) != 2 {
+		t.Fatalf("features = %d, want 2: %+v", len(body.Features), body.Features)
+	}
+	for _, feature := range body.Features {
+		if feature.Name == "" || len(feature.Geometry) == 0 {
+			t.Fatalf("feature %d is incomplete: %+v", feature.Adcode, feature)
+		}
+	}
+	invalid, err := app.Test(httptest.NewRequest("GET", "/api/locations/china/geometry/features?adcodes=abc", nil), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer invalid.Body.Close()
+	if invalid.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", invalid.StatusCode)
 	}
 }
