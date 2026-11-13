@@ -184,7 +184,10 @@ scripts\install-ffmpeg.bat
 | backend/ | go test ./... | 后端单元与集成测试 |
 | backend/ | go test ./tests/integration -v | HTTP 集成主链路 |
 | backend/ | go vet ./... | 后端静态检查 |
-| backend/aiworker/ | python test_worker.py | Worker 权重校验、OOM 处理、强制 GPU 不回退与 CPU 状态测试 |
+| backend/ | go test ./internal/services -run TestOCRSearchQualityEvaluation -v | 可复现 OCR 中文空格、断行、标点与近似误识评测 |
+| backend/ | go test ./internal/services -run '^$' -bench '^BenchmarkVectorIndexSearch100K$' -benchtime=31x -benchmem | 10 万向量 Top-K 延迟与分配基准 |
+| backend/aiworker/ | python test_worker.py | Worker 权重校验、模型缓存、OOM 处理、强制 GPU 不回退与 CPU 状态测试 |
+| backend/aiworker/ | `python evaluate_quality.py --model-dir <cacheDir>/derived/ai/models --device gpu --profile-device-switches --output <ignored-path>.json` | 确定性中文语义/OCR 质量集与设备切换基准；输出写仓库忽略路径，不读取用户媒体 |
 | frontend/ | npm run lint | 前端静态检查 |
 | frontend/ | npm run test | Vitest 单元与组件测试 |
 | frontend/ | npm run build | TypeScript 检查与生产构建 |

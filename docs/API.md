@@ -205,13 +205,13 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 任务快照的 `jobs` 按创建时间倒序提供任务记录，`active` 是当前执行或暂停的任务，`queue` 是按执行顺序排列的等待任务 ID，不包含 `active`。任务记录包含等待队列任务以及所有终态记录。队列 ID 与任务状态会一起持久化到 `state/ai_jobs.json`；旧状态文件缺少 `queue` 时会按待执行任务的创建顺序恢复，服务重启时未完成的当前任务会插回队首续跑。
 
-任务状态为 `pending`、`running`、`paused`、`completed`、`failed`、`cancelled`。快照包含阶段、总数、已处理/跳过/失败/完成数、检查点、耗时、速度、开始/结束时间及错误项。任务的 `computeDevice` 是创建时记录的 `cpu` 或 `gpu`：元数据始终使用 CPU，其他模型任务默认强制使用 GPU；关闭 GPU 设置后新任务改用 CPU，已排队任务不变。旧状态里的未完成任务若没有设备记录，恢复时按当前 GPU 设置补录设备，元数据任务仍使用 CPU。设备不可用或 GPU 推理失败时，任务以 `failed` 结束，并在 `errorCode` 与 `error` 中记录原因。错误项包含资源 ID、根目录别名下的相对图片路径、稳定错误码、脱敏原因和时间；不返回文件系统绝对路径。任务在后台按 32 张一批提交，重启后自动恢复运行中任务。
+任务状态为 `pending`、`running`、`paused`、`completed`、`failed`、`cancelled`。快照包含阶段、总数、已处理/跳过/失败/完成数、检查点、耗时、速度、开始/结束时间及错误项。`stage` 会报告 GPU 环境检查、等待媒体库、整理分析清单、准备模型与首批推理，以及后续的模块批量推理。首批阶段可能包含模型冷启动。任务的 `computeDevice` 是创建时记录的 `cpu` 或 `gpu`：元数据始终使用 CPU，其他模型任务默认强制使用 GPU；关闭 GPU 设置后新任务改用 CPU，已排队任务不变。旧状态里的未完成任务若没有设备记录，恢复时按当前 GPU 设置补录设备，元数据任务仍使用 CPU。设备不可用或 GPU 推理失败时，任务以 `failed` 结束，并在 `errorCode` 与 `error` 中记录原因。错误项包含资源 ID、根目录别名下的相对图片路径、稳定错误码、脱敏原因和时间；不返回文件系统绝对路径。任务在后台按 32 张一批提交，重启后自动恢复运行中任务。
 
 快照里另有几个按持久化计数推导的进度字段，以及两份产出统计：
 
 - `planned`：本次任务实际要处理的张数。`total` 是整库规模，增量任务里绝大多数文件已经是最新的；`planned` 才是这次真正要干的活。它与 `GET /api/ai/jobs/estimate` 算出来的增量张数是同一个口径 —— 两边用同一条判据（大小、纳秒修改时间、模块版本）。
 - `completed`：已处理张数（成功与失败都算）。
-- `estimatedRemainingMs`：运行中任务的预计剩余毫秒。只在 `running` 时给出；暂停时耗时仍在增长、速度已失真，因此返回 0。队列、暂停与终态同样返回 0。
+- `estimatedRemainingMs`：运行中任务的预计剩余毫秒。根据任务墙钟耗时与已完成图片推算，包含清单整理和首次模型加载，因此小任务或冷启动时较粗略。只在 `running` 时给出；暂停时耗时仍在增长、速度已失真，因此返回 0。队列、暂停与终态同样返回 0。
 - `speedPerSecond`：每秒实际处理张数，不含被跳过的文件（增量任务的 `done` 从跳过数起步，按它算速度会在任务开头虚高）。
 - `results`：按处理结果分类的计数。元数据使用 `parsed`、`no_exif`、`unsupported`、`failed`；OCR 使用 `recognized`、`no_text`、`failed`；人脸使用 `faces_found`、`no_faces`、`failed`；向量使用 `indexed`、`failed`。每组键的计数和等于 `completed`。
 - `fields`：按字段统计的产出计数，键包括 `exifTime`、`camera`、`gps`、`embedding`、`ocrText`、`faces`。只统计实际取得内容的图片，不报告空结果。
@@ -409,7 +409,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 语义检索使用 `text`，以图搜图使用 `resourceId` 或 multipart 上传的 `image`（最大 64 MiB）；三者最多选一种。可额外组合 `ocrText`（最多 200 字符）、`albumId`、`year`、`locationId`、`personId`、`favoriteOnly` 与 `pickedOnly`。只做 OCR 或结构化筛选时不需要 `text`、图片或 Chinese-CLIP；至少要提供一个查询条件。`personId` 仅用于照片工作区；`favoriteOnly` 匹配被收藏相册、集合或标签中的照片，`pickedOnly` 匹配用户精选的单张照片。`kind` 为必填的 `photo` 或 `comic`，年份为四位数，分页上限 200。例如：`{ "ocrText": "入口", "kind": "photo", "year": "2024", "locationId": "…", "favoriteOnly": true }`。
 
-带语义查询的结果按精确余弦相似度降序，并返回 `similarity`；仅 OCR/结构化查询时按资源 ID 稳定排序，结果不含 `similarity`。每项保留当前媒体 DTO 与所属相册 ID/名称；响应还包含 `total`、`offset`、`nextOffset` 与当前媒体库 `revision`。OCR 只匹配当前 OCR 版本、文件指纹有效的识别文本；年份筛选依赖当前版本的 EXIF 拍摄年份，地点筛选复用 GPS 地点聚类 ID。每个候选和最终结果都会按当前媒体根重新验证路径、文件类型及大小/修改时间；响应不包含绝对路径。无效请求返回 `400 invalid_semantic_search`；语义检索缺少模型/运行环境分别返回 `503 ai_model_missing` / `503 ai_runtime_unavailable`。
+带语义查询的结果按精确余弦相似度降序，并返回 `similarity`；与 OCR 组合时，OCR 精确匹配优先于近似匹配，再按余弦排序。仅 OCR 查询先按精确/近似匹配排序，再按资源 ID 稳定排序；只有结构化筛选时按资源 ID 稳定排序。结果项可含 `matchReasons`：`semantic`、`similar_image`、`ocr_exact`、`ocr_approximate`，用于解释该照片为何入选。每项保留当前媒体 DTO 与所属相册 ID/名称；响应还包含 `total`、`offset`、`nextOffset` 与当前媒体库 `revision`。OCR 只匹配当前 OCR 版本、文件指纹有效的识别文本；匹配时会归一化全半角、中文空格/断行与标点，长中文短语允许一次受限的常见混淆字或插入/遗漏。年份筛选依赖当前版本的 EXIF 拍摄年份，地点筛选复用 GPS 地点聚类 ID。每个候选和最终结果都会按当前媒体根重新验证路径、文件类型及大小/修改时间；响应不包含绝对路径。无效请求返回 `400 invalid_semantic_search`；语义检索缺少模型/运行环境分别返回 `503 ai_model_missing` / `503 ai_runtime_unavailable`。
 
 ### `GET /api/images/:fileId/metadata`
 
@@ -432,7 +432,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 - `POST /api/people/split` 接受 `{ "personId": "…", "faceKeys": ["f_…#0"] }`，将选中脸拆到新组；每次最多 200 张，必须给原组留至少一张脸。
 - `DELETE /api/people` 在没有活动人脸任务时关闭人物分析，并清除人脸任务结果、分组索引与手动修正。存在活动或排队任务时返回 `409 analysis_job_active`。
 
-人物分组使用 SFace 余弦相似度 `0.363` 作为候选阈值；这是参考基准，不代表身份确认。分组对每次构建限制最多 30,000 张脸与 2,000,000 次组中心比较，超出部分保留为独立候选组。用户名称、隐藏标记和手动拆分/合并保存在 `state/people.json`；可重建索引位于 `derived/ai/people-index.json`，只存资源 ID、文件指纹、脸部框和组 ID。人脸特征仍只保存在现有 `derived/metadata/face/` 结果中。
+人物分组使用 SFace 余弦相似度 `0.363` 作为候选阈值；这是 [OpenCV 的 SFace 参考值](https://docs.opencv.org/4.13.0/d0/dd4/tutorial_dnn_face.html)，不代表身份确认或项目内校准。聚类不限制人脸总数，每次构建最多进行 2,000,000 次组中心比较；达到上限后剩余脸仍保留为独立候选组。输入按资源 ID 与脸序号排序，旧组的命名、隐藏与分配在重建时按人脸重叠迁移；自动重建若会合并多个已有人工修正的组或拆分一个已有人工修正的组，旧分组保持独立，直到用户显式合并或拆分。人物媒体分页继续以照片为单位，拆分选择器每次显示 200 张已加载人脸，可逐段展开。用户修正保存在 `state/people.json`；可重建索引位于 `derived/ai/people-index.json`，只存资源 ID、文件指纹、脸部框和组 ID。人脸特征仍只保存在现有 `derived/metadata/face/` 结果中。
 
 ### 拍摄地点地图 API
 
