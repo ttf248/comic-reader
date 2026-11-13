@@ -448,7 +448,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 ### `GET /api/locations/china`
 
-返回全国省级照片地图：`locations` 含 `revision`、离线边界 `boundaryVersion`、GPS/境内/未归属照片数，以及 34 个省级 `provinces`（含绘图用 `geometry` 与 `unmatchedAreaPhotoCount`）。该未细分数表示照片已匹配到省，但没有命中该省的直接下级边界。响应带 `ETag`，可用 `If-None-Match` 获取 `304`。只统计当前快照中仍存在、版本指纹匹配且路径通过当前媒体根校验的照片。WGS84 GPS 会在本机转换到边界使用的 GCJ-02 后做点位匹配；响应不包含照片原始坐标与文件路径。边界数据来源、版本和限制见 [架构文档](./ARCHITECTURE.md#exifgps-与离线地点地图)。
+返回全国省级照片统计：`locations` 含 `revision`、离线边界 `boundaryVersion`、GPS/境内/未归属照片数，以及 34 个省级 `provinces`（含 `photoCount` 与 `unmatchedAreaPhotoCount`）。该未细分数表示照片已匹配到省，但没有命中该省的直接下级边界。**响应不含绘图几何**：统计与几何是两份数据，几何由 `GET /api/locations/china/geometry/:level` 单独下发（见下）。响应带 `ETag`，可用 `If-None-Match` 获取 `304`。只统计当前快照中仍存在、版本指纹匹配且路径通过当前媒体根校验的照片。WGS84 GPS 会在本机转换到边界使用的 GCJ-02 后做点位匹配；响应不包含照片原始坐标与文件路径。边界数据来源、版本和限制见 [架构文档](./ARCHITECTURE.md#exifgps-与离线地点地图)。
 
 除上述字段外还包含三个时间字段：
 
@@ -458,7 +458,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 ### `GET /api/locations/china/regions/:adcode`
 
-返回指定行政区及其**直接下级**区域的地图。省级区划返回城市与省直辖区县；城市返回区县；末级区域的 `regions` 为空。`region` 包含当前区域的 `adcode`、`name`、`level`、照片数、`parentAdcode` 和 `ancestors`；`ancestors` 按全国到直接上级排列，供完整面包屑导航。当前区域有照片但未命中任何直接下级边界的数量由 `unmatchedAreaPhotoCount` 给出。城市照片数包含其下辖区县的照片；每项 `regions` 仅统计落在该直接下级中的照片，并包含区划码、名称、级别、照片数与绘图用 `geometry`。响应也支持 `ETag` / `If-None-Match`。区划码格式错误返回 `400 invalid_region_adcode`，边界中不存在返回 `404 region_not_found`。
+返回指定行政区及其**直接下级**区域的地图。省级区划返回城市与省直辖区县；城市返回区县；末级区域的 `regions` 为空。`region` 包含当前区域的 `adcode`、`name`、`level`、照片数、`parentAdcode` 和 `ancestors`；`ancestors` 按全国到直接上级排列，供完整面包屑导航。当前区域有照片但未命中任何直接下级边界的数量由 `unmatchedAreaPhotoCount` 给出。城市照片数包含其下辖区县的照片；每项 `regions` 仅统计落在该直接下级中的照片，并包含区划码、名称、级别与照片数。绘图几何同样由 `GET /api/locations/china/geometry/:level` 单独下发。响应也支持 `ETag` / `If-None-Match`。区划码格式错误返回 `400 invalid_region_adcode`，边界中不存在返回 `404 region_not_found`。
 
 响应同样包含 `months`、`trajectory` 与 `untimedPhotoCount`，口径跟随当前区间与当前区域：`months` 是该区域自己的逐月分布，`trajectory` 是该区域直接下级之间的停靠序列。省级轨迹落到城市或省直辖区县，城市轨迹落到区县。
 
@@ -479,6 +479,70 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 ### `GET /api/locations/china/regions/:adcode/media?cursor=…&limit=200`
 
 返回指定区域的照片墙分页和区域摘要。`cursor` 是绑定当前媒体库 revision、区间与到访序号的不透明游标；路径会按当前媒体根重新校验。给了 `from`/`to` 或 `visit` 时照片按拍摄时间排序，否则维持相册顺序。不存在的区划返回 `404 region_not_found`。
+
+### `GET /api/locations/china/geometry/:level`
+
+返回绘图用的行政区轮廓。`level` 取 `province`、`city`、`district` 或 `children`：
+
+- `province` 且不给 `parent`：全部 34 个省；
+- `children` 且给 `parent`：该上级的**全部直接下级**，不拘层级 —— 河南、湖北、海南、新疆的省下面同时挂着地级市与省直辖县级区域，按单一层级取会漏掉一半；
+- `city` / `district` 且给 `parent`：该上级之下这一层级的要素。
+
+响应含 `boundaryVersion`（绘图轮廓的版本，与匹配数据的版本分开）、`hash`（内容指纹）、`level`、`parentAdcode` 与 `features`；每项 `features` 是 `{ "adcode", "name", "level", "geometry" }`，`geometry` 是 `Polygon` 或 `MultiPolygon`。
+
+这个端点与媒体库无关：轮廓是静态数据，只随边界数据变化。因此它的 `ETag` 只依赖轮廓文件的内容指纹（`W/"china-outline-<level>-<parent>-<hash>"`），并带 `Cache-Control: private, max-age=86400`，媒体库变化时不必重下几何。轮廓按层级分档简化（省 0.01°、市 0.004°、区县 0.002°），全国省图约 266 KB（gzip），整份轮廓不下发。
+
+`level` 非法返回 `400 invalid_region_level`；`parent` 不是正整数返回 `400 invalid_region_adcode`；`parent` 对应的区划不存在返回 `404 region_not_found`。
+
+### `GET /api/locations/china/places`
+
+返回地点索引：去过哪些地方。
+
+| 参数    | 含义                                                       |
+| ------- | ---------------------------------------------------------- |
+| `level` | 归并粒度：`province`、`city` 或 `district`，缺省 `province` |
+| `parent`| 限定在某个上级之下（十进制区划码）                          |
+
+`places` 含 `revision`、`boundaryVersion`、`level`、`total`、GPS/境内/未归属照片数与 `places` 列表。每项 `places` 是：
+
+| 字段               | 含义                                                     |
+| ------------------ | -------------------------------------------------------- |
+| `adcode`           | 区划码                                                   |
+| `name`             | 名称                                                     |
+| `level`            | 这个地方本身的层级（`province` / `city` / `district`）   |
+| `photoCount`       | 归并到这一层的照片数（含下级）                           |
+| `unmatchedCount`   | 没有落到任何直接下级的照片数                             |
+| `visitCount`       | 按到访口径切出的次数                                     |
+| `firstAt`/`lastAt` | 有可信拍摄时间的第一天与最后一天；没有可信时间时是空串  |
+| `coverResourceIds` | 代表照的资源 ID，最多 4 张                               |
+
+**归并粒度的含义**：「市」粒度下，区县的照片归到它所属的市；直辖市的区县没有市一级，往上退到直辖市本身 —— 这正是用户心里的说法。每一行带自己的 `level`，因此列表里可能出现不同层级的行。
+
+**只列有照片的地方**：没有照片的省不在索引里（地图上仍然完整可见）。`photoCount` 是子树合计，父子之间会重复计数；`visitCount` 按每个地方各自切分，因此省级的到访次数不等于其下级城市之和。
+
+时间区间 `from`/`to` 与其它地点端点一致，参与 `ETag`。
+
+### `GET /api/locations/china/trips`
+
+返回行程与停留：什么时候去了哪些地方。
+
+| 参数          | 含义                                                    |
+| ------------- | ------------------------------------------------------- |
+| `granularity` | 粒度：`province`、`city` 或 `district`，缺省 `city`    |
+
+`trips` 含 `revision`、`boundaryVersion`、`granularity`、`total` 与 `trips` 列表。每项 `trips` 是：
+
+| 字段              | 含义                                                   |
+| ----------------- | ------------------------------------------------------ |
+| `id`              | 稳定标识（起始日 + 第一个停留点的区划码）               |
+| `kind`            | `trip`（走过多个地方）或 `stay`（只在一个地方）        |
+| `startedAt`/`endedAt` | 这一段的开始与结束日期                            |
+| `dayCount`        | 这一段跨的自然日天数                                   |
+| `photoCount`      | 这一段落在粒度上的照片数                               |
+| `stops`           | 停留点序列，每项 `{ "adcode", "name", "level", "at", "until", "dayCount", "photoCount" }` |
+| `coverResourceIds`| 代表照的资源 ID，最多 4 张                             |
+
+**切分口径与到访完全一致**：相邻照片的日历日间隔超过 2 天就断开。区别在粒度：到访比的是同一个地方，行程比的是「去了哪些地方」；一段里只出现一个地方时它是 `stay`。市级粒度下「西湖区 → 余杭区」是同一次停留，符合人的说法。
 
 ### `GET /api/locations` / `GET /api/locations/:locationId/media`
 

@@ -50,10 +50,11 @@ func chinaLocationTestApp(t *testing.T) (*fiber.App, *services.ResourceCatalog, 
 	api.Get("/locations/china/regions/:adcode", ChinaLocationRegionsHandler(catalog, service, locations, safetyState.Validate))
 	api.Get("/locations/china/regions/:adcode/visits", ChinaLocationRegionVisitsHandler(catalog, service, locations, safetyState.Validate))
 	api.Get("/locations/china/regions/:adcode/media", ChinaLocationRegionMediaHandler(catalog, service, locations, safetyState.Validate, nil))
+	api.Get("/locations/china/geometry/:level", ChinaGeometryHandler())
 	return app, catalog, root
 }
 
-func TestChinaLocationsAPIProvidesOfflineProvinceGeometry(t *testing.T) {
+func TestChinaLocationsAPIProvidesOfflineProvinceStatistics(t *testing.T) {
 	app, _, root := chinaLocationTestApp(t)
 	response, err := app.Test(httptest.NewRequest("GET", "/api/locations/china", nil), -1)
 	if err != nil {
@@ -72,7 +73,7 @@ func TestChinaLocationsAPIProvidesOfflineProvinceGeometry(t *testing.T) {
 	if len(body.Locations.Provinces) != 34 {
 		t.Fatalf("offline locations = %d provinces", len(body.Locations.Provinces))
 	}
-	if len(body.Locations.Provinces[0].Geometry) == 0 || body.Locations.GPSPhotoCount != 0 {
+	if body.Locations.GPSPhotoCount != 0 {
 		t.Fatalf("map response is incomplete: %+v", body.Locations)
 	}
 	if body.Locations.BoundaryVersion == "" {
@@ -87,6 +88,11 @@ func TestChinaLocationsAPIProvidesOfflineProvinceGeometry(t *testing.T) {
 	}
 	if strings.Contains(string(encoded), `"areas"`) {
 		t.Fatal("national summary still carries the retired area list")
+	}
+	// 统计与几何是两份数据：统计响应里不能再有坐标，
+	// 否则全国那一次请求就会拖走 18MB。
+	if strings.Contains(string(encoded), `"coordinates"`) {
+		t.Fatal("statistics response still carries boundary geometry")
 	}
 	if _, err := os.Stat(root); err != nil {
 		t.Fatalf("test media root disappeared: %v", err)
@@ -140,9 +146,6 @@ func TestChinaLocationRegionsAPIReturnsSubRegions(t *testing.T) {
 	}
 	found := false
 	for _, region := range body.Regions.Regions {
-		if len(region.Geometry) == 0 {
-			t.Fatalf("sub region %d is missing its geometry", region.Adcode)
-		}
 		if region.Name == "杭州市" {
 			found = true
 		}
@@ -293,5 +296,155 @@ func TestChinaLocationETagVariesWithTimeRange(t *testing.T) {
 	defer response.Body.Close()
 	if response.StatusCode != fiber.StatusOK {
 		t.Fatalf("status = %d, want 200 for a different time range", response.StatusCode)
+	}
+}
+
+func TestChinaGeometryAPIServesSimplifiedOutlines(t *testing.T) {
+	app, _, _ := chinaLocationTestApp(t)
+	response, err := app.Test(httptest.NewRequest("GET", "/api/locations/china/geometry/province", nil), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d", response.StatusCode)
+	}
+	var body struct {
+		BoundaryVersion string `json:"boundaryVersion"`
+		Hash            string `json:"hash"`
+		Level           string `json:"level"`
+		Features        []struct {
+			Adcode   int             `json:"adcode"`
+			Name     string          `json:"name"`
+			Level    string          `json:"level"`
+			Geometry json.RawMessage `json:"geometry"`
+		} `json:"features"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body.BoundaryVersion == "" || body.Hash == "" {
+		t.Fatalf("outline response is missing its version or hash: %+v", body)
+	}
+	if body.Level != "province" {
+		t.Fatalf("level = %q", body.Level)
+	}
+	if len(body.Features) != 34 {
+		t.Fatalf("outline features = %d, want 34 provinces", len(body.Features))
+	}
+	for _, feature := range body.Features {
+		if len(feature.Geometry) == 0 {
+			t.Fatalf("province %d is missing its geometry", feature.Adcode)
+		}
+		if !strings.Contains(string(feature.Geometry), "coordinates") {
+			t.Fatalf("province %d has an unexpected geometry payload", feature.Adcode)
+		}
+	}
+	if response.Header.Get("ETag") == "" {
+		t.Fatal("outline response is missing the ETag")
+	}
+	if cache := response.Header.Get("Cache-Control"); !strings.Contains(cache, "max-age") {
+		t.Fatalf("outline response is not cacheable: %q", cache)
+	}
+}
+
+func TestChinaGeometryAPIServesSubLevelOutlines(t *testing.T) {
+	app, _, _ := chinaLocationTestApp(t)
+	response, err := app.Test(httptest.NewRequest("GET", "/api/locations/china/geometry/city?parent=330000", nil), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d", response.StatusCode)
+	}
+	var body struct {
+		Features []struct {
+			Adcode int    `json:"adcode"`
+			Level  string `json:"level"`
+		} `json:"features"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if len(body.Features) == 0 {
+		t.Fatal("province outline is empty")
+	}
+	for _, feature := range body.Features {
+		if feature.Level != "city" {
+			t.Fatalf("feature %d has level %q", feature.Adcode, feature.Level)
+		}
+	}
+}
+
+func TestChinaGeometryAPIRejectsUnknownLevelAndParent(t *testing.T) {
+	app, _, _ := chinaLocationTestApp(t)
+	invalid, err := app.Test(httptest.NewRequest("GET", "/api/locations/china/geometry/township", nil), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer invalid.Body.Close()
+	if invalid.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", invalid.StatusCode)
+	}
+	missing, err := app.Test(httptest.NewRequest("GET", "/api/locations/china/geometry/city?parent=999999", nil), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer missing.Body.Close()
+	if missing.StatusCode != fiber.StatusNotFound {
+		t.Fatalf("status = %d, want 404", missing.StatusCode)
+	}
+}
+
+func TestChinaGeometryAPIHonorsIfNoneMatch(t *testing.T) {
+	app, _, _ := chinaLocationTestApp(t)
+	first, err := app.Test(httptest.NewRequest("GET", "/api/locations/china/geometry/province", nil), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Body.Close()
+	etag := first.Header.Get("ETag")
+	if etag == "" {
+		t.Fatal("outline response is missing the ETag")
+	}
+	request := httptest.NewRequest("GET", "/api/locations/china/geometry/province", nil)
+	request.Header.Set("If-None-Match", etag)
+	again, err := app.Test(request, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer again.Body.Close()
+	if again.StatusCode != fiber.StatusNotModified {
+		t.Fatalf("status = %d, want 304", again.StatusCode)
+	}
+}
+
+func TestChinaGeometryAPIServesMixedLevelChildren(t *testing.T) {
+	app, _, _ := chinaLocationTestApp(t)
+	// 河南下面同时挂着地级市与省直辖县级区域，两种层级都要画出来。
+	response, err := app.Test(httptest.NewRequest("GET", "/api/locations/china/geometry/children?parent=410000", nil), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d", response.StatusCode)
+	}
+	var body struct {
+		Features []struct {
+			Adcode int    `json:"adcode"`
+			Level  string `json:"level"`
+		} `json:"features"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	levels := map[string]bool{}
+	for _, feature := range body.Features {
+		levels[feature.Level] = true
+	}
+	if !levels["city"] || !levels["district"] {
+		t.Fatalf("mixed-level children are incomplete: %v", levels)
 	}
 }

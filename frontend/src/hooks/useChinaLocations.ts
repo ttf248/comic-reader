@@ -16,6 +16,11 @@ function chinaSummaryQueryKey(from: string | null, to: string | null) {
   return ["china-locations", "summary", from, to] as const;
 }
 
+/** 绘图轮廓的查询键。 */
+function chinaOutlineQueryKey(parent: number) {
+  return ["china-locations", "outline", parent] as const;
+}
+
 /** 某个区域的下一级地图的查询键。 */
 function chinaRegionsQueryKey(
   adcode: number,
@@ -75,6 +80,79 @@ export function useChinaRegions(
         .chinaRegions(adcode as number, timeRange)
         .then((result) => result.regions),
     enabled: adcode !== null,
+  });
+}
+
+/**
+ * 当前层级的绘图轮廓。
+ *
+ * parent 为 null 表示全国。几何只随边界数据变化，不随媒体库或时间区间
+ * 变化，因此不进统计接口的缓存键，也不随筛选失效。
+ */
+export function useChinaOutline(parent: number | null) {
+  return useQuery({
+    queryKey: chinaOutlineQueryKey(parent ?? 0),
+    queryFn: () =>
+      aiJobsApi
+        .chinaGeometry("children", parent)
+        .then((result) => result.features),
+    staleTime: Infinity,
+  });
+}
+
+/** 地点索引的查询键。 */
+function chinaPlacesQueryKey(
+  level: string,
+  parent: number | null,
+  from: string | null,
+  to: string | null,
+) {
+  return ["china-locations", "places", level, parent, from, to] as const;
+}
+
+/** 行程的查询键。 */
+function chinaTripsQueryKey(
+  granularity: string,
+  from: string | null,
+  to: string | null,
+) {
+  return ["china-locations", "trips", granularity, from, to] as const;
+}
+
+/**
+ * 地点索引：去过哪些地方。
+ *
+ * level 是归并粒度（省 / 市 / 区县），parent 限定在某个上级之下。
+ */
+export function useChinaPlaces(
+  level: string,
+  parent: number | null,
+  timeRange?: ChinaTimeRange,
+) {
+  const from = timeRange?.from ?? null;
+  const to = timeRange?.to ?? null;
+  return useQuery({
+    queryKey: chinaPlacesQueryKey(level, parent, from, to),
+    queryFn: () =>
+      aiJobsApi
+        .chinaPlaces(level, parent, timeRange)
+        .then((result) => result.places),
+  });
+}
+
+/** 行程与停留：什么时候去了哪些地方。 */
+export function useChinaTrips(
+  granularity: string,
+  timeRange?: ChinaTimeRange,
+) {
+  const from = timeRange?.from ?? null;
+  const to = timeRange?.to ?? null;
+  return useQuery({
+    queryKey: chinaTripsQueryKey(granularity, from, to),
+    queryFn: () =>
+      aiJobsApi
+        .chinaTrips(granularity, timeRange)
+        .then((result) => result.trips),
   });
 }
 

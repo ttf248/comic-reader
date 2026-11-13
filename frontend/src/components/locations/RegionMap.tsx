@@ -6,6 +6,7 @@ import {
   type KeyboardEvent,
   type MouseEvent,
 } from "react";
+import type { ChinaLocationGeometry } from "../../api/aiJobs";
 import { useElementSize } from "../../hooks/useElementSize";
 import TrajectoryLayer from "./TrajectoryLayer";
 import {
@@ -93,13 +94,15 @@ export default function RegionMap({
 
   const paths = useMemo(
     () =>
-      ordered.map((region) => ({
-        region,
-        path: regionPath(region.geometry, projection.project),
-        // 质心无条件算：轨迹的节点要落在区域里，名字只是顺带用。
-        centroid: regionLabelPoint(region.geometry),
-        label: showLabels ? regionLabelPoint(region.geometry) : null,
-      })),
+      ordered
+        .filter((region) => region.geometry !== null)
+        .map((region) => ({
+          region,
+          path: regionPath(region.geometry as ChinaLocationGeometry, projection.project),
+          // 质心无条件算：轨迹的节点要落在区域里，名字只是顺带用。
+          centroid: regionLabelPoint(region.geometry),
+          label: showLabels ? regionLabelPoint(region.geometry) : null,
+        })),
     [ordered, projection, showLabels],
   );
 

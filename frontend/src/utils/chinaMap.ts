@@ -6,7 +6,13 @@ export interface MapRegion {
   name: string;
   level: string;
   photoCount: number;
-  geometry: ChinaLocationGeometry;
+  /**
+   * 绘图轮廓。
+   *
+   * 几何与统计是两份数据：轮廓还没到（或这个区划没有轮廓）时是 null，
+   * 这时这个区划不参与绘制，但仍然出现在排行里。
+   */
+  geometry: ChinaLocationGeometry | null;
 }
 
 export interface MapProjection {
@@ -40,6 +46,7 @@ export function createMapProjection(regions: MapRegion[]): MapProjection {
   let minLatitude = Number.POSITIVE_INFINITY;
   let maxLatitude = Number.NEGATIVE_INFINITY;
   for (const region of regions) {
+    if (!region.geometry) continue;
     for (const polygon of geometryPolygons(region.geometry)) {
       if (polygonMaximumLatitude(polygon) < MIN_RENDER_LATITUDE) continue;
       for (const ring of polygon) {
@@ -108,6 +115,7 @@ export function regionPath(
   geometry: ChinaLocationGeometry,
   project: MapProjection["project"],
 ): string {
+  if (!geometry) return "";
   return geometryPolygons(geometry)
     .filter((polygon) => polygonMaximumLatitude(polygon) >= MIN_RENDER_LATITUDE)
     .flatMap((polygon) =>
@@ -129,8 +137,9 @@ export function regionPath(
  * 中心；都落不到区域里就不画名字。
  */
 export function regionLabelPoint(
-  geometry: ChinaLocationGeometry,
+  geometry: ChinaLocationGeometry | null,
 ): ChinaLocationPoint | null {
+  if (!geometry) return null;
   let best: { ring: ChinaLocationPoint[]; area: number } | null = null;
   for (const polygon of geometryPolygons(geometry)) {
     for (const ring of polygon) {

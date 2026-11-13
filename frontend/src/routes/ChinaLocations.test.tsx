@@ -9,6 +9,7 @@ vi.mock("../api/aiJobs", () => ({
   aiJobsApi: {
     chinaLocations: vi.fn(),
     chinaRegions: vi.fn(),
+    chinaGeometry: vi.fn(),
     chinaRegionVisits: vi.fn(),
     chinaRegionMedia: vi.fn(),
     metadata: vi.fn(),
@@ -60,14 +61,12 @@ const summary = {
         name: "浙江省",
         photoCount: 5,
         unmatchedAreaPhotoCount: 0,
-        geometry: polygon,
       },
       {
         adcode: 310000,
         name: "上海市",
         photoCount: 3,
         unmatchedAreaPhotoCount: 0,
-        geometry: polygon,
       },
     ],
     months: [
@@ -114,14 +113,12 @@ const zhejiang = {
         name: "杭州市",
         level: "city",
         photoCount: 3,
-        geometry: polygon,
       },
       {
         adcode: 330200,
         name: "宁波市",
         level: "city",
         photoCount: 2,
-        geometry: polygon,
       },
     ],
     months: [
@@ -161,14 +158,12 @@ const hangzhou = {
         name: "西湖区",
         level: "district",
         photoCount: 3,
-        geometry: polygon,
       },
       {
         adcode: 330105,
         name: "拱墅区",
         level: "district",
         photoCount: 0,
-        geometry: polygon,
       },
     ],
     months: [{ month: "2019-05", count: 3 }],
@@ -228,6 +223,16 @@ const visits = {
   },
 };
 
+/** 绘图轮廓：统计与几何是两份数据，这里补上几何那一半。 */
+const outlineFeatures = [
+  { adcode: 330000, name: "浙江省", level: "province", geometry: polygon },
+  { adcode: 310000, name: "上海市", level: "province", geometry: polygon },
+  { adcode: 330100, name: "杭州市", level: "city", geometry: polygon },
+  { adcode: 330200, name: "宁波市", level: "city", geometry: polygon },
+  { adcode: 330106, name: "西湖区", level: "district", geometry: polygon },
+  { adcode: 330105, name: "拱墅区", level: "district", geometry: polygon },
+];
+
 function LocationProbe() {
   const location = useLocation();
   return <div data-testid="location-search">{location.search}</div>;
@@ -261,6 +266,14 @@ describe("拍摄地点逐级下钻", () => {
         throw new Error(`unexpected adcode ${adcode}`);
       },
     );
+    vi.mocked(aiJobsApi.chinaGeometry).mockResolvedValue({
+      ok: true,
+      boundaryVersion: "areacity-2025.251231.260403-outline1",
+      hash: "outline-hash",
+      level: "children",
+      parentAdcode: 0,
+      features: outlineFeatures,
+    });
     vi.mocked(aiJobsApi.chinaRegionVisits).mockResolvedValue(visits);
     vi.mocked(aiJobsApi.chinaRegionMedia).mockResolvedValue({
       ok: true,
@@ -410,6 +423,14 @@ describe("拍摄地点的时间维度", () => {
         throw new Error(`unexpected adcode ${adcode}`);
       },
     );
+    vi.mocked(aiJobsApi.chinaGeometry).mockResolvedValue({
+      ok: true,
+      boundaryVersion: "areacity-2025.251231.260403-outline1",
+      hash: "outline-hash",
+      level: "children",
+      parentAdcode: 0,
+      features: outlineFeatures,
+    });
     vi.mocked(aiJobsApi.chinaRegionVisits).mockResolvedValue(visits);
     vi.mocked(aiJobsApi.chinaRegionMedia).mockResolvedValue({
       ok: true,

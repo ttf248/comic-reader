@@ -308,6 +308,8 @@ func main() {
 	}
 	// 离线地点图谱：全国地图、省内地图与区域照片墙共用一次匹配结果。
 	chinaLocations := services.NewChinaLocationService()
+	// 边界索引要 6 秒才能建好，放到后台预热，别让第一个打开地点页的人等。
+	services.PrewarmChinaBoundaries()
 	var aiJobs *services.AIJobService
 	// 本机存储统计：模型权重与各模块产物的占用。批次提交后产物字节变了，
 	// 让缓存失效，下一次读取重新统计。
@@ -416,6 +418,10 @@ func main() {
 	api.Get("/locations/china/regions/:adcode", boundaryGzip, handlers.ChinaLocationRegionsHandler(resourceCatalog, aiJobs, chinaLocations, safetyState.Validate))
 	api.Get("/locations/china/regions/:adcode/visits", handlers.ChinaLocationRegionVisitsHandler(resourceCatalog, aiJobs, chinaLocations, safetyState.Validate))
 	api.Get("/locations/china/regions/:adcode/media", handlers.ChinaLocationRegionMediaHandler(resourceCatalog, aiJobs, chinaLocations, safetyState.Validate, picks))
+	// 绘图轮廓是静态数据，与媒体库无关：单独压缩，可以长期缓存。
+	api.Get("/locations/china/geometry/:level", boundaryGzip, handlers.ChinaGeometryHandler())
+	api.Get("/locations/china/places", handlers.ChinaPlacesHandler(resourceCatalog, aiJobs, chinaLocations, safetyState.Validate))
+	api.Get("/locations/china/trips", handlers.ChinaTripsHandler(resourceCatalog, aiJobs, chinaLocations, safetyState.Validate))
 	api.Get("/locations", handlers.GPSLocationsHandler(resourceCatalog, aiJobs, safetyState.Validate, picks))
 	api.Get("/locations/:id/media", handlers.GPSLocationsHandler(resourceCatalog, aiJobs, safetyState.Validate, picks))
 	api.Get("/people", handlers.PeopleHandler(peopleService, aiJobs, resourceCatalog, safetyState.Validate))

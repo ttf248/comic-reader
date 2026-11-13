@@ -286,7 +286,6 @@ export interface ChinaLocationProvince {
   name: string;
   photoCount: number;
   unmatchedAreaPhotoCount: number;
-  geometry: ChinaLocationGeometry;
 }
 
 /** 当前聚焦的那个区域。 */
@@ -313,7 +312,6 @@ export interface ChinaLocationRegion {
   name: string;
   level: string;
   photoCount: number;
-  geometry: ChinaLocationGeometry;
 }
 
 export interface ChinaLocationSummary {
@@ -400,6 +398,100 @@ export interface ChinaLocationVisits {
 }
 
 export type GPSLocationMedia = LibraryFeedItem;
+
+/** 绘图用的一个行政区轮廓。 */
+export interface ChinaGeometryFeature {
+  adcode: number;
+  name: string;
+  level: string;
+  geometry: ChinaLocationGeometry;
+}
+
+/**
+ * 一次绘图几何响应。
+ *
+ * 几何与统计是两份数据：统计随媒体库与时间区间变化，几何只随边界数据
+ * 变化，因此这一份可以长期缓存。
+ */
+export interface ChinaGeometry {
+  boundaryVersion: string;
+  hash: string;
+  level: string;
+  parentAdcode: number;
+  features: ChinaGeometryFeature[];
+}
+
+/** 地点索引里的一项：去过的一个地方。 */
+export interface ChinaPlace {
+  adcode: number;
+  name: string;
+  /** province | city | district —— 这个地方本身的层级。 */
+  level: string;
+  /** 归并到这一层的照片数（含下级）。 */
+  photoCount: number;
+  /** 没有落到任何直接下级的照片数。 */
+  unmatchedCount: number;
+  /** 按到访口径切出的次数。 */
+  visitCount: number;
+  /** 有可信拍摄时间的第一天；没有可信时间时是空串。 */
+  firstAt: string;
+  /** 有可信拍摄时间的最后一天；没有可信时间时是空串。 */
+  lastAt: string;
+  /** 代表照的资源 ID，最多 4 张。 */
+  coverResourceIds: string[];
+}
+
+/** 地点索引的响应。 */
+export interface ChinaPlaces {
+  revision: number;
+  boundaryVersion: string;
+  /** 请求的归并粒度：province | city | district。 */
+  level: string;
+  total: number;
+  gpsPhotoCount: number;
+  chinaPhotoCount: number;
+  unassignedPhotoCount: number;
+  untimedPhotoCount: number;
+  places: ChinaPlace[];
+}
+
+/** 一次行程里的一个停留段。 */
+export interface ChinaTripStop {
+  adcode: number;
+  name: string;
+  level: string;
+  at: string;
+  until: string;
+  dayCount: number;
+  photoCount: number;
+}
+
+/**
+ * 一段行程或一次停留。
+ *
+ * kind 是 "trip"（走过多个地方）或 "stay"（只在一个地方）。
+ */
+export interface ChinaTrip {
+  id: string;
+  kind: "trip" | "stay";
+  startedAt: string;
+  endedAt: string;
+  dayCount: number;
+  photoCount: number;
+  stops: ChinaTripStop[];
+  coverResourceIds: string[];
+}
+
+/** 行程的响应。 */
+export interface ChinaTrips {
+  revision: number;
+  boundaryVersion: string;
+  granularity: string;
+  total: number;
+  trips: ChinaTrip[];
+  untimedPhotoCount: number;
+}
+
 
 export interface PersonGroup {
   id: string;
@@ -507,6 +599,38 @@ export const aiJobsApi = {
       "/api/locations/china",
       { params: chinaTimeRangeParams(timeRange) },
     ),
+  /**
+   * 取绘图用的行政区轮廓。
+   *
+   * level 用 "children" 表示「上级的全部直接下级」：省下面可能同时挂着
+   * 地级市与省直辖县级区域，按单一层级取会漏掉一半。
+   */
+  chinaGeometry: (level: string, parent?: number | null) =>
+    api<{ ok: boolean } & ChinaGeometry>(
+      `/api/locations/china/geometry/${encodeURIComponent(level)}`,
+      { params: { parent: parent ?? undefined } },
+    ),
+  /** 地点索引：去过哪些地方。 */
+  chinaPlaces: (
+    level?: string,
+    parent?: number | null,
+    timeRange?: ChinaTimeRange,
+  ) =>
+    api<{ ok: boolean; places: ChinaPlaces }>("/api/locations/china/places", {
+      params: {
+        level: level ?? undefined,
+        parent: parent ?? undefined,
+        ...chinaTimeRangeParams(timeRange),
+      },
+    }),
+  /** 行程与停留：什么时候去了哪些地方。 */
+  chinaTrips: (granularity?: string, timeRange?: ChinaTimeRange) =>
+    api<{ ok: boolean; trips: ChinaTrips }>("/api/locations/china/trips", {
+      params: {
+        granularity: granularity ?? undefined,
+        ...chinaTimeRangeParams(timeRange),
+      },
+    }),
   chinaRegions: (adcode: number, timeRange?: ChinaTimeRange) =>
     api<{ ok: boolean; regions: ChinaLocationRegions }>(
       `/api/locations/china/regions/${encodeURIComponent(String(adcode))}`,

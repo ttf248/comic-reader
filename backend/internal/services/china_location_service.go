@@ -1,7 +1,6 @@
 package services
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -35,13 +34,15 @@ type ChinaLocationSummary struct {
 	UntimedPhotoCount int `json:"untimedPhotoCount"`
 }
 
-// ChinaLocationProvince 是一个省级区域及其绘图边界。
+// ChinaLocationProvince 是一个省级区域的照片统计。
+//
+// 绘图边界不在这里：统计与几何是两份数据，几何由单独的端点按当前
+// 视图下发（全量下发是 18MB）。
 type ChinaLocationProvince struct {
-	Adcode                  int             `json:"adcode"`
-	Name                    string          `json:"name"`
-	PhotoCount              int             `json:"photoCount"`
-	UnmatchedAreaPhotoCount int             `json:"unmatchedAreaPhotoCount"`
-	Geometry                json.RawMessage `json:"geometry"`
+	Adcode                  int    `json:"adcode"`
+	Name                    string `json:"name"`
+	PhotoCount              int    `json:"photoCount"`
+	UnmatchedAreaPhotoCount int    `json:"unmatchedAreaPhotoCount"`
 }
 
 // ChinaLocationRegionInfo 描述当前聚焦的那个区域本身。
@@ -105,13 +106,12 @@ func unmatchedChinaRegionPhotoCount(photos []chinaRegionPhoto, feature *chinaAdm
 	return len(photos) - matched
 }
 
-// ChinaLocationRegion 是一个下级区域及其绘图边界。
+// ChinaLocationRegion 是一个下级区域的照片统计。
 type ChinaLocationRegion struct {
-	Adcode     int             `json:"adcode"`
-	Name       string          `json:"name"`
-	Level      string          `json:"level"`
-	PhotoCount int             `json:"photoCount"`
-	Geometry   json.RawMessage `json:"geometry"`
+	Adcode     int    `json:"adcode"`
+	Name       string `json:"name"`
+	Level      string `json:"level"`
+	PhotoCount int    `json:"photoCount"`
 }
 
 // ChinaLocationRegions 是某个区域的下一级地图。
@@ -284,6 +284,20 @@ func chinaMonthDistribution(photos []chinaRegionPhoto) []ChinaLocationMonth {
 	return months
 }
 
+// chinaStop 是一个停靠段（服务层内部）。
+//
+// 它比对外的 ChinaLocationStop 多带层级、代表照与天数：行程的停留段
+// 要这些信息。
+type chinaStopSegment struct {
+	adcode  int
+	name    string
+	level   string
+	first   chinaCaptureTime
+	last    chinaCaptureTime
+	count   int
+	coverID string
+}
+
 // chinaTrajectoryStops 把按时间排列的照片切成停靠段：连续落在同一个
 // 区域的一段照片算一次停靠。
 //
@@ -293,11 +307,12 @@ func chinaTrajectoryStops(
 	photos []chinaRegionPhoto,
 	key func(chinaRegionPhoto) int,
 	index *chinaAdminIndex,
-) []ChinaLocationStop {
-	stops := make([]ChinaLocationStop, 0, 8)
+) []chinaStopSegment {
+	stops := make([]chinaStopSegment, 0, 8)
 	current := 0
 	count := 0
 	var first, last chinaCaptureTime
+	coverID := ""
 	for _, photo := range photos {
 		if !photo.captured.Valid {
 			continue
@@ -308,33 +323,60 @@ func chinaTrajectoryStops(
 		}
 		if adcode != current {
 			if current != 0 {
-				stops = append(stops, chinaStop(current, index, first, last, count))
+				stops = append(stops, chinaStop(current, index, first, last, count, coverID))
 			}
 			current = adcode
 			count = 0
+			coverID = photo.resourceID
 			first = photo.captured
 		}
 		last = photo.captured
 		count++
 	}
 	if current != 0 {
-		stops = append(stops, chinaStop(current, index, first, last, count))
+		stops = append(stops, chinaStop(current, index, first, last, count, coverID))
 	}
 	return stops
 }
 
-// chinaStop 组装一个停靠点。
-func chinaStop(adcode int, index *chinaAdminIndex, first, last chinaCaptureTime, count int) ChinaLocationStop {
-	name := ""
-	if feature, exists := index.byAdcode[adcode]; exists {
-		name = feature.name
+// chinaLocationStops 把内部停靠段转成对外的停靠点列表。
+func chinaLocationStops(
+	photos []chinaRegionPhoto,
+	key func(chinaRegionPhoto) int,
+	index *chinaAdminIndex,
+) []ChinaLocationStop {
+	stops := chinaTrajectoryStops(photos, key, index)
+	locations := make([]ChinaLocationStop, 0, len(stops))
+	for _, stop := range stops {
+		locations = append(locations, stop.locationStop())
 	}
+	return locations
+}
+
+// chinaStop 组装一个停靠段。
+func chinaStop(adcode int, index *chinaAdminIndex, first, last chinaCaptureTime, count int, coverID string) chinaStopSegment {
+	stop := chinaStopSegment{
+		adcode:  adcode,
+		first:   first,
+		last:    last,
+		count:   count,
+		coverID: coverID,
+	}
+	if feature, exists := index.byAdcode[adcode]; exists {
+		stop.name = feature.name
+		stop.level = feature.level
+	}
+	return stop
+}
+
+// locationStop 把内部停靠段转成对外的停靠点。
+func (s chinaStopSegment) locationStop() ChinaLocationStop {
 	return ChinaLocationStop{
-		At:         first.DayKey,
-		Until:      last.DayKey,
-		Adcode:     adcode,
-		Name:       name,
-		PhotoCount: count,
+		At:         s.first.DayKey,
+		Until:      s.last.DayKey,
+		Adcode:     s.adcode,
+		Name:       s.name,
+		PhotoCount: s.count,
 	}
 }
 
@@ -457,14 +499,15 @@ func (s *ChinaLocationService) Summary(
 			Name:                    feature.name,
 			PhotoCount:              count,
 			UnmatchedAreaPhotoCount: count - matched,
-			Geometry:                feature.geometryJSON(),
 		})
 	}
 	scoped := match.scopedPhotos(match.timedPhotos, timeRange)
 	summary.Months = chinaMonthDistribution(scoped)
-	summary.Trajectory = chinaTrajectoryStops(scoped, func(photo chinaRegionPhoto) int {
+	for _, stop := range chinaTrajectoryStops(scoped, func(photo chinaRegionPhoto) int {
 		return photo.provinceAdcode
-	}, index)
+	}, index) {
+		summary.Trajectory = append(summary.Trajectory, stop.locationStop())
+	}
 	summary.UntimedPhotoCount = match.chinaPhotoCount - len(match.timedPhotos)
 	return summary, nil
 }
@@ -502,7 +545,6 @@ func (s *ChinaLocationService) Regions(
 			Name:       child.name,
 			Level:      child.level,
 			PhotoCount: count,
-			Geometry:   child.geometryJSON(),
 		})
 	}
 	info := chinaLocationRegionInfo(feature, index)
@@ -516,7 +558,7 @@ func (s *ChinaLocationService) Regions(
 		Region:          info,
 		Regions:         regions,
 		Months:          chinaMonthDistribution(match.scopedPhotos(match.timedPhotosInScope(feature), timeRange)),
-		Trajectory: chinaTrajectoryStops(match.scopedPhotos(match.timedPhotosInScope(feature), timeRange), func(photo chinaRegionPhoto) int {
+		Trajectory: chinaLocationStops(match.scopedPhotos(match.timedPhotosInScope(feature), timeRange), func(photo chinaRegionPhoto) int {
 			return chinaRegionAtScope(photo, feature, index)
 		}, index),
 		UntimedPhotoCount: match.untimedPhotoCount(scope),

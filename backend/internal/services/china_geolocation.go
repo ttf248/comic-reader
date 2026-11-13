@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"os"
 	"sort"
@@ -311,11 +312,15 @@ func matchChinaLocations(
 			captured:       parseChinaCaptureTime(metadata.DateTimeOriginal),
 			provinceAdcode: province.adcode,
 		}
-		match.provincePhotos[province.adcode] = append(match.provincePhotos[province.adcode], photo)
-		match.chinaPhotoCount++
+		// 最深命中要在归集之前定下来：省里的照片也要带着它命中了哪个
+		// 下级，否则「未细分」的数量与省级轨迹都算不出来。
 		if area := deepestChinaFeature(index, province, longitude, latitude); area != nil {
 			photo.regionAdcode = area.adcode
-			for current := area; current != nil && current.level != chinaAdminProvinceLevel; {
+		}
+		match.provincePhotos[province.adcode] = append(match.provincePhotos[province.adcode], photo)
+		match.chinaPhotoCount++
+		if photo.regionAdcode != 0 {
+			for current := index.byAdcode[photo.regionAdcode]; current != nil && current.level != chinaAdminProvinceLevel; {
 				match.regionPhotos[current.adcode] = append(match.regionPhotos[current.adcode], photo)
 				parent, exists := index.byAdcode[current.parentAdcode]
 				if !exists {
@@ -426,6 +431,23 @@ func (m *chinaLocationMatch) untimedPhotoCount(photos []chinaRegionPhoto) int {
 		}
 	}
 	return count
+}
+
+// PrewarmChinaBoundaries 在后台预热离线边界索引。
+//
+// 匹配索引有 797 万个坐标点，加载要 6 秒、常驻约 1.4GB。放着不管的话
+// 第一个打开地点页的人要等这 6 秒。启动时先在后台加载，第一次请求就能
+// 直接用上已经建好的索引。
+func PrewarmChinaBoundaries() {
+	go func() {
+		if _, err := loadChinaAdminIndex(); err != nil {
+			log.Printf("预热离线边界索引失败: %v", err)
+			return
+		}
+		if _, err := loadChinaOutlineIndex(); err != nil {
+			log.Printf("预热离线边界轮廓失败: %v", err)
+		}
+	}()
 }
 
 func loadChinaAdminIndex() (*chinaAdminIndex, error) {
@@ -659,45 +681,6 @@ func decodeChinaAdminFeature(rawGeometry json.RawMessage, adcode, parentAdcode i
 		return nil, errors.New("China boundary has no valid polygons")
 	}
 	return feature, nil
-}
-
-func (feature *chinaAdminFeature) geometryJSON() json.RawMessage {
-	if feature == nil || len(feature.polygons) == 0 {
-		return nil
-	}
-	if len(feature.polygons) == 1 {
-		geometry := struct {
-			Type        string         `json:"type"`
-			Coordinates [][][2]float64 `json:"coordinates"`
-		}{Type: "Polygon", Coordinates: chinaPolygonCoordinates(feature.polygons[0])}
-		encoded, _ := json.Marshal(geometry)
-		return encoded
-	}
-	coordinates := make([][][][2]float64, len(feature.polygons))
-	for i, polygon := range feature.polygons {
-		coordinates[i] = chinaPolygonCoordinates(polygon)
-	}
-	geometry := struct {
-		Type        string           `json:"type"`
-		Coordinates [][][][2]float64 `json:"coordinates"`
-	}{Type: "MultiPolygon", Coordinates: coordinates}
-	encoded, _ := json.Marshal(geometry)
-	return encoded
-}
-
-func chinaPolygonCoordinates(polygon chinaPolygon) [][][2]float64 {
-	rings := make([][][2]float64, len(polygon.rings))
-	for i, ring := range polygon.rings {
-		coordinates := make([][2]float64, len(ring))
-		for j, point := range ring {
-			coordinates[j] = [2]float64{
-				float64(point.x) / chinaCoordinateScale,
-				float64(point.y) / chinaCoordinateScale,
-			}
-		}
-		rings[i] = coordinates
-	}
-	return rings
 }
 
 func matchingChinaFeature(features []*chinaAdminFeature, longitude, latitude float64) *chinaAdminFeature {

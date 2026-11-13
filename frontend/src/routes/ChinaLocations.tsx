@@ -13,11 +13,13 @@ import RegionRanking, {
 import TimeAxis from "../components/locations/TimeAxis";
 import VisitTimeline from "../components/locations/VisitTimeline";
 import {
+  useChinaOutline,
   useChinaRegionVisits,
   useChinaRegions,
   useChinaSummary,
 } from "../hooks/useChinaLocations";
 import type { MapRegion } from "../utils/chinaMap";
+import type { ChinaLocationGeometry } from "../api/aiJobs";
 import { locationRegionRoute } from "../utils/path";
 
 /** 从查询参数里读区划码。 */
@@ -73,24 +75,34 @@ export default function ChinaLocations() {
 
   // 全国层级用汇总里的省级数据；下钻后用区域接口给出的下一级。
   const isNationLevel = adcode === null;
-  const regions: MapRegion[] = useMemo(() => {
-    if (isNationLevel) {
-      return (summary?.provinces ?? []).map((province) => ({
-        adcode: province.adcode,
-        name: province.name,
-        level: "province",
-        photoCount: province.photoCount,
-        geometry: province.geometry,
-      }));
+  // 绘图轮廓与统计是两份数据：轮廓只随边界数据变化，单独取一次。
+  const outlineQuery = useChinaOutline(adcode);
+  const geometryByAdcode = useMemo(() => {
+    const map = new Map<number, ChinaLocationGeometry>();
+    for (const feature of outlineQuery.data ?? []) {
+      map.set(feature.adcode, feature.geometry);
     }
-    return childRegions.map((region) => ({
-      adcode: region.adcode,
-      name: region.name,
-      level: region.level,
-      photoCount: region.photoCount,
-      geometry: region.geometry,
+    return map;
+  }, [outlineQuery.data]);
+  const regions: MapRegion[] = useMemo(() => {
+    const stats = isNationLevel
+      ? (summary?.provinces ?? []).map((province) => ({
+          adcode: province.adcode,
+          name: province.name,
+          level: "province",
+          photoCount: province.photoCount,
+        }))
+      : childRegions.map((region) => ({
+          adcode: region.adcode,
+          name: region.name,
+          level: region.level,
+          photoCount: region.photoCount,
+        }));
+    return stats.map((region) => ({
+      ...region,
+      geometry: geometryByAdcode.get(region.adcode) ?? null,
     }));
-  }, [childRegions, isNationLevel, summary?.provinces]);
+  }, [childRegions, geometryByAdcode, isNationLevel, summary?.provinces]);
 
   // 色阶与占比的分母：本层的照片总数，含未细分到直接下级的部分。
   const levelTotal = isNationLevel
@@ -164,10 +176,12 @@ export default function ChinaLocations() {
   const visits = visitsQuery.data?.visits ?? [];
   const rangeLabel = from && to ? `${from} – ${to}` : "全部时间";
 
-  const loading = isNationLevel
-    ? summaryQuery.isLoading
-    : regionsQuery.isLoading;
-  const error = isNationLevel ? summaryQuery.isError : regionsQuery.isError;
+  const loading =
+    (isNationLevel ? summaryQuery.isLoading : regionsQuery.isLoading) ||
+    outlineQuery.isLoading;
+  const error =
+    (isNationLevel ? summaryQuery.isError : regionsQuery.isError) ||
+    outlineQuery.isError;
 
   return (
     <div className="h-full overflow-y-auto pb-12">

@@ -196,9 +196,22 @@ func TestChinaLocationsMatchCurrentGPSPhotosToProvinceAndDistrict(t *testing.T) 
 	if len(zhejiang.Regions) == 0 || zhejiang.Region.ParentAdcode != nil {
 		t.Fatalf("province sub regions are missing: %+v", zhejiang.Region)
 	}
+	// 统计响应不再带几何；绘图几何由单独的端点下发，
+	// 这里确认下钻到的每个区域都能在轮廓索引里找到对应要素。
+	outline, hash, err := ChinaOutline(chinaAdminCityLevel, 330000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hash == "" {
+		t.Fatal("outline index is missing its content hash")
+	}
+	outlined := make(map[int]bool, len(outline))
+	for _, feature := range outline {
+		outlined[feature.Adcode] = true
+	}
 	for _, region := range zhejiang.Regions {
-		if len(region.Geometry) == 0 {
-			t.Fatalf("sub region %d is missing its geometry", region.Adcode)
+		if !outlined[region.Adcode] {
+			t.Fatalf("sub region %d has no outline feature", region.Adcode)
 		}
 	}
 
@@ -455,5 +468,39 @@ func TestChinaLocationUntimedPhotosAreExcludedFromTimeAggregates(t *testing.T) {
 	}
 	if len(summary.Months) != 1 {
 		t.Fatalf("months should only count timed photos: %+v", summary.Months)
+	}
+}
+
+// TestChinaLocationProvinceScopeKnowsItsChildren 守住省一级归集里的两个口径。
+//
+// 省里的照片要带着它命中了哪个下级：否则「未细分」的数量会把省里的
+// 全部照片都算进去，省级轨迹也会是空的。
+func TestChinaLocationProvinceScopeKnowsItsChildren(t *testing.T) {
+	root := t.TempDir()
+	files := writeAIJobImages(t, root, 2)
+	catalog := aiJobCatalog(root, files)
+	snapshot := catalog.Acquire()
+	validator := aiTestPathValidator(t, root)
+	records := chinaTestRecords(t, catalog, files, []chinaTestPhoto{
+		{Coordinate: [2]float64{30.259242, 120.130396}, Datum: "GCJ-02", CapturedAt: "2019-05-02T10:00:00"},
+		{Coordinate: [2]float64{31.230416, 121.473701}, Datum: "GCJ-02", CapturedAt: "2019-05-03T10:00:00"},
+	})
+	service := NewChinaLocationService()
+
+	province, err := service.Regions(snapshot, records, 1, validator, 330000, ChinaTimeRange{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if province.Region.PhotoCount != 1 {
+		t.Fatalf("Zhejiang photo count = %d, want 1", province.Region.PhotoCount)
+	}
+	if province.Region.UnmatchedAreaPhotoCount != 0 {
+		t.Fatalf("Zhejiang unmatched count = %d, want 0", province.Region.UnmatchedAreaPhotoCount)
+	}
+	if len(province.Trajectory) == 0 {
+		t.Fatal("province trajectory is empty")
+	}
+	if province.Trajectory[0].Adcode != 330100 {
+		t.Fatalf("province trajectory starts at %d, want the city 330100", province.Trajectory[0].Adcode)
 	}
 }
