@@ -25,6 +25,50 @@ vi.mock("../api/albums", () => ({
   albumsApi: { search: mocks.albumSearch },
 }));
 
+vi.mock("../components/wall/PhotoWall", () => ({
+  default: ({
+    items,
+    itemBadge,
+  }: {
+    items: {
+      id: string;
+      kind: "image";
+      name: string;
+      index: number;
+      kindIndex: number;
+      width: number;
+      height: number;
+      albumId: string;
+      albumName: string;
+      similarity?: number;
+      matchReasons?: (
+        "semantic" | "similar_image" | "ocr_exact" | "ocr_approximate"
+      )[];
+    }[];
+    itemBadge?: (item: {
+      id: string;
+      kind: "image";
+      name: string;
+      index: number;
+      kindIndex: number;
+      width: number;
+      height: number;
+      albumId: string;
+      albumName: string;
+      similarity?: number;
+      matchReasons?: (
+        "semantic" | "similar_image" | "ocr_exact" | "ocr_approximate"
+      )[];
+    }) => string | undefined;
+  }) => (
+    <div>
+      {items.map((item) => (
+        <span key={item.id}>{itemBadge?.(item)}</span>
+      ))}
+    </div>
+  ),
+}));
+
 vi.mock("../hooks/usePicks", () => ({
   usePicks: () => ({
     isPicked: () => false,
@@ -130,6 +174,11 @@ describe("智能搜索", () => {
 
   it("提交中文描述并显示空索引引导", async () => {
     renderSearch();
+    expect(screen.getByRole("button", { name: /高级筛选/ })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.queryByLabelText("GPS 地点")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "中文描述" })).toHaveClass(
       "text-accent-contrast",
     );
@@ -197,6 +246,7 @@ describe("智能搜索", () => {
       results: [{ kind: "album", path: "a_album123", name: "旅行相册" }],
     });
     renderSearch();
+    fireEvent.click(screen.getByRole("button", { name: /高级筛选/ }));
 
     fireEvent.change(
       await screen.findByPlaceholderText(
@@ -245,5 +295,46 @@ describe("智能搜索", () => {
         undefined,
       ),
     );
+  });
+
+  it("向结果角标说明语义分数与 OCR 近似匹配", async () => {
+    mocks.semanticSearch.mockResolvedValue({
+      ok: true,
+      results: [
+        {
+          item: {
+            id: "f_result",
+            kind: "image",
+            name: "station.jpg",
+            index: 0,
+            kindIndex: 0,
+            width: 800,
+            height: 600,
+            albumId: "a_album123",
+            albumName: "旅行相册",
+          },
+          similarity: 0.42,
+          matchReasons: ["semantic", "ocr_approximate"],
+        },
+      ],
+      total: 1,
+      offset: 0,
+      nextOffset: 1,
+      revision: 1,
+    });
+    renderSearch();
+    fireEvent.change(
+      await screen.findByPlaceholderText(
+        "例如：夜晚街道上的霓虹灯、海边散步的人",
+      ),
+      { target: { value: "车站" } },
+    );
+    fireEvent.change(
+      screen.getByPlaceholderText("例如：车站名称、招牌或照片里的日期"),
+      { target: { value: "中关村科技园" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "搜索照片" }));
+
+    expect(await screen.findByText("语义 0.42 · 文字近似")).toBeInTheDocument();
   });
 });

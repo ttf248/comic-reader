@@ -33,8 +33,9 @@ type semanticSearchRequest struct {
 }
 
 type semanticSearchHit struct {
-	Item       services.FeedMediaItem `json:"item"`
-	Similarity *float64               `json:"similarity,omitempty"`
+	Item         services.FeedMediaItem `json:"item"`
+	Similarity   *float64               `json:"similarity,omitempty"`
+	MatchReasons []string               `json:"matchReasons,omitempty"`
 }
 
 // AIEmbeddingStatusHandler 返回本机运行时、GPU、权重和向量覆盖状态。
@@ -208,6 +209,7 @@ func SemanticSearchHandler(
 			}
 		}
 		candidateByID := make(map[string]services.VectorMetadata)
+		ocrMatchKinds := make(map[string]string)
 		if semanticQuery {
 			for _, metadata := range analyzer.Index().Metadata() {
 				record, exists := embeddingRecords[metadata.ResourceID]
@@ -297,13 +299,30 @@ func SemanticSearchHandler(
 				if json.Unmarshal(ocrRecord.Data, &ocrResult) != nil {
 					continue
 				}
-				query := strings.Join(strings.Fields(strings.ToLower(request.OCRText)), " ")
-				text := strings.Join(strings.Fields(strings.ToLower(ocrResult.Text)), " ")
-				if !strings.Contains(text, query) {
+				matchKind := services.MatchOCRSearchText(request.OCRText, ocrResult.Text)
+				if matchKind == "" {
 					continue
 				}
+				ocrMatchKinds[metadata.ResourceID] = matchKind
 			}
 			candidates = append(candidates, metadata)
+		}
+		ocrPriorities := make(map[string]int, len(ocrMatchKinds))
+		for resourceID, matchKind := range ocrMatchKinds {
+			if matchKind == services.OCRSearchMatchExact {
+				ocrPriorities[resourceID] = 2
+			} else {
+				ocrPriorities[resourceID] = 1
+			}
+		}
+		if !semanticQuery && request.OCRText != "" {
+			sort.SliceStable(candidates, func(i, j int) bool {
+				left, right := ocrPriorities[candidates[i].ResourceID], ocrPriorities[candidates[j].ResourceID]
+				if left != right {
+					return left > right
+				}
+				return candidates[i].ResourceID < candidates[j].ResourceID
+			})
 		}
 		start := request.Offset
 		if start > len(candidates) {
@@ -313,7 +332,7 @@ func SemanticSearchHandler(
 		var total int
 		if semanticQuery {
 			var err error
-			pageHits, total, err = analyzer.Index().Search(queryVector, candidates, start, request.Limit)
+			pageHits, total, err = analyzer.Index().SearchWithPriority(queryVector, candidates, start, request.Limit, ocrPriorities)
 			if err != nil {
 				return writeError(c, fiber.StatusInternalServerError, "semantic_search_failed", "semantic search failed")
 			}
@@ -351,7 +370,17 @@ func SemanticSearchHandler(
 			if statErr != nil || !info.Mode().IsRegular() || info.Size() != fingerprint.Size || info.ModTime().UnixNano() != fingerprint.MTimeNs {
 				continue
 			}
-			results = append(results, semanticSearchHit{Item: item, Similarity: scores[item.ID]})
+			matchReasons := make([]string, 0, 2)
+			if request.Text != "" {
+				matchReasons = append(matchReasons, "semantic")
+			}
+			if request.ResourceID != "" || uploadedPath != "" {
+				matchReasons = append(matchReasons, "similar_image")
+			}
+			if matchKind := ocrMatchKinds[item.ID]; matchKind != "" {
+				matchReasons = append(matchReasons, "ocr_"+matchKind)
+			}
+			results = append(results, semanticSearchHit{Item: item, Similarity: scores[item.ID], MatchReasons: matchReasons})
 		}
 		nextOffset := start + len(pageHits)
 		if nextOffset > total {

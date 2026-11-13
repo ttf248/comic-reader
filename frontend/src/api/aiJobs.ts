@@ -218,6 +218,9 @@ export interface SemanticSearchRequest {
 export interface SemanticSearchHit {
   item: LibraryFeedItem;
   similarity?: number;
+  matchReasons?: (
+    "semantic" | "similar_image" | "ocr_exact" | "ocr_approximate"
+  )[];
 }
 
 export interface SemanticSearchResponse {

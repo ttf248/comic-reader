@@ -19,7 +19,10 @@ import { usePhotoStore, wallTargetHeight } from "../store/photoStore";
 import { useUIStore } from "../store/uiStore";
 import { albumRoute } from "../utils/path";
 
-type ScoredFeedItem = LibraryFeedItem & { similarity?: number };
+type ScoredFeedItem = LibraryFeedItem & {
+  similarity?: number;
+  matchReasons?: SemanticSearchHit["matchReasons"];
+};
 type SearchMode = "text" | "image";
 
 interface SubmittedSearch {
@@ -44,6 +47,7 @@ export default function SemanticSearch() {
   const [personId, setPersonId] = useState("");
   const [favoriteOnly, setFavoriteOnly] = useState(false);
   const [pickedOnly, setPickedOnly] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [submitted, setSubmitted] = useState<SubmittedSearch | null>(null);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
 
@@ -87,7 +91,12 @@ export default function SemanticSearch() {
     [submittedQuery.data],
   );
   const items = useMemo<ScoredFeedItem[]>(
-    () => hits.map(({ item, similarity }) => ({ ...item, similarity })),
+    () =>
+      hits.map(({ item, similarity, matchReasons }) => ({
+        ...item,
+        similarity,
+        matchReasons,
+      })),
     [hits],
   );
   const total = submittedQuery.data?.pages[0]?.total ?? 0;
@@ -107,6 +116,13 @@ export default function SemanticSearch() {
     favoriteOnly ||
     pickedOnly,
   );
+  const advancedFilterCount =
+    Number(Boolean(album)) +
+    Number(Boolean(year.trim())) +
+    Number(Boolean(locationId)) +
+    Number(Boolean(personId)) +
+    Number(favoriteOnly) +
+    Number(pickedOnly);
 
   const search = (resourceId?: string, file?: File) => {
     const request: SemanticSearchRequest = {
@@ -247,114 +263,151 @@ export default function SemanticSearch() {
                 className="h-10 w-full rounded-lg border border-border bg-bg px-3 text-body text-fg placeholder:text-fg-subtle focus:border-focus focus:outline-none focus:ring-2 focus:ring-focus/20"
               />
               <span className="mt-1 block text-meta text-fg-subtle">
-                需要先在任务中心运行文字识别；此条件不依赖 Chinese-CLIP。
+                需先运行文字识别；自动忽略中文标点与断行，长中文查询会尝试修正一个常见错字。无需
+                Chinese-CLIP。
               </span>
             </label>
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <label className="min-w-0 text-meta text-fg-muted">
-                <span className="mb-1.5 block">限定相册</span>
-                {album ? (
-                  <button
-                    type="button"
-                    className="flex h-10 w-full items-center justify-between rounded-md border border-border bg-bg px-3 text-left text-body text-fg"
-                    onClick={() => {
-                      setAlbum(undefined);
-                      setAlbumText("");
-                    }}
-                  >
-                    <span className="truncate">{album.name}</span>
-                    <span aria-hidden="true" className="ml-2 text-fg-subtle">
-                      ×
-                    </span>
-                  </button>
-                ) : (
-                  <input
-                    value={albumText}
-                    onChange={(event) => setAlbumText(event.target.value)}
-                    placeholder="输入相册名搜索"
-                    className="h-10 w-full rounded-md border border-border bg-bg px-3 text-body text-fg placeholder:text-fg-subtle"
-                  />
-                )}
-                {!album &&
-                  (albumQuery.data?.results ?? [])
-                    .filter((hit) => hit.kind === "album")
-                    .slice(0, 5)
-                    .map((hit) => (
-                      <button
-                        key={hit.path}
-                        type="button"
-                        className="mt-1 block w-full truncate rounded-md bg-bg-elevated px-3 py-2 text-left text-body text-fg hover:bg-bg-strong"
-                        onClick={() => {
-                          setAlbum(hit);
-                          setAlbumText("");
-                        }}
+            <div className="mt-4">
+              <button
+                type="button"
+                aria-expanded={advancedOpen}
+                aria-controls="semantic-advanced-filters"
+                onClick={() => setAdvancedOpen((open) => !open)}
+                className="flex min-h-10 w-full items-center justify-between rounded-lg border border-border-faint bg-bg-subtle px-3 text-left text-meta font-medium text-fg hover:bg-bg-strong sm:w-auto sm:min-w-64"
+              >
+                <span>高级筛选</span>
+                <span className="flex items-center gap-2 text-fg-muted">
+                  {advancedFilterCount > 0
+                    ? `${advancedFilterCount} 项已生效`
+                    : "相册 · 年份 · 地点 · 人物"}
+                  <span aria-hidden="true">{advancedOpen ? "−" : "+"}</span>
+                </span>
+              </button>
+              {advancedOpen ? (
+                <div
+                  id="semantic-advanced-filters"
+                  className="mt-3 rounded-lg border border-border-faint bg-bg-subtle/60 p-3"
+                >
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <label className="min-w-0 text-meta text-fg-muted">
+                      <span className="mb-1.5 block">限定相册</span>
+                      {album ? (
+                        <button
+                          type="button"
+                          className="flex h-10 w-full items-center justify-between rounded-md border border-border bg-bg px-3 text-left text-body text-fg"
+                          onClick={() => {
+                            setAlbum(undefined);
+                            setAlbumText("");
+                          }}
+                        >
+                          <span className="truncate">{album.name}</span>
+                          <span
+                            aria-hidden="true"
+                            className="ml-2 text-fg-subtle"
+                          >
+                            ×
+                          </span>
+                        </button>
+                      ) : (
+                        <input
+                          value={albumText}
+                          onChange={(event) => setAlbumText(event.target.value)}
+                          placeholder="输入相册名搜索"
+                          className="h-10 w-full rounded-md border border-border bg-bg px-3 text-body text-fg placeholder:text-fg-subtle"
+                        />
+                      )}
+                      {!album &&
+                        (albumQuery.data?.results ?? [])
+                          .filter((hit) => hit.kind === "album")
+                          .slice(0, 5)
+                          .map((hit) => (
+                            <button
+                              key={hit.path}
+                              type="button"
+                              className="mt-1 block w-full truncate rounded-md bg-bg-elevated px-3 py-2 text-left text-body text-fg hover:bg-bg-strong"
+                              onClick={() => {
+                                setAlbum(hit);
+                                setAlbumText("");
+                              }}
+                            >
+                              {hit.name}
+                            </button>
+                          ))}
+                    </label>
+                    <label className="text-meta text-fg-muted">
+                      <span className="mb-1.5 block">拍摄年份</span>
+                      <input
+                        inputMode="numeric"
+                        value={year}
+                        onChange={(event) =>
+                          setYear(
+                            event.target.value.replace(/\D/g, "").slice(0, 4),
+                          )
+                        }
+                        placeholder="例如 2024"
+                        className="h-10 w-full rounded-md border border-border bg-bg px-3 text-body text-fg placeholder:text-fg-subtle"
+                      />
+                    </label>
+                    <label className="text-meta text-fg-muted">
+                      <span className="mb-1.5 block">GPS 地点</span>
+                      <select
+                        value={locationId}
+                        onChange={(event) => setLocationId(event.target.value)}
+                        className="h-10 w-full rounded-md border border-border bg-bg px-3 text-body text-fg"
                       >
-                        {hit.name}
-                      </button>
-                    ))}
-              </label>
-              <label className="text-meta text-fg-muted">
-                <span className="mb-1.5 block">拍摄年份</span>
-                <input
-                  inputMode="numeric"
-                  value={year}
-                  onChange={(event) =>
-                    setYear(event.target.value.replace(/\D/g, "").slice(0, 4))
-                  }
-                  placeholder="例如 2024"
-                  className="h-10 w-full rounded-md border border-border bg-bg px-3 text-body text-fg placeholder:text-fg-subtle"
-                />
-              </label>
-              <label className="text-meta text-fg-muted">
-                <span className="mb-1.5 block">GPS 地点</span>
-                <select
-                  value={locationId}
-                  onChange={(event) => setLocationId(event.target.value)}
-                  className="h-10 w-full rounded-md border border-border bg-bg px-3 text-body text-fg"
-                >
-                  <option value="">所有地点</option>
-                  {(locationsQuery.data ?? []).map((location) => (
-                    <option key={location.id} value={location.id}>
-                      {location.name} · {location.fileCount} 张
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="text-meta text-fg-muted">
-                <span className="mb-1.5 block">人物</span>
-                <select
-                  value={personId}
-                  onChange={(event) => setPersonId(event.target.value)}
-                  className="h-10 w-full rounded-md border border-border bg-bg px-3 text-body text-fg"
-                >
-                  <option value="">所有人物</option>
-                  {(peopleQuery.data?.people ?? []).map((person) => (
-                    <option key={person.id} value={person.id}>
-                      {person.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                        <option value="">所有地点</option>
+                        {(locationsQuery.data ?? []).map((location) => (
+                          <option key={location.id} value={location.id}>
+                            {location.name} · {location.fileCount} 张
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="text-meta text-fg-muted">
+                      <span className="mb-1.5 block">人物</span>
+                      <select
+                        value={personId}
+                        onChange={(event) => setPersonId(event.target.value)}
+                        className="h-10 w-full rounded-md border border-border bg-bg px-3 text-body text-fg"
+                      >
+                        <option value="">所有人物</option>
+                        {(peopleQuery.data?.people ?? []).map((person) => (
+                          <option key={person.id} value={person.id}>
+                            {person.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    <label className="flex items-center gap-2 text-meta text-fg-muted">
+                      <input
+                        type="checkbox"
+                        checked={favoriteOnly}
+                        onChange={(event) =>
+                          setFavoriteOnly(event.target.checked)
+                        }
+                      />
+                      仅来自收藏相册
+                    </label>
+                    <label className="flex items-center gap-2 text-meta text-fg-muted">
+                      <input
+                        type="checkbox"
+                        checked={pickedOnly}
+                        onChange={(event) =>
+                          setPickedOnly(event.target.checked)
+                        }
+                      />
+                      仅精选照片
+                    </label>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             <div className="mt-4 flex flex-wrap items-center gap-3">
-              <label className="flex items-center gap-2 text-meta text-fg-muted">
-                <input
-                  type="checkbox"
-                  checked={favoriteOnly}
-                  onChange={(event) => setFavoriteOnly(event.target.checked)}
-                />
-                仅来自收藏相册
-              </label>
-              <label className="flex items-center gap-2 text-meta text-fg-muted">
-                <input
-                  type="checkbox"
-                  checked={pickedOnly}
-                  onChange={(event) => setPickedOnly(event.target.checked)}
-                />
-                仅精选照片
-              </label>
               <button
                 type="submit"
                 disabled={
@@ -421,11 +474,28 @@ export default function SemanticSearch() {
             onLoadMore={loadMore}
             onOpen={(_item, index) => setViewerIndex(index)}
             albumLabel={(item) => item.albumName}
-            itemBadge={(item) =>
-              item.similarity === undefined
-                ? undefined
-                : `相似度 ${item.similarity.toFixed(2)}`
-            }
+            itemBadge={(item) => {
+              const reasons = item.matchReasons ?? [];
+              const labels = reasons.flatMap((reason) => {
+                if (reason === "semantic") {
+                  return item.similarity === undefined
+                    ? ["语义"]
+                    : [`语义 ${item.similarity.toFixed(2)}`];
+                }
+                if (reason === "similar_image") {
+                  return item.similarity === undefined
+                    ? ["以图相似"]
+                    : [`以图 ${item.similarity.toFixed(2)}`];
+                }
+                if (reason === "ocr_exact") return ["文字匹配"];
+                return ["文字近似"];
+              });
+              return labels.length > 0
+                ? labels.join(" · ")
+                : item.similarity === undefined
+                  ? undefined
+                  : `相似度 ${item.similarity.toFixed(2)}`;
+            }}
             isPicked={picks.isPicked}
             onTogglePick={(item) => {
               void picks

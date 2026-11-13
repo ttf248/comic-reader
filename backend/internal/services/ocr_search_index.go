@@ -12,7 +12,12 @@ import (
 	"unicode"
 )
 
-const ocrSearchIndexVersion = 1
+const ocrSearchIndexVersion = 2
+
+const (
+	OCRSearchMatchExact       = "exact"
+	OCRSearchMatchApproximate = "approximate"
+)
 
 type ocrSearchDocument struct {
 	ResourceID    string   `json:"resourceId"`
@@ -121,8 +126,9 @@ func (s *OCRSearchIndex) ApplyRecords(records []AIAnalysisRecord) error {
 	return s.persistLocked()
 }
 
-// Candidates returns the intersection of postings for all query n-grams.
-// Callers must verify the full normalized phrase against the source OCR text.
+// Candidates returns exact and one-error candidates from a small set of rare
+// query terms. Callers must verify the normalized OCR text before returning a
+// result.
 func (s *OCRSearchIndex) Candidates(query string) []string {
 	terms := ocrSearchTerms(query)
 	if len(terms) == 0 {
@@ -130,26 +136,41 @@ func (s *OCRSearchIndex) Candidates(query string) []string {
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	var smallest map[string]struct{}
+	type termPosting struct {
+		term string
+		ids  map[string]struct{}
+	}
+	postings := make([]termPosting, 0, len(terms))
 	for _, term := range terms {
 		posting := s.postings[term]
-		if len(posting) == 0 {
-			return []string{}
-		}
-		if smallest == nil || len(posting) < len(smallest) {
-			smallest = posting
+		postings = append(postings, termPosting{term: term, ids: posting})
+	}
+	sort.Slice(postings, func(i, j int) bool { return len(postings[i].ids) < len(postings[j].ids) })
+	fuzzy := ocrQueryAllowsApproximateMatch(normalizeOCRSearchText(query))
+	seedCount := 1
+	if fuzzy {
+		seedCount = min(4, len(postings))
+	}
+	possible := make(map[string]struct{})
+	for _, posting := range postings[:seedCount] {
+		for resourceID := range posting.ids {
+			possible[resourceID] = struct{}{}
 		}
 	}
-	candidates := make([]string, 0, len(smallest))
-	for resourceID := range smallest {
-		matched := true
+	minimumMatches := len(terms)
+	if fuzzy {
+		minimumMatches = max(1, len(terms)-3)
+	}
+	candidates := make([]string, 0, len(possible))
+	for resourceID := range possible {
+		matched := 0
 		for _, term := range terms {
 			if _, exists := s.postings[term][resourceID]; !exists {
-				matched = false
-				break
+				continue
 			}
+			matched++
 		}
-		if matched {
+		if matched >= minimumMatches {
 			candidates = append(candidates, resourceID)
 		}
 	}
@@ -261,8 +282,166 @@ func ocrSearchTerms(text string) []string {
 }
 
 func normalizeOCRSearchText(text string) string {
-	text = strings.ToLower(text)
-	return strings.Join(strings.Fields(text), " ")
+	runes := []rune(strings.ToLower(text))
+	result := make([]rune, 0, len(runes))
+	separators := make([]rune, 0, 4)
+	previousClass := 0
+	var previous rune
+	for _, value := range runes {
+		if value == '\u3000' {
+			value = ' '
+		} else if value >= '\uff01' && value <= '\uff5e' {
+			value -= 0xfee0
+			value = unicode.ToLower(value)
+		}
+		class := ocrSearchCharacterClass(value)
+		if class == 0 {
+			separators = append(separators, value)
+			continue
+		}
+		if previousClass != 0 {
+			switch {
+			case previousClass == 1 && class == 1:
+				// Chinese OCR frequently inserts spaces or line punctuation inside
+				// a phrase. CJK separators do not change phrase identity.
+			case previousClass == 2 && class == 2 && unicode.IsNumber(previous) && unicode.IsNumber(value) && numericOCRSeparators(separators):
+				// Normalize OCR variants such as 09:00, 09：00 and 09 00 alike.
+			default:
+				result = append(result, ' ')
+			}
+		}
+		result = append(result, value)
+		separators = separators[:0]
+		previousClass, previous = class, value
+	}
+	return strings.TrimSpace(string(result))
+}
+
+// MatchOCRSearchText reports whether query matches OCR text exactly after
+// normalization or through one conservative recognition-error correction.
+func MatchOCRSearchText(query, text string) string {
+	normalizedQuery := normalizeOCRSearchText(query)
+	if normalizedQuery == "" {
+		return ""
+	}
+	normalizedText := normalizeOCRSearchText(text)
+	if strings.Contains(normalizedText, normalizedQuery) {
+		return OCRSearchMatchExact
+	}
+	if !ocrQueryAllowsApproximateMatch(normalizedQuery) {
+		return ""
+	}
+	queryRunes := []rune(strings.ReplaceAll(normalizedQuery, " ", ""))
+	for _, segment := range strings.Fields(normalizedText) {
+		textRunes := []rune(segment)
+		if hasConfusableOCRSubstitution(queryRunes, textRunes) {
+			return OCRSearchMatchApproximate
+		}
+		if len(queryRunes) >= 8 && hasSingleOCRInsertionOrDeletion(queryRunes, textRunes) {
+			return OCRSearchMatchApproximate
+		}
+	}
+	return ""
+}
+
+func ocrSearchCharacterClass(value rune) int {
+	if unicode.Is(unicode.Han, value) {
+		return 1
+	}
+	if unicode.IsLetter(value) || unicode.IsNumber(value) {
+		return 2
+	}
+	return 0
+}
+
+func numericOCRSeparators(values []rune) bool {
+	for _, value := range values {
+		if !unicode.IsSpace(value) && !strings.ContainsRune(":：-－./／", value) {
+			return false
+		}
+	}
+	return true
+}
+
+func ocrQueryAllowsApproximateMatch(query string) bool {
+	query = strings.ReplaceAll(query, " ", "")
+	runes := []rune(query)
+	if len(runes) < 5 {
+		return false
+	}
+	for _, value := range runes {
+		if !unicode.Is(unicode.Han, value) {
+			return false
+		}
+	}
+	return true
+}
+
+func hasConfusableOCRSubstitution(query, text []rune) bool {
+	if len(query) != len(text) || len(query) < 5 {
+		return false
+	}
+	for start := 0; start+len(query) <= len(text); start++ {
+		mismatches := 0
+		for index, expected := range query {
+			actual := text[start+index]
+			if expected == actual {
+				continue
+			}
+			if !confusableOCRCharacters(expected, actual) {
+				mismatches = 2
+				break
+			}
+			mismatches++
+			if mismatches > 1 {
+				break
+			}
+		}
+		if mismatches == 1 {
+			return true
+		}
+	}
+	return false
+}
+
+func hasSingleOCRInsertionOrDeletion(query, text []rune) bool {
+	if ocrAbsInt(len(query)-len(text)) != 1 {
+		return false
+	}
+	shorter, longer := query, text
+	if len(query) > len(text) {
+		shorter, longer = text, query
+	}
+	for start := 0; start+len(shorter) <= len(longer); start++ {
+		matches := true
+		for index, value := range shorter {
+			if value != longer[start+index] {
+				matches = false
+				break
+			}
+		}
+		if matches {
+			return true
+		}
+	}
+	return false
+}
+
+func ocrAbsInt(value int) int {
+	if value < 0 {
+		return -value
+	}
+	return value
+}
+
+func confusableOCRCharacters(left, right rune) bool {
+	groups := []string{"园圆", "入人", "口囗", "土士", "未末", "日曰", "已己巳"}
+	for _, group := range groups {
+		if strings.ContainsRune(group, left) && strings.ContainsRune(group, right) {
+			return true
+		}
+	}
+	return false
 }
 
 func uniqueSortedStrings(values []string) []string {

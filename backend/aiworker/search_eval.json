@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "seed": 20261113,
+  "imagesPerCategory": 20,
+  "imageSize": [384, 256],
+  "categories": [
+    {
+      "id": "street_photo",
+      "query": "白天街道上的汽车、行人和两旁店铺",
+      "scene": "street"
+    },
+    {
+      "id": "beach_scene",
+      "query": "夕阳下的海滩、蓝色海面和金色沙滩",
+      "scene": "beach"
+    },
+    {
+      "id": "forest_lake",
+      "query": "绿色森林环绕着平静的湖泊",
+      "scene": "forest"
+    },
+    {
+      "id": "snow_mountain",
+      "query": "白雪覆盖的高山和山脚下的湖水",
+      "scene": "mountain"
+    },
+    {
+      "id": "city_building",
+      "query": "现代城市里的玻璃高楼和建筑",
+      "scene": "building"
+    },
+    {
+      "id": "traditional_temple",
+      "query": "中国古建筑寺庙、红色屋顶和黄色墙壁",
+      "scene": "temple"
+    },
+    {
+      "id": "pixel_game",
+      "query": "像素风格的太空射击游戏画面",
+      "scene": "game"
+    },
+    {
+      "id": "chart_screenshot",
+      "query": "电脑截图中的彩色柱状图和数据面板",
+      "scene": "screenshot"
+    },
+    {
+      "id": "chinese_sign",
+      "query": "写着中文营业时间的咖啡店招牌",
+      "scene": "text"
+    }
+  ],
+  "ocrSamples": [
+    "咖啡入口",
+    "今日营业",
+    "营业时间 09:00-21:00",
+    "欢迎光临",
+    "中关村科技园",
+    "人民广场地铁站",
+    "周末特价 28 元",
+    "请从右侧入口进入"
+  ]
+}

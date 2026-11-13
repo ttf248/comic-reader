@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "queries": [
+    {
+      "id": "punctuation_between_chinese",
+      "query": "地铁人民广场",
+      "documents": [
+        { "id": "target", "text": "地铁，人民广场", "relevant": true },
+        { "id": "nearby", "text": "地铁人民医院", "relevant": false },
+        { "id": "unrelated", "text": "北京天气晴朗", "relevant": false }
+      ]
+    },
+    {
+      "id": "ocr_line_break",
+      "query": "北京天气预报",
+      "documents": [
+        { "id": "target", "text": "北京\n天气预报", "relevant": true },
+        { "id": "nearby", "text": "北京天气预告", "relevant": false },
+        { "id": "unrelated", "text": "上海天气预报", "relevant": false }
+      ]
+    },
+    {
+      "id": "space_inside_chinese_phrase",
+      "query": "咖啡入口",
+      "documents": [
+        { "id": "target", "text": "咖啡 入口", "relevant": true },
+        { "id": "nearby", "text": "咖啡出口", "relevant": false },
+        { "id": "unrelated", "text": "咖啡豆包装", "relevant": false }
+      ]
+    },
+    {
+      "id": "punctuation_and_spacing",
+      "query": "今日营业时间",
+      "documents": [
+        { "id": "target", "text": "今日营业、时间", "relevant": true },
+        { "id": "nearby", "text": "今日停止营业", "relevant": false },
+        { "id": "unrelated", "text": "营业时间 09:00-21:00", "relevant": false }
+      ]
+    },
+    {
+      "id": "confusable_character",
+      "query": "中关村科技园",
+      "documents": [
+        { "id": "target", "text": "中关村科技圆", "relevant": true },
+        { "id": "nearby", "text": "中关村科技院", "relevant": false },
+        { "id": "unrelated", "text": "中关村软件园", "relevant": false }
+      ]
+    },
+    {
+      "id": "confusable_character_at_end",
+      "query": "请从右侧入口进入",
+      "documents": [
+        { "id": "target", "text": "请从右侧入口进人", "relevant": true },
+        { "id": "nearby", "text": "请从右侧入口退出", "relevant": false },
+        { "id": "unrelated", "text": "请从左侧入口进入", "relevant": false }
+      ]
+    },
+    {
+      "id": "full_width_digits_and_punctuation",
+      "query": "营业时间09:00-21:00",
+      "documents": [
+        { "id": "target", "text": "营业时间 ０９：００－２１：００", "relevant": true },
+        { "id": "nearby", "text": "营业时间 10:00-22:00", "relevant": false },
+        { "id": "unrelated", "text": "营业时间请见前台", "relevant": false }
+      ]
+    },
+    {
+      "id": "query_with_punctuation",
+      "query": "杭州，西湖风景区",
+      "documents": [
+        { "id": "target", "text": "杭州 西湖风景区", "relevant": true },
+        { "id": "nearby", "text": "杭州西湖风景照", "relevant": false },
+        { "id": "unrelated", "text": "杭州西湖边的游客", "relevant": false }
+      ]
+    }
+  ]
+}

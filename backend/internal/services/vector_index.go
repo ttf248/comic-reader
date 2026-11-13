@@ -29,6 +29,14 @@ const (
 
 var ErrVectorDimension = errors.New("vector dimension does not match the model")
 
+var halfToFloat32Lookup = func() [1 << 16]float32 {
+	var lookup [1 << 16]float32
+	for value := range lookup {
+		lookup[value] = halfToFloat32(uint16(value))
+	}
+	return lookup
+}()
+
 // VectorMetadata 是向量索引的轻量记录；媒体路径不进入向量索引。
 type VectorMetadata struct {
 	ResourceID   string    `json:"resourceId"`
@@ -83,6 +91,7 @@ type VectorInput struct {
 type VectorHit struct {
 	ResourceID string  `json:"resourceId"`
 	Score      float64 `json:"score"`
+	priority   int
 }
 
 // VectorIndexStore 保存 Float16 分片；每片的 metadata.jsonl 与向量数据同目录，
@@ -370,6 +379,12 @@ func (s *VectorIndexStore) Metadata() []VectorMetadata {
 }
 
 func (s *VectorIndexStore) Search(query []float32, candidates []VectorMetadata, offset, limit int) ([]VectorHit, int, error) {
+	return s.SearchWithPriority(query, candidates, offset, limit, nil)
+}
+
+// SearchWithPriority applies a caller-provided relevance tier before cosine
+// similarity. It keeps the vector store independent of OCR and other signals.
+func (s *VectorIndexStore) SearchWithPriority(query []float32, candidates []VectorMetadata, offset, limit int, priorities map[string]int) ([]VectorHit, int, error) {
 	if len(query) != AIEmbeddingDimension {
 		return nil, 0, ErrVectorDimension
 	}
@@ -387,9 +402,20 @@ func (s *VectorIndexStore) Search(query []float32, candidates []VectorMetadata, 
 		return nil, 0, errors.New("query vector has zero magnitude")
 	}
 	queryScale := float32(1 / math.Sqrt(queryNorm))
+	normalizedQuery := make([]float32, len(query))
+	for index, value := range query {
+		normalizedQuery[index] = value * queryScale
+	}
+	maxInt := int(^uint(0) >> 1)
+	retainCount := maxInt
+	if offset <= maxInt-limit {
+		retainCount = offset + limit
+	}
+	usePartialSort := retainCount < len(candidates)
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	hits := make([]VectorHit, 0, len(candidates))
+	hits := make([]VectorHit, 0, min(retainCount, len(candidates)))
+	total := 0
 	for _, metadata := range candidates {
 		current, exists := s.latest[metadata.ResourceID]
 		if !exists || current.Size != metadata.Size || current.MTimeNs != metadata.MTimeNs || current.ModelVersion != metadata.ModelVersion {
@@ -402,23 +428,77 @@ func (s *VectorIndexStore) Search(query []float32, candidates []VectorMetadata, 
 		}
 		score := 0.0
 		start := metadata.Position * AIEmbeddingDimension
-		for column, component := range query {
-			score += float64(component*queryScale) * float64(halfToFloat32(shard.values[start+column]))
+		for column, component := range normalizedQuery {
+			score += float64(component) * float64(halfToFloat32Lookup[shard.values[start+column]])
 		}
-		hits = append(hits, VectorHit{ResourceID: metadata.ResourceID, Score: score})
+		hit := VectorHit{ResourceID: metadata.ResourceID, Score: score, priority: priorities[metadata.ResourceID]}
+		total++
+		if !usePartialSort || len(hits) < retainCount {
+			hits = append(hits, hit)
+			if usePartialSort {
+				vectorHitSiftUp(hits, len(hits)-1)
+			}
+			continue
+		}
+		if vectorHitBetter(hit, hits[0]) {
+			hits[0] = hit
+			vectorHitSiftDown(hits, 0)
+		}
 	}
-	sort.Slice(hits, func(i, j int) bool {
-		if hits[i].Score != hits[j].Score {
-			return hits[i].Score > hits[j].Score
-		}
-		return hits[i].ResourceID < hits[j].ResourceID
-	})
-	total := len(hits)
+	// The heap root is the worst retained hit. Restore the public ranking
+	// order only after all candidates have been scored.
+	sort.Slice(hits, func(i, j int) bool { return vectorHitBetter(hits[i], hits[j]) })
 	if offset >= total {
 		return []VectorHit{}, total, nil
 	}
-	end := min(offset+limit, total)
+	end := total
+	if limit < total-offset {
+		end = offset + limit
+	}
 	return hits[offset:end], total, nil
+}
+
+// vectorHitBetter reports whether left sorts ahead of right in search results.
+func vectorHitBetter(left, right VectorHit) bool {
+	if left.priority != right.priority {
+		return left.priority > right.priority
+	}
+	if left.Score != right.Score {
+		return left.Score > right.Score
+	}
+	return left.ResourceID < right.ResourceID
+}
+
+// The bounded heap keeps its worst hit at index zero, so a better new hit can
+// replace it in O(log K) time without allocating a hit for every vector.
+func vectorHitSiftUp(values []VectorHit, index int) {
+	for index > 0 {
+		parent := (index - 1) / 2
+		if !vectorHitBetter(values[parent], values[index]) {
+			break
+		}
+		values[parent], values[index] = values[index], values[parent]
+		index = parent
+	}
+}
+
+func vectorHitSiftDown(values []VectorHit, index int) {
+	for {
+		left := index*2 + 1
+		if left >= len(values) {
+			return
+		}
+		worst := left
+		right := left + 1
+		if right < len(values) && vectorHitBetter(values[left], values[right]) {
+			worst = right
+		}
+		if !vectorHitBetter(values[index], values[worst]) {
+			return
+		}
+		values[index], values[worst] = values[worst], values[index]
+		index = worst
+	}
 }
 
 func (s *VectorIndexStore) Status() VectorIndexStatus {

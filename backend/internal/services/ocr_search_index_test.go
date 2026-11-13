@@ -2,6 +2,7 @@ package services
 
 import (
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"reflect"
 	"testing"
@@ -74,5 +75,82 @@ func TestOCRSearchIndexSkipsEmptyAndFailedRecords(t *testing.T) {
 	}
 	if actual := index.Candidates("不应"); len(actual) != 0 {
 		t.Fatalf("non-recognized OCR records were indexed: %v", actual)
+	}
+}
+
+func TestOCRSearchQualityEvaluation(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("testdata", "ocr_search_eval.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var evaluation struct {
+		Queries []struct {
+			ID        string `json:"id"`
+			Query     string `json:"query"`
+			Documents []struct {
+				ID       string `json:"id"`
+				Text     string `json:"text"`
+				Relevant bool   `json:"relevant"`
+			} `json:"documents"`
+		} `json:"queries"`
+	}
+	if err := json.Unmarshal(data, &evaluation); err != nil {
+		t.Fatal(err)
+	}
+	truePositive, falsePositive, falseNegative := 0, 0, 0
+	exactMatches, approximateMatches := 0, 0
+	misses := make([]string, 0)
+	for _, query := range evaluation.Queries {
+		index, err := OpenOCRSearchIndex(filepath.Join(t.TempDir(), query.ID+".json"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		records := make([]AIAnalysisRecord, 0, len(query.Documents))
+		documentByID := make(map[string]struct {
+			text     string
+			relevant bool
+		}, len(query.Documents))
+		for position, document := range query.Documents {
+			records = append(records, ocrRecord(document.ID, document.Text, int64(position+1)))
+			documentByID[document.ID] = struct {
+				text     string
+				relevant bool
+			}{text: document.Text, relevant: document.Relevant}
+		}
+		if err := index.Sync(records); err != nil {
+			t.Fatal(err)
+		}
+		candidates := make(map[string]struct{}, len(index.Candidates(query.Query)))
+		for _, resourceID := range index.Candidates(query.Query) {
+			candidates[resourceID] = struct{}{}
+		}
+		queryMatched := false
+		for resourceID, document := range documentByID {
+			_, indexed := candidates[resourceID]
+			match := MatchOCRSearchText(query.Query, document.text)
+			predicted := indexed && match != ""
+			if predicted && document.relevant {
+				truePositive++
+				queryMatched = true
+				if match == OCRSearchMatchExact {
+					exactMatches++
+				} else {
+					approximateMatches++
+				}
+			} else if predicted {
+				falsePositive++
+			} else if document.relevant {
+				falseNegative++
+			}
+		}
+		if !queryMatched {
+			misses = append(misses, query.ID)
+		}
+	}
+	precision := float64(truePositive) / float64(max(1, truePositive+falsePositive))
+	recall := float64(truePositive) / float64(max(1, truePositive+falseNegative))
+	t.Logf("OCR evaluation: precision=%.3f recall=%.3f exact=%d approximate=%d falsePositive=%d falseNegative=%d missedQueries=%v", precision, recall, exactMatches, approximateMatches, falsePositive, falseNegative, misses)
+	if precision != 1 || recall != 1 || falsePositive != 0 || falseNegative != 0 {
+		t.Fatalf("OCR evaluation did not preserve precision and recover all labeled queries")
 	}
 }

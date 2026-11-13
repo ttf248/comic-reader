@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"math"
 	"os"
 	"path/filepath"
 	"testing"
@@ -45,6 +46,46 @@ func TestVectorIndexPersistsFloat16VectorsAndRanksCosine(t *testing.T) {
 	status := reopened.Status()
 	if status.Vectors != 2 || status.Shards != 1 || status.Dimension != AIEmbeddingDimension {
 		t.Fatalf("status = %+v", status)
+	}
+}
+
+func TestVectorIndexPartialSearchKeepsStableTieOrderAcrossPages(t *testing.T) {
+	resourceIDs := []string{"r-z", "r-a", "r-m", "r-b"}
+	values := make([]uint16, len(resourceIDs)*AIEmbeddingDimension)
+	metadata := make(map[string]VectorMetadata, len(resourceIDs))
+	candidates := make([]VectorMetadata, 0, len(resourceIDs))
+	for position, resourceID := range resourceIDs {
+		values[position*AIEmbeddingDimension] = float32ToHalf(1)
+		item := VectorMetadata{
+			ResourceID: resourceID, Size: 1, MTimeNs: 1, ModelVersion: "clip-v1",
+			ShardID: "all", Position: position,
+		}
+		metadata[resourceID] = item
+		candidates = append(candidates, item)
+	}
+	index := &VectorIndexStore{
+		modelVersion: "clip-v1",
+		shards:       map[string]vectorShardData{"all": {values: values}},
+		latest:       metadata,
+	}
+	query := make([]float32, AIEmbeddingDimension)
+	query[0] = 1
+
+	hits, total, err := index.Search(query, candidates, 1, 2)
+	if err != nil || total != 4 || len(hits) != 2 {
+		t.Fatalf("Search() = (%+v, %d, %v)", hits, total, err)
+	}
+	if hits[0].ResourceID != "r-b" || hits[1].ResourceID != "r-m" {
+		t.Fatalf("paged tie order = [%s %s], want [r-b r-m]", hits[0].ResourceID, hits[1].ResourceID)
+	}
+	prioritized, total, err := index.SearchWithPriority(query, candidates, 1, 2, map[string]int{
+		"r-b": 2, "r-m": 2, "r-a": 1, "r-z": 1,
+	})
+	if err != nil || total != 4 || len(prioritized) != 2 {
+		t.Fatalf("SearchWithPriority() = (%+v, %d, %v)", prioritized, total, err)
+	}
+	if prioritized[0].ResourceID != "r-m" || prioritized[1].ResourceID != "r-a" {
+		t.Fatalf("priority page = [%s %s], want [r-m r-a]", prioritized[0].ResourceID, prioritized[1].ResourceID)
 	}
 }
 
@@ -99,6 +140,16 @@ func TestVectorFloat16RoundTrip(t *testing.T) {
 		actual := halfToFloat32(float32ToHalf(value))
 		if delta := actual - value; delta > 0.00001 || delta < -0.00001 {
 			t.Errorf("half roundtrip %g = %g", value, actual)
+		}
+	}
+}
+
+func TestVectorFloat16LookupMatchesDecoder(t *testing.T) {
+	for value := range halfToFloat32Lookup {
+		want := math.Float32bits(halfToFloat32(uint16(value)))
+		got := math.Float32bits(halfToFloat32Lookup[value])
+		if got != want {
+			t.Fatalf("half decoder mismatch for %#x: got %#x, want %#x", value, got, want)
 		}
 	}
 }

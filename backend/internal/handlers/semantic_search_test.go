@@ -87,6 +87,8 @@ func (handlerSemanticWorker) AnalyzeOCR(_ context.Context, paths []string) ([]se
 		text := "海边 漫步"
 		if filepath.Base(path) == "first.jpg" {
 			text = "入口 大门"
+		} else if filepath.Base(path) == "second.jpg" {
+			text = "中关村科技圆"
 		}
 		data, _ := json.Marshal(map[string]string{"text": text})
 		results[index].Data = data
@@ -322,15 +324,43 @@ func TestSemanticSearchAPIUsesCurrentIndexedResources(t *testing.T) {
 			Item struct {
 				ID string `json:"id"`
 			} `json:"item"`
-			Similarity *float64 `json:"similarity"`
+			Similarity   *float64 `json:"similarity"`
+			MatchReasons []string `json:"matchReasons"`
 		} `json:"results"`
 		Total int `json:"total"`
 	}
 	if err := json.NewDecoder(ocrResponse.Body).Decode(&ocrBody); err != nil {
 		t.Fatal(err)
 	}
-	if ocrBody.Total != 1 || len(ocrBody.Results) != 1 || ocrBody.Results[0].Item.ID != firstID || ocrBody.Results[0].Similarity != nil {
+	if ocrBody.Total != 1 || len(ocrBody.Results) != 1 || ocrBody.Results[0].Item.ID != firstID || ocrBody.Results[0].Similarity != nil || len(ocrBody.Results[0].MatchReasons) != 1 || ocrBody.Results[0].MatchReasons[0] != "ocr_exact" {
 		t.Fatalf("OCR search response = %+v", ocrBody)
+	}
+
+	secondID := catalog.ExternalID(files[1], services.ResourceFile)
+	approximateRequest := httptest.NewRequest("POST", "/api/ai/search", strings.NewReader(`{"ocrText":"中关村科技园","kind":"photo","limit":10}`))
+	approximateRequest.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)
+	approximateResponse, err := app.Test(approximateRequest, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer approximateResponse.Body.Close()
+	var approximateBody struct {
+		Results []struct {
+			Item struct {
+				ID string `json:"id"`
+			} `json:"item"`
+			MatchReasons []string `json:"matchReasons"`
+		} `json:"results"`
+		Total int `json:"total"`
+	}
+	if approximateResponse.StatusCode != fiber.StatusOK {
+		t.Fatalf("approximate OCR search status = %d", approximateResponse.StatusCode)
+	}
+	if err := json.NewDecoder(approximateResponse.Body).Decode(&approximateBody); err != nil {
+		t.Fatal(err)
+	}
+	if approximateBody.Total != 1 || len(approximateBody.Results) != 1 || approximateBody.Results[0].Item.ID != secondID || len(approximateBody.Results[0].MatchReasons) != 1 || approximateBody.Results[0].MatchReasons[0] != "ocr_approximate" {
+		t.Fatalf("approximate OCR search response = %+v", approximateBody)
 	}
 	albumID := catalog.ExternalID(albumPath, services.ResourceAlbum)
 	if _, err := prefs.AddFavorite(albumID); err != nil {
