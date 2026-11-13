@@ -9,6 +9,7 @@ import {
   sumEstimateModes,
   taskFieldLabel,
   taskResultLabel,
+  taskStageLabel,
 } from "./taskFormat";
 import type { AIJob, AIJobError, AIJobEstimateMode } from "../api/aiJobs";
 
@@ -65,6 +66,14 @@ describe("任务格式化", () => {
     expect(formatTaskDuration(3_600_000)).toBe("1 小时 0 分");
     expect(formatTaskSpeed(0)).toBe("—");
     expect(formatTaskSpeed(1.6)).toBe("1.6 张/秒");
+  });
+
+  it("任务阶段明确区分环境检查、清单整理、首批模型准备与持续推理", () => {
+    expect(taskStageLabel("checking_runtime")).toBe("检查 AI 运行环境");
+    expect(taskStageLabel("building_analysis_plan")).toBe("整理分析清单");
+    expect(taskStageLabel("loading_model")).toBe("准备本机模型与首批推理");
+    expect(taskStageLabel("embedding")).toBe("批量推理并写入语义向量");
+    expect(taskStageLabel("face")).toBe("批量识别人脸并保存特征");
   });
 
   it("解析状态有中文名", () => {

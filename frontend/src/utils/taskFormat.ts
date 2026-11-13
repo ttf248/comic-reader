@@ -1,8 +1,4 @@
-import type {
-  AIJob,
-  AIJobError,
-  AIJobEstimateMode,
-} from "../api/aiJobs";
+import type { AIJob, AIJobError, AIJobEstimateMode } from "../api/aiJobs";
 
 /** 千分位计数。 */
 export function formatCount(value: number): string {
@@ -108,8 +104,14 @@ export function taskStageLabel(stage: string): string {
   switch (stage) {
     case "pending":
       return "排队中";
+    case "checking_runtime":
+      return "检查 AI 运行环境";
     case "waiting_for_library":
       return "等待媒体库";
+    case "building_analysis_plan":
+      return "整理分析清单";
+    case "loading_model":
+      return "准备本机模型与首批推理";
     case "pausing":
       return "准备暂停";
     case "processing":
@@ -117,7 +119,11 @@ export function taskStageLabel(stage: string): string {
     case "metadata":
       return "读取照片元数据";
     case "embedding":
-      return "生成语义向量";
+      return "批量推理并写入语义向量";
+    case "ocr":
+      return "批量识别并保存文字";
+    case "face":
+      return "批量识别人脸并保存特征";
     case "paused":
       return "已暂停";
     case "complete":

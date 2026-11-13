@@ -1401,6 +1401,10 @@ func (s *AIJobService) run(id string, runtimeState *aiJobRuntime) {
 	s.mu.Unlock()
 
 	if computeDevice == "gpu" {
+		if err := s.setJobStage(id, "checking_runtime"); err != nil {
+			s.finishJob(id, AIJobStatusFailed, "failed", "任务状态未能持久化")
+			return
+		}
 		validator, ok := analyzer.(AIAnalyzerHardware)
 		if !ok {
 			s.failGPUJob(id, "gpu_backend_unsupported", "此分析模块没有可用的 GPU 推理实现")
@@ -1417,6 +1421,10 @@ func (s *AIJobService) run(id string, runtimeState *aiJobRuntime) {
 	snapshot, err := s.waitForCatalog(runtimeState.ctx)
 	if err != nil {
 		s.finishInterrupted(id, runtimeState, err)
+		return
+	}
+	if err := s.setJobStage(id, "building_analysis_plan"); err != nil {
+		s.finishJob(id, AIJobStatusFailed, "failed", "任务状态未能持久化")
 		return
 	}
 	targets := s.buildTargets(runtimeState.ctx, snapshot)
@@ -1436,6 +1444,12 @@ func (s *AIJobService) run(id string, runtimeState *aiJobRuntime) {
 			s.finishJob(id, AIJobStatusCompleted, "completed", "")
 		}
 		return
+	}
+	if analyzer.Type() != AIJobTypeMetadata {
+		if err := s.setJobStage(id, "loading_model"); err != nil {
+			s.finishJob(id, AIJobStatusFailed, "failed", "任务状态未能持久化")
+			return
+		}
 	}
 
 	for start := 0; start < len(candidates); start += AIBatchSize {
@@ -1471,6 +1485,24 @@ func (s *AIJobService) run(id string, runtimeState *aiJobRuntime) {
 	} else {
 		s.finishJob(id, AIJobStatusCompleted, "completed", "")
 	}
+}
+
+func (s *AIJobService) setJobStage(id, stage string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	job := s.jobs[id]
+	if job == nil {
+		return ErrAIJobNotFound
+	}
+	previousStage, previousUpdated := job.Stage, job.UpdatedAt
+	job.Stage = stage
+	job.UpdatedAt = s.now()
+	if err := s.persistLocked(); err != nil {
+		job.Stage, job.UpdatedAt = previousStage, previousUpdated
+		return err
+	}
+	s.publishLocked(*job)
+	return nil
 }
 
 func (s *AIJobService) waitForCatalog(ctx context.Context) (CatalogSnapshot, error) {

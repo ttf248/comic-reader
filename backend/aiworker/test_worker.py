@@ -47,6 +47,9 @@ class FakeModel:
         self.is_float = True
         return self
 
+    def eval(self):
+        return self
+
 
 class WorkerTests(unittest.TestCase):
     def setUp(self):
@@ -54,6 +57,8 @@ class WorkerTests(unittest.TestCase):
             "device": worker.device,
             "model": worker.model,
             "model_device": worker.model_device,
+            "model_cache": worker.model_cache,
+            "preprocess": worker.preprocess,
             "model_dir": worker.model_dir,
             "model_validation": worker.model_validation,
             "runtime_error": worker.runtime_error,
@@ -63,6 +68,7 @@ class WorkerTests(unittest.TestCase):
         }
         worker.device = "cuda"
         worker.model = FakeModel()
+        worker.model_cache = {}
         worker.model_validation = None
         worker.runtime_error = ""
         worker.torch = FakeTorch()
@@ -96,6 +102,22 @@ class WorkerTests(unittest.TestCase):
         self.assertTrue(state["runtimeReady"])
         self.assertFalse(state["cudaAvailable"])
         self.assertEqual("cpu", state["device"])
+
+    def test_cached_model_is_reused_without_loading_weights_again(self):
+        cached = FakeModel()
+        worker.model = None
+        worker.model_device = None
+        worker.model_cache = {"cpu": (cached, "cached-preprocess")}
+        worker.model_dir = Path(tempfile.gettempdir()) / "local-gallery-missing-model"
+
+        with patch.object(worker, "model_state", return_value={"modelValid": True}), patch(
+            "cn_clip.clip.load_from_name"
+        ) as load_from_name:
+            worker.load_model("cpu")
+
+        self.assertIs(worker.model, cached)
+        self.assertEqual("cached-preprocess", worker.preprocess)
+        load_from_name.assert_not_called()
 
     def test_onnx_cuda_provider_is_available_without_torch_cuda(self):
         with patch.object(worker, "cuda_provider_available", return_value=True):

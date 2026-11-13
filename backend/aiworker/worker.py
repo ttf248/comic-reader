@@ -27,6 +27,7 @@ model_dir = Path(sys.argv[1]).resolve()
 model = None
 model_device = None
 preprocess = None
+model_cache = {}
 clip = None
 torch = None
 Image = None
@@ -237,27 +238,48 @@ def load_model(device_mode: str = "auto") -> None:
     if model is not None and model_device == target_device:
         device = target_device
         return
-    model = None
-    preprocess = None
-    model_device = None
-    device = target_device
+    cached = model_cache.get(target_device)
+    if cached is not None:
+        model, preprocess = cached
+        model_device = target_device
+        device = target_device
+        runtime_error = ""
+        return
+
     try:
         with contextlib.redirect_stdout(sys.stderr):
-            model, preprocess = load_from_name("ViT-B-16", device=device, download_root=str(model_dir))
+            loaded_model, loaded_preprocess = load_from_name(
+                "ViT-B-16", device=target_device, download_root=str(model_dir)
+            )
     except Exception as error:
-        if device_mode == "auto" and device == "cuda" and "out of memory" in str(error).lower():
+        if device_mode == "auto" and target_device == "cuda" and "out of memory" in str(error).lower():
             torch.cuda.empty_cache()
-            device = "cpu"
-            with contextlib.redirect_stdout(sys.stderr):
-                model, preprocess = load_from_name("ViT-B-16", device="cpu", download_root=str(model_dir))
+            target_device = "cpu"
+            cached = model_cache.get(target_device)
+            if cached is not None:
+                loaded_model, loaded_preprocess = cached
+            else:
+                try:
+                    with contextlib.redirect_stdout(sys.stderr):
+                        loaded_model, loaded_preprocess = load_from_name(
+                            "ViT-B-16", device=target_device, download_root=str(model_dir)
+                        )
+                except Exception:
+                    runtime_error = "model_load_failed"
+                    raise RuntimeError(runtime_error) from None
         elif device_mode == "gpu":
             torch.cuda.empty_cache()
             raise RuntimeError("gpu_inference_failed") from None
         else:
             runtime_error = "model_load_failed"
             raise RuntimeError(runtime_error) from None
-    model.eval()
-    model_device = device
+
+    loaded_model.eval()
+    model_cache[target_device] = (loaded_model, loaded_preprocess)
+    model, preprocess = loaded_model, loaded_preprocess
+    model_device = target_device
+    device = target_device
+    runtime_error = ""
 
 
 def normalize_rows(features):
@@ -324,6 +346,8 @@ def run_with_fallback(items, encode, prepare, device_mode="auto"):
             device = "cpu"
             model = model.to("cpu").float()
             model_device = "cpu"
+            model_cache.pop("cuda", None)
+            model_cache["cpu"] = (model, preprocess)
             batch_size = 1
     return [{"vector": results[index], "error": errors[index]} for index in range(len(items))]
 

@@ -62,6 +62,42 @@ func TestAIJobServiceFullIncrementalAndPersistentResults(t *testing.T) {
 	shutdownAIJobService(t, restarted)
 }
 
+func TestAIJobStagesSeparatePreparationFromModelLoadingAndInference(t *testing.T) {
+	root := t.TempDir()
+	files := writeAIJobImages(t, root, AIBatchSize+1)
+	catalog := aiJobCatalog(root, files)
+	analyzer := &stagedBatchAnalyzer{
+		firstStarted: make(chan struct{}), firstRelease: make(chan struct{}),
+		secondStarted: make(chan struct{}), secondRelease: make(chan struct{}),
+	}
+	service := newTestAIJobService(t, filepath.Join(t.TempDir(), "state", "jobs.json"), filepath.Join(t.TempDir(), "derived"), catalog, MetadataAnalyzer{}, analyzer)
+	job, _, err := service.Start(AIJobTypeEmbedding, AIJobModeFull)
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-analyzer.firstStarted:
+	case <-time.After(3 * time.Second):
+		t.Fatal("first model batch did not start")
+	}
+	if active, ok := service.Get(job.ID); !ok || active.Stage != "loading_model" {
+		t.Fatalf("first batch stage = %+v, exists=%v; want loading_model", active, ok)
+	}
+	close(analyzer.firstRelease)
+	select {
+	case <-analyzer.secondStarted:
+	case <-time.After(3 * time.Second):
+		t.Fatal("second inference batch did not start")
+	}
+	if active, ok := service.Get(job.ID); !ok || active.Stage != AIJobTypeEmbedding {
+		t.Fatalf("later batch stage = %+v, exists=%v; want embedding", active, ok)
+	}
+	close(analyzer.secondRelease)
+	if result := waitForAIJob(t, service, job.ID, AIJobStatusCompleted); result.Processed != AIBatchSize+1 {
+		t.Fatalf("staged job result = %+v", result)
+	}
+}
+
 func TestAIJobServiceStartAllQueuesModulesInOrder(t *testing.T) {
 	root := t.TempDir()
 	files := writeAIJobImages(t, root, 1)
@@ -1116,6 +1152,43 @@ func shutdownAIJobService(t *testing.T, service *AIJobService) {
 type testJSONAnalyzer struct {
 	module  string
 	version string
+}
+
+type stagedBatchAnalyzer struct {
+	firstStarted  chan struct{}
+	firstRelease  chan struct{}
+	secondStarted chan struct{}
+	secondRelease chan struct{}
+	calls         atomic.Int32
+}
+
+func (*stagedBatchAnalyzer) Type() string    { return AIJobTypeEmbedding }
+func (*stagedBatchAnalyzer) Version() string { return "staged-test-v1" }
+func (*stagedBatchAnalyzer) Analyze(context.Context, io.ReadSeeker) (AIAnalysisOutput, error) {
+	return AIAnalysisOutput{Status: "processed", Data: json.RawMessage(`{"ok":true}`)}, nil
+}
+func (a *stagedBatchAnalyzer) AnalyzeBatch(ctx context.Context, inputs []AIAnalysisInput) ([]AIAnalysisOutput, error) {
+	call := a.calls.Add(1)
+	if call == 1 {
+		close(a.firstStarted)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-a.firstRelease:
+		}
+	} else if call == 2 {
+		close(a.secondStarted)
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-a.secondRelease:
+		}
+	}
+	outputs := make([]AIAnalysisOutput, len(inputs))
+	for index := range outputs {
+		outputs[index] = AIAnalysisOutput{Status: "processed", Data: json.RawMessage(`{"ok":true}`)}
+	}
+	return outputs, nil
 }
 
 type gpuTestAnalyzer struct {
