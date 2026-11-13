@@ -275,6 +275,35 @@ export interface GPSLocationAlbum {
   cellPrecision: number;
 }
 
+export type ChinaLocationPoint = [number, number];
+
+export interface ChinaLocationProvince {
+  adcode: number;
+  name: string;
+  photoCount: number;
+  unmatchedAreaPhotoCount: number;
+  geometry:
+    | { type: "Polygon"; coordinates: ChinaLocationPoint[][] }
+    | { type: "MultiPolygon"; coordinates: ChinaLocationPoint[][][] };
+}
+
+export interface ChinaLocationArea {
+  adcode: number;
+  provinceAdcode: number;
+  name: string;
+  level: "city" | "district";
+  photoCount: number;
+}
+
+export interface ChinaLocationSummary {
+  revision: number;
+  gpsPhotoCount: number;
+  chinaPhotoCount: number;
+  unassignedPhotoCount: number;
+  provinces: ChinaLocationProvince[];
+  areas: ChinaLocationArea[];
+}
+
 export type GPSLocationMedia = LibraryFeedItem;
 
 export interface PersonGroup {
@@ -378,6 +407,10 @@ export const aiJobsApi = {
       body: { resourceId, faceIndex },
       nonIdempotent: true,
     }),
+  chinaLocations: () =>
+    api<{ ok: boolean; locations: ChinaLocationSummary }>(
+      "/api/locations/china",
+    ),
   embeddingStatus: () =>
     api<{ ok: boolean; status: AIWorkerStatus }>("/api/ai/semantic/status"),
   semanticSearch: (request: SemanticSearchRequest, image?: File) => {
