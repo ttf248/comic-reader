@@ -7,6 +7,7 @@ import {
   type MouseEvent,
 } from "react";
 import { useElementSize } from "../../hooks/useElementSize";
+import TrajectoryLayer from "./TrajectoryLayer";
 import {
   createMapProjection,
   levelOpacity,
@@ -14,6 +15,7 @@ import {
   regionPath,
   shareOf,
   type MapRegion,
+  type TrajectoryStop,
 } from "../../utils/chinaMap";
 
 interface RegionMapProps {
@@ -27,6 +29,8 @@ interface RegionMapProps {
   levelLabel: string;
   /** 区域名字是否画在图上。全国层级不画，34 个省名会糊成一片。 */
   showLabels: boolean;
+  /** 轨迹的停靠序列，画在区域之上。 */
+  trajectory?: TrajectoryStop[];
   /** 点选区域时下钻一层。 */
   onSelect: (region: MapRegion) => void;
   /** 回到上一层。 */
@@ -62,6 +66,7 @@ export default function RegionMap({
   levelName,
   levelLabel,
   showLabels,
+  trajectory,
   onSelect,
   onLevelUp,
 }: RegionMapProps) {
@@ -91,9 +96,20 @@ export default function RegionMap({
       ordered.map((region) => ({
         region,
         path: regionPath(region.geometry, projection.project),
+        // 质心无条件算：轨迹的节点要落在区域里，名字只是顺带用。
+        centroid: regionLabelPoint(region.geometry),
         label: showLabels ? regionLabelPoint(region.geometry) : null,
       })),
     [ordered, projection, showLabels],
+  );
+
+  const centroidOf = useCallback(
+    (adcode: number): [number, number] | null => {
+      const entry = paths.find((item) => item.region.adcode === adcode);
+      if (!entry?.centroid) return null;
+      return projection.project(entry.centroid);
+    },
+    [paths, projection],
   );
 
   const showTooltip = useCallback(
@@ -281,6 +297,9 @@ export default function RegionMap({
               );
             })
           : null}
+        {trajectory && trajectory.length > 0 ? (
+          <TrajectoryLayer stops={trajectory} centroidOf={centroidOf} />
+        ) : null}
       </svg>
       {tooltip ? (
         <div

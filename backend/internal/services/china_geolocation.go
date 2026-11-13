@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/tianlongxiang/local-gallery/internal/models"
 )
@@ -107,16 +108,121 @@ type chinaRegionPhoto struct {
 	albumID    string
 	albumRank  int
 	index      int
+	// captured 是 EXIF 拍摄时间。相机记录的墙上时间，通常不含时区。
+	captured chinaCaptureTime
+	// provinceAdcode 是省级归属；regionAdcode 是下级区域归属，
+	// 只匹配到省级时为 0。
+	provinceAdcode int
+	regionAdcode   int
+}
+
+// chinaCaptureTime 是按日历口径比较的拍摄时间。
+//
+// EXIF 的 DateTimeOriginal 通常不含时区，保留相机记录的墙上时间：
+// 「拍摄地当地的那一天」正是轨迹叙事需要的口径 —— 晚上八点拍的那张
+// 属于那一天，而不是某个绝对时刻。
+type chinaCaptureTime struct {
+	Year   int
+	Month  int
+	Day    int
+	Hour   int
+	Minute int
+	Second int
+	// YearMonth 是 "2024-06"，DayKey 是 "2024-06-24"。
+	YearMonth string
+	DayKey    string
+	// Valid 表示这个时间可信。
+	Valid bool
+}
+
+// before 判断 a 是否早于 b。只有可信的时间才比较。
+func (a chinaCaptureTime) before(b chinaCaptureTime) bool {
+	if a.Year != b.Year {
+		return a.Year < b.Year
+	}
+	if a.Month != b.Month {
+		return a.Month < b.Month
+	}
+	if a.Day != b.Day {
+		return a.Day < b.Day
+	}
+	if a.Hour != b.Hour {
+		return a.Hour < b.Hour
+	}
+	if a.Minute != b.Minute {
+		return a.Minute < b.Minute
+	}
+	return a.Second < b.Second
+}
+
+// dayIndex 是这一天在日历上的序号，用来算两个日期隔了几天。
+func (c chinaCaptureTime) dayIndex() int {
+	return int(time.Date(c.Year, time.Month(c.Month), c.Day, 0, 0, 0, 0, time.UTC).Unix() / 86400)
+}
+
+// chinaCaptureMinYear 是可信拍摄时间的下限。数字照片早于这个年份的，
+// 基本都是相机时钟没设对。
+const chinaCaptureMinYear = 1990
+
+// chinaCaptureTimeLayouts 是 EXIF 拍摄时间的两种写法：
+// 不带时区的墙上时间，以及带偏移的 RFC3339。
+var chinaCaptureTimeLayouts = []string{
+	"2006-01-02T15:04:05.999999999",
+	time.RFC3339Nano,
+}
+
+// parseChinaCaptureTime 解析 EXIF 拍摄时间。
+//
+// 解析不出来、年份早于 1990 或晚于当年的时间都算不可信：这类照片照常
+// 计入空间统计，但不进时间轴与到访。
+//
+// 不拿文件修改时间来校验：照片常常是拷进库的，修改时间与拍摄时间差上
+// 几个月是常事，拿它当基准会误杀大量正常照片。
+func parseChinaCaptureTime(raw string) chinaCaptureTime {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return chinaCaptureTime{}
+	}
+	var parsed time.Time
+	parsedOK := false
+	for _, layout := range chinaCaptureTimeLayouts {
+		value, err := time.Parse(layout, raw)
+		if err == nil {
+			parsed = value
+			parsedOK = true
+			break
+		}
+	}
+	if !parsedOK {
+		return chinaCaptureTime{}
+	}
+	if parsed.Year() < chinaCaptureMinYear || parsed.Year() > time.Now().Year()+1 {
+		return chinaCaptureTime{}
+	}
+	return chinaCaptureTime{
+		Year:      parsed.Year(),
+		Month:     int(parsed.Month()),
+		Day:       parsed.Day(),
+		Hour:      parsed.Hour(),
+		Minute:    parsed.Minute(),
+		Second:    parsed.Second(),
+		YearMonth: fmt.Sprintf("%04d-%02d", parsed.Year(), int(parsed.Month())),
+		DayKey:    fmt.Sprintf("%04d-%02d-%02d", parsed.Year(), int(parsed.Month()), parsed.Day()),
+		Valid:     true,
+	}
 }
 
 // chinaLocationMatch 是一次匹配的结果：照片按行政区归位。
 type chinaLocationMatch struct {
 	gpsPhotoCount   int
 	chinaPhotoCount int
-	// provincePhotos 按省级区划码归集照片。
+	// provincePhotos 按省级区划码归集照片，按拍摄时间升序。
 	provincePhotos map[int][]chinaRegionPhoto
-	// regionPhotos 按下级区划码归集照片。
+	// regionPhotos 按下级区划码归集照片，按拍摄时间升序。
 	regionPhotos map[int][]chinaRegionPhoto
+	// timedPhotos 是全部有可信拍摄时间的照片，按时间升序。
+	// 全国层级的月份分布与停靠序列从它算。
+	timedPhotos []chinaRegionPhoto
 }
 
 // matchChinaLocations 在当前快照上重新校验照片版本，并将 GPS 坐标匹配到离线省级及下级边界。
@@ -186,31 +292,54 @@ func matchChinaLocations(
 			continue
 		}
 		photo := chinaRegionPhoto{
-			resourceID: record.ResourceID,
-			albumID:    fileRef.albumID,
-			albumRank:  albumRanks[fileRef.albumID],
-			index:      fileRef.index,
+			resourceID:     record.ResourceID,
+			albumID:        fileRef.albumID,
+			albumRank:      albumRanks[fileRef.albumID],
+			index:          fileRef.index,
+			captured:       parseChinaCaptureTime(metadata.DateTimeOriginal),
+			provinceAdcode: province.adcode,
 		}
 		match.provincePhotos[province.adcode] = append(match.provincePhotos[province.adcode], photo)
 		match.chinaPhotoCount++
-		area := matchingChinaFeature(index.childrenByParent[province.adcode], longitude, latitude)
-		if area == nil {
-			continue
+		if area := matchingChinaFeature(index.childrenByParent[province.adcode], longitude, latitude); area != nil {
+			photo.regionAdcode = area.adcode
+			match.regionPhotos[area.adcode] = append(match.regionPhotos[area.adcode], photo)
 		}
-		match.regionPhotos[area.adcode] = append(match.regionPhotos[area.adcode], photo)
+		if photo.captured.Valid {
+			match.timedPhotos = append(match.timedPhotos, photo)
+		}
 	}
-	// 照片按相册顺序与相册内序号排列，照片墙看起来才是「按相册分组」的。
+	// 照片按拍摄时间排列：时间轴、到访与轨迹都按这个顺序读。
 	for _, photos := range match.provincePhotos {
 		sortChinaRegionPhotos(photos)
 	}
 	for _, photos := range match.regionPhotos {
 		sortChinaRegionPhotos(photos)
 	}
+	sortChinaRegionPhotos(match.timedPhotos)
 	return match, nil
 }
 
-// sortChinaRegionPhotos 按相册顺序与相册内序号排序。
+// sortChinaRegionPhotos 按拍摄时间排列；没有可信时间的排在末尾，
+// 末尾内部仍按相册顺序，照片墙看起来依旧是「按相册分组」的。
 func sortChinaRegionPhotos(photos []chinaRegionPhoto) {
+	sort.SliceStable(photos, func(i, j int) bool {
+		left, right := photos[i].captured, photos[j].captured
+		if left.Valid != right.Valid {
+			return left.Valid
+		}
+		if left.Valid {
+			return left.before(right)
+		}
+		if photos[i].albumRank != photos[j].albumRank {
+			return photos[i].albumRank < photos[j].albumRank
+		}
+		return photos[i].index < photos[j].index
+	})
+}
+
+// sortChinaRegionPhotosByAlbum 按相册顺序与相册内序号排序。
+func sortChinaRegionPhotosByAlbum(photos []chinaRegionPhoto) {
 	sort.SliceStable(photos, func(i, j int) bool {
 		if photos[i].albumRank != photos[j].albumRank {
 			return photos[i].albumRank < photos[j].albumRank
@@ -219,20 +348,67 @@ func sortChinaRegionPhotos(photos []chinaRegionPhoto) {
 	})
 }
 
-// regionPhotoCount 返回某个区划下的照片数。
-func (m *chinaLocationMatch) regionPhotoCount(adcode int) int {
-	if m == nil {
-		return 0
+// scopePhotosFor 返回某个区域下的照片：省级要素取省级归集，下级要素取
+// 它自己的归集。
+func (m *chinaLocationMatch) scopePhotosFor(feature *chinaAdminFeature) []chinaRegionPhoto {
+	if m == nil || feature == nil {
+		return nil
 	}
-	return len(m.regionPhotos[adcode])
+	if feature.level == chinaAdminProvinceLevel {
+		return m.provincePhotos[feature.adcode]
+	}
+	return m.regionPhotos[feature.adcode]
 }
 
-// provincePhotoCount 返回某个省份下的照片数。
-func (m *chinaLocationMatch) provincePhotoCount(adcode int) int {
+// timedPhotosInScope 返回某个区域下有可信拍摄时间的照片，按时间升序。
+func (m *chinaLocationMatch) timedPhotosInScope(feature *chinaAdminFeature) []chinaRegionPhoto {
+	if m == nil || feature == nil {
+		return nil
+	}
+	photos := make([]chinaRegionPhoto, 0, 16)
+	for _, photo := range m.timedPhotos {
+		if feature.level == chinaAdminProvinceLevel {
+			if photo.provinceAdcode == feature.adcode {
+				photos = append(photos, photo)
+			}
+			continue
+		}
+		if photo.regionAdcode == feature.adcode {
+			photos = append(photos, photo)
+		}
+	}
+	return photos
+}
+
+// scopedPhotos 返回落在时间区间内的照片。
+//
+// 区间为空时原样返回：此时空间统计仍按全部照片算，只有时间轴与轨迹
+// 受拍摄时间限制。有区间时只留下时间可信且落在区间里的照片。
+func (m *chinaLocationMatch) scopedPhotos(photos []chinaRegionPhoto, timeRange ChinaTimeRange) []chinaRegionPhoto {
+	if m == nil || timeRange.IsZero() {
+		return photos
+	}
+	scoped := make([]chinaRegionPhoto, 0, len(photos))
+	for _, photo := range photos {
+		if timeRange.includes(photo.captured) {
+			scoped = append(scoped, photo)
+		}
+	}
+	return scoped
+}
+
+// untimedPhotoCount 返回没有可信拍摄时间的照片数。
+func (m *chinaLocationMatch) untimedPhotoCount(photos []chinaRegionPhoto) int {
 	if m == nil {
 		return 0
 	}
-	return len(m.provincePhotos[adcode])
+	count := 0
+	for _, photo := range photos {
+		if !photo.captured.Valid {
+			count++
+		}
+	}
+	return count
 }
 
 func loadChinaAdminIndex() (*chinaAdminIndex, error) {

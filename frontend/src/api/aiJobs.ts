@@ -317,6 +317,12 @@ export interface ChinaLocationSummary {
   chinaPhotoCount: number;
   unassignedPhotoCount: number;
   provinces: ChinaLocationProvince[];
+  /** 本范围内的逐月分布，供时间轴使用。 */
+  months: ChinaLocationMonth[];
+  /** 本范围内的停靠序列，供地图上的轨迹线使用。 */
+  trajectory: ChinaLocationStop[];
+  /** 有位置但没有可信拍摄时间的照片数。 */
+  untimedPhotoCount: number;
 }
 
 /** 某个区域的下一级地图；regions 为空表示这个区域没有更细的边界。 */
@@ -325,6 +331,65 @@ export interface ChinaLocationRegions {
   boundaryVersion: string;
   region: ChinaLocationRegionInfo;
   regions: ChinaLocationRegion[];
+  /** 这个区域自己的逐月分布，随层级细化。 */
+  months: ChinaLocationMonth[];
+  /** 这个区域下级之间的停靠序列。 */
+  trajectory: ChinaLocationStop[];
+  untimedPhotoCount: number;
+}
+
+/** 某个月份的照片数。 */
+export interface ChinaLocationMonth {
+  /** "2024-06"。 */
+  month: string;
+  count: number;
+}
+
+/** 时间区间：按拍摄时间的日历月，左闭右闭。 */
+export interface ChinaTimeRange {
+  /** "2019-01"，空表示不限。 */
+  from?: string | null;
+  /** "2019-12"，空表示不限。 */
+  to?: string | null;
+}
+
+/** 把时间区间转成查询参数。 */
+function chinaTimeRangeParams(timeRange?: ChinaTimeRange) {
+  if (!timeRange) return {};
+  return {
+    ...(timeRange.from ? { from: timeRange.from } : {}),
+    ...(timeRange.to ? { to: timeRange.to } : {}),
+  };
+}
+
+/** 轨迹上的一个停靠点：连续落在同一区域的一段时间。 */
+export interface ChinaLocationStop {
+  /** 该段第一张照片的拍摄日期。 */
+  at: string;
+  /** 该段最后一张照片的拍摄日期。 */
+  until: string;
+  adcode: number;
+  name: string;
+  photoCount: number;
+}
+
+/** 一次到访：同一个区域里连续的一段拍摄。 */
+export interface ChinaLocationVisit {
+  startedAt: string;
+  endedAt: string;
+  dayCount: number;
+  photoCount: number;
+  /** 这段时间里去过的其它区域。 */
+  regions: { adcode: number; name: string; count: number }[];
+}
+
+/** 一个区域的到访记录。 */
+export interface ChinaLocationVisits {
+  revision: number;
+  boundaryVersion: string;
+  region: ChinaLocationRegionInfo;
+  visits: ChinaLocationVisit[];
+  untimedPhotoCount: number;
 }
 
 export type GPSLocationMedia = LibraryFeedItem;
@@ -430,24 +495,44 @@ export const aiJobsApi = {
       body: { resourceId, faceIndex },
       nonIdempotent: true,
     }),
-  chinaLocations: () =>
+  chinaLocations: (timeRange?: ChinaTimeRange) =>
     api<{ ok: boolean; locations: ChinaLocationSummary }>(
       "/api/locations/china",
+      { params: chinaTimeRangeParams(timeRange) },
     ),
-  chinaRegions: (adcode: number) =>
+  chinaRegions: (adcode: number, timeRange?: ChinaTimeRange) =>
     api<{ ok: boolean; regions: ChinaLocationRegions }>(
       `/api/locations/china/regions/${encodeURIComponent(String(adcode))}`,
+      { params: chinaTimeRangeParams(timeRange) },
     ),
-  chinaRegionMedia: (adcode: number, cursor?: string) =>
+  chinaRegionVisits: (adcode: number, timeRange?: ChinaTimeRange) =>
+    api<{ ok: boolean; visits: ChinaLocationVisits }>(
+      `/api/locations/china/regions/${encodeURIComponent(String(adcode))}/visits`,
+      { params: chinaTimeRangeParams(timeRange) },
+    ),
+  chinaRegionMedia: (
+    adcode: number,
+    cursor?: string,
+    timeRange?: ChinaTimeRange,
+    visit?: number,
+  ) =>
     api<{
       ok: boolean;
       page: LibraryPage<LibraryFeedItem> & {
         albums: { id: string; name: string; count: number }[];
         region: ChinaLocationRegionInfo;
       };
-    }>(`/api/locations/china/regions/${encodeURIComponent(String(adcode))}/media`, {
-      params: { cursor, limit: 200 },
-    }),
+    }>(
+      `/api/locations/china/regions/${encodeURIComponent(String(adcode))}/media`,
+      {
+        params: {
+          cursor,
+          limit: 200,
+          ...chinaTimeRangeParams(timeRange),
+          ...(visit === undefined ? {} : { visit }),
+        },
+      },
+    ),
   embeddingStatus: () =>
     api<{ ok: boolean; status: AIWorkerStatus }>("/api/ai/semantic/status"),
   semanticSearch: (request: SemanticSearchRequest, image?: File) => {

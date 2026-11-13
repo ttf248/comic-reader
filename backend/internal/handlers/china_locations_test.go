@@ -48,6 +48,7 @@ func chinaLocationTestApp(t *testing.T) (*fiber.App, *services.ResourceCatalog, 
 	api.Use(safety)
 	api.Get("/locations/china", ChinaLocationsHandler(catalog, service, locations, safetyState.Validate))
 	api.Get("/locations/china/regions/:adcode", ChinaLocationRegionsHandler(catalog, service, locations, safetyState.Validate))
+	api.Get("/locations/china/regions/:adcode/visits", ChinaLocationRegionVisitsHandler(catalog, service, locations, safetyState.Validate))
 	api.Get("/locations/china/regions/:adcode/media", ChinaLocationRegionMediaHandler(catalog, service, locations, safetyState.Validate, nil))
 	return app, catalog, root
 }
@@ -187,5 +188,83 @@ func TestChinaLocationRegionMediaAPIRejectsUnknownRegion(t *testing.T) {
 	defer response.Body.Close()
 	if response.StatusCode != fiber.StatusNotFound {
 		t.Fatalf("status = %d, want 404", response.StatusCode)
+	}
+}
+
+func TestChinaLocationAPIReturnsVisits(t *testing.T) {
+	app, _, _ := chinaLocationTestApp(t)
+	response, err := app.Test(httptest.NewRequest("GET", "/api/locations/china/regions/330000/visits", nil), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d", response.StatusCode)
+	}
+	var body struct {
+		Visits services.ChinaLocationVisits `json:"visits"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&body); err != nil {
+		t.Fatal(err)
+	}
+	if body.Visits.Region.Name != "浙江省" {
+		t.Fatalf("visit region = %+v", body.Visits.Region)
+	}
+	if body.Visits.Visits == nil {
+		t.Fatal("visits list must not be null")
+	}
+}
+
+func TestChinaLocationAPIRejectsInvalidTimeRange(t *testing.T) {
+	app, _, _ := chinaLocationTestApp(t)
+	response, err := app.Test(httptest.NewRequest("GET", "/api/locations/china?from=2019", nil), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", response.StatusCode)
+	}
+	reversed, err := app.Test(httptest.NewRequest("GET", "/api/locations/china?from=2020-01&to=2019-01", nil), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reversed.Body.Close()
+	if reversed.StatusCode != fiber.StatusBadRequest {
+		t.Fatalf("status = %d, want 400", reversed.StatusCode)
+	}
+}
+
+func TestChinaLocationETagVariesWithTimeRange(t *testing.T) {
+	app, _, _ := chinaLocationTestApp(t)
+	first, err := app.Test(httptest.NewRequest("GET", "/api/locations/china", nil), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer first.Body.Close()
+	etag := first.Header.Get("ETag")
+	if etag == "" {
+		t.Fatal("map response is missing the ETag")
+	}
+	request := httptest.NewRequest("GET", "/api/locations/china", nil)
+	request.Header.Set("If-None-Match", etag)
+	again, err := app.Test(request, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer again.Body.Close()
+	if again.StatusCode != fiber.StatusNotModified {
+		t.Fatalf("status = %d, want 304", again.StatusCode)
+	}
+	// 换了时间区间，响应内容不同，不能继续命中同一个标识。
+	scoped := httptest.NewRequest("GET", "/api/locations/china?from=2019-01&to=2019-12", nil)
+	scoped.Header.Set("If-None-Match", etag)
+	response, err := app.Test(scoped, -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != fiber.StatusOK {
+		t.Fatalf("status = %d, want 200 for a different time range", response.StatusCode)
 	}
 }

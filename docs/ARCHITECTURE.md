@@ -23,7 +23,7 @@ Fiber middleware → handlers → services/store → models + 本地文件
 | [internal/handlers/](../backend/internal/handlers/)                                                                                         | HTTP/SSE 输入输出、状态码与公共 DTO                        |
 | [services/scanner.go](../backend/internal/services/scanner.go)、[scan_runner.go](../backend/internal/services/scan_runner.go)               | 目录工作池、扫描生命周期与进度订阅                         |
 | [resource_catalog.go](../backend/internal/services/resource_catalog.go)、[library_page.go](../backend/internal/services/library_page.go)    | 不可变库快照、资源 ID、分页/搜索索引                       |
-| [ai_jobs.go](../backend/internal/services/ai_jobs.go)、[exif_metadata.go](../backend/internal/services/exif_metadata.go)、[china_geolocation.go](../backend/internal/services/china_geolocation.go) | 持久分析任务、EXIF/GPS 解析、省级地图与市区照片统计         |
+| [ai_jobs.go](../backend/internal/services/ai_jobs.go)、[exif_metadata.go](../backend/internal/services/exif_metadata.go)、[china_geolocation.go](../backend/internal/services/china_geolocation.go) | 持久分析任务、EXIF/GPS 解析、省级地图与市区照片统计、按拍摄时间的轨迹与到访聚合 |
 | [thumbnail.go](../backend/internal/services/thumbnail.go)、[video_transcode.go](../backend/internal/services/video_transcode.go) 等媒体服务 | 缩略图、预览、格式转换、视频封面、元数据、faststart 与转码 |
 | [internal/store/](../backend/internal/store/)                                                                                               | 偏好与媒体活动分文件持久化，锁内部分更新、原子写入         |
 | [frontend/src/App.tsx](../frontend/src/App.tsx)、[main.tsx](../frontend/src/main.tsx)                                                       | 应用入口、懒加载路由、访问门禁、主题、活动同步与错误边界   |
@@ -111,6 +111,26 @@ EXIF 解析器保存拍摄墙上时间、朝向、相机信息和 GPS 附属字�
 **几何只有两级。** 这份数据里 34 个省级要素之下是 363 个地级市与 112 个区县，而区县只存在于京、津、沪、渝、港、澳六地（它们的下级直接挂在本级区划码下），其余省份只有地级市，没有区县几何。因此地图的下钻深度是「全国 → 省 → 市/区县」两级，再往下就是叶子；台湾省没有下级，也按叶子处理。页面据此如实写明每层的区域粒度，不暗示还能再点一层。
 
 **几何按需下发，计数与几何同源。** `GET /api/locations/china` 返回 34 个省的绘图几何（约 570 KB 原始字节，gzip 后约 150 KB）；`GET /api/locations/china/regions/:adcode` 返回该区域的下一级几何，单省约 117 KB。两者的照片数都出自同一次匹配，不存在「计数来自一次快照、边界来自另一次」的可能。匹配结果按 `(catalog revision, 分析记录版本)` 缓存，重复查询不再重跑整库点位判定；分析记录的版本号由 `AIJobService.RecordsRevision()` 给出，记录增删改时递增，缓存因此不会给出过期计数。边界数据的内容指纹（嵌入文件的 sha256 前 8 字节）参与端点 ETag：换了边界文件，缓存自动失效，不依赖人记得改版本常量。
+
+### 时间维度：三种时间，只用一种
+
+地点页的轨迹叙事只用 **EXIF 拍摄时间**（`dateTimeOriginal`）。库里有三种「时间」，各管各的，不混用：
+
+| 口径           | 来源                             | 用途                                 |
+| -------------- | -------------------------------- | ------------------------------------ |
+| 文件夹名年份   | 目录名里的 `19xx/20xx`           | `/photo/years/:year` 年份墙          |
+| 相册业务日期   | `filename > folder > modified`    | 相册在时间轴上的位置                 |
+| EXIF 拍摄时间  | `dateTimeOriginal`               | **地点页的时间轴、轨迹与到访**       |
+
+EXIF 的 `dateTimeOriginal` 通常不含时区，因此保留相机记录的墙上时间，按**拍摄地的当地日期**比较 —— 这正是「我在杭州待了几天」这种叙事的口径；接口不声称给出绝对时刻。
+
+**可信性只看解析结果，不看文件时间。** 解析失败、年份早于 1990 或晚于当年加一的照片，时间标记为不可信：它们照常计入空间统计，但不进时间轴、轨迹与到访，界面如实给出这部分的数量（`untimedPhotoCount`）。不用文件 mtime 校验 —— 照片常是事后拷进库的，mtime 与拍摄时间能差出几个月，拿它当基准会误杀大量正常照片。
+
+**时间索引在缓存里建一次，区间在读取时过滤。** 匹配阶段已经反序列化了 `ImageMetadata`，多解析一个 `dateTimeOriginal` 不带来额外 I/O。匹配结果里的照片按拍摄时间升序存放（时间不可信的排在末尾，仍按相册序），缓存键**不包含**请求的时间区间 —— 区间过滤发生在读取时，扫一遍缓存里的切片即可。这样不会出现「缓存里只有某一年的数据」这种错配，缓存也不会因为用户拖时间轴而反复重建。请求级的时间区间只进入 HTTP 的 `ETag`，换区间后旧响应不会命中 `304`。
+
+**到访按日历日切分，阈值是量出来的。** 同一区域的照片按拍摄时间排序后，相邻两张的**日历日间隔 ≤ 2 天**算同一次到访，超过则另算一次；列表和照片墙共用同一个切分函数，两边不可能对不上。按日历日而不是按小时，是因为「晚上八点和第二天早上八点」这种跨夜行程在人看来是一次。2 天这个阈值来自本机库的实测：同地点相邻照片的日间隔在 1 天 328 次、2 天 132 次、3 天起断崖式下跌到长尾，≤ 2 天合并、> 2 天另算正落在拐点上。阈值写成常量 `chinaVisitMaxGapDays`，修改需同步界面说明。
+
+**轨迹的停靠点是行政区，不是照片。** 停靠点 = 连续落在同一区域的一段照片，粒度跟层级走（全国＝省级，省内＝市/区县）。后端只返回停靠点的**区划码与名称**，折线由前端用区域几何的质心连出来 —— 这样响应里依然没有任何照片经纬度。相邻停靠之间间隔超过 2 天就不连线，否则相隔两次出行的照片会被画成一条横跨半张图的假路径。
 
 
 
@@ -226,7 +246,7 @@ SIGINT/SIGTERM 触发停止接收连接、取消扫描/转码并强制刷新扫�
 
 - TanStack Query 管理库、媒体、偏好、收藏与历史；Zustand 管理本机 UI、阅读器和扫描连接会话。主题与 Toast 在应用层统一挂载，阅读器独立于 AppShell 但仍有错误边界与访问门禁。
 - 路由在 `App.tsx` 懒加载，**模式进 URL 路径**：`/photo`（照片库）、`/photo/recents`、`/photo/favorites`、`/photo/picks`（精选照片）、`/photo/albums/*`、`/photo/tags/*`、`/photo/locations`（离线地点地图）、`/photo/people`（人物候选）；`/comic`（漫画库）、`/comic/unread`、`/comic/recents`、`/comic/favorites`、`/comic/albums/*`、`/comic/tags/*`；漫画阅读器 `/comic/read/:albumId` 使用相册 ID 和 0-based index，视频加 `type=video`；设置页 `/settings` 与模式无关。根路径 `/` 按服务端记住的偏好落到某一侧。标签按单个路径段编码，路径段只解码一次（从原始 pathname 切段，不用 `useParams`），直接打开链接的返回有应用内兜底。
-- 地点地图的下钻状态放查询参数：`/photo/locations?adcode=<六位区划码>`。`adcode` 指向当前聚焦的区域，页面显示它的下一级地图；它没有下一级（叶子）时显示该区域的照片墙。它不用路径段，因为同一段路径上已经有坐标聚类相册 ID（`/photo/locations/:locationId`），两套 ID 规则不可混用。面包屑的祖先链由区划父子关系推导，祖先可点，「返回」回到上一级地图而不是退出页面。
+- 地点地图的下钻状态放查询参数：`/photo/locations?adcode=<六位区划码>&from=<YYYY-MM>&to=<YYYY-MM>`。`adcode` 指向当前聚焦的区域，页面显示它的下一级地图；它没有下一级（叶子）时显示该区域的照片墙。它不用路径段，因为同一段路径上已经有坐标聚类相册 ID（`/photo/locations/:locationId`），两套 ID 规则不可混用。面包屑的祖先链由区划父子关系推导，祖先可点，「返回」回到上一级地图而不是退出页面。时间区间是跨层级的一维：下钻、返回与换面板都带着它，缺省表示全部时间。
 - **模式有且只有一个真相源：URL 路径前缀。** 服务端 `Prefs.appMode` 只决定根路径落到哪一侧；前端 `appModeStore` 只镜像这个偏好，不持有「当前模式」。`WorkbenchModeProvider`（`components/layout/`）挂在应用最外层，从 `useLocation` 推导模式并经上下文下发，因此整屏脱离外壳的阅读器也在同一套上下文里。切换模式 = 导航到对侧对应页 + 写回偏好，两件事缺一不可。
 - 模式切换的语义只有一张表（`utils/path.ts` 的 `counterpartRoute`）：两侧都有的同名页（最近 / 收藏 / 标签）一一对应；相册与阅读器只属于一侧，未读只属于漫画侧，精选只属于照片侧，它们都回落到对侧首页。
 - 相册入口按内容属性分派：照片目录的相册 `/photo/albums/<相册 id>` 直接渲染照片墙，漫画目录的相册重定向到阅读器。属性由服务端给出（所属目录的 `kind`），前端不按图片数量推断。

@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { resetWorkbenchMode } from "./helpers/library";
+import { ensureLibraryReady, resetWorkbenchMode } from "./helpers/library";
 
 /** 地图上的区域（SVG 里的可聚焦节点）。 */
 const mapRegion = (page: import("@playwright/test").Page, name: string) =>
@@ -13,6 +13,8 @@ const rankingRow = (page: import("@playwright/test").Page, name: string) =>
 
 test.beforeEach(async ({ request }) => {
   await resetWorkbenchMode(request);
+  // 地图读的是媒体库快照：这条用例要能单独跑，不能等别的用例先把库准备好。
+  await ensureLibraryReady(request);
 });
 
 test("拍摄地点逐级下钻并可返回", async ({ page }) => {
@@ -60,4 +62,14 @@ test("排行面板也能进入区域", async ({ page }) => {
   await rankingRow(page, "北京市").click();
   await expect(page).toHaveURL(/adcode=110000/);
   await expect(mapRegion(page, "东城区")).toBeVisible();
+});
+
+test("时间轴在没有拍摄时间时如实说明", async ({ page }) => {
+  await page.goto("/photo/locations");
+
+  const axis = page.getByRole("region", { name: "时间轴" });
+  await expect(axis).toBeVisible();
+  // 临时库里的照片没有 EXIF，时间轴不编造年份。
+  await expect(axis.getByText(/没有拍摄时间，暂时画不出时间轴/)).toBeVisible();
+  await expect(page.getByText(/基准：全国 · 全部时间/)).toBeVisible();
 });

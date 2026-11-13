@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import PageHeading from "../components/common/PageHeading";
 import { MapPinIcon } from "../components/common/Icon";
@@ -10,9 +10,15 @@ import RegionPhotoWall from "../components/locations/RegionPhotoWall";
 import RegionRanking, {
   type RankingRegion,
 } from "../components/locations/RegionRanking";
-import { useChinaRegions, useChinaSummary } from "../hooks/useChinaLocations";
+import TimeAxis from "../components/locations/TimeAxis";
+import VisitTimeline from "../components/locations/VisitTimeline";
+import {
+  useChinaRegionVisits,
+  useChinaRegions,
+  useChinaSummary,
+} from "../hooks/useChinaLocations";
 import type { MapRegion } from "../utils/chinaMap";
-import { locationRegionRoute, locationsRoute } from "../utils/path";
+import { locationRegionRoute } from "../utils/path";
 
 /** 从查询参数里读区划码。 */
 function parseAdcode(raw: string | null): number | null {
@@ -20,22 +26,49 @@ function parseAdcode(raw: string | null): number | null {
   return Number(raw);
 }
 
+/** 从查询参数里读月份（YYYY-MM）。 */
+function parseMonth(raw: string | null): string | null {
+  if (!raw || !/^\d{4}-\d{2}$/.test(raw)) return null;
+  return raw;
+}
+
 export default function ChinaLocations() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const adcode = parseAdcode(searchParams.get("adcode"));
+  const from = parseMonth(searchParams.get("from"));
+  const to = parseMonth(searchParams.get("to"));
+  const timeRange = useMemo(() => ({ from, to }), [from, to]);
 
-  const summaryQuery = useChinaSummary();
+  const [panelMode, setPanelMode] = useState<"spread" | "visits">("spread");
+  const [activeVisit, setActiveVisit] = useState<number | null>(null);
+
+  const summaryQuery = useChinaSummary(timeRange);
   const summary = summaryQuery.data;
-  const regionsQuery = useChinaRegions(adcode);
+  const regionsQuery = useChinaRegions(adcode, timeRange);
+  const visitsQuery = useChinaRegionVisits(adcode, timeRange);
   const regionInfo = regionsQuery.data?.region;
-  const childRegions = regionsQuery.data?.regions ?? [];
+  // 包一层 useMemo：缺省空数组每次渲染都是新引用，会让下游 memo 失效。
+  const childRegions = useMemo(
+    () => regionsQuery.data?.regions ?? [],
+    [regionsQuery.data?.regions],
+  );
 
   const gotoRegion = useCallback(
     (next: number | null) => {
-      navigate(next === null ? locationsRoute() : locationRegionRoute(next));
+      // 时间是跨层级的一维：下钻与返回都带着当前区间。
+      navigate(locationRegionRoute(next, from, to));
+      setActiveVisit(null);
     },
-    [navigate],
+    [from, navigate, to],
+  );
+
+  const setRange = useCallback(
+    (nextFrom: string | null, nextTo: string | null) => {
+      navigate(locationRegionRoute(adcode, nextFrom, nextTo));
+      setActiveVisit(null);
+    },
+    [adcode, navigate],
   );
 
   // 全国层级用汇总里的省级数据；下钻后用区域接口给出的下一级。
@@ -122,6 +155,21 @@ export default function ChinaLocations() {
     [gotoRegion],
   );
 
+  const months = isNationLevel
+    ? (summary?.months ?? [])
+    : (regionsQuery.data?.months ?? []);
+  const trajectory = isNationLevel
+    ? (summary?.trajectory ?? [])
+    : (regionsQuery.data?.trajectory ?? []);
+  const untimedCount = isNationLevel
+    ? (summary?.untimedPhotoCount ?? 0)
+    : (regionsQuery.data?.untimedPhotoCount ?? 0);
+
+  // 到访面板：叶子层级只有到访，省级层级可以让用户在分布与到访之间切。
+  const showVisits = !isNationLevel && (isLeaf || panelMode === "visits");
+  const visits = visitsQuery.data?.visits ?? [];
+  const rangeLabel = from && to ? `${from} – ${to}` : "全部时间";
+
   const loading = isNationLevel
     ? summaryQuery.isLoading
     : regionsQuery.isLoading;
@@ -200,21 +248,30 @@ export default function ChinaLocations() {
             {chain.length > 1 ? (
               <LocationBreadcrumb chain={chain} onNavigate={gotoRegion} />
             ) : null}
-            <div
-              className={`grid grid-cols-1 items-start gap-4 ${
-                isLeaf
-                  ? ""
-                  : "xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.75fr)]"
-              }`}
-            >
+            <TimeAxis
+              months={months}
+              from={from}
+              to={to}
+              onChange={setRange}
+              untimedCount={untimedCount}
+            />
+            <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.75fr)]">
               <section
                 aria-label="行政区照片地图"
                 className="min-w-0 overflow-hidden rounded-2xl border border-border-faint bg-bg-elevated"
               >
-                {isLeaf ? (
+                {activeVisit !== null ? (
                   <RegionPhotoWall
                     adcode={regionInfo?.adcode ?? adcode ?? 0}
                     name={regionInfo?.name ?? ""}
+                    visit={activeVisit}
+                    timeRange={timeRange}
+                  />
+                ) : isLeaf ? (
+                  <RegionPhotoWall
+                    adcode={regionInfo?.adcode ?? adcode ?? 0}
+                    name={regionInfo?.name ?? ""}
+                    timeRange={timeRange}
                   />
                 ) : (
                   <>
@@ -242,7 +299,8 @@ export default function ChinaLocations() {
                         <span className="h-2.5 w-12 rounded-full bg-gradient-to-r from-brand-soft to-brand" />
                         <span>多</span>
                         <span className="ml-1 text-fg-subtle">
-                          基准：{levelLabel} · {levelTotal.toLocaleString()} 张
+                          基准：{levelLabel} · {rangeLabel} ·{" "}
+                          {levelTotal.toLocaleString()} 张
                         </span>
                       </div>
                     </div>
@@ -257,6 +315,7 @@ export default function ChinaLocations() {
                         levelName={levelName}
                         levelLabel={levelLabel}
                         showLabels={!isNationLevel}
+                        trajectory={trajectory}
                         onSelect={handleSelect}
                         onLevelUp={levelUp}
                       />
@@ -264,19 +323,70 @@ export default function ChinaLocations() {
                   </>
                 )}
               </section>
-              {!isLeaf ? (
-                <RegionRanking
-                  regions={rankingRegions}
-                  levelTotal={levelTotal}
-                  title={
-                    isNationLevel ? "省份排行" : `${levelLabel}${levelName}排行`
-                  }
-                  onSelect={handleSelect}
-                />
-              ) : null}
+              <div className="flex flex-col gap-3">
+                {!isNationLevel && !isLeaf ? (
+                  <div
+                    role="group"
+                    aria-label="面板视图"
+                    className="inline-flex w-fit items-center shrink-0 rounded-md border border-border bg-bg-subtle/40 overflow-hidden"
+                  >
+                    <button
+                      type="button"
+                      aria-pressed={panelMode === "spread"}
+                      onClick={() => {
+                        setPanelMode("spread");
+                        setActiveVisit(null);
+                      }}
+                      className={`px-3 py-1.5 text-meta transition-colors ${
+                        panelMode === "spread"
+                          ? "bg-bg-elevated text-fg shadow-xs"
+                          : "text-fg-subtle hover:text-fg hover:bg-bg-subtle/60"
+                      }`}
+                    >
+                      分布
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={panelMode === "visits"}
+                      onClick={() => setPanelMode("visits")}
+                      className={`px-3 py-1.5 text-meta transition-colors ${
+                        panelMode === "visits"
+                          ? "bg-bg-elevated text-fg shadow-xs"
+                          : "text-fg-subtle hover:text-fg hover:bg-bg-subtle/60"
+                      }`}
+                    >
+                      到访
+                    </button>
+                  </div>
+                ) : null}
+                {showVisits ? (
+                  <VisitTimeline
+                    visits={visits}
+                    activeIndex={activeVisit}
+                    onOpen={(_visit, index) =>
+                      setActiveVisit((current) =>
+                        current === index ? null : index,
+                      )
+                    }
+                  />
+                ) : (
+                  <RegionRanking
+                    regions={rankingRegions}
+                    levelTotal={levelTotal}
+                    title={
+                      isNationLevel
+                        ? "省份排行"
+                        : `${levelLabel}${levelName}排行`
+                    }
+                    onSelect={handleSelect}
+                  />
+                )}
+              </div>
             </div>
             <p className="px-1 text-meta leading-relaxed text-fg-subtle">
-              坐标与边界均在本机处理。离线边界数据来自阿里云 DataV
+              坐标与边界均在本机处理；时间轴按 EXIF
+              拍摄时间切分，跨时区旅行按拍摄地的当地日期计算。
+              离线边界数据来自阿里云 DataV
               GeoAtlas（areas_v3，2021.5）；官方说明为学习交流用途，商业使用请先联系数据权利方。
             </p>
           </>

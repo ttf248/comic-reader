@@ -9,6 +9,7 @@ vi.mock("../api/aiJobs", () => ({
   aiJobsApi: {
     chinaLocations: vi.fn(),
     chinaRegions: vi.fn(),
+    chinaRegionVisits: vi.fn(),
     chinaRegionMedia: vi.fn(),
     metadata: vi.fn(),
   },
@@ -69,6 +70,27 @@ const summary = {
         geometry: polygon,
       },
     ],
+    months: [
+      { month: "2019-05", count: 4 },
+      { month: "2021-06", count: 4 },
+    ],
+    trajectory: [
+      {
+        at: "2019-05-02",
+        until: "2019-05-02",
+        adcode: 330000,
+        name: "浙江省",
+        photoCount: 4,
+      },
+      {
+        at: "2021-06-12",
+        until: "2021-06-12",
+        adcode: 310000,
+        name: "上海市",
+        photoCount: 4,
+      },
+    ],
+    untimedPhotoCount: 1,
   },
 };
 
@@ -101,6 +123,20 @@ const zhejiang = {
         geometry: polygon,
       },
     ],
+    months: [
+      { month: "2019-05", count: 3 },
+      { month: "2021-06", count: 2 },
+    ],
+    trajectory: [
+      {
+        at: "2019-05-02",
+        until: "2019-05-02",
+        adcode: 330100,
+        name: "杭州市",
+        photoCount: 3,
+      },
+    ],
+    untimedPhotoCount: 0,
   },
 };
 
@@ -118,6 +154,35 @@ const hangzhou = {
       parentAdcode: 330000,
     },
     regions: [],
+    months: [{ month: "2019-05", count: 3 }],
+    trajectory: [],
+    untimedPhotoCount: 0,
+  },
+};
+
+const visits = {
+  ok: true as const,
+  visits: {
+    revision: 4,
+    boundaryVersion: "datav-areas_v3-2021.5",
+    region: {
+      adcode: 330100,
+      name: "杭州市",
+      level: "city",
+      photoCount: 3,
+      unmatchedAreaPhotoCount: 0,
+      parentAdcode: 330000,
+    },
+    visits: [
+      {
+        startedAt: "2019-05-02",
+        endedAt: "2019-05-04",
+        dayCount: 3,
+        photoCount: 3,
+        regions: [{ adcode: 330200, name: "宁波市", count: 2 }],
+      },
+    ],
+    untimedPhotoCount: 0,
   },
 };
 
@@ -153,6 +218,7 @@ describe("拍摄地点逐级下钻", () => {
         throw new Error(`unexpected adcode ${adcode}`);
       },
     );
+    vi.mocked(aiJobsApi.chinaRegionVisits).mockResolvedValue(visits);
     vi.mocked(aiJobsApi.chinaRegionMedia).mockResolvedValue({
       ok: true,
       page: {
@@ -191,7 +257,9 @@ describe("拍摄地点逐级下钻", () => {
     });
     expect(province).toBeInTheDocument();
     expect(screen.queryByText("杭州市")).not.toBeInTheDocument();
-    expect(screen.getByText("基准：全国 · 8 张")).toBeInTheDocument();
+    expect(
+      screen.getByText(/基准：全国 · 全部时间 · 8 张/),
+    ).toBeInTheDocument();
     // 全国层级没有上级，面包屑与返回按钮都不该出现。
     expect(
       screen.queryByRole("navigation", { name: "地点层级" }),
@@ -212,7 +280,10 @@ describe("拍摄地点逐级下钻", () => {
     );
 
     expect((await screen.findAllByText("杭州市")).length).toBeGreaterThan(0);
-    expect(aiJobsApi.chinaRegions).toHaveBeenCalledWith(330000);
+    expect(aiJobsApi.chinaRegions).toHaveBeenCalledWith(
+      330000,
+      expect.objectContaining({ from: null, to: null }),
+    );
     await waitFor(() => {
       expect(screen.getByTestId("location-search")).toHaveTextContent(
         "?adcode=330000",
@@ -222,13 +293,17 @@ describe("拍摄地点逐级下钻", () => {
     expect(crumb).toHaveTextContent("全国");
     expect(crumb).toHaveTextContent("浙江省");
     expect(screen.getByRole("button", { name: "返回" })).toBeInTheDocument();
-    expect(screen.getByText("基准：浙江省 · 5 张")).toBeInTheDocument();
+    expect(
+      screen.getByText(/基准：浙江省 · 全部时间 · 5 张/),
+    ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "全国" }));
     await waitFor(() => {
       expect(screen.getByTestId("location-search")).toHaveTextContent("");
     });
-    expect(screen.getByText("基准：全国 · 8 张")).toBeInTheDocument();
+    expect(
+      screen.getByText(/基准：全国 · 全部时间 · 8 张/),
+    ).toBeInTheDocument();
   });
 
   it("排行面板也能进入区域", async () => {
@@ -241,7 +316,10 @@ describe("拍摄地点逐级下钻", () => {
     );
 
     expect((await screen.findAllByText("杭州市")).length).toBeGreaterThan(0);
-    expect(aiJobsApi.chinaRegions).toHaveBeenCalledWith(330000);
+    expect(aiJobsApi.chinaRegions).toHaveBeenCalledWith(
+      330000,
+      expect.anything(),
+    );
   });
 
   it("地图内按 Esc 回到上一级", async () => {
@@ -266,5 +344,119 @@ describe("拍摄地点逐级下钻", () => {
     expect(crumb).toHaveTextContent("全国");
     expect(crumb).toHaveTextContent("浙江省");
     expect(crumb).toHaveTextContent("杭州市");
+  });
+});
+
+describe("拍摄地点的时间维度", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(aiJobsApi.chinaLocations).mockResolvedValue(summary);
+    vi.mocked(aiJobsApi.chinaRegions).mockImplementation(
+      async (adcode: number) => {
+        if (adcode === 330000) return zhejiang;
+        if (adcode === 330100) return hangzhou;
+        throw new Error(`unexpected adcode ${adcode}`);
+      },
+    );
+    vi.mocked(aiJobsApi.chinaRegionVisits).mockResolvedValue(visits);
+    vi.mocked(aiJobsApi.chinaRegionMedia).mockResolvedValue({
+      ok: true,
+      page: {
+        revision: 4,
+        total: 1,
+        nextCursor: "",
+        items: [
+          {
+            id: "f_1",
+            kind: "image",
+            index: 0,
+            kindIndex: 0,
+            name: "西湖.jpg",
+            albumId: "a_1",
+            albumName: "浙江",
+          },
+        ],
+        albums: [{ id: "a_1", name: "浙江", count: 1 }],
+        region: {
+          adcode: 330100,
+          name: "杭州市",
+          level: "city",
+          photoCount: 3,
+          unmatchedAreaPhotoCount: 0,
+          parentAdcode: 330000,
+        },
+      },
+    });
+  });
+
+  it("时间轴按年分格，并如实说明没有拍摄时间的照片", async () => {
+    renderPage();
+
+    const year = await screen.findByRole("button", {
+      name: "2019 年，4 张照片",
+    });
+    expect(year).toBeInTheDocument();
+    expect(
+      screen.getByText("1 张照片没有拍摄时间，未计入时间轴。"),
+    ).toBeInTheDocument();
+  });
+
+  it("选中年份后地址带上时间区间，接口也带上同样的区间", async () => {
+    renderPage();
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "2019 年，4 张照片" }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("location-search")).toHaveTextContent(
+        "from=2019-01&to=2019-12",
+      );
+    });
+    expect(aiJobsApi.chinaLocations).toHaveBeenLastCalledWith(
+      expect.objectContaining({ from: "2019-01", to: "2019-12" }),
+    );
+  });
+
+  it("下钻时保留时间区间", async () => {
+    renderPage("/photo/locations?from=2019-01&to=2019-12");
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "浙江省，5 张照片，占本层 62.5%",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("location-search")).toHaveTextContent(
+        "adcode=330000",
+      );
+    });
+    expect(screen.getByTestId("location-search")).toHaveTextContent(
+      "from=2019-01",
+    );
+    expect(aiJobsApi.chinaRegions).toHaveBeenCalledWith(
+      330000,
+      expect.objectContaining({ from: "2019-01", to: "2019-12" }),
+    );
+  });
+
+  it("城市层级给出到访清单，点一次到访打开那几天的照片", async () => {
+    renderPage("/photo/locations?adcode=330100");
+
+    const visit = await screen.findByRole("button", {
+      name: /2019-05-02 至 2019-05-04，3 天，3 张照片/,
+    });
+    expect(visit).toBeInTheDocument();
+
+    fireEvent.click(visit);
+    await waitFor(() => {
+      expect(aiJobsApi.chinaRegionMedia).toHaveBeenCalledWith(
+        330100,
+        undefined,
+        expect.anything(),
+        0,
+      );
+    });
   });
 });

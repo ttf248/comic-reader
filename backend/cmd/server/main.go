@@ -414,6 +414,7 @@ func main() {
 	boundaryGzip := compress.New(compress.Config{Level: compress.LevelBestSpeed})
 	api.Get("/locations/china", boundaryGzip, handlers.ChinaLocationsHandler(resourceCatalog, aiJobs, chinaLocations, safetyState.Validate))
 	api.Get("/locations/china/regions/:adcode", boundaryGzip, handlers.ChinaLocationRegionsHandler(resourceCatalog, aiJobs, chinaLocations, safetyState.Validate))
+	api.Get("/locations/china/regions/:adcode/visits", handlers.ChinaLocationRegionVisitsHandler(resourceCatalog, aiJobs, chinaLocations, safetyState.Validate))
 	api.Get("/locations/china/regions/:adcode/media", handlers.ChinaLocationRegionMediaHandler(resourceCatalog, aiJobs, chinaLocations, safetyState.Validate, picks))
 	api.Get("/locations", handlers.GPSLocationsHandler(resourceCatalog, aiJobs, safetyState.Validate, picks))
 	api.Get("/locations/:id/media", handlers.GPSLocationsHandler(resourceCatalog, aiJobs, safetyState.Validate, picks))

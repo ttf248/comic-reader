@@ -434,17 +434,51 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 人物分组使用 SFace 余弦相似度 `0.363` 作为候选阈值；这是参考基准，不代表身份确认。分组对每次构建限制最多 30,000 张脸与 2,000,000 次组中心比较，超出部分保留为独立候选组。用户名称、隐藏标记和手动拆分/合并保存在 `state/people.json`；可重建索引位于 `derived/ai/people-index.json`，只存资源 ID、文件指纹、脸部框和组 ID。人脸特征仍只保存在现有 `derived/metadata/face/` 结果中。
 
+### 拍摄地点地图 API
+
+三个地图端点与一个媒体页端点共享一组可选的查询参数：
+
+| 参数     | 含义                                                          |
+| -------- | ------------------------------------------------------------- |
+| `from`   | 时间区间起点，`YYYY-MM`，左闭                                |
+| `to`     | 时间区间终点，`YYYY-MM`，右闭                                |
+| `visit`  | 只在媒体页上有效：到访序号（从 0 开始），缺省表示不按到访筛 |
+
+时间区间按 EXIF 拍摄时间的日历月比较，缺省表示不限。格式非法或 `from` 晚于 `to` 返回 `400 invalid_time_range`；`visit` 不是非负整数返回 `400 invalid_region_visit`。区间与到访序号都参与 `ETag`，换区间后旧响应不会命中 `304`。
+
 ### `GET /api/locations/china`
 
 返回全国省级照片地图：`locations` 含 `revision`、离线边界 `boundaryVersion`、GPS/境内/未归属照片数，以及 34 个省级 `provinces`（含绘图用 `geometry`）。响应带 `ETag`，可用 `If-None-Match` 获取 `304`。只统计当前快照中仍存在、版本指纹匹配且路径通过当前媒体根校验的照片。WGS84 GPS 会在本机转换到边界使用的 GCJ-02 后做点位匹配；响应不包含照片原始坐标与文件路径。边界数据来源、版本和限制见 [架构文档](./ARCHITECTURE.md#exifgps-与离线地点地图)。
+
+除上述字段外还包含三个时间字段：
+
+- `months`：当前区间内的逐月分布，每项为 `{ "month": "2024-06", "count": 123 }`，按月份升序；
+- `trajectory`：当前区间内的停靠序列，每项为 `{ "at", "until", "adcode", "name", "photoCount" }`（`at`/`until` 是该段首尾照片的拍摄日期）。停靠点只给区划码与名称，不含照片坐标；
+- `untimedPhotoCount`：有位置但拍摄时间不可信（解析不出、年份早于 1990 或晚于当下）的照片数。这些照片照常计入空间统计，但不进时间轴、轨迹与到访。
 
 ### `GET /api/locations/china/regions/:adcode`
 
 返回指定行政区及其下一级区域的地图。省级区划返回地级市；直辖市、特别行政区和更细区域返回下一级区县；末级区域的 `regions` 为空。每项区域包含区划码、名称、级别、照片数与绘图用 `geometry`。响应也支持 `ETag` / `If-None-Match`。区划码格式错误返回 `400 invalid_region_adcode`，边界中不存在返回 `404 region_not_found`。
 
+响应同样包含 `months`、`trajectory` 与 `untimedPhotoCount`，口径跟随当前区间与当前区域：`months` 是该区域自己的逐月分布，`trajectory` 是该区域下级之间的停靠序列。
+
+### `GET /api/locations/china/regions/:adcode/visits`
+
+返回指定区域的到访记录。`visits` 按开始时间升序，每项为：
+
+| 字段        | 含义                                             |
+| ----------- | ------------------------------------------------ |
+| `startedAt` | 第一次到访的拍摄日期（`YYYY-MM-DD`）             |
+| `endedAt`   | 最后一次到访的拍摄日期                           |
+| `dayCount`  | 这段到访跨的自然日天数                           |
+| `photoCount`| 这段到访里的照片数                               |
+| `regions`   | 同期出现过的其它区域，每项 `{ "adcode", "name", "count" }` |
+
+`regions` 始终是数组（没有则为 `[]`）。同一区域的照片按拍摄时间排序后，相邻两张的日历日间隔不超过 2 天算作同一次到访，超过则另算一次；`visit` 序号与本列表的下标一一对应。响应同样包含 `region` 与 `untimedPhotoCount`。区划码格式错误返回 `400 invalid_region_adcode`，边界中不存在返回 `404 region_not_found`。
+
 ### `GET /api/locations/china/regions/:adcode/media?cursor=…&limit=200`
 
-返回指定区域的照片墙分页和区域摘要。`cursor` 是绑定当前媒体库 revision 的不透明游标；路径会按当前媒体根重新校验。不存在的区划返回 `404 region_not_found`。
+返回指定区域的照片墙分页和区域摘要。`cursor` 是绑定当前媒体库 revision、区间与到访序号的不透明游标；路径会按当前媒体根重新校验。给了 `from`/`to` 或 `visit` 时照片按拍摄时间排序，否则维持相册顺序。不存在的区划返回 `404 region_not_found`。
 
 ### `GET /api/locations` / `GET /api/locations/:locationId/media`
 

@@ -3,11 +3,14 @@ import type { ChinaLocationGeometry } from "../api/aiJobs";
 import {
   createMapProjection,
   levelOpacity,
+  monthBuckets,
   polygonMaximumLatitude,
   regionLabelPoint,
   regionPath,
   shareOf,
+  trajectoryPath,
   type MapRegion,
+  type TrajectoryStop,
 } from "./chinaMap";
 
 const square: ChinaLocationGeometry = {
@@ -104,5 +107,68 @@ describe("离线地图几何", () => {
     expect(shareOf(5, 0)).toBe(0);
     expect(shareOf(5, 10)).toBe(0.5);
     expect(shareOf(20, 10)).toBe(1);
+  });
+
+  it("逐月分布聚成年份，按时间升序", () => {
+    const years = monthBuckets([
+      { month: "2021-06", count: 3 },
+      { month: "2019-05", count: 2 },
+      { month: "2019-11", count: 4 },
+    ]);
+    expect(years).toEqual([
+      { year: "2019", count: 6 },
+      { year: "2021", count: 3 },
+    ]);
+  });
+
+  it("轨迹折线在间隔太久处断开", () => {
+    const stops: TrajectoryStop[] = [
+      {
+        adcode: 1,
+        name: "甲",
+        at: "2019-05-02",
+        until: "2019-05-02",
+        photoCount: 3,
+      },
+      {
+        adcode: 2,
+        name: "乙",
+        at: "2019-05-03",
+        until: "2019-05-03",
+        photoCount: 2,
+      },
+      {
+        adcode: 3,
+        name: "丙",
+        at: "2021-06-12",
+        until: "2021-06-12",
+        photoCount: 1,
+      },
+    ];
+    const centroidOf = (adcode: number): [number, number] | null =>
+      adcode === 1 ? [10, 10] : adcode === 2 ? [20, 20] : [30, 30];
+    const path = trajectoryPath(stops, centroidOf);
+    // 前两段相隔一天，连在一起；第三段隔了两年，另起一段。
+    expect(path).toContain("M10.00,10.00L20.00,20.00");
+    expect(path).toContain("M30.00,30.00");
+    expect(path).not.toContain("L30.00,30.00");
+  });
+
+  it("轨迹折线在空输入时不崩", () => {
+    expect(trajectoryPath([], () => null)).toBe("");
+    expect(
+      trajectoryPath(
+        [
+          {
+            adcode: 1,
+            name: "甲",
+            at: "2019-05-02",
+            until: "2019-05-02",
+            photoCount: 1,
+          },
+        ],
+        () => null,
+      ),
+    ).toBe("");
   });
 });
