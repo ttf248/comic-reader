@@ -277,31 +277,54 @@ export interface GPSLocationAlbum {
 
 export type ChinaLocationPoint = [number, number];
 
+export type ChinaLocationGeometry =
+  | { type: "Polygon"; coordinates: ChinaLocationPoint[][] }
+  | { type: "MultiPolygon"; coordinates: ChinaLocationPoint[][][] };
+
 export interface ChinaLocationProvince {
   adcode: number;
   name: string;
   photoCount: number;
   unmatchedAreaPhotoCount: number;
-  geometry:
-    | { type: "Polygon"; coordinates: ChinaLocationPoint[][] }
-    | { type: "MultiPolygon"; coordinates: ChinaLocationPoint[][][] };
+  geometry: ChinaLocationGeometry;
 }
 
-export interface ChinaLocationArea {
+/** 当前聚焦的那个区域。 */
+export interface ChinaLocationRegionInfo {
   adcode: number;
-  provinceAdcode: number;
   name: string;
-  level: "city" | "district";
+  level: string;
   photoCount: number;
+  unmatchedAreaPhotoCount: number;
+  /** 上级区划码；省级区域为 null。 */
+  parentAdcode: number | null;
+}
+
+/** 某个区域的下一级区域。 */
+export interface ChinaLocationRegion {
+  adcode: number;
+  name: string;
+  level: string;
+  photoCount: number;
+  geometry: ChinaLocationGeometry;
 }
 
 export interface ChinaLocationSummary {
   revision: number;
+  /** 离线边界数据的版本。 */
+  boundaryVersion: string;
   gpsPhotoCount: number;
   chinaPhotoCount: number;
   unassignedPhotoCount: number;
   provinces: ChinaLocationProvince[];
-  areas: ChinaLocationArea[];
+}
+
+/** 某个区域的下一级地图；regions 为空表示这个区域没有更细的边界。 */
+export interface ChinaLocationRegions {
+  revision: number;
+  boundaryVersion: string;
+  region: ChinaLocationRegionInfo;
+  regions: ChinaLocationRegion[];
 }
 
 export type GPSLocationMedia = LibraryFeedItem;
@@ -411,6 +434,20 @@ export const aiJobsApi = {
     api<{ ok: boolean; locations: ChinaLocationSummary }>(
       "/api/locations/china",
     ),
+  chinaRegions: (adcode: number) =>
+    api<{ ok: boolean; regions: ChinaLocationRegions }>(
+      `/api/locations/china/regions/${encodeURIComponent(String(adcode))}`,
+    ),
+  chinaRegionMedia: (adcode: number, cursor?: string) =>
+    api<{
+      ok: boolean;
+      page: LibraryPage<LibraryFeedItem> & {
+        albums: { id: string; name: string; count: number }[];
+        region: ChinaLocationRegionInfo;
+      };
+    }>(`/api/locations/china/regions/${encodeURIComponent(String(adcode))}/media`, {
+      params: { cursor, limit: 200 },
+    }),
   embeddingStatus: () =>
     api<{ ok: boolean; status: AIWorkerStatus }>("/api/ai/semantic/status"),
   semanticSearch: (request: SemanticSearchRequest, image?: File) => {

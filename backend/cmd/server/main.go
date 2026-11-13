@@ -306,6 +306,8 @@ func main() {
 	if err != nil {
 		log.Fatalf("初始化人物索引失败: %v", err)
 	}
+	// 离线地点图谱：全国地图、省内地图与区域照片墙共用一次匹配结果。
+	chinaLocations := services.NewChinaLocationService()
 	var aiJobs *services.AIJobService
 	// 本机存储统计：模型权重与各模块产物的占用。批次提交后产物字节变了，
 	// 让缓存失效，下一次读取重新统计。
@@ -408,7 +410,11 @@ func main() {
 	api.Get("/library/dashboard", handlers.LibraryHomeDashboardHandler(resourceCatalog, activities, unreadIndex))
 	api.Get("/library/unread", handlers.LibraryUnreadAlbumsPageHandler(resourceCatalog, activities, unreadIndex))
 	api.Delete("/library", handlers.ScanCacheClearHandler(scanCache, resourceCatalog, runner))
-	api.Get("/locations/china", handlers.ChinaLocationsHandler(resourceCatalog, aiJobs, safetyState.Validate))
+	// 边界几何体积大，这两个端点显式压缩；/api 下的其它响应不压缩。
+	boundaryGzip := compress.New(compress.Config{Level: compress.LevelBestSpeed})
+	api.Get("/locations/china", boundaryGzip, handlers.ChinaLocationsHandler(resourceCatalog, aiJobs, chinaLocations, safetyState.Validate))
+	api.Get("/locations/china/regions/:adcode", boundaryGzip, handlers.ChinaLocationRegionsHandler(resourceCatalog, aiJobs, chinaLocations, safetyState.Validate))
+	api.Get("/locations/china/regions/:adcode/media", handlers.ChinaLocationRegionMediaHandler(resourceCatalog, aiJobs, chinaLocations, safetyState.Validate, picks))
 	api.Get("/locations", handlers.GPSLocationsHandler(resourceCatalog, aiJobs, safetyState.Validate, picks))
 	api.Get("/locations/:id/media", handlers.GPSLocationsHandler(resourceCatalog, aiJobs, safetyState.Validate, picks))
 	api.Get("/people", handlers.PeopleHandler(peopleService, aiJobs, resourceCatalog, safetyState.Validate))

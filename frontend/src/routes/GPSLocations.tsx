@@ -5,7 +5,7 @@ import EmptyState from "../components/common/EmptyState";
 import PhotoWall from "../components/wall/PhotoWall";
 import PhotoViewer from "../components/wall/PhotoViewer";
 import { aiJobsApi, type GPSLocationMedia } from "../api/aiJobs";
-import ChinaLocationMap from "./ChinaLocationMap";
+import ChinaLocations from "./ChinaLocations";
 import { usePhotoStore, wallTargetHeight } from "../store/photoStore";
 import { usePicks } from "../hooks/usePicks";
 import { useUIStore } from "../store/uiStore";
@@ -16,12 +16,8 @@ export default function GPSLocations() {
   return locationId ? (
     <GPSLocationMedia locationId={locationId} />
   ) : (
-    <GPSLocationList />
+    <ChinaLocations />
   );
-}
-
-function GPSLocationList() {
-  return <ChinaLocationMap />;
 }
 
 function GPSLocationMedia({ locationId }: { locationId: string }) {

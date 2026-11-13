@@ -436,7 +436,15 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 ### `GET /api/locations/china`
 
-返回离线省级地图与市区照片统计：`locations` 含当前 `revision`、带 GPS/匹配省份/未匹配照片数、34 个省级 `provinces`（含绘图用 `geometry`）及 `areas`（城市/区县名称、级别和照片数）。只统计当前快照中仍存在、版本指纹匹配且路径通过当前媒体根校验的照片。WGS84 GPS 会在本机转换到边界使用的 GCJ-02 后做点位匹配；响应不包含照片原始坐标与文件路径。边界数据来源、版本和限制见 [架构文档](./ARCHITECTURE.md#exifgps-与离线地点地图)。
+返回全国省级照片地图：`locations` 含 `revision`、离线边界 `boundaryVersion`、GPS/境内/未归属照片数，以及 34 个省级 `provinces`（含绘图用 `geometry`）。响应带 `ETag`，可用 `If-None-Match` 获取 `304`。只统计当前快照中仍存在、版本指纹匹配且路径通过当前媒体根校验的照片。WGS84 GPS 会在本机转换到边界使用的 GCJ-02 后做点位匹配；响应不包含照片原始坐标与文件路径。边界数据来源、版本和限制见 [架构文档](./ARCHITECTURE.md#exifgps-与离线地点地图)。
+
+### `GET /api/locations/china/regions/:adcode`
+
+返回指定行政区及其下一级区域的地图。省级区划返回地级市；直辖市、特别行政区和更细区域返回下一级区县；末级区域的 `regions` 为空。每项区域包含区划码、名称、级别、照片数与绘图用 `geometry`。响应也支持 `ETag` / `If-None-Match`。区划码格式错误返回 `400 invalid_region_adcode`，边界中不存在返回 `404 region_not_found`。
+
+### `GET /api/locations/china/regions/:adcode/media?cursor=…&limit=200`
+
+返回指定区域的照片墙分页和区域摘要。`cursor` 是绑定当前媒体库 revision 的不透明游标；路径会按当前媒体根重新校验。不存在的区划返回 `404 region_not_found`。
 
 ### `GET /api/locations` / `GET /api/locations/:locationId/media`
 

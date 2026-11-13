@@ -337,14 +337,17 @@ type AIJobService struct {
 	order              []string
 	queue              []string
 	records            map[string]AIAnalysisRecord
-	runtimes           map[string]*aiJobRuntime
-	subs               map[string]map[chan AIJob]struct{}
-	activeID           string
-	closed             bool
-	settings           AIJobSettings
-	stopSchedule       context.CancelFunc
-	closeOnce          sync.Once
-	wg                 sync.WaitGroup
+	// recordsRevision 在分析结果增删改时递增。
+	// 依赖分析结果的派生数据（如离线地点图谱）用它判断缓存是否过期。
+	recordsRevision uint64
+	runtimes        map[string]*aiJobRuntime
+	subs            map[string]map[chan AIJob]struct{}
+	activeID        string
+	closed          bool
+	settings        AIJobSettings
+	stopSchedule    context.CancelFunc
+	closeOnce       sync.Once
+	wg              sync.WaitGroup
 	// targetCache 是文件指纹清单的短时缓存，只服务空闲时的规模预估。
 	// 它有自己的锁，避免把 stat 的等待混进任务状态锁。
 	targetCacheMu sync.Mutex
@@ -1063,6 +1066,7 @@ func (s *AIJobService) ClearModuleRecords(moduleType string) error {
 			delete(s.records, key)
 		}
 	}
+	s.recordsRevision++
 	keptOrder := s.order[:0]
 	for _, id := range s.order {
 		if job := s.jobs[id]; job != nil && job.Type == moduleType {
@@ -1167,6 +1171,15 @@ func (s *AIJobService) Subscribe(id string) (<-chan AIJob, func(), bool) {
 		}
 	}
 	return channel, unsubscribe, true
+}
+
+// RecordsRevision 返回当前分析结果的版本号。
+//
+// 每次记录增删改都会递增它，派生数据据此判断自己的缓存是否过期。
+func (s *AIJobService) RecordsRevision() uint64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.recordsRevision
 }
 
 // Records 返回指定模块的结果副本，便于 handler 按当前资源快照过滤过期记录。
@@ -1863,6 +1876,7 @@ func (s *AIJobService) commitBatch(jobID string, runtimeState *aiJobRuntime, tar
 			continue
 		}
 		s.records[aiRecordKey(record.Type, record.ResourceID)] = record
+		s.recordsRevision++
 		if record.Status == "failed" {
 			job.Failed++
 			job.Errors = append(job.Errors, AIJobError{
@@ -2344,6 +2358,7 @@ func (s *AIJobService) loadRecords() error {
 			current, exists := s.records[key]
 			if !exists || record.UpdatedAt.After(current.UpdatedAt) {
 				s.records[key] = record
+				s.recordsRevision++
 			}
 		}
 		if job := s.jobs[batch.JobID]; job != nil && batch.Number > job.Checkpoint.Batch {

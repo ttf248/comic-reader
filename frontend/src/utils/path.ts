@@ -65,6 +65,17 @@ export function locationsRoute(locationId?: string): string {
   return locationId ? `${base}/${encodeURIComponent(locationId)}` : base;
 }
 
+/**
+ * 离线地点图谱里聚焦某个行政区。
+ *
+ * 与 locationsRoute(locationId) 的那一个路径段不是一回事：那里放的是
+ * 坐标聚类的相册 ID（loc_ 前缀），这里放的是六位行政区划码。两套 ID
+ * 规则互不通用，所以下钻状态走查询参数，不占路径段。
+ */
+export function locationRegionRoute(adcode: number): string {
+  return `${MODE_PREFIX.photo}/locations?adcode=${adcode}`;
+}
+
 /** 照片侧的人物候选分组相册。 */
 export function peopleRoute(personId?: string): string {
   const base = `${MODE_PREFIX.photo}/people`;

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -395,20 +396,121 @@ func GPSLocationsHandler(catalog *services.ResourceCatalog, jobs *services.AIJob
 	}
 }
 
-// ChinaLocationsHandler 返回离线省级地图和省内城市/区县照片数。
-func ChinaLocationsHandler(catalog *services.ResourceCatalog, jobs *services.AIJobService, validate func(string) (string, error)) fiber.Handler {
+// ChinaLocationsHandler 返回离线省级地图与各省照片数。
+func ChinaLocationsHandler(catalog *services.ResourceCatalog, jobs *services.AIJobService, locations *services.ChinaLocationService, validate func(string) (string, error)) fiber.Handler {
 	return func(c *fiber.Ctx) error {
-		if jobs == nil {
+		if jobs == nil || locations == nil {
 			return writeError(c, fiber.StatusServiceUnavailable, "analysis_unavailable", "analysis service is unavailable")
 		}
 		snapshot := requestCatalogSnapshot(c, catalog)
-		locations, err := services.ChinaLocations(snapshot, jobs.Records(services.AIJobTypeMetadata), validate)
+		revision := jobs.RecordsRevision()
+		etag := chinaLocationETag("", services.ChinaLocationBoundaryHash(), snapshot.Revision(), revision)
+		if matchETag(c.Get(fiber.HeaderIfNoneMatch), etag) {
+			return c.SendStatus(fiber.StatusNotModified)
+		}
+		summary, err := locations.Summary(snapshot, jobs.Records(services.AIJobTypeMetadata), revision, validate)
 		if err != nil {
 			if errors.Is(err, services.ErrLibraryNotReady) {
 				return writeLibraryPageError(c, err, snapshot.Revision())
 			}
 			return writeError(c, fiber.StatusInternalServerError, "location_map_unavailable", "offline location boundaries are unavailable")
 		}
-		return c.JSON(fiber.Map{"ok": true, "locations": locations})
+		c.Set(fiber.HeaderETag, etag)
+		return c.JSON(fiber.Map{"ok": true, "locations": summary})
 	}
+}
+
+// ChinaLocationRegionsHandler 返回某个区域的下一级地图。
+func ChinaLocationRegionsHandler(catalog *services.ResourceCatalog, jobs *services.AIJobService, locations *services.ChinaLocationService, validate func(string) (string, error)) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		if jobs == nil || locations == nil {
+			return writeError(c, fiber.StatusServiceUnavailable, "analysis_unavailable", "analysis service is unavailable")
+		}
+		adcode, err := parseChinaRegionAdcode(c.Params("adcode"))
+		if err != nil {
+			return writeError(c, fiber.StatusBadRequest, "invalid_region_adcode", "region adcode must be six digits")
+		}
+		snapshot := requestCatalogSnapshot(c, catalog)
+		revision := jobs.RecordsRevision()
+		etag := chinaLocationETag(strconv.Itoa(adcode), services.ChinaLocationBoundaryHash(), snapshot.Revision(), revision)
+		if matchETag(c.Get(fiber.HeaderIfNoneMatch), etag) {
+			return c.SendStatus(fiber.StatusNotModified)
+		}
+		regions, err := locations.Regions(snapshot, jobs.Records(services.AIJobTypeMetadata), revision, validate, adcode)
+		if err != nil {
+			if errors.Is(err, services.ErrChinaRegionNotFound) {
+				return writeError(c, fiber.StatusNotFound, "region_not_found", "region was not found in the offline boundaries")
+			}
+			if errors.Is(err, services.ErrLibraryNotReady) {
+				return writeLibraryPageError(c, err, snapshot.Revision())
+			}
+			return writeError(c, fiber.StatusInternalServerError, "location_map_unavailable", "offline location boundaries are unavailable")
+		}
+		c.Set(fiber.HeaderETag, etag)
+		return c.JSON(fiber.Map{"ok": true, "regions": regions})
+	}
+}
+
+// ChinaLocationRegionMediaHandler 返回某个区域的照片墙分页。
+func ChinaLocationRegionMediaHandler(catalog *services.ResourceCatalog, jobs *services.AIJobService, locations *services.ChinaLocationService, validate func(string) (string, error), picks *store.PickStore) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		if jobs == nil || locations == nil {
+			return writeError(c, fiber.StatusServiceUnavailable, "analysis_unavailable", "analysis service is unavailable")
+		}
+		adcode, err := parseChinaRegionAdcode(c.Params("adcode"))
+		if err != nil {
+			return writeError(c, fiber.StatusBadRequest, "invalid_region_adcode", "region adcode must be six digits")
+		}
+		limit, ok := parseLibraryPageLimit(c)
+		if !ok {
+			return nil
+		}
+		snapshot := requestCatalogSnapshot(c, catalog)
+		page, err := locations.RegionMedia(snapshot, jobs.Records(services.AIJobTypeMetadata), jobs.RecordsRevision(), validate, adcode, c.Query("cursor"), limit)
+		if err != nil {
+			if errors.Is(err, services.ErrChinaRegionNotFound) {
+				return writeError(c, fiber.StatusNotFound, "region_not_found", "region was not found in the offline boundaries")
+			}
+			return writeLibraryPageError(c, err, snapshot.Revision())
+		}
+		markFeedPicks(picks, page.Items)
+		return c.JSON(fiber.Map{"ok": true, "page": page})
+	}
+}
+
+// parseChinaRegionAdcode 解析区划码参数。
+func parseChinaRegionAdcode(raw string) (int, error) {
+	value := strings.TrimSpace(raw)
+	if len(value) != 6 {
+		return 0, services.ErrInvalidChinaRegionAdcode
+	}
+	adcode, err := strconv.Atoi(value)
+	if err != nil || adcode <= 0 {
+		return 0, services.ErrInvalidChinaRegionAdcode
+	}
+	return adcode, nil
+}
+
+// chinaLocationETag 组合边界数据、媒体库与分析结果的版本。
+func chinaLocationETag(scope, boundaryHash string, catalogRevision, recordsRevision uint64) string {
+	return `W/"china-` + scope + boundaryHash + "-" +
+		strconv.FormatUint(catalogRevision, 10) + "-" +
+		strconv.FormatUint(recordsRevision, 10) + `"`
+}
+
+// matchETag 判断客户端带的 ETag 是否与当前一致。
+func matchETag(header, etag string) bool {
+	header = strings.TrimSpace(header)
+	if header == "" {
+		return false
+	}
+	for _, candidate := range strings.Split(header, ",") {
+		candidate = strings.TrimSpace(candidate)
+		candidate = strings.TrimPrefix(candidate, "W/")
+		current := strings.TrimPrefix(etag, "W/")
+		if candidate == current {
+			return true
+		}
+	}
+	return false
 }

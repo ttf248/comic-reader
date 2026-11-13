@@ -3,7 +3,9 @@ package services
 import (
 	"bytes"
 	"compress/gzip"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,39 +27,28 @@ var (
 	chinaAdminErr  error
 )
 
-type ChinaLocationSummary struct {
-	Revision             uint64                  `json:"revision"`
-	GPSPhotoCount        int                     `json:"gpsPhotoCount"`
-	ChinaPhotoCount      int                     `json:"chinaPhotoCount"`
-	UnassignedPhotoCount int                     `json:"unassignedPhotoCount"`
-	Provinces            []ChinaLocationProvince `json:"provinces"`
-	Areas                []ChinaLocationArea     `json:"areas"`
-}
-
-type ChinaLocationProvince struct {
-	Adcode                  int             `json:"adcode"`
-	Name                    string          `json:"name"`
-	PhotoCount              int             `json:"photoCount"`
-	UnmatchedAreaPhotoCount int             `json:"unmatchedAreaPhotoCount"`
-	Geometry                json.RawMessage `json:"geometry"`
-}
-
-type ChinaLocationArea struct {
-	Adcode         int    `json:"adcode"`
-	ProvinceAdcode int    `json:"provinceAdcode"`
-	Name           string `json:"name"`
-	Level          string `json:"level"`
-	PhotoCount     int    `json:"photoCount"`
-}
+// chinaBoundaryVersion 是内嵌边界数据的版本标识。
+//
+// 更换 geodata/china-admin.geojson.gz 时必须同步更新它：前端缓存与端点的
+// ETag 都靠它判断边界数据是否换代。
+const chinaBoundaryVersion = "datav-areas_v3-2021.5"
 
 type chinaAdminIndex struct {
-	provinces       []*chinaAdminFeature
-	areas           []*chinaAdminFeature
-	areasByProvince map[int][]*chinaAdminFeature
+	provinces []*chinaAdminFeature
+	areas     []*chinaAdminFeature
+	// byAdcode 按区划码索引全部要素，供按区域查询。
+	byAdcode map[int]*chinaAdminFeature
+	// childrenByParent 按上级区划码索引直属下级。
+	// 省级要素的下级是地级市；直辖市与特别行政区的下级是区县。
+	childrenByParent map[int][]*chinaAdminFeature
+	// hash 是内嵌边界数据的内容指纹。换了文件就换指纹，
+	// 端点的 ETag 随之改变，浏览器缓存自动失效。
+	hash string
 }
 
 type chinaAdminFeature struct {
 	adcode         int
+	parentAdcode   int
 	provinceAdcode int
 	name           string
 	level          string
@@ -107,32 +98,51 @@ const (
 	chinaAdminCityLevel     = "city"
 )
 
-// ChinaLocations 在当前快照上重新校验照片版本，并将 GPS 坐标匹配到离线省级及市区边界。
-func ChinaLocations(
+// chinaRegionPhoto 是一个落在某个行政区内的照片。
+//
+// 匹配阶段只保留资源 ID 与相册内序号，不保留路径：路径在出库时按当前
+// 媒体根重新校验，资源 ID 不是授权凭据。
+type chinaRegionPhoto struct {
+	resourceID string
+	albumID    string
+	albumRank  int
+	index      int
+}
+
+// chinaLocationMatch 是一次匹配的结果：照片按行政区归位。
+type chinaLocationMatch struct {
+	gpsPhotoCount   int
+	chinaPhotoCount int
+	// provincePhotos 按省级区划码归集照片。
+	provincePhotos map[int][]chinaRegionPhoto
+	// regionPhotos 按下级区划码归集照片。
+	regionPhotos map[int][]chinaRegionPhoto
+}
+
+// matchChinaLocations 在当前快照上重新校验照片版本，并将 GPS 坐标匹配到离线省级及下级边界。
+func matchChinaLocations(
 	snapshot CatalogSnapshot,
 	records []AIAnalysisRecord,
 	validatePath func(string) (string, error),
-) (ChinaLocationSummary, error) {
+) (*chinaLocationMatch, error) {
 	if !snapshot.Ready() || validatePath == nil {
-		return ChinaLocationSummary{}, ErrLibraryNotReady
+		return nil, ErrLibraryNotReady
 	}
 	index, err := loadChinaAdminIndex()
 	if err != nil {
-		return ChinaLocationSummary{}, err
+		return nil, err
+	}
+	if snapshot.state == nil || snapshot.state.library == nil {
+		return nil, ErrLibraryNotReady
 	}
 
-	provinceByCode := make(map[int]ChinaLocationProvince, len(index.provinces))
-	for _, feature := range index.provinces {
-		provinceByCode[feature.adcode] = ChinaLocationProvince{
-			Adcode: feature.adcode, Name: feature.name, Geometry: feature.geometry,
-		}
+	albumRanks := make(map[string]int, len(snapshot.state.library.albums))
+	for rank, album := range snapshot.state.library.albums {
+		albumRanks[album.ID] = rank
 	}
-	areaCounts := make(map[int]int, len(index.areas))
-	provinceUnmatched := make(map[int]int, len(index.provinces))
-	summary := ChinaLocationSummary{
-		Revision:  snapshot.Revision(),
-		Provinces: make([]ChinaLocationProvince, 0, len(index.provinces)),
-		Areas:     make([]ChinaLocationArea, 0, len(index.areas)),
+	match := &chinaLocationMatch{
+		provincePhotos: make(map[int][]chinaRegionPhoto),
+		regionPhotos:   make(map[int][]chinaRegionPhoto),
 	}
 	for _, record := range records {
 		if record.Type != AIJobTypeMetadata || record.Status != MetadataParseParsed || len(record.Data) == 0 {
@@ -148,9 +158,6 @@ func ChinaLocations(
 		}
 		info, err := os.Stat(path)
 		if err != nil || !info.Mode().IsRegular() || info.Size() != record.Size || info.ModTime().UnixNano() != record.MTimeNs {
-			continue
-		}
-		if snapshot.state == nil || snapshot.state.library == nil {
 			continue
 		}
 		fileRef, ok := snapshot.state.library.mediaByFile[record.ResourceID]
@@ -169,7 +176,7 @@ func ChinaLocations(
 		if json.Unmarshal(record.Data, &metadata) != nil || metadata.GPS == nil || !validCoordinates(metadata.GPS.Latitude, metadata.GPS.Longitude) {
 			continue
 		}
-		summary.GPSPhotoCount++
+		match.gpsPhotoCount++
 		longitude, latitude, validDatum := coordinatesToChinaMap(metadata.GPS.Longitude, metadata.GPS.Latitude, metadata.GPS.MapDatum)
 		if !validDatum {
 			continue
@@ -178,31 +185,54 @@ func ChinaLocations(
 		if province == nil {
 			continue
 		}
-		provinceSummary := provinceByCode[province.adcode]
-		provinceSummary.PhotoCount++
-		provinceByCode[province.adcode] = provinceSummary
-		summary.ChinaPhotoCount++
-		area := matchingChinaFeature(index.areasByProvince[province.adcode], longitude, latitude)
+		photo := chinaRegionPhoto{
+			resourceID: record.ResourceID,
+			albumID:    fileRef.albumID,
+			albumRank:  albumRanks[fileRef.albumID],
+			index:      fileRef.index,
+		}
+		match.provincePhotos[province.adcode] = append(match.provincePhotos[province.adcode], photo)
+		match.chinaPhotoCount++
+		area := matchingChinaFeature(index.childrenByParent[province.adcode], longitude, latitude)
 		if area == nil {
-			provinceUnmatched[province.adcode]++
 			continue
 		}
-		areaCounts[area.adcode]++
+		match.regionPhotos[area.adcode] = append(match.regionPhotos[area.adcode], photo)
 	}
+	// 照片按相册顺序与相册内序号排列，照片墙看起来才是「按相册分组」的。
+	for _, photos := range match.provincePhotos {
+		sortChinaRegionPhotos(photos)
+	}
+	for _, photos := range match.regionPhotos {
+		sortChinaRegionPhotos(photos)
+	}
+	return match, nil
+}
 
-	summary.UnassignedPhotoCount = summary.GPSPhotoCount - summary.ChinaPhotoCount
-	for _, feature := range index.provinces {
-		province := provinceByCode[feature.adcode]
-		province.UnmatchedAreaPhotoCount = provinceUnmatched[feature.adcode]
-		summary.Provinces = append(summary.Provinces, province)
+// sortChinaRegionPhotos 按相册顺序与相册内序号排序。
+func sortChinaRegionPhotos(photos []chinaRegionPhoto) {
+	sort.SliceStable(photos, func(i, j int) bool {
+		if photos[i].albumRank != photos[j].albumRank {
+			return photos[i].albumRank < photos[j].albumRank
+		}
+		return photos[i].index < photos[j].index
+	})
+}
+
+// regionPhotoCount 返回某个区划下的照片数。
+func (m *chinaLocationMatch) regionPhotoCount(adcode int) int {
+	if m == nil {
+		return 0
 	}
-	for _, feature := range index.areas {
-		summary.Areas = append(summary.Areas, ChinaLocationArea{
-			Adcode: feature.adcode, ProvinceAdcode: feature.provinceAdcode,
-			Name: feature.name, Level: feature.level, PhotoCount: areaCounts[feature.adcode],
-		})
+	return len(m.regionPhotos[adcode])
+}
+
+// provincePhotoCount 返回某个省份下的照片数。
+func (m *chinaLocationMatch) provincePhotoCount(adcode int) int {
+	if m == nil {
+		return 0
 	}
-	return summary, nil
+	return len(m.provincePhotos[adcode])
 }
 
 func loadChinaAdminIndex() (*chinaAdminIndex, error) {
@@ -212,6 +242,8 @@ func loadChinaAdminIndex() (*chinaAdminIndex, error) {
 			chinaAdminErr = fmt.Errorf("read embedded China boundaries: %w", err)
 			return
 		}
+		digest := sha256.Sum256(archive)
+		boundaryHash := hex.EncodeToString(digest[:8])
 		reader, err := gzip.NewReader(bytes.NewReader(archive))
 		if err != nil {
 			chinaAdminErr = fmt.Errorf("open embedded China boundaries: %w", err)
@@ -223,7 +255,11 @@ func loadChinaAdminIndex() (*chinaAdminIndex, error) {
 			chinaAdminErr = fmt.Errorf("decode embedded China boundaries: %w", err)
 			return
 		}
-		index := &chinaAdminIndex{areasByProvince: make(map[int][]*chinaAdminFeature)}
+		index := &chinaAdminIndex{
+			byAdcode:         make(map[int]*chinaAdminFeature),
+			childrenByParent: make(map[int][]*chinaAdminFeature),
+			hash:             boundaryHash,
+		}
 		for _, rawFeature := range collection.Features {
 			properties := rawFeature.Properties
 			if properties.Adcode == 0 || strings.TrimSpace(properties.Name) == "" || len(rawFeature.Geometry) == 0 {
@@ -234,17 +270,30 @@ func loadChinaAdminIndex() (*chinaAdminIndex, error) {
 				chinaAdminErr = err
 				return
 			}
+			index.byAdcode[feature.adcode] = feature
 			switch properties.Level {
 			case chinaAdminProvinceLevel:
 				index.provinces = append(index.provinces, feature)
 			case chinaAdminCityLevel, chinaAdminDistrictLevel:
 				index.areas = append(index.areas, feature)
-				index.areasByProvince[feature.provinceAdcode] = append(index.areasByProvince[feature.provinceAdcode], feature)
 			}
 		}
 		if len(index.provinces) != 34 || len(index.areas) < 400 {
 			chinaAdminErr = fmt.Errorf("embedded China boundaries are incomplete: provinces=%d areas=%d", len(index.provinces), len(index.areas))
 			return
+		}
+		// 省级区划码的上级是全国，其余要素逐级向上找到省级，
+		// 这样无论下级要素挂在市下面还是省下面，都归得到同一个省。
+		for _, feature := range index.areas {
+			feature.provinceAdcode = feature.parentAdcode
+			for depth := 0; depth < 4; depth++ {
+				parent, exists := index.byAdcode[feature.provinceAdcode]
+				if !exists || parent.level == chinaAdminProvinceLevel {
+					break
+				}
+				feature.provinceAdcode = parent.parentAdcode
+			}
+			index.childrenByParent[feature.parentAdcode] = append(index.childrenByParent[feature.parentAdcode], feature)
 		}
 		sort.Slice(index.provinces, func(i, j int) bool { return index.provinces[i].adcode < index.provinces[j].adcode })
 		sort.Slice(index.areas, func(i, j int) bool {
@@ -256,7 +305,7 @@ func loadChinaAdminIndex() (*chinaAdminIndex, error) {
 			}
 			return index.areas[i].adcode < index.areas[j].adcode
 		})
-		for _, features := range index.areasByProvince {
+		for _, features := range index.childrenByParent {
 			sort.Slice(features, func(i, j int) bool {
 				if features[i].level != features[j].level {
 					return features[i].level == chinaAdminDistrictLevel
@@ -290,7 +339,7 @@ func decodeChinaAdminFeature(rawGeometry json.RawMessage, adcode, parentAdcode i
 		return nil, fmt.Errorf("unsupported China boundary geometry %q for %d", geometry.Type, adcode)
 	}
 	feature := &chinaAdminFeature{
-		adcode: adcode, provinceAdcode: parentAdcode, name: name, level: level,
+		adcode: adcode, parentAdcode: parentAdcode, name: name, level: level,
 		geometry: append(json.RawMessage(nil), rawGeometry...),
 		minX:     math.Inf(1), minY: math.Inf(1), maxX: math.Inf(-1), maxY: math.Inf(-1),
 	}
