@@ -1,7 +1,6 @@
 package services
 
 import (
-	"bytes"
 	"compress/gzip"
 	"crypto/sha256"
 	"embed"
@@ -9,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"os"
 	"sort"
@@ -32,7 +32,7 @@ var (
 //
 // 更换 geodata/china-admin.geojson.gz 时必须同步更新它：前端缓存与端点的
 // ETag 都靠它判断边界数据是否换代。
-const chinaBoundaryVersion = "datav-areas_v3-2021.5"
+const chinaBoundaryVersion = "areacity-2025.251231.260403"
 
 type chinaAdminIndex struct {
 	provinces []*chinaAdminFeature
@@ -40,7 +40,7 @@ type chinaAdminIndex struct {
 	// byAdcode 按区划码索引全部要素，供按区域查询。
 	byAdcode map[int]*chinaAdminFeature
 	// childrenByParent 按上级区划码索引直属下级。
-	// 省级要素的下级是地级市；直辖市与特别行政区的下级是区县。
+	// 省级下级可能是城市或省直辖区县；城市下级是区县。
 	childrenByParent map[int][]*chinaAdminFeature
 	// hash 是内嵌边界数据的内容指纹。换了文件就换指纹，
 	// 端点的 ETag 随之改变，浏览器缓存自动失效。
@@ -53,7 +53,6 @@ type chinaAdminFeature struct {
 	provinceAdcode int
 	name           string
 	level          string
-	geometry       json.RawMessage
 	polygons       []chinaPolygon
 	minX           float64
 	minY           float64
@@ -62,30 +61,43 @@ type chinaAdminFeature struct {
 }
 
 type chinaPolygon struct {
-	rings [][]chinaPoint
-	minX  float64
-	minY  float64
-	maxX  float64
-	maxY  float64
+	rings      [][]chinaPoint
+	ringLatIdx []chinaRingLatitudeIndex
+	minX       float64
+	minY       float64
+	maxX       float64
+	maxY       float64
 }
 
+type chinaRingLatitudeIndex struct {
+	firstBucket int
+	buckets     [][]int
+}
+
+const chinaLatitudeBucketDegrees = 0.1
+
 type chinaPoint struct {
+	x int32
+	y int32
+}
+
+type chinaCoordinate struct {
 	x float64
 	y float64
 }
 
-type chinaAdminCollection struct {
-	Features []struct {
-		Properties struct {
-			Adcode int    `json:"adcode"`
-			Name   string `json:"name"`
-			Level  string `json:"level"`
-			Parent struct {
-				Adcode int `json:"adcode"`
-			} `json:"parent"`
-		} `json:"properties"`
-		Geometry json.RawMessage `json:"geometry"`
-	} `json:"features"`
+const chinaCoordinateScale = 1_000_000
+
+type chinaAdminRawFeature struct {
+	Properties struct {
+		Adcode int    `json:"adcode"`
+		Name   string `json:"name"`
+		Level  string `json:"level"`
+		Parent struct {
+			Adcode int `json:"adcode"`
+		} `json:"parent"`
+	} `json:"properties"`
+	Geometry json.RawMessage `json:"geometry"`
 }
 
 type chinaAdminGeometry struct {
@@ -301,9 +313,16 @@ func matchChinaLocations(
 		}
 		match.provincePhotos[province.adcode] = append(match.provincePhotos[province.adcode], photo)
 		match.chinaPhotoCount++
-		if area := matchingChinaFeature(index.childrenByParent[province.adcode], longitude, latitude); area != nil {
+		if area := deepestChinaFeature(index, province, longitude, latitude); area != nil {
 			photo.regionAdcode = area.adcode
-			match.regionPhotos[area.adcode] = append(match.regionPhotos[area.adcode], photo)
+			for current := area; current != nil && current.level != chinaAdminProvinceLevel; {
+				match.regionPhotos[current.adcode] = append(match.regionPhotos[current.adcode], photo)
+				parent, exists := index.byAdcode[current.parentAdcode]
+				if !exists {
+					break
+				}
+				current = parent
+			}
 		}
 		if photo.captured.Valid {
 			match.timedPhotos = append(match.timedPhotos, photo)
@@ -365,15 +384,13 @@ func (m *chinaLocationMatch) timedPhotosInScope(feature *chinaAdminFeature) []ch
 	if m == nil || feature == nil {
 		return nil
 	}
-	photos := make([]chinaRegionPhoto, 0, 16)
-	for _, photo := range m.timedPhotos {
-		if feature.level == chinaAdminProvinceLevel {
-			if photo.provinceAdcode == feature.adcode {
-				photos = append(photos, photo)
-			}
-			continue
-		}
-		if photo.regionAdcode == feature.adcode {
+	scope := m.regionPhotos[feature.adcode]
+	if feature.level == chinaAdminProvinceLevel {
+		scope = m.provincePhotos[feature.adcode]
+	}
+	photos := make([]chinaRegionPhoto, 0, len(scope))
+	for _, photo := range scope {
+		if photo.captured.Valid {
 			photos = append(photos, photo)
 		}
 	}
@@ -413,22 +430,39 @@ func (m *chinaLocationMatch) untimedPhotoCount(photos []chinaRegionPhoto) int {
 
 func loadChinaAdminIndex() (*chinaAdminIndex, error) {
 	chinaAdminOnce.Do(func() {
-		archive, err := chinaAdminArchive.ReadFile("geodata/china-admin.geojson.gz")
+		archiveFile, err := chinaAdminArchive.Open("geodata/china-admin.geojson.gz")
 		if err != nil {
 			chinaAdminErr = fmt.Errorf("read embedded China boundaries: %w", err)
 			return
 		}
-		digest := sha256.Sum256(archive)
-		boundaryHash := hex.EncodeToString(digest[:8])
-		reader, err := gzip.NewReader(bytes.NewReader(archive))
+		digest := sha256.New()
+		if _, err := io.Copy(digest, archiveFile); err != nil {
+			_ = archiveFile.Close()
+			chinaAdminErr = fmt.Errorf("hash embedded China boundaries: %w", err)
+			return
+		}
+		if err := archiveFile.Close(); err != nil {
+			chinaAdminErr = fmt.Errorf("close embedded China boundaries: %w", err)
+			return
+		}
+		boundaryHash := hex.EncodeToString(digest.Sum(nil)[:8])
+		archiveFile, err = chinaAdminArchive.Open("geodata/china-admin.geojson.gz")
 		if err != nil {
+			chinaAdminErr = fmt.Errorf("reopen embedded China boundaries: %w", err)
+			return
+		}
+		reader, err := gzip.NewReader(archiveFile)
+		if err != nil {
+			_ = archiveFile.Close()
 			chinaAdminErr = fmt.Errorf("open embedded China boundaries: %w", err)
 			return
 		}
 		defer reader.Close()
-		var collection chinaAdminCollection
-		if err := json.NewDecoder(reader).Decode(&collection); err != nil {
-			chinaAdminErr = fmt.Errorf("decode embedded China boundaries: %w", err)
+		defer archiveFile.Close()
+		decoder := json.NewDecoder(reader)
+		opening, err := decoder.Token()
+		if err != nil || opening != json.Delim('{') {
+			chinaAdminErr = errors.New("decode embedded China boundaries: invalid feature collection")
 			return
 		}
 		index := &chinaAdminIndex{
@@ -436,38 +470,105 @@ func loadChinaAdminIndex() (*chinaAdminIndex, error) {
 			childrenByParent: make(map[int][]*chinaAdminFeature),
 			hash:             boundaryHash,
 		}
-		for _, rawFeature := range collection.Features {
-			properties := rawFeature.Properties
-			if properties.Adcode == 0 || strings.TrimSpace(properties.Name) == "" || len(rawFeature.Geometry) == 0 {
-				continue
-			}
-			feature, err := decodeChinaAdminFeature(rawFeature.Geometry, properties.Adcode, properties.Parent.Adcode, properties.Name, properties.Level)
+		featuresFound := false
+		for decoder.More() {
+			keyToken, err := decoder.Token()
 			if err != nil {
-				chinaAdminErr = err
+				chinaAdminErr = fmt.Errorf("decode embedded China boundaries: %w", err)
 				return
 			}
-			index.byAdcode[feature.adcode] = feature
-			switch properties.Level {
-			case chinaAdminProvinceLevel:
-				index.provinces = append(index.provinces, feature)
-			case chinaAdminCityLevel, chinaAdminDistrictLevel:
-				index.areas = append(index.areas, feature)
+			key, ok := keyToken.(string)
+			if !ok {
+				chinaAdminErr = errors.New("decode embedded China boundaries: invalid collection key")
+				return
+			}
+			if key != "features" {
+				var ignored json.RawMessage
+				if err := decoder.Decode(&ignored); err != nil {
+					chinaAdminErr = fmt.Errorf("decode embedded China boundaries: %w", err)
+					return
+				}
+				continue
+			}
+			featuresFound = true
+			featuresToken, err := decoder.Token()
+			if err != nil || featuresToken != json.Delim('[') {
+				chinaAdminErr = errors.New("decode embedded China boundaries: invalid features list")
+				return
+			}
+			for decoder.More() {
+				var rawFeature chinaAdminRawFeature
+				if err := decoder.Decode(&rawFeature); err != nil {
+					chinaAdminErr = fmt.Errorf("decode embedded China boundary feature: %w", err)
+					return
+				}
+				properties := rawFeature.Properties
+				if properties.Adcode == 0 || strings.TrimSpace(properties.Name) == "" || len(rawFeature.Geometry) == 0 {
+					chinaAdminErr = errors.New("embedded China boundaries contain an incomplete feature")
+					return
+				}
+				feature, err := decodeChinaAdminFeature(rawFeature.Geometry, properties.Adcode, properties.Parent.Adcode, properties.Name, properties.Level)
+				if err != nil {
+					chinaAdminErr = err
+					return
+				}
+				if _, exists := index.byAdcode[feature.adcode]; exists {
+					chinaAdminErr = fmt.Errorf("embedded China boundaries contain duplicate adcode %d", feature.adcode)
+					return
+				}
+				index.byAdcode[feature.adcode] = feature
+				switch properties.Level {
+				case chinaAdminProvinceLevel:
+					index.provinces = append(index.provinces, feature)
+				case chinaAdminCityLevel, chinaAdminDistrictLevel:
+					index.areas = append(index.areas, feature)
+				default:
+					chinaAdminErr = fmt.Errorf("embedded China boundaries contain unknown level %q", properties.Level)
+					return
+				}
+			}
+			if _, err := decoder.Token(); err != nil {
+				chinaAdminErr = fmt.Errorf("decode embedded China boundaries: %w", err)
+				return
 			}
 		}
-		if len(index.provinces) != 34 || len(index.areas) < 400 {
-			chinaAdminErr = fmt.Errorf("embedded China boundaries are incomplete: provinces=%d areas=%d", len(index.provinces), len(index.areas))
+		if _, err := decoder.Token(); err != nil || !featuresFound {
+			chinaAdminErr = errors.New("decode embedded China boundaries: missing features list")
+			return
+		}
+		districts := 0
+		for _, feature := range index.areas {
+			if feature.level == chinaAdminDistrictLevel {
+				districts++
+			}
+		}
+		if len(index.provinces) != 34 || len(index.areas) < 3_000 || districts < 2_800 {
+			chinaAdminErr = fmt.Errorf("embedded China boundaries are incomplete: provinces=%d areas=%d districts=%d", len(index.provinces), len(index.areas), districts)
 			return
 		}
 		// 省级区划码的上级是全国，其余要素逐级向上找到省级，
 		// 这样无论下级要素挂在市下面还是省下面，都归得到同一个省。
 		for _, feature := range index.areas {
+			if _, exists := index.byAdcode[feature.parentAdcode]; !exists {
+				chinaAdminErr = fmt.Errorf("embedded China boundary %d has missing parent %d", feature.adcode, feature.parentAdcode)
+				return
+			}
 			feature.provinceAdcode = feature.parentAdcode
+			foundProvince := false
 			for depth := 0; depth < 4; depth++ {
 				parent, exists := index.byAdcode[feature.provinceAdcode]
-				if !exists || parent.level == chinaAdminProvinceLevel {
+				if !exists {
+					break
+				}
+				if parent.level == chinaAdminProvinceLevel {
+					foundProvince = true
 					break
 				}
 				feature.provinceAdcode = parent.parentAdcode
+			}
+			if !foundProvince {
+				chinaAdminErr = fmt.Errorf("embedded China boundary %d has no province ancestor", feature.adcode)
+				return
 			}
 			index.childrenByParent[feature.parentAdcode] = append(index.childrenByParent[feature.parentAdcode], feature)
 		}
@@ -516,8 +617,7 @@ func decodeChinaAdminFeature(rawGeometry json.RawMessage, adcode, parentAdcode i
 	}
 	feature := &chinaAdminFeature{
 		adcode: adcode, parentAdcode: parentAdcode, name: name, level: level,
-		geometry: append(json.RawMessage(nil), rawGeometry...),
-		minX:     math.Inf(1), minY: math.Inf(1), maxX: math.Inf(-1), maxY: math.Inf(-1),
+		minX: math.Inf(1), minY: math.Inf(1), maxX: math.Inf(-1), maxY: math.Inf(-1),
 	}
 	for _, rawRings := range rawPolygons {
 		if len(rawRings) == 0 {
@@ -527,15 +627,23 @@ func decodeChinaAdminFeature(rawGeometry json.RawMessage, adcode, parentAdcode i
 		for _, rawRing := range rawRings {
 			ring := make([]chinaPoint, 0, len(rawRing))
 			for _, coordinates := range rawRing {
-				point := chinaPoint{x: coordinates[0], y: coordinates[1]}
+				longitude, latitude := coordinates[0], coordinates[1]
+				if math.IsNaN(longitude) || math.IsInf(longitude, 0) || math.IsNaN(latitude) || math.IsInf(latitude, 0) || longitude < -180 || longitude > 180 || latitude < -90 || latitude > 90 {
+					return nil, fmt.Errorf("China boundary %d has invalid coordinates", adcode)
+				}
+				point := chinaPoint{
+					x: int32(math.Round(longitude * chinaCoordinateScale)),
+					y: int32(math.Round(latitude * chinaCoordinateScale)),
+				}
 				ring = append(ring, point)
-				polygon.minX = math.Min(polygon.minX, point.x)
-				polygon.maxX = math.Max(polygon.maxX, point.x)
-				polygon.minY = math.Min(polygon.minY, point.y)
-				polygon.maxY = math.Max(polygon.maxY, point.y)
+				polygon.minX = math.Min(polygon.minX, longitude)
+				polygon.maxX = math.Max(polygon.maxX, longitude)
+				polygon.minY = math.Min(polygon.minY, latitude)
+				polygon.maxY = math.Max(polygon.maxY, latitude)
 			}
 			if len(ring) >= 3 {
 				polygon.rings = append(polygon.rings, ring)
+				polygon.ringLatIdx = append(polygon.ringLatIdx, buildChinaRingLatitudeIndex(ring))
 			}
 		}
 		if len(polygon.rings) == 0 {
@@ -553,8 +661,47 @@ func decodeChinaAdminFeature(rawGeometry json.RawMessage, adcode, parentAdcode i
 	return feature, nil
 }
 
+func (feature *chinaAdminFeature) geometryJSON() json.RawMessage {
+	if feature == nil || len(feature.polygons) == 0 {
+		return nil
+	}
+	if len(feature.polygons) == 1 {
+		geometry := struct {
+			Type        string         `json:"type"`
+			Coordinates [][][2]float64 `json:"coordinates"`
+		}{Type: "Polygon", Coordinates: chinaPolygonCoordinates(feature.polygons[0])}
+		encoded, _ := json.Marshal(geometry)
+		return encoded
+	}
+	coordinates := make([][][][2]float64, len(feature.polygons))
+	for i, polygon := range feature.polygons {
+		coordinates[i] = chinaPolygonCoordinates(polygon)
+	}
+	geometry := struct {
+		Type        string           `json:"type"`
+		Coordinates [][][][2]float64 `json:"coordinates"`
+	}{Type: "MultiPolygon", Coordinates: coordinates}
+	encoded, _ := json.Marshal(geometry)
+	return encoded
+}
+
+func chinaPolygonCoordinates(polygon chinaPolygon) [][][2]float64 {
+	rings := make([][][2]float64, len(polygon.rings))
+	for i, ring := range polygon.rings {
+		coordinates := make([][2]float64, len(ring))
+		for j, point := range ring {
+			coordinates[j] = [2]float64{
+				float64(point.x) / chinaCoordinateScale,
+				float64(point.y) / chinaCoordinateScale,
+			}
+		}
+		rings[i] = coordinates
+	}
+	return rings
+}
+
 func matchingChinaFeature(features []*chinaAdminFeature, longitude, latitude float64) *chinaAdminFeature {
-	point := chinaPoint{x: longitude, y: latitude}
+	point := chinaCoordinate{x: longitude, y: latitude}
 	for _, feature := range features {
 		if point.x < feature.minX || point.x > feature.maxX || point.y < feature.minY || point.y > feature.maxY {
 			continue
@@ -571,27 +718,113 @@ func matchingChinaFeature(features []*chinaAdminFeature, longitude, latitude flo
 	return nil
 }
 
-func pointInChinaPolygon(point chinaPoint, polygon chinaPolygon) bool {
-	if len(polygon.rings) == 0 || !pointInChinaRing(point, polygon.rings[0]) {
+func deepestChinaFeature(index *chinaAdminIndex, parent *chinaAdminFeature, longitude, latitude float64) *chinaAdminFeature {
+	if index == nil || parent == nil {
+		return nil
+	}
+	var matched *chinaAdminFeature
+	current := parent
+	for depth := 0; depth < 3; depth++ {
+		child := matchingChinaFeature(index.childrenByParent[current.adcode], longitude, latitude)
+		if child == nil {
+			break
+		}
+		matched = child
+		current = child
+	}
+	return matched
+}
+
+func chinaRegionAtScope(photo chinaRegionPhoto, scope *chinaAdminFeature, index *chinaAdminIndex) int {
+	if scope == nil || index == nil || photo.regionAdcode == 0 {
+		return 0
+	}
+	current, exists := index.byAdcode[photo.regionAdcode]
+	for depth := 0; exists && depth < 4; depth++ {
+		if current.adcode == scope.adcode {
+			return 0
+		}
+		if current.parentAdcode == scope.adcode {
+			return current.adcode
+		}
+		current, exists = index.byAdcode[current.parentAdcode]
+	}
+	return 0
+}
+
+func pointInChinaPolygon(point chinaCoordinate, polygon chinaPolygon) bool {
+	if len(polygon.rings) == 0 || !pointInChinaRing(point, polygon.rings[0], polygon.ringLatIdx[0]) {
 		return false
 	}
-	for _, hole := range polygon.rings[1:] {
-		if pointInChinaRing(point, hole) {
+	for i, hole := range polygon.rings[1:] {
+		if pointInChinaRing(point, hole, polygon.ringLatIdx[i+1]) {
 			return false
 		}
 	}
 	return true
 }
 
-func pointInChinaRing(point chinaPoint, ring []chinaPoint) bool {
+func buildChinaRingLatitudeIndex(ring []chinaPoint) chinaRingLatitudeIndex {
+	if len(ring) == 0 {
+		return chinaRingLatitudeIndex{}
+	}
+	minimum := math.Inf(1)
+	maximum := math.Inf(-1)
+	for _, point := range ring {
+		latitude := float64(point.y) / chinaCoordinateScale
+		minimum = math.Min(minimum, latitude)
+		maximum = math.Max(maximum, latitude)
+	}
+	firstBucket := int(math.Floor(minimum / chinaLatitudeBucketDegrees))
+	lastBucket := int(math.Floor(maximum / chinaLatitudeBucketDegrees))
+	index := chinaRingLatitudeIndex{
+		firstBucket: firstBucket,
+		buckets:     make([][]int, lastBucket-firstBucket+1),
+	}
+	for edgeIndex, point := range ring {
+		previous := ring[(edgeIndex+len(ring)-1)%len(ring)]
+		previousLatitude := float64(previous.y) / chinaCoordinateScale
+		latitude := float64(point.y) / chinaCoordinateScale
+		low := math.Min(previousLatitude, latitude)
+		high := math.Max(previousLatitude, latitude)
+		first := int(math.Floor(low / chinaLatitudeBucketDegrees))
+		last := int(math.Floor(high / chinaLatitudeBucketDegrees))
+		for bucket := first; bucket <= last; bucket++ {
+			index.buckets[bucket-firstBucket] = append(index.buckets[bucket-firstBucket], edgeIndex)
+		}
+	}
+	return index
+}
+
+func (index chinaRingLatitudeIndex) edgesAt(latitude float64) []int {
+	bucket := int(math.Floor(latitude/chinaLatitudeBucketDegrees)) - index.firstBucket
+	if bucket < 0 || bucket >= len(index.buckets) {
+		return nil
+	}
+	return index.buckets[bucket]
+}
+
+func pointInChinaRing(point chinaCoordinate, ring []chinaPoint, index chinaRingLatitudeIndex) bool {
 	inside := false
-	for i, j := 0, len(ring)-1; i < len(ring); j, i = i, i+1 {
-		a, b := ring[j], ring[i]
-		cross := (point.x-a.x)*(b.y-a.y) - (point.y-a.y)*(b.x-a.x)
-		if math.Abs(cross) < 1e-9 && point.x >= math.Min(a.x, b.x)-1e-9 && point.x <= math.Max(a.x, b.x)+1e-9 && point.y >= math.Min(a.y, b.y)-1e-9 && point.y <= math.Max(a.y, b.y)+1e-9 {
+	edges := index.edgesAt(point.y)
+	if len(edges) == 0 {
+		return false
+	}
+	for _, edgeIndex := range edges {
+		previousIndex := edgeIndex - 1
+		if previousIndex < 0 {
+			previousIndex = len(ring) - 1
+		}
+		a, b := ring[previousIndex], ring[edgeIndex]
+		ax := float64(a.x) / chinaCoordinateScale
+		ay := float64(a.y) / chinaCoordinateScale
+		bx := float64(b.x) / chinaCoordinateScale
+		by := float64(b.y) / chinaCoordinateScale
+		cross := (point.x-ax)*(by-ay) - (point.y-ay)*(bx-ax)
+		if math.Abs(cross) < 1e-9 && point.x >= math.Min(ax, bx)-1e-9 && point.x <= math.Max(ax, bx)+1e-9 && point.y >= math.Min(ay, by)-1e-9 && point.y <= math.Max(ay, by)+1e-9 {
 			return true
 		}
-		if (a.y > point.y) != (b.y > point.y) && point.x < (b.x-a.x)*(point.y-a.y)/(b.y-a.y)+a.x {
+		if (ay > point.y) != (by > point.y) && point.x < (bx-ax)*(point.y-ay)/(by-ay)+ax {
 			inside = !inside
 		}
 	}

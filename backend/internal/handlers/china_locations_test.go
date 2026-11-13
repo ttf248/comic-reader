@@ -157,6 +157,33 @@ func TestChinaLocationRegionsAPIReturnsSubRegions(t *testing.T) {
 	if strings.Contains(string(encoded), root) || strings.Contains(string(encoded), "latitude") || strings.Contains(string(encoded), "longitude") {
 		t.Fatal("region response exposed a filesystem path or raw GPS coordinates")
 	}
+
+	countyResponse, err := app.Test(httptest.NewRequest("GET", "/api/locations/china/regions/330100", nil), -1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer countyResponse.Body.Close()
+	if countyResponse.StatusCode != fiber.StatusOK {
+		t.Fatalf("city region status = %d", countyResponse.StatusCode)
+	}
+	var cityBody struct {
+		Regions services.ChinaLocationRegions `json:"regions"`
+	}
+	if err := json.NewDecoder(countyResponse.Body).Decode(&cityBody); err != nil {
+		t.Fatal(err)
+	}
+	if cityBody.Regions.Region.Name != "杭州市" || len(cityBody.Regions.Region.Ancestors) != 1 || cityBody.Regions.Region.Ancestors[0].Adcode != 330000 {
+		t.Fatalf("city region ancestors are wrong: %+v", cityBody.Regions.Region)
+	}
+	foundCounty := false
+	for _, region := range cityBody.Regions.Regions {
+		if region.Adcode == 330106 && region.Name == "西湖区" && region.Level == "district" {
+			foundCounty = true
+		}
+	}
+	if !foundCounty {
+		t.Fatal("city region response is missing the West Lake district boundary")
+	}
 }
 
 func TestChinaLocationRegionsAPIRejectsUnknownRegion(t *testing.T) {

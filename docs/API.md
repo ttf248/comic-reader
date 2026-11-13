@@ -448,7 +448,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 ### `GET /api/locations/china`
 
-返回全国省级照片地图：`locations` 含 `revision`、离线边界 `boundaryVersion`、GPS/境内/未归属照片数，以及 34 个省级 `provinces`（含绘图用 `geometry`）。响应带 `ETag`，可用 `If-None-Match` 获取 `304`。只统计当前快照中仍存在、版本指纹匹配且路径通过当前媒体根校验的照片。WGS84 GPS 会在本机转换到边界使用的 GCJ-02 后做点位匹配；响应不包含照片原始坐标与文件路径。边界数据来源、版本和限制见 [架构文档](./ARCHITECTURE.md#exifgps-与离线地点地图)。
+返回全国省级照片地图：`locations` 含 `revision`、离线边界 `boundaryVersion`、GPS/境内/未归属照片数，以及 34 个省级 `provinces`（含绘图用 `geometry` 与 `unmatchedAreaPhotoCount`）。该未细分数表示照片已匹配到省，但没有命中该省的直接下级边界。响应带 `ETag`，可用 `If-None-Match` 获取 `304`。只统计当前快照中仍存在、版本指纹匹配且路径通过当前媒体根校验的照片。WGS84 GPS 会在本机转换到边界使用的 GCJ-02 后做点位匹配；响应不包含照片原始坐标与文件路径。边界数据来源、版本和限制见 [架构文档](./ARCHITECTURE.md#exifgps-与离线地点地图)。
 
 除上述字段外还包含三个时间字段：
 
@@ -458,9 +458,9 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 ### `GET /api/locations/china/regions/:adcode`
 
-返回指定行政区及其下一级区域的地图。省级区划返回地级市；直辖市、特别行政区和更细区域返回下一级区县；末级区域的 `regions` 为空。每项区域包含区划码、名称、级别、照片数与绘图用 `geometry`。响应也支持 `ETag` / `If-None-Match`。区划码格式错误返回 `400 invalid_region_adcode`，边界中不存在返回 `404 region_not_found`。
+返回指定行政区及其**直接下级**区域的地图。省级区划返回城市与省直辖区县；城市返回区县；末级区域的 `regions` 为空。`region` 包含当前区域的 `adcode`、`name`、`level`、照片数、`parentAdcode` 和 `ancestors`；`ancestors` 按全国到直接上级排列，供完整面包屑导航。当前区域有照片但未命中任何直接下级边界的数量由 `unmatchedAreaPhotoCount` 给出。城市照片数包含其下辖区县的照片；每项 `regions` 仅统计落在该直接下级中的照片，并包含区划码、名称、级别、照片数与绘图用 `geometry`。响应也支持 `ETag` / `If-None-Match`。区划码格式错误返回 `400 invalid_region_adcode`，边界中不存在返回 `404 region_not_found`。
 
-响应同样包含 `months`、`trajectory` 与 `untimedPhotoCount`，口径跟随当前区间与当前区域：`months` 是该区域自己的逐月分布，`trajectory` 是该区域下级之间的停靠序列。
+响应同样包含 `months`、`trajectory` 与 `untimedPhotoCount`，口径跟随当前区间与当前区域：`months` 是该区域自己的逐月分布，`trajectory` 是该区域直接下级之间的停靠序列。省级轨迹落到城市或省直辖区县，城市轨迹落到区县。
 
 ### `GET /api/locations/china/regions/:adcode/visits`
 

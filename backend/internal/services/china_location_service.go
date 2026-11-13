@@ -53,6 +53,56 @@ type ChinaLocationRegionInfo struct {
 	UnmatchedAreaPhotoCount int    `json:"unmatchedAreaPhotoCount"`
 	// ParentAdcode 是上级的区划码；省级区域为 null。
 	ParentAdcode *int `json:"parentAdcode"`
+	// Ancestors 按全国到直接上级的顺序列出祖先行政区。
+	Ancestors []ChinaLocationAncestor `json:"ancestors"`
+}
+
+// ChinaLocationAncestor 是当前区域的一层祖先。
+type ChinaLocationAncestor struct {
+	Adcode int    `json:"adcode"`
+	Name   string `json:"name"`
+}
+
+func chinaLocationRegionInfo(feature *chinaAdminFeature, index *chinaAdminIndex) ChinaLocationRegionInfo {
+	info := ChinaLocationRegionInfo{
+		Adcode:    feature.adcode,
+		Name:      feature.name,
+		Level:     feature.level,
+		Ancestors: []ChinaLocationAncestor{},
+	}
+	if feature.level != chinaAdminProvinceLevel {
+		parent := feature.parentAdcode
+		info.ParentAdcode = &parent
+	}
+	ancestors := make([]ChinaLocationAncestor, 0, 2)
+	parentAdcode := feature.parentAdcode
+	for depth := 0; depth < 4 && parentAdcode != 0; depth++ {
+		parent, exists := index.byAdcode[parentAdcode]
+		if !exists {
+			break
+		}
+		ancestors = append(ancestors, ChinaLocationAncestor{Adcode: parent.adcode, Name: parent.name})
+		if parent.level == chinaAdminProvinceLevel {
+			break
+		}
+		parentAdcode = parent.parentAdcode
+	}
+	for left, right := 0, len(ancestors)-1; left < right; left, right = left+1, right-1 {
+		ancestors[left], ancestors[right] = ancestors[right], ancestors[left]
+	}
+	info.Ancestors = ancestors
+	return info
+}
+
+func unmatchedChinaRegionPhotoCount(photos []chinaRegionPhoto, feature *chinaAdminFeature, index *chinaAdminIndex) int {
+	matched := 0
+	for _, photo := range photos {
+		childAdcode := chinaRegionAtScope(photo, feature, index)
+		if childAdcode != 0 && childAdcode != feature.adcode {
+			matched++
+		}
+	}
+	return len(photos) - matched
 }
 
 // ChinaLocationRegion 是一个下级区域及其绘图边界。
@@ -407,7 +457,7 @@ func (s *ChinaLocationService) Summary(
 			Name:                    feature.name,
 			PhotoCount:              count,
 			UnmatchedAreaPhotoCount: count - matched,
-			Geometry:                feature.geometry,
+			Geometry:                feature.geometryJSON(),
 		})
 	}
 	scoped := match.scopedPhotos(match.timedPhotos, timeRange)
@@ -421,8 +471,8 @@ func (s *ChinaLocationService) Summary(
 
 // Regions 返回某个区域的下一级地图。
 //
-// 传入省级区划码得到该省的地级市（直辖市与特别行政区得到区县）；
-// 传入更细的区划码得到它的下一级；没有下一级时 regions 为空。
+// 传入省级区划码得到城市与省直辖区县；更细区域得到其下一级区县；
+// 没有下一级时 regions 为空。
 func (s *ChinaLocationService) Regions(
 	snapshot CatalogSnapshot,
 	records []AIAnalysisRecord,
@@ -445,33 +495,21 @@ func (s *ChinaLocationService) Regions(
 	}
 	children := index.childrenByParent[adcode]
 	regions := make([]ChinaLocationRegion, 0, len(children))
-	matched := 0
 	for _, child := range children {
 		count := len(match.scopedPhotos(match.regionPhotos[child.adcode], timeRange))
-		matched += count
 		regions = append(regions, ChinaLocationRegion{
 			Adcode:     child.adcode,
 			Name:       child.name,
 			Level:      child.level,
 			PhotoCount: count,
-			Geometry:   child.geometry,
+			Geometry:   child.geometryJSON(),
 		})
 	}
-	info := ChinaLocationRegionInfo{
-		Adcode: feature.adcode,
-		Name:   feature.name,
-		Level:  feature.level,
-	}
+	info := chinaLocationRegionInfo(feature, index)
 	scope := match.scopePhotosFor(feature)
 	scoped := match.scopedPhotos(scope, timeRange)
-	if feature.level == chinaAdminProvinceLevel {
-		info.PhotoCount = len(scoped)
-		info.UnmatchedAreaPhotoCount = info.PhotoCount - matched
-	} else {
-		parent := feature.parentAdcode
-		info.ParentAdcode = &parent
-		info.PhotoCount = len(scoped)
-	}
+	info.PhotoCount = len(scoped)
+	info.UnmatchedAreaPhotoCount = unmatchedChinaRegionPhotoCount(scoped, feature, index)
 	result := ChinaLocationRegions{
 		Revision:        snapshot.Revision(),
 		BoundaryVersion: chinaBoundaryVersion,
@@ -479,7 +517,7 @@ func (s *ChinaLocationService) Regions(
 		Regions:         regions,
 		Months:          chinaMonthDistribution(match.scopedPhotos(match.timedPhotosInScope(feature), timeRange)),
 		Trajectory: chinaTrajectoryStops(match.scopedPhotos(match.timedPhotosInScope(feature), timeRange), func(photo chinaRegionPhoto) int {
-			return photo.regionAdcode
+			return chinaRegionAtScope(photo, feature, index)
 		}, index),
 		UntimedPhotoCount: match.untimedPhotoCount(scope),
 	}
@@ -515,14 +553,9 @@ func (s *ChinaLocationService) Visits(
 		ownKey = func(photo chinaRegionPhoto) int { return photo.provinceAdcode }
 	}
 	result := ChinaLocationVisits{
-		Revision:        snapshot.Revision(),
-		BoundaryVersion: chinaBoundaryVersion,
-		Region: ChinaLocationRegionInfo{
-			Adcode:     feature.adcode,
-			Name:       feature.name,
-			Level:      feature.level,
-			PhotoCount: len(scoped),
-		},
+		Revision:          snapshot.Revision(),
+		BoundaryVersion:   chinaBoundaryVersion,
+		Region:            chinaLocationRegionInfo(feature, index),
 		Visits:            make([]ChinaLocationVisit, 0, len(visits)),
 		UntimedPhotoCount: match.untimedPhotoCount(scope),
 	}
@@ -535,6 +568,8 @@ func (s *ChinaLocationService) Visits(
 			Regions:    match.otherRegionsWithin(visit, ownKey, index),
 		})
 	}
+	result.Region.PhotoCount = len(scoped)
+	result.Region.UnmatchedAreaPhotoCount = unmatchedChinaRegionPhotoCount(scoped, feature, index)
 	return result, nil
 }
 
@@ -607,6 +642,9 @@ func (s *ChinaLocationService) RegionMedia(
 		albumRefs = append(albumRefs, *ref)
 	}
 	sort.Slice(albumRefs, func(i, j int) bool { return albumRefs[i].Name < albumRefs[j].Name })
+	regionInfo := chinaLocationRegionInfo(feature, index)
+	regionInfo.PhotoCount = len(photos)
+	regionInfo.UnmatchedAreaPhotoCount = unmatchedChinaRegionPhotoCount(photos, feature, index)
 	return ChinaRegionMediaPage{
 		MediaFeedPage: MediaFeedPage{
 			LibraryPage: LibraryPage[FeedMediaItem]{
@@ -615,12 +653,7 @@ func (s *ChinaLocationService) RegionMedia(
 			Albums:  albumRefs,
 			Sources: []FeedSource{},
 		},
-		Region: ChinaLocationRegionInfo{
-			Adcode:     feature.adcode,
-			Name:       feature.name,
-			Level:      feature.level,
-			PhotoCount: len(photos),
-		},
+		Region: regionInfo,
 	}, nil
 }
 

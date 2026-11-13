@@ -11,6 +11,7 @@ import (
 // chinaTestPhoto 是测试里的一张照片：坐标与可选的 EXIF 拍摄时间。
 type chinaTestPhoto struct {
 	Coordinate [2]float64
+	Datum      string
 	// CapturedAt 是 EXIF 拍摄时间（相机墙上时间）。空表示没有。
 	CapturedAt string
 }
@@ -24,12 +25,16 @@ func chinaTestRecords(t *testing.T, catalog *ResourceCatalog, files []string, ph
 		if err != nil {
 			t.Fatal(err)
 		}
+		datum := photos[index].Datum
+		if datum == "" {
+			datum = "WGS-84"
+		}
 		metadata := ImageMetadata{
 			Status: MetadataParseParsed,
 			GPS: &GPSMetadata{
 				Latitude:  photos[index].Coordinate[0],
 				Longitude: photos[index].Coordinate[1],
-				MapDatum:  "WGS-84",
+				MapDatum:  datum,
 			},
 		}
 		if photos[index].CapturedAt != "" {
@@ -45,6 +50,97 @@ func chinaTestRecords(t *testing.T, catalog *ResourceCatalog, files []string, ph
 		})
 	}
 	return records
+}
+
+func TestChinaBoundaryIndexIncludesCountyHierarchy(t *testing.T) {
+	index, err := loadChinaAdminIndex()
+	if err != nil {
+		t.Fatal(err)
+	}
+	districts := 0
+	for _, area := range index.areas {
+		if area.level == chinaAdminDistrictLevel {
+			districts++
+		}
+	}
+	if len(index.provinces) != 34 || len(index.areas) < 3_000 || districts < 2_800 {
+		t.Fatalf("boundary hierarchy = %d provinces, %d areas, %d districts", len(index.provinces), len(index.areas), districts)
+	}
+	xihu, exists := index.byAdcode[330106]
+	if !exists || xihu.level != chinaAdminDistrictLevel || xihu.parentAdcode != 330100 {
+		t.Fatalf("Xihu boundary is missing or has the wrong parent: %+v", xihu)
+	}
+	if _, exists := index.byAdcode[110100]; exists {
+		t.Fatal("Beijing municipality alias was not folded into its province")
+	}
+	if districtsUnderProvince := index.childrenByParent[110000]; len(districtsUnderProvince) == 0 {
+		t.Fatal("Beijing districts are not attached directly to the municipality")
+	}
+}
+
+func TestChinaLocationMatchesCountyAndAggregatesToCity(t *testing.T) {
+	root := t.TempDir()
+	files := writeAIJobImages(t, root, 2)
+	catalog := aiJobCatalog(root, files)
+	snapshot := catalog.Acquire()
+	validator := aiTestPathValidator(t, root)
+	records := chinaTestRecords(t, catalog, files, []chinaTestPhoto{
+		{Coordinate: [2]float64{30.259242, 120.130396}, Datum: "GCJ-02", CapturedAt: "2019-05-02T10:00:00"},
+		{Coordinate: [2]float64{30.259242, 120.130396}, Datum: "GCJ-02", CapturedAt: "2019-05-03T10:00:00"},
+	})
+	service := NewChinaLocationService()
+
+	province, err := service.Regions(snapshot, records, 1, validator, 330000, ChinaTimeRange{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var hangzhouCount int
+	for _, region := range province.Regions {
+		if region.Adcode == 330100 {
+			hangzhouCount = region.PhotoCount
+		}
+	}
+	if hangzhouCount != 2 {
+		t.Fatalf("Hangzhou aggregate count = %d, want 2", hangzhouCount)
+	}
+
+	city, err := service.Regions(snapshot, records, 1, validator, 330100, ChinaTimeRange{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if city.Region.PhotoCount != 2 || city.Region.UnmatchedAreaPhotoCount != 0 {
+		t.Fatalf("Hangzhou aggregate = %+v", city.Region)
+	}
+	if len(city.Region.Ancestors) != 1 || city.Region.Ancestors[0].Adcode != 330000 {
+		t.Fatalf("Hangzhou ancestors = %+v", city.Region.Ancestors)
+	}
+	var xihuCount int
+	for _, region := range city.Regions {
+		if region.Adcode == 330106 {
+			xihuCount = region.PhotoCount
+		}
+	}
+	if xihuCount != 2 {
+		t.Fatalf("Xihu district count = %d, want 2", xihuCount)
+	}
+	if len(city.Trajectory) != 1 || city.Trajectory[0].Adcode != 330106 || city.Trajectory[0].PhotoCount != 2 {
+		t.Fatalf("city trajectory did not use its county-level stop: %+v", city.Trajectory)
+	}
+
+	county, err := service.Regions(snapshot, records, 1, validator, 330106, ChinaTimeRange{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(county.Region.Ancestors) != 2 || county.Region.Ancestors[0].Adcode != 330000 || county.Region.Ancestors[1].Adcode != 330100 {
+		t.Fatalf("Xihu ancestors = %+v", county.Region.Ancestors)
+	}
+	page, err := service.RegionMedia(snapshot, records, 1, validator, 330100, ChinaTimeRange{}, -1, "", 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if page.Total != 2 {
+		t.Fatalf("city media total = %d, want 2", page.Total)
+	}
 }
 
 func TestChinaLocationsMatchCurrentGPSPhotosToProvinceAndDistrict(t *testing.T) {
