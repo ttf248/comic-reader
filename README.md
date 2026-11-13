@@ -26,9 +26,9 @@ Local Gallery 是一款在本机运行的照片、漫画与视频画廊。Go 后
 1. 下载并解压与你的操作系统和处理器架构对应的 local-gallery-v2.x 压缩包。
 2. 复制配置样例并编辑媒体目录。照片和漫画目录都可以配置多个；暂时不添加目录时可使用 mediaRoots: []，之后在设置页添加。
 
-   ~~~powershell
-   # Windows
-   Copy-Item config.example.yaml config.yaml
+   ~~~bat
+    REM Windows
+    copy /Y config.example.yaml config.yaml >NUL
    ~~~
 
    ~~~sh
@@ -71,27 +71,27 @@ Local Gallery 是一款在本机运行的照片、漫画与视频画廊。Go 后
 
 ### 从源码开发
 
-适用于要修改代码的用户。先安装 Git、Go 1.24+、Node.js 20+（包含 npm）和 PowerShell 7，再克隆仓库。按操作系统从 [Git](https://git-scm.com/downloads)、[Go](https://go.dev/dl/)、[Node.js](https://nodejs.org/) 和 [PowerShell](https://learn.microsoft.com/powershell/scripting/install/installing-powershell) 官方页面下载安装；安装后重新打开终端。
+适用于要修改代码的用户。安装 Git、Go 1.24+、Node.js 20+（包含 npm）后克隆仓库。Windows 首次运行准备脚本：
 
 在仓库根目录首次运行准备脚本：
 
-~~~powershell
-pwsh -NoProfile -File scripts/setup-dev.ps1
+~~~bat
+scripts\setup-dev.bat
 ~~~
 
-脚本会检查工具版本、创建 `backend/config.yaml`（已有配置不会覆盖），并准备 Go 和前端依赖。它不安装上述开发工具。打开 `backend/config.yaml`，将 `mediaRoots` 改为本机目录；也可以设为 `[]`，启动后从设置页添加。
+脚本会创建 `backend/config.yaml`（已有配置不会覆盖），并准备 Go 和前端依赖。macOS / Linux 用户执行 `cd backend && go mod download`、`cd frontend && npm ci`，并从 `backend/config.example.yaml` 复制配置。打开 `backend/config.yaml`，将 `mediaRoots` 改为本机目录；也可以设为 `[]`，启动后从设置页添加。
 
 开发时打开两个终端：
 
-~~~powershell
-# 终端一：仓库根目录
-Set-Location backend
+~~~sh
+# 终端一
+cd backend
 go run ./cmd/server --config config.yaml
 ~~~
 
-~~~powershell
-# 终端二：仓库根目录
-Set-Location frontend
+~~~sh
+# 终端二
+cd frontend
 npm run dev
 ~~~
 
@@ -101,17 +101,18 @@ npm run dev
 
 需要单进程运行时，在 `backend/config.yaml` 中将 `staticDir` 设为 `../frontend/dist`。Windows 在仓库根目录运行：
 
-~~~powershell
-.\build.bat
-.\start.bat
+~~~bat
+build.bat
+start.bat
 ~~~
 
 macOS / Linux 在仓库根目录运行：
 
-~~~powershell
-pwsh -NoProfile -File scripts/build.ps1
-Set-Location backend
-../bin/local-gallery --config config.yaml
+~~~sh
+npm --prefix frontend run build
+mkdir -p bin
+(cd backend && go build -o ../bin/local-gallery ./cmd/server)
+(cd backend && ../bin/local-gallery --config config.yaml)
 ~~~
 
 服务默认监听 `127.0.0.1:8080`。构建与发布细节见 [构建与发布](./docs/RELEASE.md)。
@@ -120,21 +121,19 @@ Set-Location backend
 
 ### 本机 AI 安装（一次执行）
 
-首次安装会准备 Chinese-CLIP、中文 OCR 与人脸检测/相似检索所需的 Python 运行环境和权重。需要 Python 3.11、PowerShell 7 与网络；Windows/Linux 使用项目独立虚拟环境、CUDA 12.6 版 PyTorch 和兼容的 ONNX Runtime GPU 运行时，macOS 使用 CPU 版 PyTorch 与 ONNX Runtime。任务中心默认强制 GPU；若本机没有可用 NVIDIA GPU，先关闭「强制使用 GPU」再新建模型任务，任务会改用 CPU。元数据任务始终使用 CPU。
+Windows 一键安装需要 Python 3.11、NVIDIA 驱动和网络。脚本会创建项目虚拟环境、安装 CUDA 12.6 版 PyTorch、OCR 与人脸识别依赖、下载模型并执行推理检查。模型下载默认经过 `http://127.0.0.1:7897`：
 
-源码目录从仓库根目录运行一次：
-
-~~~powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -File backend/aiworker/setup.ps1
+~~~bat
+backend\aiworker\setup.bat
 ~~~
 
-发布包从解压目录运行一次：
+发布包用户在解压目录运行：
 
-~~~powershell
-pwsh -NoProfile -ExecutionPolicy Bypass -File aiworker/setup.ps1
+~~~bat
+aiworker\setup.bat
 ~~~
 
-脚本安装 RapidOCR、ONNX Runtime 1.20.2（Windows/Linux GPU 版、macOS CPU 版）、OpenCV，并下载/校验 Chinese-CLIP、YuNet 和 SFace 权重；最后实际运行 OCR 识别、YuNet 检测与 SFace 特征提取检查。安装完成后重启 Local Gallery，在「任务中心」运行「文字识别」或「人脸识别」的全量任务；人物分析默认关闭，首次使用需在每日计划区域勾选「启用人物分析」并保存，然后启动人脸识别。之后可用增量任务处理新增或变更图片。图片详情会展示识别文字、人脸框，并可按人脸查找相似照片；「人物相册」页允许改名、合并、拆分或隐藏候选分组。识别组件见 [RapidOCR 安装与用法](https://rapidai.github.io/RapidOCRDocs/main/en/install_usage/rapidocr/install/)；人脸权重固定来自 [OpenCV Zoo YuNet](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet) 和 [SFace](https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface)。
+需要改代理端口时，编辑两个 BAT 脚本中的 `http_proxy`、`https_proxy`。脚本校验 Chinese-CLIP、YuNet 和 SFace 权重的 SHA256，并实际检查 OCR、人脸推理。安装后重启应用，在「任务中心」运行相应任务；人物分析需先启用。模型来源：[OpenCV Zoo YuNet](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet) 和 [SFace](https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface)。
 
 Python 虚拟环境位于 Worker 目录的 `.venv/`，模型按配置保存在 `<cacheDir>/derived/ai/models/`：
 
@@ -144,16 +143,16 @@ face/face_detection_yunet_2023mar.onnx
 face/face_recognition_sface_2021dec.onnx
 ~~~
 
-默认 `cacheDir` 是进程工作目录下的 `.local-gallery`。权重不会放进系统 Python 或 `site-packages`，也不包含在发布压缩包中。Chinese-CLIP 权重约 753 MB；OCR 模型随 RapidOCR 安装；两个人脸模型合计约 37 MB。
+默认 `cacheDir` 是进程工作目录下的 `.local-gallery`。虚拟环境位于 Worker 目录的 `.venv/`；模型保存在 `<cacheDir>/derived/ai/models/`，不包含在发布压缩包中。Chinese-CLIP 权重约 753 MB；OCR 模型随 RapidOCR 安装。
 
-macOS / Linux 可在安装 Python 3.11 和 PowerShell 7 后运行同一安装脚本；Linux 安装 PyTorch CUDA 12.6 与 ONNX Runtime GPU 版，macOS 安装 CPU 版。若要单独重下或校验权重，可运行 `backend/aiworker/download-model.ps1`（发布包路径为 `aiworker/download-model.ps1`）。
+macOS / Linux 用户自行用 Python 3.11 创建 `.venv` 并安装平台对应依赖，然后在 `backend/aiworker/` 中运行 `python download_models.py`。Linux 可使用 CUDA 版 PyTorch，macOS 使用 CPU 版。Windows 单独重下模型可运行 `backend/aiworker/download-model.bat`。
 
 ### FFmpeg 媒体增强
 
 FFmpeg / ffprobe 用于视频封面与元数据、部分视频转码和特殊图片格式转换。源码目录的 Windows 用户可从仓库根目录运行：
 
-~~~powershell
-pwsh -NoProfile -File scripts/install-ffmpeg.ps1
+~~~bat
+scripts\install-ffmpeg.bat
 ~~~
 
 其他平台可安装系统 FFmpeg，或在 config.yaml 中设置 ffmpegPath。没有 FFmpeg 时，照片、漫画和浏览器原生支持的视频仍可使用；需要服务端转码的媒体可能无法播放。
@@ -190,8 +189,8 @@ pwsh -NoProfile -File scripts/install-ffmpeg.ps1
 | frontend/ | npm run test | Vitest 单元与组件测试 |
 | frontend/ | npm run build | TypeScript 检查与生产构建 |
 | frontend/ | npm run test:e2e | 独立临时媒体库的全栈浏览器测试 |
-| 仓库根 | pwsh -NoProfile -File scripts/build.ps1 | 全栈构建 |
-| 仓库根 | pwsh -NoProfile -File scripts/package-release.ps1 -Version 2.0.0 -TargetOS windows -TargetArch amd64 | 生成 Windows 发布包 |
+| 仓库根 | `build.bat` | Windows 全栈构建 |
+| 仓库根 | `scripts/package-release.bat 2.0.0 windows amd64` | 生成 Windows 发布包 |
 
 E2E 首次运行前，在 frontend/ 执行 npx playwright install chromium。测试会生成独立临时媒体与配置，不读取个人媒体库；只读文档改动不需要新增业务测试。
 
@@ -200,12 +199,12 @@ E2E 首次运行前，在 frontend/ 执行 npx playwright install chromium。测
 ~~~text
 backend/
   cmd/server/         Go 服务入口与依赖装配
-  aiworker/           本机语义搜索 Worker、依赖与模型安装脚本
+  aiworker/           本机 AI Worker、依赖与环境安装脚本
   internal/           配置、资源索引、媒体服务、API 与 JSON 存储
 frontend/
   src/                React 页面、API、hooks、store 与界面组件
   tests/e2e/          Playwright 全栈测试
-scripts/              开发环境准备、构建、发布与 FFmpeg 安装
+scripts/              BAT 入口与跨平台 E2E 辅助脚本
 docs/                 API、架构、快捷键、设计与发布文档
 ~~~
 

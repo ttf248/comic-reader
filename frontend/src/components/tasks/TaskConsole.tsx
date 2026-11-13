@@ -455,7 +455,7 @@ function EmbeddingRuntimeStatus({
         模型：
         <span className="text-fg">
           {!status.runtimeReady
-            ? "Python 运行环境未安装，请运行 backend/aiworker/setup.ps1。"
+            ? "Python 运行环境未安装，请运行 backend/aiworker/setup.bat。"
             : !status.modelAvailable || !status.modelValid
               ? "权重缺失或校验失败；请将官方 clip_cn_vit-b-16.pt 放入 cacheDir/derived/ai/models/。"
               : `${status.modelLoaded ? "已载入" : "已校验，首次推理时载入"} · ${status.modelVersion}`}
@@ -505,20 +505,20 @@ function ImageModuleRuntimeStatus({
 function moduleUnavailableMessage(code?: string): string {
   switch (code) {
     case "python_runtime_unavailable":
-      return "Python 3.11 环境不可用，请运行 backend/aiworker/setup.ps1。";
+      return "Python 3.11 环境不可用，请运行 backend/aiworker/setup.bat。";
     case "ocr_dependencies_missing":
-      return "OCR 依赖未安装，请运行 backend/aiworker/setup.ps1 并重启应用。";
+      return "OCR 依赖未安装，请运行 backend/aiworker/setup.bat 并重启应用。";
     case "ocr_dependency_version_mismatch":
-      return "OCR 依赖版本不匹配，请重新运行 backend/aiworker/setup.ps1。";
+      return "OCR 依赖版本不匹配，请重新运行 backend/aiworker/setup.bat。";
     case "ocr_model_load_failed":
       return "OCR 模型加载失败，请重新运行安装脚本并查看终端错误。";
     case "face_dependencies_missing":
-      return "人脸识别依赖未安装，请运行 backend/aiworker/setup.ps1。";
+      return "人脸识别依赖未安装，请运行 backend/aiworker/setup.bat。";
     case "face_model_missing_or_checksum_invalid":
-      return "人脸权重缺失或校验失败，请运行 backend/aiworker/download-model.ps1。";
+      return "人脸权重缺失或校验失败，请运行 backend/aiworker/download-model.bat。";
     case "face_model_load_failed":
-      return "人脸模型加载失败，请运行 backend/aiworker/setup.ps1 并重启应用。";
+      return "人脸模型加载失败，请运行 backend/aiworker/setup.bat 并重启应用。";
     default:
-      return "本机识别运行环境未就绪，请运行 backend/aiworker/setup.ps1 并重启应用。";
+      return "本机识别运行环境未就绪，请运行 backend/aiworker/setup.bat 并重启应用。";
   }
 }

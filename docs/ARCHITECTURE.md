@@ -289,7 +289,7 @@ Go 单元测试按服务/中间件/handler 就近维护；`backend/tests/integra
 
 在 `backend/` 下复测：
 
-```powershell
+```sh
 go test ./internal/store -run '^$' -bench BenchmarkActivity -benchtime=20x -benchmem
 ```
 
@@ -311,7 +311,7 @@ HTTP 对照预热一次后顺序请求 20 次 `/api/videos/info/batch`，每批�
 
 在 `backend/` 下执行：
 
-```powershell
+```sh
 go test ./internal/services -run '^$' -bench BenchmarkThumbnailCold -benchtime=24x -benchmem
 go test ./internal/services -run '^$' -bench BenchmarkVideoInfoRepeated -benchtime=32x -count=3 -benchmem
 ```

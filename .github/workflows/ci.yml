@@ -74,23 +74,19 @@ jobs:
 
       - name: 构建可运行包
         if: runner.os == 'Linux'
-        shell: pwsh
+        shell: bash
         run: |
-          $outputDir = Join-Path $env:RUNNER_TEMP 'local-gallery-ci-build'
-          pwsh -NoProfile -File scripts/build.ps1 `
-            -SkipInstall `
-            -Version '0.0.0-dev' `
-            -OutputDir $outputDir
-
-          $packageDir = Join-Path $env:RUNNER_TEMP 'local-gallery-ci-package'
-          New-Item -ItemType Directory -Path (Join-Path $packageDir 'dist') -Force | Out-Null
-          Copy-Item -LiteralPath (Join-Path $outputDir 'local-gallery') -Destination $packageDir
-          Copy-Item -Path (Join-Path $env:GITHUB_WORKSPACE 'frontend/dist/*') `
-            -Destination (Join-Path $packageDir 'dist') -Recurse -Force
-          Copy-Item -LiteralPath (Join-Path $env:GITHUB_WORKSPACE 'backend/config.example.yaml') `
-            -Destination (Join-Path $packageDir 'config.example.yaml')
-          tar -czf (Join-Path $env:RUNNER_TEMP 'local-gallery-ci.tar.gz') `
-            -C $env:RUNNER_TEMP local-gallery-ci-package
+          set -euo pipefail
+          build_dir="$RUNNER_TEMP/local-gallery-ci-build"
+          package_dir="$RUNNER_TEMP/local-gallery-ci-package"
+          mkdir -p "$build_dir" "$package_dir/dist"
+          (cd backend && CGO_ENABLED=0 go build \
+            -ldflags "-X github.com/tianlongxiang/local-gallery/internal/config.Version=0.0.0-dev" \
+            -o "$build_dir/local-gallery" ./cmd/server)
+          cp "$build_dir/local-gallery" "$package_dir/"
+          cp -R frontend/dist/. "$package_dir/dist/"
+          cp backend/config.example.yaml "$package_dir/config.example.yaml"
+          tar -czf "$RUNNER_TEMP/local-gallery-ci.tar.gz" -C "$RUNNER_TEMP" local-gallery-ci-package
 
       - name: 上传构建产物
         if: runner.os == 'Linux'

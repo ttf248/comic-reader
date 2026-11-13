@@ -9,18 +9,11 @@ set "result=1"
 if not exist "config.yaml" (
   echo [错误] 缺少 backend\config.yaml。
 
-  echo 请先安装 Go 1.24+、Node.js 20+ 和 PowerShell 7，
+  echo 请先安装 Go 1.24+ 和 Node.js 20+，
 
-  echo 再在仓库根目录运行：pwsh -NoProfile -File scripts\setup-dev.ps1
+  echo 再在仓库根目录运行：scripts\setup-dev.bat
 
   echo 然后编辑 backend\config.yaml，设置 mediaRoots 和 staticDir 为 "../frontend/dist"。
-
-  goto finish
-)
-
-where pwsh.exe >nul 2>nul
-if errorlevel 1 (
-  echo [错误] 找不到 PowerShell 7（pwsh.exe），无法构建最新版本。
 
   goto finish
 )
@@ -28,14 +21,14 @@ if errorlevel 1 (
 if not exist "..\frontend\node_modules" (
   echo [错误] 缺少前端依赖，请先在 frontend 目录执行 npm ci。
 
-  echo 或在仓库根目录运行 scripts\setup-dev.ps1。
+  echo 或在仓库根目录运行 scripts\setup-dev.bat。
 
   goto finish
 )
 
 echo 正在构建前后端最新代码...
 
-pwsh -NoProfile -ExecutionPolicy Bypass -File "..\scripts\build.ps1" -Local -SkipInstall
+call "..\scripts\build.bat" --local --skip-install --no-pause
 if errorlevel 1 (
   echo [错误] 最新代码构建失败，已取消启动。
 

@@ -1,113 +1,77 @@
 # 构建与发布
 
-本文件只维护当前构建与人工发布流程。[release-notes/](./release-notes/) 保留对应版本的发布与迁移记录，其中历史实现、schema 和“后续”说明不作为当前规则或待办；开发入口与标准验证命令见根 [README.md](../README.md)。
+Windows 开发、构建和发布包入口在根 [README.md](../README.md)；本文件只保留跨平台验证与正式发布步骤。
 
-## Windows 源码目录一键运行
+## 本地开发
 
-根目录 `build.bat` 复用 `scripts/build.ps1`，安装锁定的前端依赖、构建前端，再编译 Windows 本机架构的后端。构建需要 Go 1.24+、Node.js 20+（含 npm）和 PowerShell 7，均从 PATH 查找。新开发环境的准备步骤见根 [README.md](../README.md#从源码开发)，使用 `scripts/setup-dev.ps1` 安装项目依赖并创建本机配置。
+Windows 首次准备依赖：
 
-```powershell
-.\build.bat
-.\start.bat
+```bat
+scripts\setup-dev.bat
 ```
 
-构建产物为 `bin/local-gallery.exe` 与 `frontend/dist/`。首次构建前运行 `scripts/setup-dev.ps1`；然后在 `backend/config.yaml` 填写实际媒体目录 `mediaRoots`，并将 `staticDir` 设为 `"../frontend/dist"`。准备脚本不会覆盖已有配置。
+设置 `backend\config.yaml` 后，`build.bat` 构建前后端，`start.bat` 启动服务。Go 1.24+、Node.js 20+ 和 npm 需已安装。
 
-`start.bat` 检查二进制、前端入口和配置文件后，以 `backend/` 为工作目录执行 `../bin/local-gallery.exe --config config.yaml`，不调用编译器或开发服务器。相对媒体路径、`cacheDir` 和 `staticDir` 均相对该工作目录解析；默认状态和缓存存放在 `backend/.local-gallery/`。启动只需要构建产物和有效配置，视频增强功能仍按配置使用 ffmpeg / ffprobe。
+macOS / Linux 直接用 Go 与 npm：
 
-默认访问 `http://127.0.0.1:8080`；修改监听地址或端口后使用配置中的地址。服务保持前台运行，按 `Ctrl+C` 停止。两个 BAT 均可从其他工作目录调用，包含空格或中文的仓库路径受支持。构建结束及启动失败时暂停，供双击运行查看结果；自动化使用 `--no-pause`，失败会返回非零退出码。
+```sh
+(cd backend && go mod download)
+(cd frontend && npm ci)
+(cd frontend && npm run build)
+mkdir -p bin
+(cd backend && go build -o ../bin/local-gallery ./cmd/server)
+(cd backend && ../bin/local-gallery --config config.yaml)
+```
 
-VSCode 的 `build: all` 任务在 Windows 上调用 `build.bat --no-pause`，生成相同的启动产物。VSCode 的“运行已构建版本”入口直接运行二进制；“调试服务测试”入口调试 services 包，完整后端回归使用 `go test ./...`。发布压缩包仍使用包内 `staticDir: "dist"` 布局，与源码目录运行方式区分。
+E2E 首次运行前，在 `frontend/` 安装 Chromium：
 
-## 发布线
-
-GitHub 上已有的 `v1.0.0`～`v1.9.0` 是旧 Python/PyInstaller 架构的历史版本，保持只读，不再用当前代码重建或覆盖这些 Release。
-
-当前 `main` 是 Go + React 架构，首个正式版本从 `v2.0.0` 开始。版本号遵循 SemVer：
-
-- `v2.x.y`：当前架构的正式版本；
-- `v2.x.y-rc.n`：候选版本，GitHub Release 会标记为 prerelease；
-- 破坏性架构或配置契约变化提升主版本号。
-
-分支推送、PR 和标签推送均不触发构建或发布。CI 与 Release 只保留 `workflow_dispatch` 手动入口，CNB 只同步代码。
-
-## 手动验证与推送
-
-在 GitHub Actions 页面选择 CI，指定分支后手动运行。验证覆盖 Windows、macOS 和 Linux 的后端测试、前端 lint、单元测试与真实全栈 E2E；Linux 额外运行 Go race 检查并上传保留 7 天的验证包。本地 Windows 未安装 C 编译器时不运行 race 检查。
-
-本地 E2E 首次运行需要安装浏览器：
-
-```powershell
+```sh
 cd frontend
 npx playwright install chromium
 npm run test:e2e
 ```
 
-E2E 脚本自动构建、生成临时测试媒体、使用空闲端口启动服务，并在结束时清理临时进程与目录。需要 PowerShell 7，不依赖正在运行的开发服务，也不读取用户媒体库。
+测试入口 `scripts/test-e2e.mjs` 会创建临时媒体库、构建并启动隔离服务，结束后清理临时进程和目录。Windows 也可从仓库根目录运行 `scripts\test-e2e.bat --audit` 或 `scripts\test-e2e.bat --crash`。
 
-提交推送脚本只处理已暂存文件；非琐碎改动使用包含背景、关键改动、验证方式和影响范围的多行中文提交说明：
+## CI
 
-```powershell
-git add <本次任务的文件>
-pwsh -File scripts/publish.ps1 -Message $message
+CI 与 Release 只通过 GitHub Actions 的 `workflow_dispatch` 手动启动。CI 覆盖 Windows、macOS、Linux 的后端测试、前端 lint、单元测试和 E2E；Linux 另跑 Go race 检查并上传验证包。
+
+如需提交推送，先按项目规则暂存当前任务文件，再准备多行中文提交说明文件：
+
+```bat
+scripts\publish.bat commit-message.txt
 ```
 
-默认运行构建、后端测试、前端 lint 与单元测试后提交并推送当前分支。不自动暂存其他文件，不自动触发或等待 Actions；文档改动可使用 `-SkipValidation`。远端拒绝推送时保留本地提交，不强推。手动启动 CI 后，可单独监控：
+脚本只提交已暂存文件，默认运行构建、后端测试、前端 lint 和单元测试，然后推送当前分支。文档改动可加 `--skip-validation`。脚本不会自动运行 GitHub Actions。
 
-```powershell
-$sha = (git rev-parse HEAD).Trim()
-pwsh -File scripts/watch-github-actions.ps1 -CommitSha $sha
+查看指定提交的工作流：
+
+```bat
+scripts\watch-github-actions.bat <commit-sha>
 ```
+
+需要先安装并登录 GitHub CLI（`gh`）。
 
 ## 正式发布
 
-发布前先手动运行 CI 并确认通过，在 `docs/release-notes/vX.Y.Z.md` 写中文发布说明，检查远端无同名标签，然后创建并推送带注释的 `v2.*` 标签。标签需要被推送到 GitHub，若本地 `origin` 是 CNB 镜像，请使用已配置认证的 GitHub 远端推送标签：
+当前发布线为 Go + React v2；历史 v1 发布保持不变。发布前手动运行 CI，在 `docs/release-notes/vX.Y.Z.md` 写中文说明，确认远端没有同名标签，再推送注释标签：
 
-```powershell
+```sh
 git tag -a v2.0.0 -m "发布 v2.0.0"
-# 如果本地还没有 GitHub 远端，只需配置一次：
-git remote add github https://github.com/ttf248/local-gallery.git
 git push github v2.0.0
 ```
 
-推送标签后，在 GitHub Actions 页面手动运行 `Release`，填写这个已存在的 `v2.x.y` 标签。发布工作流会：
+在 GitHub Actions 页面手动运行 Release 并选择该标签。工作流构建一次前端，交叉编译 Linux、Windows、macOS 的 amd64 / arm64 包，生成校验和并创建或更新 Release。
 
-1. 校验标签只属于当前 Go + React 的 `v2` 发布线；
-2. 构建前端一次，并把同一份 `dist` 复用到所有平台包；
-3. 使用 `CGO_ENABLED=0` 交叉编译 Linux、Windows 和 macOS；
-4. 生成 `linux-amd64`、`linux-arm64`、`windows-amd64`、`darwin-amd64`、`darwin-arm64` 五种包；
-5. 创建或幂等更新 GitHub Release，并上传 `SHA256SUMS`。
+Windows 本地生成发布包：
 
-每个压缩包包含：
-
-- `local-gallery` 或 `local-gallery.exe`；
-- `dist/` 前端静态资源；
-- `config.example.yaml`；
-- README 引用的 `backend/config.example.yaml`、`AGENTS.md` 与 `docs/` 文档；
-- `aiworker/` 下的 Worker 源码、依赖清单及环境/权重安装脚本；
-- `README.md`。
-
-发布包不包含 Python 虚拟环境或约 753 MB 的 Chinese-CLIP 权重。照片、漫画和视频浏览不需要 Python；首次启用语义搜索时，Windows 用户在发布包根目录运行 `pwsh -File aiworker/setup.ps1` 与 `pwsh -File aiworker/download-model.ps1`。macOS/Linux 用户自行安装 Python 3.11 和平台对应的 PyTorch，再安装 `aiworker/requirements.txt` 并下载权重。程序从发布包根目录启动，使 Worker 和相对配置路径均指向包内文件。
-
-这是“单端口可运行包”，不是把前端资源硬编码进 Go 二进制：生产配置中的 `staticDir: "dist"` 与包内目录保持一致，便于用户替换前端资源、排查问题和保持后端构建简单。当前架构仍然是单进程，不引入数据库、消息队列或反向代理。
-
-本地生成同样的发布包：
-
-```powershell
-pwsh -File scripts/package-release.ps1 `
-  -Version 2.0.0 `
-  -TargetOS windows `
-  -TargetArch amd64
+```bat
+scripts\package-release.bat 2.0.0 windows amd64
 ```
 
-如果前端已经由 CI 或本地步骤构建，可加 `-SkipFrontend` 复用现有 `frontend/dist`。
+发布包包含可运行程序、`dist/`、示例配置、文档和 `aiworker/` 源码；不包含 Python 虚拟环境和模型。Windows 用户运行 `aiworker\setup.bat` 安装 AI 环境。macOS / Linux 需安装 Python 3.11 与平台对应依赖，再运行 Worker。
 
-## 版本一致性
+版本号由发布标签注入后端和前端。不要为普通提交修改版本，也不要提交 `frontend/dist`、`bin/`、发布包或运行时缓存。
 
-发布标签去掉 `v` 后作为唯一版本输入：
-
-- `scripts/build.ps1 -Version` 通过 `-ldflags` 注入后端 `/api/health.version`；
-- Vite 使用 `LOCAL_GALLERY_VERSION` 覆盖 `package.json` 的开发默认版本；
-- 未指定版本时，开发构建仍使用前端 `package.json` 与后端源码默认值。
-
-不要为每次提交修改版本号，也不要把 `frontend/dist`、`bin/`、Release 压缩包或运行时缓存提交进仓库。
+\n

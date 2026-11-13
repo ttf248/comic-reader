@@ -405,7 +405,7 @@ Local Gallery 帮助用户浏览、阅读本地照片、漫画与视频，重点
 
 在 `frontend/` 下运行，默认连接已启动的 `http://127.0.0.1:5173`；需要 Playwright Chromium（首次执行 `npx playwright install chromium`）：
 
-```powershell
+```sh
 npm run audit:layout
 npm run audit:contrast
 npm run audit:contrast -- --self-test
@@ -415,21 +415,22 @@ npm run shot -- --out .smoke/review
 
 整页截图看不清某一处时，用元素截图单独拍一块（`--route` 是要打开的路由，`--sel` 是 CSS 选择器）：
 
-```powershell
+```sh
 npm run shot:el -- --route /comic --sel ".hero-panel__feature" --out .smoke/hero
 ```
 
 也可在仓库根目录使用独立临时媒体库，脚本构建并启动服务，E2E 后追加审计或探针：
 
-```powershell
-pwsh -NoProfile -File scripts/test-e2e.ps1 -Audit
-pwsh -NoProfile -File scripts/test-e2e.ps1 -Crash
+```sh
+cd frontend
+npm run test:e2e -- --audit
+npm run test:e2e -- --crash
 ```
 
 页面体积用体积审计量：静态载荷（HTML + JS + CSS 的实际传输字节）、媒体字节、
 请求数与 FCP/LCP。
 
-```powershell
+```sh
 npm run audit:size                                   # 对着运行中的服务量
 npm run audit:size -- --dist                         # 只量构建产物首屏，CI 用这条
 ```
@@ -455,9 +456,9 @@ npm run audit:size -- --dist                         # 只量构建产物首屏�
 | `LG_SCALE`             | 元素截图；像素倍率，默认 2                                                                          |
 | `LG_STATE`             | 元素截图；追加到 `local-gallery-ui` 的偏好片段，如 `{"viewMode":"list"}`                             |
 
-PowerShell 示例：`$env:LG_VIEWMODE = "list"` 后执行审计，结束用 `Remove-Item Env:LG_VIEWMODE` 恢复。上述变量只控制验证工具，不覆盖应用 YAML 配置。
+环境变量只控制验证工具，不覆盖应用 YAML 配置。例如：`LG_VIEWMODE=list npm run audit:layout`。
 
-截图工具默认只拍首页、最近、收藏和未读，且不包含 1024 断点；完整复核应显式设置页面与断点，不能把默认截图当作全站覆盖。标签审计优先真实标签，无标签才构造数据并注明；`-Audit` 的临时库包含中文、空格、`+`、`%` 等真实标签。阅读器审计应按相册 ID 直接进入，避免图片/视频入口文案差异导致漏页。
+截图工具默认只拍首页、最近、收藏和未读，且不包含 1024 断点；完整复核应显式设置页面与断点。标签审计优先真实标签；E2E 的临时库包含中文、空格、`+`、`%` 等真实标签。阅读器审计应按相册 ID 直接进入。
 
 ### 页面体积基线
 

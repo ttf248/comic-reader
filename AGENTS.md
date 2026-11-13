@@ -60,7 +60,7 @@
 | 用户可见快捷键               | `docs/SHORTCUTS.md`、快捷键声明与处理器、对应测试            |
 | 界面规范与开放问题           | `docs/DESIGN.md`，验证结果写提交信息，移除已解决待办         |
 | 配置、端口、运行参数         | 配置样例、README、API；涉及启动时同步 `.vscode/` 与脚本      |
-| 调试/任务命令、cwd、脚本入参 | README / `docs/RELEASE.md`、`.vscode/`、相关 `scripts/*.ps1` |
+| 调试/任务命令、cwd、脚本入参 | README / `docs/RELEASE.md`、`.vscode/`、相关 `scripts/*.bat` |
 
 同步顺序：代码与测试 → README / `docs/` → 受影响的 `.vscode/` 与脚本，同一主题一起提交。每项事实只在对应专题维护完整说明，其余位置引用；先更新现有文档，不为每轮任务新建计划、迭代日志、功能副本或验收报告。确需新增长期文档时，在 README 文档导航登记用途与阅读时机。
 

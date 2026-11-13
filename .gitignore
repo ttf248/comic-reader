@@ -9,7 +9,7 @@
 *.exe
 *.exe~
 
-# 第三方可执行(由 scripts/install-ffmpeg.ps1 绿色安装)
+# 第三方可执行(由 scripts/install-ffmpeg.bat 绿色安装)
 /bin/ffmpeg/
 *.dll
 *.so
@@ -87,7 +87,7 @@ $RECYCLE.BIN/
 /tests/integration/testdata/
 
 # ----- 烟测 / 调试脚本运行产物 ----
-# scripts/*.ps1 / curl 烟测产生的临时文件 + 进程日志
+# 脚本运行产生的临时文件、截图与进程日志
 .smoke/
 
 # ----- 缓存目录（运行时生成，不入仓）-----

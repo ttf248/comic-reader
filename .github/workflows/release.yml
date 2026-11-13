@@ -124,17 +124,32 @@ jobs:
           path: frontend/dist
 
       - name: 生成发布包
-        shell: pwsh
+        shell: bash
         env:
           RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+          TARGET_OS: ${{ matrix.os }}
+          TARGET_ARCH: ${{ matrix.arch }}
         run: |
-          $outputDir = Join-Path $env:RUNNER_TEMP 'release-assets'
-          pwsh -NoProfile -File scripts/package-release.ps1 `
-            -Version $env:RELEASE_VERSION `
-            -TargetOS '${{ matrix.os }}' `
-            -TargetArch '${{ matrix.arch }}' `
-            -OutputDir $outputDir `
-            -SkipFrontend
+          set -euo pipefail
+          name="local-gallery-v${RELEASE_VERSION}-${TARGET_OS}-${TARGET_ARCH}"
+          work_dir="$RUNNER_TEMP/$name"
+          output_dir="$RUNNER_TEMP/release-assets"
+          mkdir -p "$work_dir/dist" "$work_dir/backend" "$work_dir/aiworker" "$output_dir"
+          (cd backend && CGO_ENABLED=0 GOOS="$TARGET_OS" GOARCH="$TARGET_ARCH" go build \
+            -ldflags "-X github.com/tianlongxiang/local-gallery/internal/config.Version=${RELEASE_VERSION}" \
+            -o "$work_dir/$( [[ "$TARGET_OS" == windows ]] && echo local-gallery.exe || echo local-gallery )" ./cmd/server)
+          cp -R frontend/dist/. "$work_dir/dist/"
+          cp backend/config.example.yaml "$work_dir/config.example.yaml" "$work_dir/backend/config.example.yaml"
+          cp README.md AGENTS.md "$work_dir/"
+          cp -R docs "$work_dir/docs"
+          cp backend/aiworker/*.py backend/aiworker/*.txt backend/aiworker/*.bat "$work_dir/aiworker/"
+          if [[ -f LICENSE ]]; then cp LICENSE "$work_dir/"; fi
+          if [[ "$TARGET_OS" == windows ]]; then
+            (cd "$RUNNER_TEMP" && zip -qr "$output_dir/$name.zip" "$name")
+          else
+            tar -czf "$output_dir/$name.tar.gz" -C "$RUNNER_TEMP" "$name"
+          fi
+          rm -rf "$work_dir"
 
       - name: 上传平台发布包
         uses: actions/upload-artifact@v4

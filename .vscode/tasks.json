@@ -30,8 +30,11 @@
     {
       "label": "build: local",
       "type": "shell",
-      "command": "pwsh",
-      "args": ["-NoProfile", "-File", "scripts/build.ps1", "-Local", "-SkipInstall"],
+      "command": "npm run build && mkdir -p bin && cd backend && go build -o ../bin/local-gallery ./cmd/server",
+      "windows": {
+        "command": ".\\scripts\\build.bat",
+        "args": ["--local", "--skip-install", "--no-pause"]
+      },
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -96,8 +99,7 @@
     {
       "label": "build: all",
       "type": "shell",
-      "command": "pwsh",
-      "args": ["-NoProfile", "-File", "scripts/build.ps1"],
+      "command": "npm run build && mkdir -p bin && cd backend && go build -o ../bin/local-gallery ./cmd/server",
       "windows": {
         "command": ".\\build.bat",
         "args": ["--no-pause"]
