@@ -306,6 +306,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("初始化人物索引失败: %v", err)
 	}
+	peopleService.SetImageVectorLookup(vectorIndex.Vector)
 	// 离线地点图谱：全国地图、省内地图与区域照片墙共用一次匹配结果。
 	chinaLocations := services.NewChinaLocationService()
 	// 边界索引要 6 秒才能建好，放到后台预热，别让第一个打开地点页的人等。

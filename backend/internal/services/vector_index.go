@@ -367,6 +367,31 @@ func (s *VectorIndexStore) Current(resourceID string, size, mtimeNs int64) bool 
 	return exists
 }
 
+// Vector returns the current image embedding for a resource when its file
+// fingerprint still matches the indexed vector.
+func (s *VectorIndexStore) Vector(resourceID string, size, mtimeNs int64) ([]float32, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	metadata, exists := s.latest[resourceID]
+	if !exists || metadata.Size != size || metadata.MTimeNs != mtimeNs || metadata.ModelVersion != s.modelVersion {
+		return nil, false
+	}
+	shard, exists := s.shards[metadata.ShardID]
+	if !exists {
+		return nil, false
+	}
+	start := metadata.Position * AIEmbeddingDimension
+	end := start + AIEmbeddingDimension
+	if start < 0 || end > len(shard.values) {
+		return nil, false
+	}
+	vector := make([]float32, AIEmbeddingDimension)
+	for index, value := range shard.values[start:end] {
+		vector[index] = halfToFloat32Lookup[value]
+	}
+	return vector, true
+}
+
 func (s *VectorIndexStore) Metadata() []VectorMetadata {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

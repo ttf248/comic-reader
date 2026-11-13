@@ -59,8 +59,10 @@ describe("人物相册", () => {
     mocks.people.mockResolvedValue({
       ok: true,
       people: [],
-      centroidThreshold: 0.6,
+      centroidThreshold: 0.52,
       exemplarThreshold: 0.72,
+      ambiguousFaceThreshold: 0.58,
+      imageSimilarityThreshold: 0.65,
       revision: 1,
     });
     mocks.searchPeople.mockResolvedValue({
@@ -68,8 +70,10 @@ describe("人物相册", () => {
       people: [],
       totalGroups: 0,
       limit: 20,
-      centroidThreshold: 0.6,
+      centroidThreshold: 0.52,
       exemplarThreshold: 0.72,
+      ambiguousFaceThreshold: 0.58,
+      imageSimilarityThreshold: 0.65,
       revision: 1,
     });
     mocks.clearPeople.mockResolvedValue({ ok: true, cleared: true });
@@ -97,15 +101,18 @@ describe("人物相册", () => {
           hidden: false,
         },
       ],
-      centroidThreshold: 0.6,
+      centroidThreshold: 0.52,
       exemplarThreshold: 0.72,
+      ambiguousFaceThreshold: 0.58,
+      imageSimilarityThreshold: 0.65,
       revision: 2,
     });
     renderPeople();
 
     expect(await screen.findByText("旅行同伴")).toBeInTheDocument();
     expect(screen.getByText(/3\s*张脸/)).toBeInTheDocument();
-    expect(screen.getByText(/组中心\s*0\.600\s*·\s*代表脸\s*0\.720/)).toBeInTheDocument();
+    expect(screen.getByText("1 组 · 按照片数排序")).toBeInTheDocument();
+    expect(screen.queryByText(/组中心|代表脸|边界脸/)).not.toBeInTheDocument();
     expect(
       screen.getByText(
         (_content, element) =>
@@ -127,8 +134,10 @@ describe("人物相册", () => {
       })),
       totalGroups: 83,
       limit: 50,
-      centroidThreshold: 0.6,
+      centroidThreshold: 0.52,
       exemplarThreshold: 0.72,
+      ambiguousFaceThreshold: 0.58,
+      imageSimilarityThreshold: 0.65,
       revision: 3,
     });
     renderPeople();
@@ -215,8 +224,10 @@ describe("人物相册", () => {
       ],
       totalGroups: 1,
       limit: 20,
-      centroidThreshold: 0.6,
+      centroidThreshold: 0.52,
       exemplarThreshold: 0.72,
+      ambiguousFaceThreshold: 0.58,
+      imageSimilarityThreshold: 0.65,
       revision: 4,
     });
     render(

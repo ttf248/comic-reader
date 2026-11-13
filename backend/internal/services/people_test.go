@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -190,8 +191,8 @@ func TestPeopleServiceRequiresCentroidAndExemplarThresholds(t *testing.T) {
 	belowAnchor := make([]float32, peopleEmbeddingDimension)
 	belowAnchor[0] = 1
 	belowNeighbor := make([]float32, peopleEmbeddingDimension)
-	belowNeighbor[0] = 0.58
-	belowNeighbor[1] = float32(math.Sqrt(1 - 0.58*0.58))
+	belowNeighbor[0] = 0.50
+	belowNeighbor[1] = float32(math.Sqrt(1 - 0.50*0.50))
 	aboveAnchor := make([]float32, peopleEmbeddingDimension)
 	aboveAnchor[2] = 1
 	aboveNeighbor := make([]float32, peopleEmbeddingDimension)
@@ -212,10 +213,70 @@ func TestPeopleServiceRequiresCentroidAndExemplarThresholds(t *testing.T) {
 		ids[face.ResourceID] = face.PersonID
 	}
 	if ids["a_below_anchor"] == ids["b_below_neighbor"] {
-		t.Fatal("0.58 similarity unexpectedly merged below the centroid threshold")
+		t.Fatal("0.50 similarity unexpectedly merged below the centroid threshold")
 	}
 	if ids["c_above_anchor"] != ids["d_above_neighbor"] {
 		t.Fatal("0.74 similarity did not merge above the centroid and exemplar thresholds")
+	}
+}
+
+func TestPeopleServiceUsesCurrentImageVectorsForAmbiguousMatches(t *testing.T) {
+	root := t.TempDir()
+	vectorIndex, err := OpenVectorIndex(filepath.Join(root, "vectors"), "clip-v1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer vectorIndex.Close()
+
+	imageA := make([]float32, AIEmbeddingDimension)
+	imageB := make([]float32, AIEmbeddingDimension)
+	imageC := make([]float32, AIEmbeddingDimension)
+	imageD := make([]float32, AIEmbeddingDimension)
+	imageA[0], imageB[0], imageC[2], imageD[3] = 1, 1, 1, 1
+	if err := vectorIndex.Commit(context.Background(), []VectorInput{
+		{ResourceID: "a_anchor", Size: 100, MTimeNs: 200, Vector: imageA},
+		{ResourceID: "b_match", Size: 100, MTimeNs: 200, Vector: imageB},
+		{ResourceID: "c_anchor", Size: 100, MTimeNs: 200, Vector: imageC},
+		{ResourceID: "d_different_context", Size: 100, MTimeNs: 200, Vector: imageD},
+		{ResourceID: "e_same_photo", Size: 100, MTimeNs: 200, Vector: imageA},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	people, err := OpenPeopleService(filepath.Join(root, "state.json"), filepath.Join(root, "people-index.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	people.SetImageVectorLookup(vectorIndex.Vector)
+	match := make([]float32, peopleEmbeddingDimension)
+	match[0], match[1] = 0.6, 0.8
+	differentContext := make([]float32, peopleEmbeddingDimension)
+	differentContext[2], differentContext[3] = 0.6, 0.8
+	samePhotoOtherFace := make([]float32, peopleEmbeddingDimension)
+	samePhotoOtherFace[0], samePhotoOtherFace[1] = 0.6, 0.8
+	records := []AIAnalysisRecord{
+		peopleTestRecord("a_anchor", peopleTestVector(0, 0)),
+		peopleTestRecord("b_match", match),
+		peopleTestRecord("c_anchor", peopleTestVector(2, 0)),
+		peopleTestRecord("d_different_context", differentContext),
+		peopleTestRecord("e_same_photo", peopleTestVector(0, 0), samePhotoOtherFace),
+	}
+	if err := people.Sync(records); err != nil {
+		t.Fatal(err)
+	}
+
+	ids := make(map[string]string)
+	for _, face := range people.AllFaces() {
+		ids[face.Key] = face.PersonID
+	}
+	if ids["a_anchor#0"] != ids["b_match#0"] {
+		t.Fatal("borderline face with matching image context was not grouped")
+	}
+	if ids["c_anchor#0"] == ids["d_different_context#0"] {
+		t.Fatal("borderline face with unrelated image context was grouped")
+	}
+	if ids["a_anchor#0"] != ids["e_same_photo#0"] || ids["e_same_photo#0"] == ids["e_same_photo#1"] {
+		t.Fatal("multiple faces from one resource were merged into the same person")
 	}
 }
 
@@ -516,14 +577,10 @@ func TestPeopleServiceKeepsCorrectedGroupTogetherWhenAutomaticClustersSplit(t *t
 
 func TestPeopleServiceRetainsFacesAboveFormerLimit(t *testing.T) {
 	const faceCount = 30025
-	records := make([]AIAnalysisRecord, 0, faceCount/100+1)
-	for start := 0; start < faceCount; start += 100 {
-		count := min(100, faceCount-start)
-		vectors := make([][]float32, count)
-		for index := range vectors {
-			vectors[index] = peopleTestVector(0, 0)
-		}
-		records = append(records, peopleTestRecord(fmt.Sprintf("f_%05d", start), vectors...))
+	records := make([]AIAnalysisRecord, faceCount)
+	vector := peopleTestVector(0, 0)
+	for index := range records {
+		records[index] = peopleTestRecord(fmt.Sprintf("f_%05d", index), vector)
 	}
 	root := t.TempDir()
 	people, err := OpenPeopleService(filepath.Join(root, "state.json"), filepath.Join(root, "index.json"))

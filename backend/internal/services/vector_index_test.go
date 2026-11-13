@@ -33,6 +33,13 @@ func TestVectorIndexPersistsFloat16VectorsAndRanksCosine(t *testing.T) {
 	if err != nil || total != 2 || len(hits) != 1 || hits[0].ResourceID != "file-a" || hits[0].Score < 0.99 {
 		t.Fatalf("Search() = (%+v, %d, %v)", hits, total, err)
 	}
+	loaded, ok := index.Vector("file-a", 10, 100)
+	if !ok || len(loaded) != AIEmbeddingDimension || loaded[0] < 0.99 {
+		t.Fatalf("Vector() = (%d dimensions, %v), want current vector", len(loaded), ok)
+	}
+	if _, ok := index.Vector("file-a", 11, 100); ok {
+		t.Fatal("Vector() returned an embedding for a stale file fingerprint")
+	}
 	index.Close()
 
 	reopened, err := OpenVectorIndex(dir, "clip-v1")
