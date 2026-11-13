@@ -60,11 +60,6 @@ function PeopleList() {
           人物列表加载失败，请稍后重试。
         </p>
       ) : null}
-      {query.data?.groupingLimited ? (
-        <p className="page-shell mt-4 text-meta text-fg-muted">
-          当前照片数量触发了本机分组计算上限；未比较的脸部会保留为独立候选组。
-        </p>
-      ) : null}
       {groups.length === 0 && !query.isLoading ? (
         <EmptyState
           title={
@@ -90,8 +85,10 @@ function PeopleList() {
               {totalGroups > groups.length
                 ? `照片数最多的 ${groups.length.toLocaleString()} / 共 ${totalGroups.toLocaleString()} 组`
                 : `${totalGroups.toLocaleString()} 组`}
-              {" · 按照片数排序 · 阈值 "}
-              {query.data?.threshold.toFixed(3) ?? "0.363"}（候选分组参考值）
+              {" · 按照片数排序 · 组中心 "}
+              {query.data?.centroidThreshold.toFixed(3) ?? "0.600"}
+              {" · 代表脸 "}
+              {query.data?.exemplarThreshold.toFixed(3) ?? "0.680"}
             </p>
             <div className="flex flex-wrap items-center gap-3">
               <label className="flex items-center gap-2 text-meta text-fg-muted">

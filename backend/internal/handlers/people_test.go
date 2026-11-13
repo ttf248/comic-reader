@@ -284,12 +284,17 @@ func TestPeopleHTTPListReturnsTop50ByPhotoCount(t *testing.T) {
 
 	list := peopleHandlerRequest(t, app, fiber.MethodGet, "/api/people", "")
 	var listBody struct {
-		People      []services.PersonGroup `json:"people"`
-		TotalGroups int                    `json:"totalGroups"`
-		Limit       int                    `json:"limit"`
+		People            []services.PersonGroup `json:"people"`
+		TotalGroups       int                    `json:"totalGroups"`
+		Limit             int                    `json:"limit"`
+		CentroidThreshold float64                `json:"centroidThreshold"`
+		ExemplarThreshold float64                `json:"exemplarThreshold"`
+		GroupingLimited   *bool                  `json:"groupingLimited"`
 	}
 	decodePeopleBody(t, list, &listBody)
-	if len(listBody.People) != 50 || listBody.TotalGroups != groupCount || listBody.Limit != 50 {
+	if len(listBody.People) != 50 || listBody.TotalGroups != groupCount || listBody.Limit != 50 ||
+		listBody.CentroidThreshold != services.PeopleGroupingCentroidThreshold ||
+		listBody.ExemplarThreshold != services.PeopleGroupingExemplarThreshold || listBody.GroupingLimited != nil {
 		t.Fatalf("top people response = %d groups, total %d, limit %d; want 50 of %d", len(listBody.People), listBody.TotalGroups, listBody.Limit, groupCount)
 	}
 	if listBody.People[0].PhotoCount != groupCount || listBody.People[49].PhotoCount != 2 {

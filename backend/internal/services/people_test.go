@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -35,6 +36,20 @@ func peopleTestVector(axis int, noise float32) []float32 {
 	vector[axis] = 1
 	if noise != 0 {
 		vector[(axis+1)%peopleEmbeddingDimension] = noise
+	}
+	return vector
+}
+
+func peopleTestRandomVector(rng *rand.Rand) []float32 {
+	vector := make([]float32, peopleEmbeddingDimension)
+	var norm float64
+	for index := range vector {
+		vector[index] = float32(rng.NormFloat64())
+		norm += float64(vector[index] * vector[index])
+	}
+	length := float32(math.Sqrt(norm))
+	for index := range vector {
+		vector[index] /= length
 	}
 	return vector
 }
@@ -162,6 +177,192 @@ func TestPeopleServiceSyncIsIndependentOfRecordOrder(t *testing.T) {
 	}
 	if got, want := peopleFaceGroups(shuffled.AllFaces()), peopleFaceGroups(ordered.AllFaces()); !reflect.DeepEqual(got, want) {
 		t.Fatalf("record order changed person groups: got %v, want %v", got, want)
+	}
+}
+
+func TestPeopleServiceRequiresCentroidAndExemplarThresholds(t *testing.T) {
+	root := t.TempDir()
+	people, err := OpenPeopleService(filepath.Join(root, "state.json"), filepath.Join(root, "index.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	belowAnchor := make([]float32, peopleEmbeddingDimension)
+	belowAnchor[0] = 1
+	belowNeighbor := make([]float32, peopleEmbeddingDimension)
+	belowNeighbor[0] = 0.58
+	belowNeighbor[1] = float32(math.Sqrt(1 - 0.58*0.58))
+	aboveAnchor := make([]float32, peopleEmbeddingDimension)
+	aboveAnchor[2] = 1
+	aboveNeighbor := make([]float32, peopleEmbeddingDimension)
+	aboveNeighbor[2] = 0.72
+	aboveNeighbor[3] = float32(math.Sqrt(1 - 0.72*0.72))
+
+	records := []AIAnalysisRecord{
+		peopleTestRecord("a_below_anchor", belowAnchor),
+		peopleTestRecord("b_below_neighbor", belowNeighbor),
+		peopleTestRecord("c_above_anchor", aboveAnchor),
+		peopleTestRecord("d_above_neighbor", aboveNeighbor),
+	}
+	if err := people.Sync(records); err != nil {
+		t.Fatal(err)
+	}
+	ids := make(map[string]string)
+	for _, face := range people.AllFaces() {
+		ids[face.ResourceID] = face.PersonID
+	}
+	if ids["a_below_anchor"] == ids["b_below_neighbor"] {
+		t.Fatal("0.58 similarity unexpectedly merged below the centroid threshold")
+	}
+	if ids["c_above_anchor"] != ids["d_above_neighbor"] {
+		t.Fatal("0.72 similarity did not merge above the centroid and exemplar thresholds")
+	}
+}
+
+func TestPeopleServiceRejectsCentroidDriftWithoutExemplarMatch(t *testing.T) {
+	addFaceToCluster := func(exemplarSimilarity float32) string {
+		centroid := make([]float32, peopleEmbeddingDimension)
+		centroid[0] = 1
+		exemplar := make([]float32, peopleEmbeddingDimension)
+		exemplar[0] = exemplarSimilarity
+		exemplar[1] = float32(math.Sqrt(float64(1 - exemplarSimilarity*exemplarSimilarity)))
+		clusterID := "p_existing"
+		cluster := &peopleCluster{
+			sum:      make([]float64, peopleEmbeddingDimension),
+			centroid: centroid,
+			count:    1,
+			members:  map[string]struct{}{"seed#0": {}},
+			exemplars: []peopleClusterExemplar{{
+				key: "seed#0", score: 0.9, embedding: exemplar,
+			}},
+		}
+		cluster.sum[0] = 1
+		people := &PeopleService{
+			faces:    map[string]PersonFace{},
+			clusters: map[string]*peopleCluster{clusterID: cluster},
+			ann:      newPeopleANNIndex(),
+		}
+		people.ann.Add(clusterID, cluster.centroid)
+		candidate := make([]float32, peopleEmbeddingDimension)
+		candidate[0] = 1
+		people.addFaceLocked(PersonFace{Key: "new#0", ResourceID: "new", Score: 0.9, embedding: candidate})
+		return people.faces["new#0"].PersonID
+	}
+
+	if got := addFaceToCluster(0.669); got == "p_existing" {
+		t.Fatal("face matching only the moving centroid joined without a strong exemplar match")
+	}
+	if got := addFaceToCluster(0.7136); got != "p_existing" {
+		t.Fatalf("face with a strong exemplar match joined %q, want p_existing", got)
+	}
+}
+
+func TestPeopleServiceRestoresCachedAssignmentsWithoutReclustering(t *testing.T) {
+	root := t.TempDir()
+	statePath := filepath.Join(root, "state.json")
+	indexPath := filepath.Join(root, "index.json")
+	records := []AIAnalysisRecord{
+		peopleTestRecord("cache_a", peopleTestVector(0, 0)),
+		peopleTestRecord("cache_b", peopleTestVector(0, .05)),
+		peopleTestRecord("cache_c", peopleTestVector(1, 0)),
+	}
+	first, err := OpenPeopleService(statePath, indexPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := first.Sync(records); err != nil {
+		t.Fatal(err)
+	}
+	want := peopleFaceGroups(first.AllFaces())
+
+	restarted, err := OpenPeopleService(statePath, indexPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(restarted.cachedIDs) != len(records) {
+		t.Fatalf("cached face assignments = %d, want %d", len(restarted.cachedIDs), len(records))
+	}
+	if err := restarted.Sync(records); err != nil {
+		t.Fatal(err)
+	}
+	if restarted.ann != nil {
+		t.Fatal("cached assignments eagerly rebuilt the ANN index during startup")
+	}
+	if restarted.comparisons != 0 {
+		t.Fatalf("unchanged face records triggered %d clustering comparisons", restarted.comparisons)
+	}
+	if got := peopleFaceGroups(restarted.AllFaces()); !reflect.DeepEqual(got, want) {
+		t.Fatalf("cached assignments = %v, want %v", got, want)
+	}
+}
+
+func TestPeopleServiceBuildsANNWhenIncrementalFaceArrivesAfterCachedRestore(t *testing.T) {
+	root := t.TempDir()
+	statePath := filepath.Join(root, "state.json")
+	indexPath := filepath.Join(root, "index.json")
+	records := []AIAnalysisRecord{
+		peopleTestRecord("cache_a", peopleTestVector(0, 0)),
+		peopleTestRecord("cache_b", peopleTestVector(1, 0)),
+	}
+	first, err := OpenPeopleService(statePath, indexPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := first.Sync(records); err != nil {
+		t.Fatal(err)
+	}
+	restarted, err := OpenPeopleService(statePath, indexPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := restarted.Sync(records); err != nil {
+		t.Fatal(err)
+	}
+	if restarted.ann != nil {
+		t.Fatal("cached restore unexpectedly created an ANN index")
+	}
+
+	newRecord := peopleTestRecord("zz_cache_new", peopleTestVector(1, 0.05))
+	if err := restarted.ApplyRecords([]AIAnalysisRecord{newRecord}); err != nil {
+		t.Fatal(err)
+	}
+	if restarted.ann == nil || restarted.ann.Len() != len(restarted.clusters) {
+		t.Fatalf("incremental ANN length = %v; want %d cluster entries", restarted.ann, len(restarted.clusters))
+	}
+	groups := peopleFaceGroups(restarted.AllFaces())
+	if groups["cache_b"] != groups["zz_cache_new"] {
+		t.Fatalf("incremental face group = %q, want existing group %q", groups["zz_cache_new"], groups["cache_b"])
+	}
+}
+
+func TestPeopleServiceReclustersWhenCachedFaceRecordChanges(t *testing.T) {
+	root := t.TempDir()
+	statePath := filepath.Join(root, "state.json")
+	indexPath := filepath.Join(root, "index.json")
+	records := []AIAnalysisRecord{
+		peopleTestRecord("cache_a", peopleTestVector(0, 0)),
+		peopleTestRecord("cache_b", peopleTestVector(0, .05)),
+		peopleTestRecord("cache_c", peopleTestVector(1, 0)),
+	}
+	first, err := OpenPeopleService(statePath, indexPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := first.Sync(records); err != nil {
+		t.Fatal(err)
+	}
+
+	restarted, err := OpenPeopleService(statePath, indexPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := peopleTestRecord("cache_b", peopleTestVector(2, 0))
+	changed.MTimeNs++
+	if err := restarted.Sync([]AIAnalysisRecord{records[0], changed, records[2]}); err != nil {
+		t.Fatal(err)
+	}
+	if restarted.comparisons == 0 {
+		t.Fatal("changed face record reused cached grouping without reclustering")
 	}
 }
 
@@ -332,8 +533,40 @@ func TestPeopleServiceRetainsFacesAboveFormerLimit(t *testing.T) {
 	if got := len(people.AllFaces()); got != faceCount {
 		t.Fatalf("indexed face count = %d, want %d", got, faceCount)
 	}
-	if people.GroupingLimited() {
-		t.Fatal("single-cluster evaluation unexpectedly hit the comparison limit")
+	if people.comparisons != faceCount-1 {
+		t.Fatalf("single-cluster comparison count = %d, want %d", people.comparisons, faceCount-1)
+	}
+}
+
+func TestPeopleServiceGroupsEveryFaceWithoutFullClusterScans(t *testing.T) {
+	const faceCount = 2200
+	rng := rand.New(rand.NewSource(42))
+	records := make([]AIAnalysisRecord, 0, faceCount/100+1)
+	for start := 0; start < faceCount; start += 100 {
+		count := min(100, faceCount-start)
+		vectors := make([][]float32, count)
+		for index := range vectors {
+			vectors[index] = peopleTestRandomVector(rng)
+		}
+		records = append(records, peopleTestRecord(fmt.Sprintf("random_%05d", start), vectors...))
+	}
+
+	root := t.TempDir()
+	people, err := OpenPeopleService(filepath.Join(root, "state.json"), filepath.Join(root, "index.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := people.Sync(records); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(people.AllFaces()); got != faceCount {
+		t.Fatalf("indexed face count = %d, want %d", got, faceCount)
+	}
+	if people.comparisons >= 2_000_000 {
+		t.Fatalf("exact cluster comparisons = %d, want a bounded candidate set", people.comparisons)
+	}
+	if people.ann.Len() != len(people.clusters) {
+		t.Fatalf("candidate index contains %d clusters, want %d", people.ann.Len(), len(people.clusters))
 	}
 }
 

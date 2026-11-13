@@ -59,8 +59,8 @@ describe("人物相册", () => {
     mocks.people.mockResolvedValue({
       ok: true,
       people: [],
-      groupingLimited: false,
-      threshold: 0.363,
+      centroidThreshold: 0.6,
+      exemplarThreshold: 0.68,
       revision: 1,
     });
     mocks.searchPeople.mockResolvedValue({
@@ -68,8 +68,8 @@ describe("人物相册", () => {
       people: [],
       totalGroups: 0,
       limit: 20,
-      groupingLimited: false,
-      threshold: 0.363,
+      centroidThreshold: 0.6,
+      exemplarThreshold: 0.68,
       revision: 1,
     });
     mocks.clearPeople.mockResolvedValue({ ok: true, cleared: true });
@@ -97,14 +97,15 @@ describe("人物相册", () => {
           hidden: false,
         },
       ],
-      groupingLimited: false,
-      threshold: 0.363,
+      centroidThreshold: 0.6,
+      exemplarThreshold: 0.68,
       revision: 2,
     });
     renderPeople();
 
     expect(await screen.findByText("旅行同伴")).toBeInTheDocument();
     expect(screen.getByText(/3\s*张脸/)).toBeInTheDocument();
+    expect(screen.getByText(/组中心\s*0\.600\s*·\s*代表脸\s*0\.680/)).toBeInTheDocument();
     expect(
       screen.getByText(
         (_content, element) =>
@@ -126,8 +127,8 @@ describe("人物相册", () => {
       })),
       totalGroups: 83,
       limit: 50,
-      groupingLimited: false,
-      threshold: 0.363,
+      centroidThreshold: 0.6,
+      exemplarThreshold: 0.68,
       revision: 3,
     });
     renderPeople();
@@ -214,8 +215,8 @@ describe("人物相册", () => {
       ],
       totalGroups: 1,
       limit: 20,
-      groupingLimited: false,
-      threshold: 0.363,
+      centroidThreshold: 0.6,
+      exemplarThreshold: 0.68,
       revision: 4,
     });
     render(

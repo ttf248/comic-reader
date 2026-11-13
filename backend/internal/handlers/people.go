@@ -65,13 +65,16 @@ func PeopleHandler(people *services.PeopleService, jobs *services.AIJobService, 
 		if !snapshot.Ready() {
 			return c.JSON(fiber.Map{
 				"ok": true, "people": []services.PersonGroup{}, "totalGroups": 0,
-				"limit": limit, "groupingLimited": false, "revision": snapshot.Revision(),
+				"limit": limit, "centroidThreshold": services.PeopleGroupingCentroidThreshold,
+				"exemplarThreshold": services.PeopleGroupingExemplarThreshold, "revision": snapshot.Revision(),
 			})
 		}
 		groups, total := people.SearchGroups(query, limit, c.Query("includeHidden") == "true", snapshot.IsPhotoImage)
 		return c.JSON(fiber.Map{
 			"ok": true, "people": groups, "totalGroups": total, "limit": limit,
-			"groupingLimited": people.GroupingLimited(), "threshold": 0.363, "revision": snapshot.Revision(),
+			"centroidThreshold": services.PeopleGroupingCentroidThreshold,
+			"exemplarThreshold": services.PeopleGroupingExemplarThreshold,
+			"revision":          snapshot.Revision(),
 		})
 	}
 }

@@ -813,8 +813,8 @@ export const aiJobsApi = {
       people: PersonGroup[];
       totalGroups: number;
       limit: number;
-      groupingLimited: boolean;
-      threshold: number;
+      centroidThreshold: number;
+      exemplarThreshold: number;
       revision: number;
     }>("/api/people", { params: { includeHidden } }),
   searchPeople: (query: string) =>
@@ -823,8 +823,8 @@ export const aiJobsApi = {
       people: PersonGroup[];
       totalGroups: number;
       limit: number;
-      groupingLimited: boolean;
-      threshold: number;
+      centroidThreshold: number;
+      exemplarThreshold: number;
       revision: number;
     }>("/api/people", { params: { q: query, limit: 20 } }),
   personMedia: (id: string, cursor?: string) =>
