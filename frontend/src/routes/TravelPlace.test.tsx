@@ -14,6 +14,7 @@ vi.mock("../api/aiJobs", () => ({
     chinaGeometry: vi.fn(),
     chinaPlaces: vi.fn(),
     chinaTrips: vi.fn(),
+    chinaTripMedia: vi.fn(),
   },
 }));
 
@@ -66,7 +67,7 @@ const regions = {
       { adcode: 330100, name: "杭州市", level: "city", photoCount: 20 },
       { adcode: 330200, name: "宁波市", level: "city", photoCount: 10 },
     ],
-    months: [],
+    months: [{ month: "2019-05", count: 20 }],
     trajectory: [],
     untimedPhotoCount: 0,
   },
@@ -139,8 +140,8 @@ describe("地点详情页", () => {
   it("位置图把当前这个地方标出来", async () => {
     renderPage();
 
-    const locator = await screen.findByRole("img", {
-      name: "浙江省在上级区划中的位置",
+    const locator = await screen.findByRole("group", {
+      name: /浙江省照片地图/,
     });
     expect(locator).toBeTruthy();
     // 只有当前这个地方是品牌色，其余是中性底。
@@ -148,19 +149,30 @@ describe("地点详情页", () => {
     expect(brand).toHaveLength(1);
   });
 
-  it("到访记录先给一段，展开后给全部", async () => {
+  it("到访记录每一条都能展开看照片", async () => {
     renderPage();
 
     expect(await screen.findByRole("heading", { name: "到访记录" })).toBeTruthy();
-    expect(screen.getAllByText(/^2019-05-\d\d$/)).toHaveLength(24);
+    expect(screen.getAllByText(/^2019-05-\d\d$/)).toHaveLength(30);
 
-    fireEvent.click(screen.getByRole("button", { name: "展开全部 30 次到访" }));
+    // 照片在展开时才去取：到访常常上百条，一次全取既慢又没人看。
+    expect(
+      vi
+        .mocked(aiJobsApi.chinaRegionMedia)
+        .mock.calls.filter((call) => call[3] !== undefined),
+    ).toHaveLength(0);
+    fireEvent.click(screen.getAllByRole("button", { name: /看照片/ })[0]);
     await waitFor(() => {
-      expect(screen.getAllByText(/^2019-05-\d\d$/)).toHaveLength(30);
+      expect(aiJobsApi.chinaRegionMedia).toHaveBeenCalledWith(
+        330000,
+        undefined,
+        undefined,
+        0,
+      );
     });
   });
 
-  it("下级地点可以直接点进去", async () => {
+  it("下级地点是横排的入口", async () => {
     renderPage();
 
     expect(await screen.findByRole("link", { name: /杭州市/ })).toBeTruthy();

@@ -463,6 +463,13 @@ export interface ChinaTripStop {
   adcode: number;
   name: string;
   level: string;
+  /**
+   * 这个停留点的直接上级；省级停留点是 null。
+   *
+   * 界面按它取「停留点所在的那一层轮廓」：停留点是市，直接上级就是省，
+   * 轮廓取该省的城市；停留点是省，没有上级，轮廓取全国各省。
+   */
+  parentAdcode: number | null;
   at: string;
   until: string;
   dayCount: number;
@@ -476,6 +483,8 @@ export interface ChinaTripStop {
  */
 export interface ChinaTrip {
   id: string;
+  /** 这段在行程列表里的序号（从 0 起），照片端点按它寻址。 */
+  index: number;
   kind: "trip" | "stay";
   startedAt: string;
   endedAt: string;
@@ -483,6 +492,22 @@ export interface ChinaTrip {
   photoCount: number;
   stops: ChinaTripStop[];
   coverResourceIds: string[];
+  /**
+   * 照片带用的照片，最多 12 张。
+   *
+   * 按时间均匀采样并含首尾：只给开头几张会把这一段讲成「刚到那儿」。
+   */
+  bandResourceIds: string[];
+}
+
+/** 某一段行程的照片分页。 */
+export interface ChinaTripMediaPage {
+  revision: number;
+  items: LibraryFeedItem[];
+  total: number;
+  nextCursor?: string;
+  albums: { id: string; name: string; count: number }[];
+  trip: ChinaTrip;
 }
 
 /** 行程的响应。 */
@@ -638,6 +663,29 @@ export const aiJobsApi = {
         ...chinaTimeRangeParams(timeRange),
       },
     }),
+  /**
+   * 某一段行程的照片。
+   *
+   * 段是按「粒度 + 间隔 + 时间区间」切出来的，因此取照片必须带上同样
+   * 的参数，否则按下标取到的不是同一段。
+   */
+  chinaTripMedia: (
+    index: number,
+    granularity?: string,
+    timeRange?: ChinaTimeRange,
+    cursor?: string,
+  ) =>
+    api<{ ok: boolean; page: ChinaTripMediaPage }>(
+      `/api/locations/china/trips/${encodeURIComponent(String(index))}/media`,
+      {
+        params: {
+          granularity: granularity ?? undefined,
+          cursor,
+          limit: 200,
+          ...chinaTimeRangeParams(timeRange),
+        },
+      },
+    ),
   chinaRegions: (adcode: number, timeRange?: ChinaTimeRange) =>
     api<{ ok: boolean; regions: ChinaLocationRegions }>(
       `/api/locations/china/regions/${encodeURIComponent(String(adcode))}`,

@@ -37,7 +37,7 @@ const THEMES = (process.env.LG_THEMES ?? "light,dark")
 //             伪造标签页数据，封面仍是真实缩略图）
 const PAGES = (
   process.env.LG_PAGES ??
-  "/,/recents,/favorites,/unread,/settings,/tasks,album,reader,tag"
+  "/,/recents,/favorites,/unread,/settings,/tasks,/travels,album,reader,tag"
 )
   .split(",")
   .map((p) => p.trim())

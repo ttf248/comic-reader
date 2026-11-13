@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import Travels from "./Travels";
@@ -14,6 +14,7 @@ vi.mock("../api/aiJobs", () => ({
     chinaGeometry: vi.fn(),
     chinaPlaces: vi.fn(),
     chinaTrips: vi.fn(),
+    chinaTripMedia: vi.fn(),
   },
 }));
 
@@ -22,13 +23,7 @@ vi.mock("../hooks/usePicks", () => ({
 }));
 
 vi.mock("../components/wall/PhotoWall", () => ({
-  default: ({ items }: { items: { name: string }[] }) => (
-    <div data-testid="photo-wall">
-      {items.map((item) => (
-        <span key={item.name}>{item.name}</span>
-      ))}
-    </div>
-  ),
+  default: () => <div data-testid="photo-wall" />,
 }));
 
 vi.mock("../components/wall/PhotoViewer", () => ({
@@ -62,7 +57,6 @@ const summary = {
     provinces: [
       { adcode: 330000, name: "浙江省", photoCount: 5, unmatchedAreaPhotoCount: 0 },
       { adcode: 310000, name: "上海市", photoCount: 3, unmatchedAreaPhotoCount: 0 },
-      { adcode: 410000, name: "河南省", photoCount: 0, unmatchedAreaPhotoCount: 0 },
     ],
     months: [
       { month: "2019-05", count: 4 },
@@ -78,7 +72,7 @@ const places = {
   places: {
     revision: 4,
     boundaryVersion: "areacity-2025.251231.260403",
-    level: "province",
+    level: "city",
     total: 2,
     gpsPhotoCount: 8,
     chinaPhotoCount: 8,
@@ -86,9 +80,9 @@ const places = {
     untimedPhotoCount: 1,
     items: [
       {
-        adcode: 330000,
-        name: "浙江省",
-        level: "province",
+        adcode: 330100,
+        name: "杭州市",
+        level: "city",
         photoCount: 5,
         unmatchedCount: 0,
         visitCount: 2,
@@ -123,6 +117,7 @@ const trips = {
     items: [
       {
         id: "2019-05-02-330100",
+        index: 0,
         kind: "trip" as const,
         startedAt: "2019-05-02",
         endedAt: "2019-05-05",
@@ -133,6 +128,7 @@ const trips = {
             adcode: 330100,
             name: "杭州市",
             level: "city",
+            parentAdcode: 330000,
             at: "2019-05-02",
             until: "2019-05-03",
             dayCount: 2,
@@ -142,6 +138,7 @@ const trips = {
             adcode: 310000,
             name: "上海市",
             level: "province",
+            parentAdcode: null,
             at: "2019-05-05",
             until: "2019-05-05",
             dayCount: 1,
@@ -149,9 +146,11 @@ const trips = {
           },
         ],
         coverResourceIds: ["f_1", "f_2"],
+        bandResourceIds: ["f_1", "f_2", "f_3"],
       },
       {
         id: "2021-06-12-330100",
+        index: 1,
         kind: "stay" as const,
         startedAt: "2021-06-12",
         endedAt: "2021-06-12",
@@ -162,6 +161,7 @@ const trips = {
             adcode: 330100,
             name: "杭州市",
             level: "city",
+            parentAdcode: 330000,
             at: "2021-06-12",
             until: "2021-06-12",
             dayCount: 1,
@@ -169,6 +169,7 @@ const trips = {
           },
         ],
         coverResourceIds: ["f_3"],
+        bandResourceIds: ["f_3"],
       },
     ],
   },
@@ -194,6 +195,10 @@ function renderPage(initialEntry = "/photo/travels") {
         <LocationProbe />
         <Routes>
           <Route path="/photo/travels" element={<Travels />} />
+          <Route
+            path="/photo/travels/place/:placeId"
+            element={<div data-testid="place-page" />}
+          />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
@@ -219,52 +224,77 @@ describe("足迹页", () => {
     });
   });
 
-  it("先给规模，再给地点与行程", async () => {
+  it("先给规模，再给按时间排的段流", async () => {
     renderPage();
 
-    // 数字台：段足迹、去过的地方、张数。
+    // 数字台：段足迹、去过的地方、带位置的照片。
+    const ledger = await screen.findByRole("region", { name: /规模/ });
     expect(await screen.findByText("段足迹")).toBeTruthy();
-    expect(await screen.findByText("2 个省 · 1 个市")).toBeTruthy();
-    expect(await screen.findByText("张带位置的照片")).toBeTruthy();
+    expect(within(ledger).getByText("段足迹")).toBeTruthy();
+    expect(within(ledger).getByText("2 个省 · 1 个市")).toBeTruthy();
 
-    // 地点索引只列有照片的地方。
-    expect(await screen.findByRole("link", { name: /浙江省/ })).toBeTruthy();
-    expect(screen.getByRole("link", { name: /上海市/ })).toBeTruthy();
-    expect(screen.queryByRole("link", { name: /河南省/ })).toBeNull();
-  });
-
-  it("行程区分走过多个地方与只在一个地方", async () => {
-    renderPage();
-
+    // 段流：每一段给出日期、地点链与照片带。
     expect(
-      await screen.findByRole("heading", { name: "行程" }),
+      await screen.findByRole("region", { name: "2019-05-02 至 2019-05-05" }),
     ).toBeTruthy();
-    // 走过多个地方叫行程，只在一个地方叫停留。
-    expect(await screen.findAllByText("行程")).not.toHaveLength(0);
-    expect(await screen.findAllByText("停留")).not.toHaveLength(0);
-    // 地点链按顺序排出来。
-    expect(await screen.findAllByText("杭州市")).not.toHaveLength(0);
+    expect(screen.getAllByRole("button", { name: "看这一段的照片" }).length).toBe(
+      4,
+    );
   });
 
-  it("切换归并粒度会换一层地点", async () => {
+  it("选中一段，右栏才出现这段的说明", async () => {
     renderPage();
 
-    await screen.findByRole("link", { name: /浙江省/ });
-    fireEvent.click(screen.getByRole("radio", { name: "市" }));
+    // 面板平时不存在：地图是一件按需出现的配图。
+    expect(screen.queryByRole("complementary", { name: "上下文" })).toBeNull();
+
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: /2019-05-02 至 2019-05-05，4 天/,
+      }),
+    );
+
+    const panel = await screen.findByRole("complementary", { name: "上下文" });
+    expect(panel.textContent).toContain("这段行程");
+    expect(panel.textContent).toContain("杭州市");
+    expect(panel.textContent).toContain("上海市");
+  });
+
+  it("「地方」列出去过的地方", async () => {
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "地方" }));
+
+    const panel = await screen.findByRole("complementary", { name: "上下文" });
+    expect(panel.textContent).toContain("杭州市");
+    expect(panel.textContent).toContain("5 张");
+  });
+
+  it("切归并粒度会换一层地方与行程", async () => {
+    renderPage();
+
+    fireEvent.click(screen.getByRole("radio", { name: "省" }));
 
     await waitFor(() => {
       expect(aiJobsApi.chinaPlaces).toHaveBeenCalledWith(
-        "city",
+        "province",
         null,
         expect.anything(),
       );
     });
+    expect(aiJobsApi.chinaTrips).toHaveBeenCalledWith(
+      "province",
+      expect.anything(),
+      undefined,
+    );
   });
 
   it("选年份后地址里带上时间区间", async () => {
     renderPage();
 
-    fireEvent.click(await screen.findByRole("button", { name: "2019 年，4 张照片" }));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "2019 年，4 张照片" }),
+    );
 
     await waitFor(() => {
       expect(screen.getByTestId("location-search").textContent).toContain(
@@ -276,26 +306,27 @@ describe("足迹页", () => {
     );
   });
 
+  it("点地名直接进这个地方，并且带着筛选条件", async () => {
+    renderPage("/photo/travels?from=2019-01&to=2019-12&level=city");
+
+    const stops = await screen.findAllByRole("button", { name: /杭州市/ });
+    fireEvent.click(stops[0]);
+
+    await waitFor(() => {
+      expect(screen.getByTestId("location-search").textContent).toContain(
+        "/photo/travels/place/330100",
+      );
+    });
+    expect(screen.getByTestId("location-search").textContent).toContain(
+      "from=2019-01",
+    );
+  });
+
   it("没有拍摄时间的照片如实说明", async () => {
     renderPage();
 
     expect(
       await screen.findByText("1 张照片没有拍摄时间，未计入时间轴。"),
     ).toBeTruthy();
-  });
-
-  it("地图上的省能直接打开这个地方的详情页", async () => {
-    renderPage();
-
-    const region = await screen.findByRole("button", {
-      name: /^浙江省，/,
-    });
-    fireEvent.click(region);
-
-    await waitFor(() => {
-      expect(screen.getByTestId("location-search").textContent).toContain(
-        "/photo/travels/place/330000",
-      );
-    });
   });
 });

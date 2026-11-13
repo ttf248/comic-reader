@@ -11,6 +11,7 @@ export default [
       'coverage/**',
       'playwright-report/**',
       'test-results/**',
+      '.smoke/**',
     ],
   },
   {

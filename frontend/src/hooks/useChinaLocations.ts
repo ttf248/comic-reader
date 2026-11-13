@@ -1,5 +1,7 @@
+import { useMemo } from "react";
 import {
   useInfiniteQuery,
+  useQueries,
   useQuery,
   type UseQueryResult,
 } from "@tanstack/react-query";
@@ -19,6 +21,33 @@ function chinaSummaryQueryKey(from: string | null, to: string | null) {
 /** 绘图轮廓的查询键。 */
 function chinaOutlineQueryKey(parent: number) {
   return ["china-locations", "outline", parent] as const;
+}
+
+/**
+ * 若干个上级区划的下级轮廓。
+ *
+ * 一段行程可能同时经过几个上级（省或市），地图要把它们画在同一张图上，
+ * 因此一次取回多份轮廓再合并。上级为 0 表示全国（各省）。
+ */
+export function useChinaOutlines(parents: number[]) {
+  const key = useMemo(
+    () => [...new Set(parents)].sort((left, right) => left - right),
+    [parents],
+  );
+  const results = useQueries({
+    queries: key.map((parent) => ({
+      queryKey: chinaOutlineQueryKey(parent),
+      queryFn: () =>
+        aiJobsApi
+          .chinaGeometry("children", parent)
+          .then((result) => result.features),
+      staleTime: Infinity,
+    })),
+  });
+  return useMemo(
+    () => results.flatMap((result) => result.data ?? []),
+    [results],
+  );
 }
 
 /** 某个区域的下一级地图的查询键。 */
@@ -88,8 +117,10 @@ export function useChinaRegions(
  *
  * parent 为 null 表示全国。几何只随边界数据变化，不随媒体库或时间区间
  * 变化，因此不进统计接口的缓存键，也不随筛选失效。
+ *
+ * enabled 用来在页面还拿不到该画哪一层时先不发请求。
  */
-export function useChinaOutline(parent: number | null) {
+export function useChinaOutline(parent: number | null, enabled = true) {
   return useQuery({
     queryKey: chinaOutlineQueryKey(parent ?? 0),
     queryFn: () =>
@@ -97,6 +128,7 @@ export function useChinaOutline(parent: number | null) {
         .chinaGeometry("children", parent)
         .then((result) => result.features),
     staleTime: Infinity,
+    enabled,
   });
 }
 
@@ -141,6 +173,23 @@ export function useChinaPlaces(
   });
 }
 
+/** 某一段行程的照片的查询键。 */
+function chinaTripMediaQueryKey(
+  index: number,
+  granularity: string,
+  from: string | null,
+  to: string | null,
+) {
+  return [
+    "china-locations",
+    "trip-media",
+    index,
+    granularity,
+    from,
+    to,
+  ] as const;
+}
+
 /** 行程与停留：什么时候去了哪些地方。 */
 export function useChinaTrips(
   granularity: string,
@@ -155,6 +204,36 @@ export function useChinaTrips(
       aiJobsApi
         .chinaTrips(granularity, timeRange, gapDays)
         .then((result) => result.trips.items),
+  });
+}
+
+/**
+ * 某一段行程的照片。
+ *
+ * 段是按「粒度 + 间隔 + 时间区间」切出来的，因此取照片必须带上同样的
+ * 粒度与时间区间，否则按下标取到的不是这一段。
+ */
+export function useChinaTripMedia(
+  index: number | null,
+  granularity: string,
+  timeRange?: ChinaTimeRange,
+) {
+  const from = timeRange?.from ?? null;
+  const to = timeRange?.to ?? null;
+  return useInfiniteQuery({
+    queryKey: chinaTripMediaQueryKey(index ?? -1, granularity, from, to),
+    queryFn: ({ pageParam }) =>
+      aiJobsApi
+        .chinaTripMedia(
+          index as number,
+          granularity,
+          timeRange,
+          pageParam,
+        )
+        .then((result) => result.page),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (page) => page.nextCursor,
+    enabled: index !== null,
   });
 }
 

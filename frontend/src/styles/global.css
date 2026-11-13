@@ -1919,7 +1919,9 @@ button:not(:disabled):active {
   .travel-axis__track {
     display: flex;
     align-items: flex-end;
-    gap: 4px;
+    /* 柱与柱之间只留一条缝：宽屏上一年能分到两百多像素，柱挨着柱才
+       连成一张分布图，而不是一排孤零零的小柱子。 */
+    gap: 3px;
     /* 高度要放得下「最高的一根柱 + 柱顶数字 + 年份」：
        柱子最高 60px，数字与年份各一行，放不下时最高的柱子会顶到
        上面那行「全部时间」里去。 */
@@ -1948,10 +1950,11 @@ button:not(:disabled):active {
     background: var(--accent-soft);
   }
   .travel-axis__bar {
-    width: 70%;
-    max-width: 34px;
+    /* 柱铺满年份的格子，于是相邻的柱连成一条起伏的轮廓 ——
+       宽屏上这张图才有「分布」的样子，而不是一排小方块。 */
+    width: 100%;
     border-radius: 2px 2px 0 0;
-    background: var(--brand-soft);
+    background: color-mix(in srgb, var(--brand) 30%, transparent);
   }
   .travel-axis__year[aria-pressed="true"] .travel-axis__bar {
     background: var(--brand);
@@ -1997,171 +2000,242 @@ button:not(:disabled):active {
     max-width: 18px;
   }
 
-  /* --- 地点卡：照片挂在上面，文字在下面 --- */
-  .travel-place {
+  /* --- 通栏容器：照片墙类页面用，不设宽度上限 ---
+     .page-shell 有 1720px 的上限，27 寸上左右各空出一大片；照片墙类
+     页面一律通栏，这里把这个做法收成一个类。 */
+  .page-bleed {
+    width: 100%;
+    padding-inline: clamp(20px, 3vw, 48px);
+  }
+
+  /* --- 足迹页的两栏：主栏 + 按需出现的上下文面板 ---
+     面板平时不存在：地图是一件按需出现的配图，常驻右栏只会占着版面
+     却答不了任何问题。它出现时主栏收窄，照片带因此重排一次。 */
+  .travel-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    padding-inline: clamp(20px, 3vw, 48px);
+    transition: grid-template-columns 220ms var(--dur);
+  }
+  .travel-layout[data-context="true"] {
+    grid-template-columns: minmax(0, 1fr) 380px;
+    column-gap: clamp(20px, 3vw, 48px);
+  }
+  .travel-layout__aside {
+    position: sticky;
+    top: 16px;
+    align-self: start;
+    max-height: calc(100vh - 40px);
+    overflow-y: auto;
+    padding-block: 24px;
+  }
+
+  /* --- 段流：一条按时间排的照片流，被行程切成段 --- */
+  .travel-journal {
     display: flex;
     flex-direction: column;
+  }
+  .travel-segment {
+    padding-block: 26px 30px;
+    border-top: 1px solid var(--border-faint);
+  }
+  .travel-segment:first-child {
+    border-top: none;
+    padding-top: 6px;
+  }
+
+  /* --- 段头：日期、地方链、张数 --- */
+  .travel-segment__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 8px 18px;
+    margin-bottom: 12px;
+  }
+  .travel-segment__date {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 10px;
+    font-family: var(--font-mono);
+    font-size: var(--text-label);
+    font-variant-numeric: tabular-nums;
+    color: var(--fg);
+    text-align: left;
+  }
+  .travel-segment__date:hover {
+    color: var(--brand-ink);
+  }
+  .travel-segment[data-selected="true"] .travel-segment__date {
+    color: var(--brand-ink);
+  }
+  /* 选中的那一段要一眼看得出来：段头整行淡染，比只换一个字色更明确。
+     负边距抵掉内边距，照片带的位置不受影响。 */
+  .travel-segment[data-selected="true"] .travel-segment__head {
+    margin-inline: -12px;
+    padding-inline: 12px;
+    border-radius: var(--radius-media);
+    background: color-mix(in srgb, var(--brand) 8%, transparent);
+  }
+  .travel-segment__days {
+    font-size: var(--text-meta);
+    color: var(--fg-subtle);
+  }
+  .travel-segment__route {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 8px;
+    min-width: 0;
+  }
+  .travel-segment__stop {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 6px;
+    padding: 2px 9px;
+    border-radius: var(--radius-media);
+    background: var(--bg-subtle);
+    font-size: var(--text-meta);
+    color: var(--fg);
+  }
+  .travel-segment__stop:hover {
+    background: var(--bg-strong);
+    color: var(--brand-ink);
+  }
+  .travel-segment__stop-count {
+    color: var(--fg-subtle);
+    font-variant-numeric: tabular-nums;
+  }
+  .travel-segment__arrow {
+    color: var(--fg-subtle);
+  }
+  .travel-segment__meta {
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: auto;
+  }
+  .travel-segment__kind {
+    font-size: var(--text-meta);
+    letter-spacing: 0.08em;
+    color: var(--fg-muted);
+  }
+  /* 停留只有一个地方，弱一些：它是一句实话，不是「走过很多地方」。 */
+  .travel-segment__kind--stay {
+    color: var(--fg-subtle);
+  }
+
+  /* --- 照片带：这一段的门面 --- */
+  .travel-segment__band {
+    display: flex;
+    gap: 4px;
+    height: 132px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+  .travel-segment__photo {
+    flex: 1 1 0;
+    min-width: 104px;
     overflow: hidden;
+    border-radius: var(--radius-media);
+    background: var(--bg-media);
+  }
+  .travel-segment__photo img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 300ms var(--dur);
+  }
+  .travel-segment__photo:hover img {
+    transform: scale(1.03);
+  }
+
+  /* --- 展开后的整段照片 --- */
+  .travel-segment__grid {
+    margin-top: 14px;
+    height: min(62vh, 620px);
+    overflow: hidden;
+    border-radius: var(--radius-media);
+  }
+
+  /* --- 上下文面板：选中某段，或打开「地方」时才有 --- */
+  .travel-context {
+    padding: 18px;
     border: 1px solid var(--border-faint);
     border-radius: var(--radius-tile);
     background: var(--bg-elevated);
-    transition:
-      border-color var(--dur),
-      transform var(--dur);
   }
-  .travel-place:hover {
-    border-color: var(--border-strong);
-    transform: translateY(-1px);
-  }
-  /* 照片侧的照片是裸挂的，不裱框 —— 卡片自己也不画框。 */
-  .travel-place__mosaic {
+  .travel-context__stops {
     display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 14px;
+  }
+  .travel-context__stop {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 6px 8px;
+    border-radius: var(--radius-media);
+    text-align: left;
+  }
+  .travel-context__stop:hover {
+    background: var(--bg-subtle);
+  }
+  .travel-context__places {
+    display: flex;
+    flex-direction: column;
     gap: 2px;
-    height: 84px;
+    margin-top: 12px;
+  }
+  .travel-context__place {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 6px;
+    border-radius: var(--radius-media);
+  }
+  .travel-context__place:hover {
+    background: var(--bg-subtle);
+  }
+  .travel-context__mosaic {
+    display: flex;
+    flex: none;
+    gap: 1px;
+    width: 72px;
+    height: 48px;
+    overflow: hidden;
+    border-radius: var(--radius-media);
     background: var(--bg-media);
   }
-  .travel-place__mosaic img {
+  .travel-context__mosaic img {
     min-width: 0;
     flex: 1;
     height: 100%;
     object-fit: cover;
   }
-  .travel-place__mosaic--empty {
-    align-items: center;
-    justify-content: center;
-    background: var(--bg-subtle);
+
+  /* --- 页脚说明：口径与误差 --- */
+  .travel-footnote {
+    padding: 24px 0 8px;
+    border-top: 1px solid var(--border-faint);
+    font-size: var(--text-meta);
+    line-height: 1.7;
     color: var(--fg-subtle);
-    font-size: var(--text-meta);
-  }
-  .travel-place__body {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 12px 14px 13px;
-  }
-  .travel-place__name {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-    min-width: 0;
-  }
-  .travel-place__title {
-    font-size: var(--text-label);
-    font-weight: 500;
-    color: var(--fg);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .travel-place__meta {
-    font-size: var(--text-meta);
-    color: var(--fg-muted);
-    font-variant-numeric: tabular-nums;
-  }
-  .travel-place__span {
-    font-size: var(--text-meta);
-    color: var(--fg-subtle);
-    font-variant-numeric: tabular-nums;
-  }
-  .travel-place__bar {
-    height: 3px;
-    border-radius: 2px;
-    background: var(--bg-subtle);
-    overflow: hidden;
-  }
-  .travel-place__bar span {
-    display: block;
-    height: 100%;
-    border-radius: 2px;
-    background: var(--brand);
   }
 
-  /* --- 行程：与浏览足迹同一条时间线 --- */
-  .travel-trips {
-    --footprint-stamp-col: 108px;
-    max-width: 1080px;
-  }
-  .travel-trip {
-    position: relative;
-  }
-  /* 连接线：穿过整列，最后一行只画到圆点为止。 */
-  .travel-trip::before {
-    content: "";
-    position: absolute;
-    left: calc(var(--footprint-stamp-col) + 10px + 8px);
-    top: 0;
-    bottom: 0;
-    width: 1px;
-    background: var(--border);
-  }
-  .travel-trips > li:last-child .travel-trip::before {
-    bottom: 50%;
-  }
-  .travel-trip__stamp {
-    text-align: right;
-    white-space: nowrap;
-  }
-  .travel-trip__node {
-    position: relative;
-    z-index: 1;
-    justify-self: center;
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    background: var(--brand);
-    box-shadow: 0 0 0 3px var(--bg);
-  }
-  .travel-trip__content {
-    display: block;
-    min-width: 0;
-    padding: 6px 10px;
-    margin-left: -10px;
-    border-radius: var(--radius-media);
-  }
-
-  .travel-trip {
-    display: grid;
-    grid-template-columns: var(--footprint-stamp-col, 132px) 18px minmax(0, 1fr);
-    align-items: center;
-    gap: 0 10px;
-    padding-block: 10px;
-  }
-  .travel-trip__route {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 4px 6px;
-    min-width: 0;
-  }
-  .travel-trip__stop {
-    display: inline-flex;
-    align-items: baseline;
-    gap: 5px;
-    padding: 2px 8px;
-    border-radius: var(--radius-media);
-    background: var(--bg-subtle);
-    font-size: var(--text-meta);
-    color: var(--fg);
-  }
-  /* 停留：不用药丸。它只有一个地方，药丸会让它看起来像走过很多地方。 */
-  .travel-trip__stop--stay {
-    background: transparent;
-    color: var(--fg-muted);
-    padding-inline: 0;
-  }
-  .travel-trip__count {
-    color: var(--fg-subtle);
-    font-variant-numeric: tabular-nums;
-  }
-  .travel-trip__arrow {
-    color: var(--fg-subtle);
-  }
-  /* 停留与行程要一眼分得开：停留只有一个地方，弱一些。 */
-  .travel-trip__kind {
-    /* 「行程」与「停留」是要读懂的一对说法，不缩到徽章那一档。 */
-    font-size: var(--text-meta);
-    letter-spacing: 0.08em;
-    color: var(--fg-subtle);
+  @media (max-width: 1023px) {
+    /* 窄屏放不下两栏：面板落到主栏下面，不再并排。 */
+    .travel-layout[data-context="true"] {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .travel-layout__aside {
+      position: static;
+      max-height: none;
+      padding-block: 0 24px;
+    }
   }
 
   /* --- 紧凑地图：右栏里的一件配图 --- */

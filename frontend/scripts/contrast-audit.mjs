@@ -30,7 +30,7 @@ const THEMES = (process.env.LG_THEMES ?? "light,dark").split(",");
 //   reader —— 阅读器（见下方 openReader）
 //   tag    —— 标签页（真实库里可能一个标签都没有，用仪表盘里的真实相册
 //             伪造标签页数据，封面仍是真实缩略图）
-const PAGES = (process.env.LG_PAGES ?? "/,/unread,/recents,/favorites,/settings,/tasks,album,reader,tag")
+const PAGES = (process.env.LG_PAGES ?? "/,/unread,/recents,/favorites,/settings,/tasks,/travels,album,reader,tag")
   .split(",")
   .map((p) => p.trim())
   .filter(Boolean);

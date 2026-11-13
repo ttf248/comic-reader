@@ -7,36 +7,36 @@ import {
   type MouseEvent,
 } from "react";
 import type { ChinaLocationGeometry } from "../../api/aiJobs";
-import { useElementSize } from "../../hooks/useElementSize";
 import {
   boundsOfPhotos,
   createMapProjection,
   levelOpacity,
-  regionLabelPoint,
   regionPath,
   shareOf,
-  trajectoryPath,
   type MapRegion,
-  type TrajectoryStop,
 } from "../../utils/travelMap";
 
 interface TravelMapProps {
-  /** 本层的全部区域。 */
+  /** 参与绘制的这一层区域。 */
   regions: MapRegion[];
   /** 本层照片总数，作为色阶与占比的分母。 */
   levelTotal: number;
-  /** 当前层级名，例如「省级区域」「地级区域」。 */
-  levelName: string;
-  /** 当前层级名，例如「全国」「浙江省」。 */
-  levelLabel: string;
-  /** 区域名字是否画在图上。全国层级不画，34 个省名会糊成一片。 */
-  showLabels: boolean;
-  /** 行踪折线（可选，默认不画）。 */
-  trajectory?: TrajectoryStop[];
-  /** 点选区域时下钻一层。 */
-  onSelect: (region: MapRegion) => void;
-  /** 回到上一层。 */
-  onLevelUp: () => void;
+  /** 这一层的说法，写在无障碍名称与图例里。 */
+  scopeLabel: string;
+  /** 图例文案；缺省写「基准：<scopeLabel> · N 张」，null 表示不写图例。 */
+  legend?: string | null;
+  /** 是否提供「缩到有照片的地方 / 看全国范围」的切换。 */
+  cropToggle?: boolean;
+  /**
+   * 是否裁到有照片的那一片。
+   *
+   * 位置图不裁：它要说明「在哪儿」，裁到只剩一个区反而失去上下文。
+   */
+  crop?: boolean;
+  /** 点选区域。 */
+  onSelect?: (region: MapRegion) => void;
+  /** Esc：回到上一层。 */
+  onLevelUp?: () => void;
 }
 
 interface TooltipState {
@@ -57,36 +57,31 @@ function clampTooltipX(x: number, containerWidth: number): number {
 }
 
 /**
- * 紧凑的行政区地图。
+ * 行政区地图：把一段行程去过的地方画出来。
  *
- * 它是右栏里的一件配图，不是页面主角：所以高度有限，且默认把画面
- * 裁到有照片的那一片 —— 一张库里往往只有几个省有照片，整张中国地图
- * 里大半是空的。
+ * 它是一件按需出现的上下文面板里的配图，因此默认裁到有照片的那一片 ——
+ * 一张库里往往只有几个地方有照片，整张中国地图里大半是空的。没有照片的
+ * 区域画成中性底色而不是透明：透明会让它从图上消失，看起来像缺了一块。
  *
- * 地图本身只是形状，键盘与读屏用户靠旁边的排行进入 —— 所以这里只保证
+ * 地图本身只是形状，键盘与读屏用户靠旁边的清单进入 —— 所以这里只保证
  * 形状可点、可聚焦，信息不靠颜色单独承载。
  */
 export default function TravelMap({
   regions,
   levelTotal,
-  levelName,
-  levelLabel,
-  showLabels,
-  trajectory,
+  scopeLabel,
+  legend,
+  cropToggle = true,
+  crop = true,
   onSelect,
   onLevelUp,
 }: TravelMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const { ref: sizeRef, width: containerWidth } =
-    useElementSize<HTMLDivElement>();
   const [focusIndex, setFocusIndex] = useState(0);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
   const [cropToPhotos, setCropToPhotos] = useState(true);
-  // 行踪折线默认不画：它连的是行政区质心，画出来是示意而不是真实路径。
-  const [showRoute, setShowRoute] = useState(false);
 
-  // 区域按照片数排序：焦点移动的顺序与视觉重要性一致，
-  // 排行列表也用同一个顺序。
+  // 区域按照片数排序：焦点移动的顺序与视觉重要性一致。
   const ordered = useMemo(
     () =>
       [...regions].sort((left, right) => {
@@ -100,8 +95,9 @@ export default function TravelMap({
 
   const photoBounds = useMemo(() => boundsOfPhotos(ordered), [ordered]);
   const projection = useMemo(
-    () => createMapProjection(ordered, cropToPhotos ? photoBounds : null),
-    [cropToPhotos, ordered, photoBounds],
+    () =>
+      createMapProjection(ordered, crop && cropToPhotos ? photoBounds : null),
+    [crop, cropToPhotos, ordered, photoBounds],
   );
 
   const paths = useMemo(
@@ -114,26 +110,9 @@ export default function TravelMap({
             region.geometry as ChinaLocationGeometry,
             projection.project,
           ),
-          // 质心无条件算：行踪的节点要落在区域里，名字只是顺带用。
-          centroid: regionLabelPoint(region.geometry),
-          label: showLabels ? regionLabelPoint(region.geometry) : null,
         })),
-    [ordered, projection, showLabels],
+    [ordered, projection],
   );
-
-  const centroidOf = useCallback(
-    (adcode: number): [number, number] | null => {
-      const entry = paths.find((item) => item.region.adcode === adcode);
-      if (!entry?.centroid) return null;
-      return projection.project(entry.centroid);
-    },
-    [paths, projection],
-  );
-
-  const routePath = useMemo(() => {
-    if (!trajectory || trajectory.length === 0) return "";
-    return trajectoryPath(trajectory, centroidOf, 2);
-  }, [centroidOf, trajectory]);
 
   const showTooltip = useCallback(
     (region: MapRegion, event: MouseEvent<SVGElement>) => {
@@ -186,12 +165,12 @@ export default function TravelMap({
         case "Enter":
         case " ":
           event.preventDefault();
-          onSelect(region);
+          onSelect?.(region);
           break;
         case "Escape":
           event.preventDefault();
           event.stopPropagation();
-          onLevelUp();
+          onLevelUp?.();
           break;
         default:
           break;
@@ -202,7 +181,7 @@ export default function TravelMap({
 
   if (regions.length === 0) {
     return (
-      <div className="flex min-h-[220px] flex-col items-center justify-center gap-2 px-6 text-center">
+      <div className="flex min-h-[180px] flex-col items-center justify-center gap-2 px-6 text-center">
         <p className="text-body font-medium text-fg">这一层没有更细的边界</p>
         <p className="max-w-sm text-meta leading-relaxed text-fg-muted">
           这个区域的照片仍然计入上级统计，可以回到上一级继续查看。
@@ -211,20 +190,13 @@ export default function TravelMap({
     );
   }
 
-  // 名字按屏幕上的实际字号给，不随 SVG 缩放：窄屏上 17 个单位只有
-  // 六个像素，根本看不清。
-  const labelFontSize =
-    containerWidth > 0
-      ? Math.min(30, (11 * projection.width) / containerWidth)
-      : 15;
-
   return (
     <div>
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-meta text-fg-muted">
-          {cropToPhotos ? "已缩放到有照片的区域" : "全国范围"}
-        </p>
-        <div className="flex items-center gap-2">
+      {cropToggle ? (
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-meta text-fg-muted">
+            {cropToPhotos ? "已缩放到有照片的区域" : "全国范围"}
+          </p>
           <button
             type="button"
             aria-pressed={cropToPhotos}
@@ -233,28 +205,17 @@ export default function TravelMap({
           >
             {cropToPhotos ? "看全国范围" : "缩到有照片的地方"}
           </button>
-          {trajectory && trajectory.length > 0 ? (
-            <button
-              type="button"
-              aria-pressed={showRoute}
-              onClick={() => setShowRoute((value) => !value)}
-              className="btn btn-sm btn-outline"
-            >
-              {showRoute ? "不看行踪" : "看行踪"}
-            </button>
-          ) : null}
         </div>
-      </div>
+      ) : null}
       <div
         ref={(node) => {
           containerRef.current = node;
-          sizeRef(node);
         }}
         className="travel-map"
       >
         <svg
           role="group"
-          aria-label={`${levelLabel}${levelName}照片地图，可用方向键在区域间移动，回车下钻，Esc 返回上一级`}
+          aria-label={`${scopeLabel}照片地图，可用方向键在区域间移动，回车打开该地区`}
           viewBox={projection.viewBox}
         >
           <g>
@@ -275,7 +236,7 @@ export default function TravelMap({
                   role="button"
                   aria-label={`${region.name}，${region.photoCount.toLocaleString()} 张照片，占本层 ${percent}`}
                   className="group cursor-pointer outline-none"
-                  onClick={() => onSelect(region)}
+                  onClick={() => onSelect?.(region)}
                   onMouseEnter={(event) => showTooltip(region, event)}
                   onMouseMove={(event) => showTooltip(region, event)}
                   onMouseLeave={() => setTooltip(null)}
@@ -322,40 +283,6 @@ export default function TravelMap({
               );
             })}
           </g>
-          {showRoute && routePath ? (
-            <path
-              d={routePath}
-              fill="none"
-              stroke="var(--fg)"
-              strokeOpacity={0.45}
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeDasharray="5 4"
-            />
-          ) : null}
-          {showLabels
-            ? paths.map(({ region, label }) => {
-                if (!label) return null;
-                const [x, y] = projection.project(label);
-                return (
-                  <text
-                    key={`label-${region.adcode}`}
-                    x={x}
-                    y={y}
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    fontSize={labelFontSize}
-                    className="pointer-events-none select-none"
-                    fill="var(--fg)"
-                    stroke="var(--bg-strong)"
-                    strokeWidth={labelFontSize * 0.18}
-                    paintOrder="stroke"
-                  >
-                    {region.name}
-                  </text>
-                );
-              })
-            : null}
         </svg>
         {tooltip ? (
           <div
@@ -374,16 +301,11 @@ export default function TravelMap({
           </div>
         ) : null}
       </div>
-      <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-meta text-fg-muted">
-        <span className="flex items-center gap-2">
-          <span>少</span>
-          <span className="h-2.5 w-10 rounded-full bg-gradient-to-r from-brand-soft to-brand" />
-          <span>多</span>
-        </span>
-        <span className="text-fg-subtle">
-          基准：{levelLabel} · {levelTotal.toLocaleString()} 张
-        </span>
-      </div>
+      {legend === null ? null : (
+        <p className="mt-2 text-meta text-fg-muted">
+          {legend ?? `基准：${scopeLabel} · ${levelTotal.toLocaleString()} 张`}
+        </p>
+      )}
     </div>
   );
 }

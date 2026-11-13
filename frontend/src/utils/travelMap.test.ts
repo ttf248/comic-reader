@@ -9,9 +9,7 @@ import {
   regionLabelPoint,
   regionPath,
   shareOf,
-  trajectoryPath,
   type MapRegion,
-  type TrajectoryStop,
 } from "./travelMap";
 
 const square: ChinaLocationGeometry = {
@@ -162,56 +160,5 @@ describe("离线地图几何", () => {
     const croppedWidth =
       cropped.project([117, 40])[0] - cropped.project([115, 40])[0];
     expect(croppedWidth).toBeGreaterThan(fullWidth);
-  });
-
-  it("轨迹折线在间隔太久处断开", () => {
-    const stops: TrajectoryStop[] = [
-      {
-        adcode: 1,
-        name: "甲",
-        at: "2019-05-02",
-        until: "2019-05-02",
-        photoCount: 3,
-      },
-      {
-        adcode: 2,
-        name: "乙",
-        at: "2019-05-03",
-        until: "2019-05-03",
-        photoCount: 2,
-      },
-      {
-        adcode: 3,
-        name: "丙",
-        at: "2021-06-12",
-        until: "2021-06-12",
-        photoCount: 1,
-      },
-    ];
-    const centroidOf = (adcode: number): [number, number] | null =>
-      adcode === 1 ? [10, 10] : adcode === 2 ? [20, 20] : [30, 30];
-    const path = trajectoryPath(stops, centroidOf);
-    // 前两段相隔一天，连在一起；第三段隔了两年，另起一段。
-    expect(path).toContain("M10.00,10.00L20.00,20.00");
-    expect(path).toContain("M30.00,30.00");
-    expect(path).not.toContain("L30.00,30.00");
-  });
-
-  it("轨迹折线在空输入时不崩", () => {
-    expect(trajectoryPath([], () => null)).toBe("");
-    expect(
-      trajectoryPath(
-        [
-          {
-            adcode: 1,
-            name: "甲",
-            at: "2019-05-02",
-            until: "2019-05-02",
-            photoCount: 1,
-          },
-        ],
-        () => null,
-      ),
-    ).toBe("");
   });
 });

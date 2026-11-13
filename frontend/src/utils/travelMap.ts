@@ -269,60 +269,6 @@ export function monthBuckets(months: MonthCount[]): YearBucket[] {
     .sort((left, right) => left.year.localeCompare(right.year));
 }
 
-/** 轨迹上的一个停靠点。 */
-export interface TrajectoryStop {
-  adcode: number;
-  name: string;
-  /** 该段第一张照片的拍摄日期。 */
-  at: string;
-  /** 该段最后一张照片的拍摄日期。 */
-  until: string;
-  photoCount: number;
-}
-
-/**
- * 生成轨迹折线的路径数据。
- *
- * 停靠点画在行政区质心上，因此响应里不需要照片坐标。相邻停靠之间
- * 间隔超过阈值就不连线：否则相隔很久的两次出行会被画成一条假路径。
- */
-export function trajectoryPath(
-  stops: TrajectoryStop[],
-  centroidOf: (adcode: number) => [number, number] | null,
-  maxGapDays = 2,
-): string {
-  const segments: string[] = [];
-  let segment = "";
-  let previous: { point: [number, number]; until: string } | null = null;
-  for (const stop of stops) {
-    const point = centroidOf(stop.adcode);
-    if (!point) continue;
-    if (previous) {
-      const gap = dayGap(previous.until, stop.at);
-      if (gap > maxGapDays) {
-        // 间隔太久，另起一段，不连线。
-        if (segment) segments.push(segment);
-        segment = `M${point[0].toFixed(2)},${point[1].toFixed(2)}`;
-      } else {
-        segment += `L${point[0].toFixed(2)},${point[1].toFixed(2)}`;
-      }
-    } else {
-      segment = `M${point[0].toFixed(2)},${point[1].toFixed(2)}`;
-    }
-    previous = { point, until: stop.until };
-  }
-  if (segment) segments.push(segment);
-  return segments.join(" ");
-}
-
-/** 两个日期之间隔了几天。 */
-function dayGap(from: string, to: string): number {
-  const fromTime = Date.parse(`${from}T00:00:00Z`);
-  const toTime = Date.parse(`${to}T00:00:00Z`);
-  if (Number.isNaN(fromTime) || Number.isNaN(toTime)) return 0;
-  return Math.round((toTime - fromTime) / 86400000);
-}
-
 function polygonArea(ring: ChinaLocationPoint[]): number {
   let sum = 0;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {
