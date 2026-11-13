@@ -390,6 +390,45 @@ func (s CatalogSnapshot) Resolve(id string) (string, bool) {
 	return ref.AbsolutePath, ok
 }
 
+// PhotoCount 返回快照内的图片总数（不含视频）。
+//
+// 相册可以嵌套在集合里，因此顶层相册只是目录树的第一层；只数顶层相册会
+// 漏掉绝大部分照片。按绝对路径去重：虚拟相册与实体相册指向同一批文件，
+// 不去重会算两遍。
+//
+// 它是「全库有多少张照片」这个问题的唯一来源 —— 目录索引按 ID 存资源，
+// 不区分图片与视频，因此只能从相册的图片清单数。
+func (s CatalogSnapshot) PhotoCount() int {
+	if s.state == nil || s.state.result == nil {
+		return 0
+	}
+	seen := make(map[string]struct{})
+	var countAlbums func(albums []models.Album)
+	var countCollections func(collections []models.Collection)
+	countAlbums = func(albums []models.Album) {
+		for i := range albums {
+			for _, file := range albums[i].ImageFiles {
+				if file == "" {
+					continue
+				}
+				seen[file] = struct{}{}
+			}
+		}
+	}
+	countCollections = func(collections []models.Collection) {
+		for i := range collections {
+			countAlbums(collections[i].Albums)
+			countCollections(collections[i].Collections)
+		}
+	}
+	countAlbums(s.state.result.Albums)
+	countCollections(s.state.result.Collections)
+	for i := range s.state.result.SmartCollections {
+		countAlbums(s.state.result.SmartCollections[i].Albums)
+	}
+	return len(seen)
+}
+
 // FileIDs 返回快照内按资源 ID 稳定排序的文件 ID 列表；绝对路径仍留在目录索引内。
 func (s CatalogSnapshot) FileIDs() []string {
 	if s.state == nil {

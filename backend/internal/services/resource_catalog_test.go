@@ -85,6 +85,28 @@ func TestResourceCatalog_VirtualAlbumAndCollectionSharePhysicalPath(t *testing.T
 	}
 }
 
+func TestResourceCatalog_PhotoCountDeduplicatesVirtualAlbums(t *testing.T) {
+	root := t.TempDir()
+	directory := filepath.Join(root, "album")
+	first := filepath.Join(directory, "1.jpg")
+	second := filepath.Join(directory, "2.jpg")
+	video := filepath.Join(directory, "clip.mp4")
+
+	catalog := NewResourceCatalog()
+	catalog.Publish(&models.ScanResult{
+		Roots: []string{root},
+		Albums: []models.Album{
+			{Path: directory, ImageFiles: []string{first, second}, VideoFiles: []string{video}},
+			// 虚拟相册指向同一批文件，不去重会算成四张。
+			{Path: directory, Virtual: true, ImageFiles: []string{first, second}},
+		},
+	}, []string{root})
+
+	if got := catalog.Acquire().PhotoCount(); got != 2 {
+		t.Fatalf("PhotoCount()=%d, want 2", got)
+	}
+}
+
 func TestResourceCatalog_AcquiredSnapshotRemainsVersionConsistent(t *testing.T) {
 	rootA := t.TempDir()
 	rootB := t.TempDir()

@@ -28,7 +28,12 @@ type ChinaLocationSummary struct {
 	GPSPhotoCount        int                     `json:"gpsPhotoCount"`
 	ChinaPhotoCount      int                     `json:"chinaPhotoCount"`
 	UnassignedPhotoCount int                     `json:"unassignedPhotoCount"`
-	Provinces            []ChinaLocationProvince `json:"provinces"`
+	// TotalPhotoCount 是全库的图片总数（不含视频），不随时间区间变化。
+	//
+	// 它给「有多少张照片」一个分母：gpsPhotoCount 说清了有多少张带位置，
+	// 但没有这个分母就看不出覆盖率。
+	TotalPhotoCount int                     `json:"totalPhotoCount"`
+	Provinces       []ChinaLocationProvince `json:"provinces"`
 	// Months 是本范围内的逐月分布，供时间轴使用。
 	Months []ChinaLocationMonth `json:"months"`
 	// Trajectory 是本范围内的停靠序列，供地图上的轨迹线使用。
@@ -518,6 +523,7 @@ func (s *ChinaLocationService) Summary(
 		GPSPhotoCount:        match.gpsPhotoCount,
 		ChinaPhotoCount:      match.chinaPhotoCount,
 		UnassignedPhotoCount: match.gpsPhotoCount - match.chinaPhotoCount,
+		TotalPhotoCount:      snapshot.PhotoCount(),
 		Provinces:            make([]ChinaLocationProvince, 0, len(index.provinces)),
 		Months:               []ChinaLocationMonth{},
 		Trajectory:           []ChinaLocationStop{},

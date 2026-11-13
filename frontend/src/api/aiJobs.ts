@@ -322,6 +322,8 @@ export interface ChinaLocationSummary {
   gpsPhotoCount: number;
   chinaPhotoCount: number;
   unassignedPhotoCount: number;
+  /** 全库图片总数（不含视频），不随时间区间变化。 */
+  totalPhotoCount: number;
   provinces: ChinaLocationProvince[];
   /** 本范围内的逐月分布，供时间轴使用。 */
   months: ChinaLocationMonth[];

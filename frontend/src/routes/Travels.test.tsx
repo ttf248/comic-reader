@@ -53,6 +53,7 @@ const summary = {
     gpsPhotoCount: 8,
     chinaPhotoCount: 8,
     unassignedPhotoCount: 0,
+    totalPhotoCount: 120,
     provinceCount: 2,
     cityCount: 1,
     districtCount: 0,
@@ -264,21 +265,24 @@ describe("足迹页", () => {
     });
   });
 
-  it("抬头分两栏：左边是标题与数字，右边是一块小地图", async () => {
+  it("抬头分两栏：左边是标题与规模，右边是一块小地图", async () => {
     renderPage();
 
-    // 标题与规模并成一句话，不拆成四个各自占一格的大数字。
+    // 标题与规模并成一条，不拆成四个各自占一格的大数字。
     expect(await screen.findByRole("heading", { name: "足迹" })).toBeTruthy();
     const head = document.querySelector(".travel-head") as HTMLElement;
-    const meta = head.querySelector(".travel-head__meta") as HTMLElement;
+    const stats = head.querySelector(".travel-stats") as HTMLElement;
     await waitFor(() => {
-      expect(meta.textContent).toContain("张带位置");
+      expect(stats.textContent).toContain("张照片");
     });
-    expect(meta.textContent).toContain("2 段足迹");
-    expect(meta.textContent).toContain("2 个省");
-    expect(meta.textContent).toContain("1 个市");
-    expect(meta.textContent).toContain("8 张带位置");
-    expect(meta.textContent).toContain("1 张没有拍摄时间");
+    // 主数字是全库照片总数，其余是它的分解。
+    expect(stats.textContent).toContain("120");
+    expect(stats.textContent).toContain("张照片 · 全库");
+    expect(stats.textContent).toContain("8 张带位置");
+    expect(stats.textContent).toContain("2 段出行");
+    expect(stats.textContent).toContain("2 个省");
+    expect(stats.textContent).toContain("1 个市");
+    expect(stats.textContent).toContain("1 张没有拍摄时间");
 
     // 地图在抬头的右栏里，不用选中什么就一直在。
     const map = await screen.findByRole("img", { name: /小地图/ });
@@ -402,10 +406,10 @@ describe("足迹页", () => {
     renderPage();
 
     const head = document.querySelector(".travel-head") as HTMLElement;
-    const meta = head.querySelector(".travel-head__meta") as HTMLElement;
+    const stats = head.querySelector(".travel-stats") as HTMLElement;
     await waitFor(() => {
-      expect(meta.textContent).toContain("2 个省");
+      expect(stats.textContent).toContain("2 个省");
     });
-    expect(meta.textContent).toContain("1 张没有拍摄时间");
+    expect(stats.textContent).toContain("1 张没有拍摄时间");
   });
 });

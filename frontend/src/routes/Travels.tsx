@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import Segmented from "../components/common/Segmented";
 import TravelMiniMap from "../components/travels/TravelMiniMap";
 import TravelPlaceList from "../components/travels/TravelPlaceList";
+import TravelStats from "../components/travels/TravelStats";
 import TravelTimeline from "../components/travels/TravelTimeline";
 import TravelTrips from "../components/travels/TravelTrips";
 import {
@@ -152,6 +153,8 @@ export default function Travels() {
 
   const untimedCount = summary?.untimedPhotoCount ?? 0;
 
+  const hasWindow = Boolean(from || to);
+
   const error =
     summaryQuery.isError || wholeQuery.isError || tripsQuery.isError;
 
@@ -212,34 +215,16 @@ export default function Travels() {
               <p className="page-eyebrow">离线解析</p>
               <h1 className="travel-head__title">足迹</h1>
 
-              {/* 规模并成一句话，不拆成四个各自占一格的大数字。 */}
-              <p className="travel-head__meta">
-                <span>
-                  <span className="travel-head__value">{tripCount}</span> 段足迹
-                </span>
-                <span>
-                  <span className="travel-head__value">
-                    {summary?.provinceCount ?? "—"}
-                  </span>{" "}
-                  个省
-                  <span className="travel-head__value ml-3">
-                    {summary?.cityCount ?? "—"}
-                  </span>{" "}
-                  个市
-                </span>
-                <span>
-                  <span className="travel-head__value">
-                    {(summary?.gpsPhotoCount ?? 0).toLocaleString()}
-                  </span>{" "}
-                  张带位置
-                </span>
-                <span>
-                  <span className="travel-head__value">
-                    {untimedCount.toLocaleString()}
-                  </span>{" "}
-                  张没有拍摄时间
-                </span>
-              </p>
+              {/* 规模：一个主数字（全库照片总数）加一句补充。 */}
+              <TravelStats
+                totalPhotos={summary?.totalPhotoCount ?? null}
+                gpsPhotos={summary?.gpsPhotoCount ?? 0}
+                trips={tripCount}
+                provinces={summary?.provinceCount ?? 0}
+                cities={summary?.cityCount ?? 0}
+                untimed={untimedCount}
+                scoped={hasWindow}
+              />
 
               <div className="travel-head__actions">
                 <Segmented

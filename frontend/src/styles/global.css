@@ -1914,6 +1914,54 @@ button:not(:disabled):active {
     font-weight: 600;
     font-variant-numeric: tabular-nums;
   }
+
+  /* --- 规模条：一个主数字 + 一句补充 ---
+     一排同样大小的数字读不出主次；主数字（全库照片总数）是分母，
+     其余是从这个分母里分出来的说法。 */
+  .travel-stats {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 6px 20px;
+    margin-top: 12px;
+  }
+  .travel-stats__hero {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .travel-stats__hero-value {
+    font-family: var(--font-display);
+    font-size: 30px;
+    line-height: 1.05;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--fg);
+    font-variant-numeric: tabular-nums;
+  }
+  .travel-stats__hero-label {
+    font-size: var(--text-meta);
+    color: var(--fg-muted);
+  }
+  .travel-stats__rest {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 3px 16px;
+    padding-left: 20px;
+    border-left: 1px solid var(--border-faint);
+    font-size: var(--text-body);
+    color: var(--fg-muted);
+  }
+  .travel-stats__value {
+    color: var(--fg);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .travel-stats__scope {
+    color: var(--brand-ink);
+    font-weight: 600;
+  }
   .travel-head__actions {
     display: flex;
     flex-wrap: wrap;

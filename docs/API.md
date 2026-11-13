@@ -448,7 +448,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 ### `GET /api/locations/china`
 
-返回全国省级照片统计：`locations` 含 `revision`、离线边界 `boundaryVersion`、GPS/境内/未归属照片数、有照片的行政区数量（`provinceCount` / `cityCount` / `districtCount`），以及 34 个省级 `provinces`（含 `photoCount` 与 `unmatchedAreaPhotoCount`）。该未细分数表示照片已匹配到省，但没有命中该省的直接下级边界。**响应不含绘图几何**：统计与几何是两份数据，几何由 `GET /api/locations/china/geometry/:level` 单独下发（见下）。响应带 `ETag`，可用 `If-None-Match` 获取 `304`。只统计当前快照中仍存在、版本指纹匹配且路径通过当前媒体根校验的照片。WGS84 GPS 会在本机转换到边界使用的 GCJ-02 后做点位匹配；响应不包含照片原始坐标与文件路径。边界数据来源、版本和限制见 [架构文档](./ARCHITECTURE.md#exifgps-与离线地点地图)。
+返回全国省级照片统计：`locations` 含 `revision`、离线边界 `boundaryVersion`、GPS/境内/未归属照片数、全库图片总数 `totalPhotoCount`（不含视频，不随时间区间变化）、有照片的行政区数量（`provinceCount` / `cityCount` / `districtCount`），以及 34 个省级 `provinces`（含 `photoCount` 与 `unmatchedAreaPhotoCount`）。`totalPhotoCount` 给「有多少张照片」一个分母：`gpsPhotoCount` 说清了有多少张带位置，但没有分母就看不出覆盖率。该未细分数表示照片已匹配到省，但没有命中该省的直接下级边界。**响应不含绘图几何**：统计与几何是两份数据，几何由 `GET /api/locations/china/geometry/:level` 单独下发（见下）。响应带 `ETag`，可用 `If-None-Match` 获取 `304`。只统计当前快照中仍存在、版本指纹匹配且路径通过当前媒体根校验的照片。WGS84 GPS 会在本机转换到边界使用的 GCJ-02 后做点位匹配；响应不包含照片原始坐标与文件路径。边界数据来源、版本和限制见 [架构文档](./ARCHITECTURE.md#exifgps-与离线地点地图)。
 
 除上述字段外还包含三个时间字段：
 
