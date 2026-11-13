@@ -407,9 +407,9 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 ### `POST /api/ai/search`
 
-语义检索使用 `text`，以图搜图使用 `resourceId` 或 multipart 上传的 `image`（最大 64 MiB）；三者最多选一种。可额外组合 `ocrText`（最多 200 字符）、`albumId`、`year`、`locationId`、`personId`、`favoriteOnly` 与 `pickedOnly`。只做 OCR 或结构化筛选时不需要 `text`、图片或 Chinese-CLIP；至少要提供一个查询条件。`personId` 仅用于照片工作区；`favoriteOnly` 匹配被收藏相册、集合或标签中的照片，`pickedOnly` 匹配用户精选的单张照片。`kind` 为必填的 `photo` 或 `comic`，年份为四位数，分页上限 200。例如：`{ "ocrText": "入口", "kind": "photo", "year": "2024", "locationId": "…", "favoriteOnly": true }`。
+语义检索使用 `text`，以图搜图使用 `resourceId` 或 multipart 上传的 `image`（最大 64 MiB）；三者最多选一种。可额外组合 `ocrText`（最多 200 字符）、`albumId`、`year`、`adcode`、`personId`、`favoriteOnly` 与 `pickedOnly`。只做 OCR 或结构化筛选时不需要 `text`、图片或 Chinese-CLIP；至少要提供一个查询条件。`personId` 仅用于照片工作区；`favoriteOnly` 匹配被收藏相册、集合或标签中的照片，`pickedOnly` 匹配用户精选的单张照片。`kind` 为必填的 `photo` 或 `comic`，年份为四位数，分页上限 200。例如：`{ "ocrText": "入口", "kind": "photo", "year": "2024", "adcode": 330000, "favoriteOnly": true }`。
 
-带语义查询的结果按精确余弦相似度降序，并返回 `similarity`；与 OCR 组合时，OCR 精确匹配优先于近似匹配，再按余弦排序。仅 OCR 查询先按精确/近似匹配排序，再按资源 ID 稳定排序；只有结构化筛选时按资源 ID 稳定排序。结果项可含 `matchReasons`：`semantic`、`similar_image`、`ocr_exact`、`ocr_approximate`，用于解释该照片为何入选。每项保留当前媒体 DTO 与所属相册 ID/名称；响应还包含 `total`、`offset`、`nextOffset` 与当前媒体库 `revision`。OCR 只匹配当前 OCR 版本、文件指纹有效的识别文本；匹配时会归一化全半角、中文空格/断行与标点，长中文短语允许一次受限的常见混淆字或插入/遗漏。年份筛选依赖当前版本的 EXIF 拍摄年份，地点筛选复用 GPS 地点聚类 ID。每个候选和最终结果都会按当前媒体根重新验证路径、文件类型及大小/修改时间；响应不包含绝对路径。无效请求返回 `400 invalid_semantic_search`；语义检索缺少模型/运行环境分别返回 `503 ai_model_missing` / `503 ai_runtime_unavailable`。
+带语义查询的结果按精确余弦相似度降序，并返回 `similarity`；与 OCR 组合时，OCR 精确匹配优先于近似匹配，再按余弦排序。仅 OCR 查询先按精确/近似匹配排序，再按资源 ID 稳定排序；只有结构化筛选时按资源 ID 稳定排序。结果项可含 `matchReasons`：`semantic`、`similar_image`、`ocr_exact`、`ocr_approximate`，用于解释该照片为何入选。每项保留当前媒体 DTO 与所属相册 ID/名称；响应还包含 `total`、`offset`、`nextOffset` 与当前媒体库 `revision`。OCR 只匹配当前 OCR 版本、文件指纹有效的识别文本；匹配时会归一化全半角、中文空格/断行与标点，长中文短语允许一次受限的常见混淆字或插入/遗漏。年份筛选依赖当前版本的 EXIF 拍摄年份，地点筛选按行政区划码匹配（筛一个省包含它下面的市与区县；坐标按记录里的 datum 转到边界使用的 GCJ-02 再判定）。每个候选和最终结果都会按当前媒体根重新验证路径、文件类型及大小/修改时间；响应不包含绝对路径。无效请求返回 `400 invalid_semantic_search`；语义检索缺少模型/运行环境分别返回 `503 ai_model_missing` / `503 ai_runtime_unavailable`。
 
 ### `GET /api/images/:fileId/metadata`
 
@@ -434,7 +434,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 人物分组使用 SFace 余弦相似度 `0.363` 作为候选阈值；这是 [OpenCV 的 SFace 参考值](https://docs.opencv.org/4.13.0/d0/dd4/tutorial_dnn_face.html)，不代表身份确认或项目内校准。聚类不限制人脸总数，每次构建最多进行 2,000,000 次组中心比较；达到上限后剩余脸仍保留为独立候选组。输入按资源 ID 与脸序号排序，旧组的命名、隐藏与分配在重建时按人脸重叠迁移；自动重建若会合并多个已有人工修正的组或拆分一个已有人工修正的组，旧分组保持独立，直到用户显式合并或拆分。人物媒体分页继续以照片为单位，拆分选择器每次显示 200 张已加载人脸，可逐段展开。用户修正保存在 `state/people.json`；可重建索引位于 `derived/ai/people-index.json`，只存资源 ID、文件指纹、脸部框和组 ID。人脸特征仍只保存在现有 `derived/metadata/face/` 结果中。
 
-### 拍摄地点地图 API
+### 足迹页 API
 
 三个地图端点与一个媒体页端点共享一组可选的查询参数：
 
@@ -448,7 +448,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 ### `GET /api/locations/china`
 
-返回全国省级照片统计：`locations` 含 `revision`、离线边界 `boundaryVersion`、GPS/境内/未归属照片数，以及 34 个省级 `provinces`（含 `photoCount` 与 `unmatchedAreaPhotoCount`）。该未细分数表示照片已匹配到省，但没有命中该省的直接下级边界。**响应不含绘图几何**：统计与几何是两份数据，几何由 `GET /api/locations/china/geometry/:level` 单独下发（见下）。响应带 `ETag`，可用 `If-None-Match` 获取 `304`。只统计当前快照中仍存在、版本指纹匹配且路径通过当前媒体根校验的照片。WGS84 GPS 会在本机转换到边界使用的 GCJ-02 后做点位匹配；响应不包含照片原始坐标与文件路径。边界数据来源、版本和限制见 [架构文档](./ARCHITECTURE.md#exifgps-与离线地点地图)。
+返回全国省级照片统计：`locations` 含 `revision`、离线边界 `boundaryVersion`、GPS/境内/未归属照片数、有照片的行政区数量（`provinceCount` / `cityCount` / `districtCount`），以及 34 个省级 `provinces`（含 `photoCount` 与 `unmatchedAreaPhotoCount`）。该未细分数表示照片已匹配到省，但没有命中该省的直接下级边界。**响应不含绘图几何**：统计与几何是两份数据，几何由 `GET /api/locations/china/geometry/:level` 单独下发（见下）。响应带 `ETag`，可用 `If-None-Match` 获取 `304`。只统计当前快照中仍存在、版本指纹匹配且路径通过当前媒体根校验的照片。WGS84 GPS 会在本机转换到边界使用的 GCJ-02 后做点位匹配；响应不包含照片原始坐标与文件路径。边界数据来源、版本和限制见 [架构文档](./ARCHITECTURE.md#exifgps-与离线地点地图)。
 
 除上述字段外还包含三个时间字段：
 
@@ -458,7 +458,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 ### `GET /api/locations/china/regions/:adcode`
 
-返回指定行政区及其**直接下级**区域的地图。省级区划返回城市与省直辖区县；城市返回区县；末级区域的 `regions` 为空。`region` 包含当前区域的 `adcode`、`name`、`level`、照片数、`parentAdcode` 和 `ancestors`；`ancestors` 按全国到直接上级排列，供完整面包屑导航。当前区域有照片但未命中任何直接下级边界的数量由 `unmatchedAreaPhotoCount` 给出。城市照片数包含其下辖区县的照片；每项 `regions` 仅统计落在该直接下级中的照片，并包含区划码、名称、级别与照片数。绘图几何同样由 `GET /api/locations/china/geometry/:level` 单独下发。响应也支持 `ETag` / `If-None-Match`。区划码格式错误返回 `400 invalid_region_adcode`，边界中不存在返回 `404 region_not_found`。
+返回指定行政区及其**直接下级**区域的地图。省级区划返回城市与省直辖区县；城市返回区县；末级区域的 `regions` 为空。`region` 包含当前区域的 `adcode`、`name`、`level`、照片数、到访次数（`visitCount`）、有可信拍摄时间的首末日期（`firstAt` / `lastAt`，没有可信时间时是空串）、代表照（`coverResourceIds`，最多 4 个）、`parentAdcode` 和 `ancestors`；`ancestors` 按全国到直接上级排列，供完整面包屑导航。当前区域有照片但未命中任何直接下级边界的数量由 `unmatchedAreaPhotoCount` 给出。城市照片数包含其下辖区县的照片；每项 `regions` 仅统计落在该直接下级中的照片，并包含区划码、名称、级别与照片数。绘图几何同样由 `GET /api/locations/china/geometry/:level` 单独下发。响应也支持 `ETag` / `If-None-Match`。区划码格式错误返回 `400 invalid_region_adcode`，边界中不存在返回 `404 region_not_found`。
 
 响应同样包含 `months`、`trajectory` 与 `untimedPhotoCount`，口径跟随当前区间与当前区域：`months` 是该区域自己的逐月分布，`trajectory` 是该区域直接下级之间的停靠序列。省级轨迹落到城市或省直辖区县，城市轨迹落到区县。
 
@@ -503,7 +503,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 | `level` | 归并粒度：`province`、`city` 或 `district`，缺省 `province` |
 | `parent`| 限定在某个上级之下（十进制区划码）                          |
 
-`places` 含 `revision`、`boundaryVersion`、`level`、`total`、GPS/境内/未归属照片数与 `places` 列表。每项 `places` 是：
+`places` 含 `revision`、`boundaryVersion`、`level`、`total`、GPS/境内/未归属照片数与 `items` 列表。每项 `items` 是：
 
 | 字段               | 含义                                                     |
 | ------------------ | -------------------------------------------------------- |
@@ -529,8 +529,9 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 | 参数          | 含义                                                    |
 | ------------- | ------------------------------------------------------- |
 | `granularity` | 粒度：`province`、`city` 或 `district`，缺省 `city`    |
+| `gapDays`     | 切分两段行程的最大间隔（天），1–365，缺省 14       |
 
-`trips` 含 `revision`、`boundaryVersion`、`granularity`、`total` 与 `trips` 列表。每项 `trips` 是：
+`trips` 含 `revision`、`boundaryVersion`、`granularity`、`gapDays`、`total` 与 `items` 列表。每项 `items` 是：
 
 | 字段              | 含义                                                   |
 | ----------------- | ------------------------------------------------------ |
@@ -542,11 +543,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 | `stops`           | 停留点序列，每项 `{ "adcode", "name", "level", "at", "until", "dayCount", "photoCount" }` |
 | `coverResourceIds`| 代表照的资源 ID，最多 4 张                             |
 
-**切分口径与到访完全一致**：相邻照片的日历日间隔超过 2 天就断开。区别在粒度：到访比的是同一个地方，行程比的是「去了哪些地方」；一段里只出现一个地方时它是 `stay`。市级粒度下「西湖区 → 余杭区」是同一次停留，符合人的说法。
-
-### `GET /api/locations` / `GET /api/locations/:locationId/media`
-
-该坐标聚类接口仅汇总当前扫描快照中仍存在、版本指纹匹配且路径通过当前媒体根校验的照片 GPS 结果。响应按有限坐标网格聚合，并给出坐标、照片数、来源相册数与封面 ID；媒体页额外返回地点摘要、照片分页与来源相册 ID/名称。它继续供语义筛选和既有地点照片分页使用；地点主页面改读 `/api/locations/china` 展示行政区名称，不发起在线反向地理编码。游标绑定当前 library revision。失效地点返回 `404 location_not_found`。`locationId` 是聚类 ID，不是资源授权凭据。
+**切分口径比到访宽**：相邻照片的日历日间隔超过 `gapDays` 天就断开，缺省 14 天。两天的口径是「回来算又一次到访」，拿来做行程会把出门一趟切成好几段。区别还在粒度：到访比的是同一个地方，行程比的是「去了哪些地方」；一段里只出现一个地方时它是 `stay」。市级粒度下「西湖区 → 余杭区」是同一次停留，符合人的说法。
 
 ## 相册与搜索
 

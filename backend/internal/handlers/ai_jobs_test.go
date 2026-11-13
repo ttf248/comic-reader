@@ -70,7 +70,6 @@ func TestAIJobAPIFullAnalysisOverThousandImages(t *testing.T) {
 	api.Get("/ai/jobs", AIJobsHandler(service))
 	api.Post("/ai/jobs", AIJobStartHandler(service))
 	api.Get("/images/:id/metadata", middleware.ResourceParam(catalog, safetyState), ImageMetadataHandler(service))
-	api.Get("/locations", GPSLocationsHandler(catalog, service, safetyState.Validate, nil))
 
 	startRequest := httptest.NewRequest("POST", "/api/ai/jobs", strings.NewReader(`{"type":"metadata","mode":"full"}`))
 	startRequest.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)

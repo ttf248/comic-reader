@@ -32,6 +32,13 @@ type ChinaLocationSummary struct {
 	Trajectory []ChinaLocationStop `json:"trajectory"`
 	// UntimedPhotoCount 是有位置但没有可信拍摄时间的照片数。
 	UntimedPhotoCount int `json:"untimedPhotoCount"`
+	// ProvinceCount / CityCount / DistrictCount 是各有照片的行政区数量。
+	//
+	// 这三个数回答「去过多少地方」：照片数只说规模，去了几个地方才是
+	// 另一个量纲。
+	ProvinceCount int `json:"provinceCount"`
+	CityCount     int `json:"cityCount"`
+	DistrictCount int `json:"districtCount"`
 }
 
 // ChinaLocationProvince 是一个省级区域的照片统计。
@@ -52,6 +59,14 @@ type ChinaLocationRegionInfo struct {
 	Level                   string `json:"level"`
 	PhotoCount              int    `json:"photoCount"`
 	UnmatchedAreaPhotoCount int    `json:"unmatchedAreaPhotoCount"`
+	// VisitCount 是按到访口径切出的次数。
+	VisitCount int `json:"visitCount"`
+	// FirstAt 与 LastAt 是这个区域有可信拍摄时间的第一天与最后一天，
+	// 没有可信时间时是空串。
+	FirstAt string `json:"firstAt"`
+	LastAt  string `json:"lastAt"`
+	// CoverResourceIDs 是代表照的资源 ID，最多 4 张。
+	CoverResourceIDs []string `json:"coverResourceIds"`
 	// ParentAdcode 是上级的区划码；省级区域为 null。
 	ParentAdcode *int `json:"parentAdcode"`
 	// Ancestors 按全国到直接上级的顺序列出祖先行政区。
@@ -386,6 +401,14 @@ func (s chinaStopSegment) locationStop() ChinaLocationStop {
 // 隔很久回来算两次。切分与照片筛选共用这个函数，到访列表与到访里的
 // 照片因此永远对得上。
 func splitChinaVisits(photos []chinaRegionPhoto) []chinaVisit {
+	return splitChinaVisitsByGap(photos, chinaVisitMaxGapDays)
+}
+
+// splitChinaVisitsByGap 按给定的间隔上限切分照片。
+//
+// 到访用两天的口径（回来算又一次），行程用可调的间隔：把「出门一趟」
+// 看成一段而不是一串，需要更宽的间隔。
+func splitChinaVisitsByGap(photos []chinaRegionPhoto, maxGapDays int) []chinaVisit {
 	visits := make([]chinaVisit, 0, 4)
 	current := chinaVisit{}
 	for _, photo := range photos {
@@ -394,7 +417,7 @@ func splitChinaVisits(photos []chinaRegionPhoto) []chinaVisit {
 		}
 		if len(current.photos) > 0 {
 			gap := photo.captured.dayIndex() - current.endedAt.dayIndex()
-			if gap > chinaVisitMaxGapDays {
+			if gap > maxGapDays {
 				visits = append(visits, current)
 				current = chinaVisit{}
 			}
@@ -503,6 +526,7 @@ func (s *ChinaLocationService) Summary(
 	}
 	scoped := match.scopedPhotos(match.timedPhotos, timeRange)
 	summary.Months = chinaMonthDistribution(scoped)
+	summary.ProvinceCount, summary.CityCount, summary.DistrictCount = chinaPlaceCounts(match, index)
 	for _, stop := range chinaTrajectoryStops(scoped, func(photo chinaRegionPhoto) int {
 		return photo.provinceAdcode
 	}, index) {
@@ -552,6 +576,18 @@ func (s *ChinaLocationService) Regions(
 	scoped := match.scopedPhotos(scope, timeRange)
 	info.PhotoCount = len(scoped)
 	info.UnmatchedAreaPhotoCount = unmatchedChinaRegionPhotoCount(scoped, feature, index)
+	visits := splitChinaVisits(scoped)
+	info.VisitCount = len(visits)
+	info.CoverResourceIDs = chinaPlaceCoverIDs(scoped, visits)
+	for _, photo := range scoped {
+		if !photo.captured.Valid {
+			continue
+		}
+		if info.FirstAt == "" {
+			info.FirstAt = photo.captured.DayKey
+		}
+		info.LastAt = photo.captured.DayKey
+	}
 	result := ChinaLocationRegions{
 		Revision:        snapshot.Revision(),
 		BoundaryVersion: chinaBoundaryVersion,

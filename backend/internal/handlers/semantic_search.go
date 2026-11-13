@@ -18,13 +18,14 @@ import (
 )
 
 type semanticSearchRequest struct {
-	Text         string `json:"text"`
-	OCRText      string `json:"ocrText"`
-	ResourceID   string `json:"resourceId"`
-	Kind         string `json:"kind"`
-	AlbumID      string `json:"albumId"`
-	Year         string `json:"year"`
-	LocationID   string `json:"locationId"`
+	Text       string `json:"text"`
+	OCRText    string `json:"ocrText"`
+	ResourceID string `json:"resourceId"`
+	Kind       string `json:"kind"`
+	AlbumID    string `json:"albumId"`
+	Year       string `json:"year"`
+	// Adcode 是行政区划码（六位）。筛「浙江省」包含它下面的市与区县。
+	Adcode       int    `json:"adcode"`
 	PersonID     string `json:"personId"`
 	FavoriteOnly bool   `json:"favoriteOnly"`
 	PickedOnly   bool   `json:"pickedOnly"`
@@ -87,11 +88,13 @@ func SemanticSearchHandler(
 	return func(c *fiber.Ctx) error {
 		var request semanticSearchRequest
 		var uploadedPath string
+		// 行政区筛选器只在这一个请求里用；不筛地点时它是 nil。
+		var placeFilter *services.ChinaPlaceFilter
 		if strings.HasPrefix(strings.ToLower(c.Get(fiber.HeaderContentType)), "multipart/form-data") {
 			request = semanticSearchRequest{
 				Text: c.FormValue("text"), OCRText: c.FormValue("ocrText"), ResourceID: c.FormValue("resourceId"),
 				Kind: c.FormValue("kind"), AlbumID: c.FormValue("albumId"),
-				Year: c.FormValue("year"), LocationID: c.FormValue("locationId"), PersonID: c.FormValue("personId"),
+				Year: c.FormValue("year"), Adcode: parseSemanticInt(c.FormValue("adcode"), 0), PersonID: c.FormValue("personId"),
 				FavoriteOnly: c.FormValue("favoriteOnly") == "true", PickedOnly: c.FormValue("pickedOnly") == "true",
 				Offset: parseSemanticInt(c.FormValue("offset"), 0), Limit: parseSemanticInt(c.FormValue("limit"), 60),
 			}
@@ -129,7 +132,7 @@ func SemanticSearchHandler(
 		if request.Text != "" && (request.ResourceID != "" || uploadedPath != "") || request.ResourceID != "" && uploadedPath != "" {
 			return writeError(c, fiber.StatusBadRequest, "invalid_semantic_search", "provide either one text or one image query")
 		}
-		if !semanticQuery && request.OCRText == "" && request.AlbumID == "" && request.Year == "" && request.LocationID == "" && request.PersonID == "" && !request.FavoriteOnly && !request.PickedOnly {
+		if !semanticQuery && request.OCRText == "" && request.AlbumID == "" && request.Year == "" && request.Adcode == 0 && request.PersonID == "" && !request.FavoriteOnly && !request.PickedOnly {
 			return writeError(c, fiber.StatusBadRequest, "invalid_semantic_search", "provide a search query or at least one filter")
 		}
 		kind := services.LibraryKindScope(request.Kind)
@@ -138,6 +141,16 @@ func SemanticSearchHandler(
 		}
 		if request.PersonID != "" && kind != services.LibraryKindPhoto {
 			return writeError(c, fiber.StatusBadRequest, "invalid_semantic_filter", "person filters are available for photos only")
+		}
+		if request.Adcode > 0 {
+			filter, err := services.NewChinaPlaceFilter(request.Adcode)
+			if err != nil {
+				if errors.Is(err, services.ErrChinaRegionNotFound) {
+					return writeError(c, fiber.StatusBadRequest, "invalid_semantic_filter", "adcode is not a known administrative region")
+				}
+				return writeError(c, fiber.StatusInternalServerError, "semantic_search_failed", "semantic search failed")
+			}
+			placeFilter = filter
 		}
 		if request.Year != "" {
 			if len(request.Year) != 4 {
@@ -179,7 +192,7 @@ func SemanticSearchHandler(
 			}
 		}
 		metadataRecords := make(map[string]services.AIAnalysisRecord)
-		if request.Year != "" || request.LocationID != "" {
+		if request.Year != "" || request.Adcode > 0 {
 			for _, record := range jobs.Records(services.AIJobTypeMetadata) {
 				metadataRecords[record.ResourceID] = record
 			}
@@ -272,7 +285,7 @@ func SemanticSearchHandler(
 			if request.FavoriteOnly && !libraryAlbumIsFavorite(snapshot, album, favoriteIDs) {
 				continue
 			}
-			if request.Year != "" || request.LocationID != "" {
+			if request.Year != "" || request.Adcode > 0 {
 				metaRecord, exists := metadataRecords[metadata.ResourceID]
 				if !exists || metaRecord.Status != services.MetadataParseParsed || metaRecord.Size != metadata.Size || metaRecord.MTimeNs != metadata.MTimeNs {
 					continue
@@ -284,8 +297,10 @@ func SemanticSearchHandler(
 				if request.Year != "" && !strings.HasPrefix(imageMetadata.DateTimeOriginal, request.Year) {
 					continue
 				}
-				if request.LocationID != "" && (imageMetadata.GPS == nil || services.GPSLocationID(imageMetadata.GPS.Latitude, imageMetadata.GPS.Longitude) != request.LocationID) {
-					continue
+				if request.Adcode > 0 {
+					if imageMetadata.GPS == nil || !placeFilter.Contains(imageMetadata.GPS.Longitude, imageMetadata.GPS.Latitude, imageMetadata.GPS.MapDatum) {
+						continue
+					}
 				}
 			}
 			if request.OCRText != "" {

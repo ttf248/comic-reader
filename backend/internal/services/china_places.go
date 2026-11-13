@@ -37,7 +37,7 @@ type ChinaPlaces struct {
 	ChinaPhotoCount      int          `json:"chinaPhotoCount"`
 	UnassignedPhotoCount int          `json:"unassignedPhotoCount"`
 	UntimedPhotoCount    int          `json:"untimedPhotoCount"`
-	Places               []ChinaPlace `json:"places"`
+	Items                []ChinaPlace `json:"items"`
 }
 
 // ChinaTripStop 是一次行程里的一个停留段。
@@ -71,11 +71,13 @@ type ChinaTrip struct {
 
 // ChinaTrips 是行程的响应。
 type ChinaTrips struct {
-	Revision          uint64      `json:"revision"`
-	BoundaryVersion   string      `json:"boundaryVersion"`
-	Granularity       string      `json:"granularity"`
+	Revision        uint64 `json:"revision"`
+	BoundaryVersion string `json:"boundaryVersion"`
+	Granularity     string `json:"granularity"`
+	// GapDays 是切分两段行程的最大间隔（天）。
+	GapDays           int         `json:"gapDays"`
 	Total             int         `json:"total"`
-	Trips             []ChinaTrip `json:"trips"`
+	Items             []ChinaTrip `json:"items"`
 	UntimedPhotoCount int         `json:"untimedPhotoCount"`
 }
 
@@ -242,8 +244,30 @@ func (s *ChinaLocationService) Places(
 		ChinaPhotoCount:      match.chinaPhotoCount,
 		UnassignedPhotoCount: match.gpsPhotoCount - match.chinaPhotoCount,
 		UntimedPhotoCount:    match.chinaPhotoCount - len(match.timedPhotos),
-		Places:               places,
+		Items:                places,
 	}, nil
+}
+
+// chinaPlaceCounts 数出各有照片的行政区数量（省、市、区县各一）。
+func chinaPlaceCounts(match *chinaLocationMatch, index *chinaAdminIndex) (int, int, int) {
+	if match == nil {
+		return 0, 0, 0
+	}
+	levels := map[string]map[int]bool{
+		chinaAdminProvinceLevel: {},
+		chinaAdminCityLevel:     {},
+		chinaAdminDistrictLevel: {},
+	}
+	for _, photos := range match.provincePhotos {
+		for _, photo := range photos {
+			for level := range levels {
+				if key := chinaPlaceKey(photo, level, index); key != 0 {
+					levels[level][key] = true
+				}
+			}
+		}
+	}
+	return len(levels[chinaAdminProvinceLevel]), len(levels[chinaAdminCityLevel]), len(levels[chinaAdminDistrictLevel])
 }
 
 // chinaPlaceCoverIDs 挑代表照。
@@ -295,6 +319,7 @@ func (s *ChinaLocationService) Trips(
 	validatePath func(string) (string, error),
 	granularity string,
 	timeRange ChinaTimeRange,
+	gapDays int,
 ) (ChinaTrips, error) {
 	if !IsChinaPlaceGranularity(granularity) {
 		return ChinaTrips{}, fmt.Errorf("unknown trip granularity %q", granularity)
@@ -308,7 +333,7 @@ func (s *ChinaLocationService) Trips(
 		return ChinaTrips{}, err
 	}
 	scoped := match.scopedPhotos(match.timedPhotos, timeRange)
-	segments := splitChinaVisits(scoped)
+	segments := splitChinaVisitsByGap(scoped, gapDays)
 	trips := make([]ChinaTrip, 0, len(segments))
 	for _, segment := range segments {
 		stops := chinaTrajectoryStops(segment.photos, func(photo chinaRegionPhoto) int {
@@ -356,14 +381,89 @@ func (s *ChinaLocationService) Trips(
 		Revision:          snapshot.Revision(),
 		BoundaryVersion:   chinaBoundaryVersion,
 		Granularity:       granularity,
+		GapDays:           gapDays,
 		Total:             len(trips),
-		Trips:             trips,
+		Items:             trips,
 		UntimedPhotoCount: match.chinaPhotoCount - len(match.timedPhotos),
 	}, nil
 }
+
+// ChinaTripMaxGapDays 是行程的默认间隔上限（天）。
+//
+// 两天的口径是「回来算又一次到访」，对行程太碎：出门两天、回家一天、
+// 再出门，会被切成三段。行程用十四天：两周之内还连着拍的地方算同一段
+// 出行，超过才算另起一段。
+const ChinaTripMaxGapDays = 14
 
 // 行程的两类：走过多个地方是行程，只在一个地方是停留。
 const (
 	chinaTripKindTrip = "trip"
 	chinaTripKindStay = "stay"
 )
+
+// ChinaPlaceFilter 是按行政区筛选照片的过滤器。
+//
+// 它匹配的是行政区的整棵子树：筛「浙江省」要包含杭州市下的所有区县。
+type ChinaPlaceFilter struct {
+	// adcodes 是目标区划与它全部下级的区划码。
+	adcodes map[int]bool
+}
+
+// NewChinaPlaceFilter 为某个区划码建一个筛选器。
+func NewChinaPlaceFilter(adcode int) (*ChinaPlaceFilter, error) {
+	index, err := loadChinaAdminIndex()
+	if err != nil {
+		return nil, err
+	}
+	feature, exists := index.byAdcode[adcode]
+	if !exists {
+		return nil, ErrChinaRegionNotFound
+	}
+	codes := map[int]bool{feature.adcode: true}
+	// 层级最多三层：省 → 市 → 区县。
+	for depth := 0; depth < 3; depth++ {
+		expanded := false
+		for code := range codes {
+			for _, child := range index.childrenByParent[code] {
+				if !codes[child.adcode] {
+					codes[child.adcode] = true
+					expanded = true
+				}
+			}
+		}
+		if !expanded {
+			break
+		}
+	}
+	return &ChinaPlaceFilter{adcodes: codes}, nil
+}
+
+// Contains 判断一个坐标是否落在筛选范围内。
+//
+// 坐标按记录里的 datum 转到边界使用的 GCJ-02 再判定：边界是 GCJ-02，
+// 不做转换的话绝大多数照片会落到错误的区。
+func (f *ChinaPlaceFilter) Contains(longitude, latitude float64, datum string) bool {
+	if f == nil {
+		return false
+	}
+	index, err := loadChinaAdminIndex()
+	if err != nil {
+		return false
+	}
+	lon, lat, valid := coordinatesToChinaMap(longitude, latitude, datum)
+	if !valid {
+		return false
+	}
+	province := matchingChinaFeature(index.provinces, lon, lat)
+	if province == nil {
+		return false
+	}
+	if f.adcodes[province.adcode] {
+		return true
+	}
+	area := deepestChinaFeature(index, province, lon, lat)
+	if area == nil {
+		return false
+	}
+	return f.adcodes[area.adcode]
+}

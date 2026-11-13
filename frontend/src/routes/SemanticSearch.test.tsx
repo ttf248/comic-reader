@@ -6,7 +6,7 @@ import SemanticSearch from "./SemanticSearch";
 
 const mocks = vi.hoisted(() => ({
   embeddingStatus: vi.fn(),
-  locations: vi.fn(),
+  chinaPlaces: vi.fn(),
   people: vi.fn(),
   semanticSearch: vi.fn(),
   albumSearch: vi.fn(),
@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("../api/aiJobs", () => ({
   aiJobsApi: {
     embeddingStatus: mocks.embeddingStatus,
-    locations: mocks.locations,
+    chinaPlaces: mocks.chinaPlaces,
     people: mocks.people,
     semanticSearch: mocks.semanticSearch,
   },
@@ -130,18 +130,28 @@ describe("智能搜索", () => {
         coverage: { indexed: 0, total: 0 },
       },
     });
-    mocks.locations.mockResolvedValue({
+    mocks.chinaPlaces.mockResolvedValue({
       ok: true,
-      page: {
+      places: {
+        revision: 1,
+        boundaryVersion: "areacity-2025.251231.260403",
+        level: "province",
+        total: 1,
+        gpsPhotoCount: 2,
+        chinaPhotoCount: 2,
+        unassignedPhotoCount: 0,
+        untimedPhotoCount: 0,
         items: [
           {
-            id: "gps_abc",
-            name: "北京",
-            latitude: 39.9,
-            longitude: 116.4,
-            fileCount: 2,
-            albumCount: 1,
-            cellPrecision: 5,
+            adcode: 110000,
+            name: "北京市",
+            level: "province",
+            photoCount: 2,
+            unmatchedCount: 0,
+            visitCount: 1,
+            firstAt: "2024-05-01",
+            lastAt: "2024-05-02",
+            coverResourceIds: [],
           },
         ],
       },
@@ -267,8 +277,8 @@ describe("智能搜索", () => {
     fireEvent.change(screen.getByPlaceholderText("例如 2024"), {
       target: { value: "2024" },
     });
-    fireEvent.change(screen.getByLabelText("GPS 地点"), {
-      target: { value: "gps_abc" },
+    fireEvent.change(screen.getByLabelText("拍摄地点"), {
+      target: { value: "110000" },
     });
     fireEvent.change(screen.getByLabelText("人物"), {
       target: { value: "p_123456" },
@@ -284,7 +294,7 @@ describe("智能搜索", () => {
           ocrText: "入口",
           albumId: "a_album123",
           year: "2024",
-          locationId: "gps_abc",
+          adcode: 110000,
           personId: "p_123456",
           favoriteOnly: true,
           pickedOnly: true,

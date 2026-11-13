@@ -43,7 +43,7 @@ export default function SemanticSearch() {
   const [albumText, setAlbumText] = useState("");
   const [album, setAlbum] = useState<SearchHit | undefined>();
   const [year, setYear] = useState("");
-  const [locationId, setLocationId] = useState("");
+  const [adcode, setAdcode] = useState("");
   const [personId, setPersonId] = useState("");
   const [favoriteOnly, setFavoriteOnly] = useState(false);
   const [pickedOnly, setPickedOnly] = useState(false);
@@ -56,11 +56,20 @@ export default function SemanticSearch() {
     queryFn: aiJobsApi.embeddingStatus,
     refetchInterval: 30_000,
   });
-  const locationsQuery = useQuery({
-    queryKey: ["gps-locations", "semantic-filter"],
-    queryFn: () => aiJobsApi.locations().then((result) => result.page.items),
+  // 地点筛选用行政区：坐标聚类的名字是「坐标 30.25°, 120.13°」，
+  // 没法用来挑一个地方。
+  const provincePlacesQuery = useQuery({
+    queryKey: ["china-locations", "places", "province", null],
+    queryFn: () => aiJobsApi.chinaPlaces("province").then((r) => r.places.items),
     staleTime: 60_000,
   });
+  const cityPlacesQuery = useQuery({
+    queryKey: ["china-locations", "places", "city", null],
+    queryFn: () => aiJobsApi.chinaPlaces("city").then((r) => r.places.items),
+    staleTime: 60_000,
+  });
+  const provincePlaces = provincePlacesQuery.data ?? [];
+  const cityPlaces = cityPlacesQuery.data ?? [];
   const peopleQuery = useQuery({
     queryKey: ["people", false],
     queryFn: () => aiJobsApi.people(false),
@@ -111,7 +120,7 @@ export default function SemanticSearch() {
     ocrText.trim() ||
     album ||
     year ||
-    locationId ||
+    adcode ||
     personId ||
     favoriteOnly ||
     pickedOnly,
@@ -119,7 +128,7 @@ export default function SemanticSearch() {
   const advancedFilterCount =
     Number(Boolean(album)) +
     Number(Boolean(year.trim())) +
-    Number(Boolean(locationId)) +
+    Number(Boolean(adcode)) +
     Number(Boolean(personId)) +
     Number(favoriteOnly) +
     Number(pickedOnly);
@@ -134,7 +143,7 @@ export default function SemanticSearch() {
       ...(resourceId ? { resourceId } : {}),
       ...(album ? { albumId: album.path } : {}),
       ...(year.trim() ? { year: year.trim() } : {}),
-      ...(locationId ? { locationId } : {}),
+      ...(adcode ? { adcode: Number(adcode) } : {}),
       ...(personId ? { personId } : {}),
       ...(favoriteOnly ? { favoriteOnly: true } : {}),
       ...(pickedOnly ? { pickedOnly: true } : {}),
@@ -350,18 +359,31 @@ export default function SemanticSearch() {
                       />
                     </label>
                     <label className="text-meta text-fg-muted">
-                      <span className="mb-1.5 block">GPS 地点</span>
+                      <span className="mb-1.5 block">拍摄地点</span>
                       <select
-                        value={locationId}
-                        onChange={(event) => setLocationId(event.target.value)}
+                        value={adcode}
+                        onChange={(event) => setAdcode(event.target.value)}
                         className="h-10 w-full rounded-md border border-border bg-bg px-3 text-body text-fg"
                       >
                         <option value="">所有地点</option>
-                        {(locationsQuery.data ?? []).map((location) => (
-                          <option key={location.id} value={location.id}>
-                            {location.name} · {location.fileCount} 张
-                          </option>
-                        ))}
+                        {provincePlaces.length > 0 ? (
+                          <optgroup label="省">
+                            {provincePlaces.map((place) => (
+                              <option key={place.adcode} value={place.adcode}>
+                                {place.name} · {place.photoCount.toLocaleString()} 张
+                              </option>
+                            ))}
+                          </optgroup>
+                        ) : null}
+                        {cityPlaces.length > 0 ? (
+                          <optgroup label="市">
+                            {cityPlaces.map((place) => (
+                              <option key={place.adcode} value={place.adcode}>
+                                {place.name} · {place.photoCount.toLocaleString()} 张
+                              </option>
+                            ))}
+                          </optgroup>
+                        ) : null}
                       </select>
                     </label>
                     <label className="text-meta text-fg-muted">

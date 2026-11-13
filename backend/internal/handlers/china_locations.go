@@ -202,17 +202,25 @@ func ChinaTripsHandler(catalog *services.ResourceCatalog, jobs *services.AIJobSe
 		if !services.IsChinaPlaceGranularity(granularity) {
 			return writeError(c, fiber.StatusBadRequest, "invalid_region_level", "granularity must be province, city or district")
 		}
+		gapDays := services.ChinaTripMaxGapDays
+		if raw := strings.TrimSpace(c.Query("gapDays")); raw != "" {
+			value, err := strconv.Atoi(raw)
+			if err != nil || value < 1 || value > 365 {
+				return writeError(c, fiber.StatusBadRequest, "invalid_trip_gap", "gapDays must be between 1 and 365")
+			}
+			gapDays = value
+		}
 		timeRange, ok := parseChinaTimeRange(c)
 		if !ok {
 			return nil
 		}
 		snapshot := requestCatalogSnapshot(c, catalog)
 		revision := jobs.RecordsRevision()
-		etag := chinaLocationETag("trips-"+granularity, services.ChinaLocationBoundaryHash(), snapshot.Revision(), revision, timeRange)
+		etag := chinaLocationETag("trips-"+granularity+"-"+strconv.Itoa(gapDays), services.ChinaLocationBoundaryHash(), snapshot.Revision(), revision, timeRange)
 		if matchETag(c.Get(fiber.HeaderIfNoneMatch), etag) {
 			return c.SendStatus(fiber.StatusNotModified)
 		}
-		trips, err := locations.Trips(snapshot, jobs.Records(services.AIJobTypeMetadata), revision, validate, granularity, timeRange)
+		trips, err := locations.Trips(snapshot, jobs.Records(services.AIJobTypeMetadata), revision, validate, granularity, timeRange, gapDays)
 		if err != nil {
 			if errors.Is(err, services.ErrLibraryNotReady) {
 				return writeLibraryPageError(c, err, snapshot.Revision())

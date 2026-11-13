@@ -376,7 +376,7 @@ func TestSemanticSearchAPIUsesCurrentIndexedResources(t *testing.T) {
 	combinedBody, _ := json.Marshal(map[string]any{
 		"ocrText": "入口", "albumId": albumID, "personId": peopleGroups[0].ID,
 		"favoriteOnly": true, "pickedOnly": true, "year": "2024",
-		"locationId": services.GPSLocationID(39.9, 116.4), "kind": "photo", "limit": 10,
+		"adcode": 110000, "kind": "photo", "limit": 10,
 	})
 	combinedRequest := httptest.NewRequest("POST", "/api/ai/search", strings.NewReader(string(combinedBody)))
 	combinedRequest.Header.Set(fiber.HeaderContentType, fiber.MIMEApplicationJSON)

@@ -15,7 +15,6 @@ import (
 	"github.com/tianlongxiang/local-gallery/internal/middleware"
 	"github.com/tianlongxiang/local-gallery/internal/models"
 	"github.com/tianlongxiang/local-gallery/internal/services"
-	"github.com/tianlongxiang/local-gallery/internal/store"
 )
 
 type aiJobStartRequest struct {
@@ -365,32 +364,5 @@ func ImageMetadataHandler(service *services.AIJobService) fiber.Handler {
 			response["error"] = fiber.Map{"code": record.ErrorCode, "message": record.ErrorMessage}
 		}
 		return c.JSON(response)
-	}
-}
-
-// GPSLocationsHandler 返回 GPS 地点相册列表或相册内媒体分页。
-func GPSLocationsHandler(catalog *services.ResourceCatalog, jobs *services.AIJobService, validate func(string) (string, error), picks *store.PickStore) fiber.Handler {
-	return func(c *fiber.Ctx) error {
-		limit, ok := parseLibraryPageLimit(c)
-		if !ok {
-			return nil
-		}
-		snapshot := requestCatalogSnapshot(c, catalog)
-		if c.Params("id") == "" {
-			page, err := services.PageGPSLocations(snapshot, jobs.Records(services.AIJobTypeMetadata), validate, c.Query("cursor"), limit)
-			if err != nil {
-				return writeLibraryPageError(c, err, snapshot.Revision())
-			}
-			return c.JSON(fiber.Map{"ok": true, "page": page})
-		}
-		page, err := services.PageGPSLocationMedia(snapshot, jobs.Records(services.AIJobTypeMetadata), validate, c.Params("id"), c.Query("cursor"), limit)
-		if err != nil {
-			if errors.Is(err, services.ErrGPSLocationNotFound) {
-				return writeError(c, fiber.StatusNotFound, "location_not_found", "GPS location was not found")
-			}
-			return writeLibraryPageError(c, err, snapshot.Revision())
-		}
-		markFeedPicks(picks, page.Items)
-		return c.JSON(fiber.Map{"ok": true, "page": page})
 	}
 }

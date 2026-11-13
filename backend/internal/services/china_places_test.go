@@ -38,11 +38,11 @@ func TestChinaPlacesIndexesOnlyVisitedPlaces(t *testing.T) {
 		t.Fatal(err)
 	}
 	if provinces.Total != 2 {
-		t.Fatalf("province places = %d, want 2: %+v", provinces.Total, provinces.Places)
+		t.Fatalf("province places = %d, want 2: %+v", provinces.Total, provinces.Items)
 	}
-	zhejiang, exists := chinaPlaceByAdcode(provinces.Places, 330000)
+	zhejiang, exists := chinaPlaceByAdcode(provinces.Items, 330000)
 	if !exists {
-		t.Fatalf("Zhejiang is missing from the place index: %+v", provinces.Places)
+		t.Fatalf("Zhejiang is missing from the place index: %+v", provinces.Items)
 	}
 	if zhejiang.PhotoCount != 2 || zhejiang.VisitCount != 1 {
 		t.Fatalf("Zhejiang place = %+v", zhejiang)
@@ -53,7 +53,7 @@ func TestChinaPlacesIndexesOnlyVisitedPlaces(t *testing.T) {
 	if len(zhejiang.CoverResourceIDs) == 0 {
 		t.Fatal("Zhejiang place has no cover photo")
 	}
-	shanghai, exists := chinaPlaceByAdcode(provinces.Places, 310000)
+	shanghai, exists := chinaPlaceByAdcode(provinces.Items, 310000)
 	if !exists || shanghai.PhotoCount != 1 {
 		t.Fatalf("Shanghai place = %+v", shanghai)
 	}
@@ -65,13 +65,13 @@ func TestChinaPlacesIndexesOnlyVisitedPlaces(t *testing.T) {
 		t.Fatal(err)
 	}
 	if cities.Total != 2 {
-		t.Fatalf("city places = %d, want 2: %+v", cities.Total, cities.Places)
+		t.Fatalf("city places = %d, want 2: %+v", cities.Total, cities.Items)
 	}
-	hangzhou, exists := chinaPlaceByAdcode(cities.Places, 330100)
+	hangzhou, exists := chinaPlaceByAdcode(cities.Items, 330100)
 	if !exists || hangzhou.PhotoCount != 2 {
 		t.Fatalf("Hangzhou place = %+v", hangzhou)
 	}
-	shanghaiCity, exists := chinaPlaceByAdcode(cities.Places, 310000)
+	shanghaiCity, exists := chinaPlaceByAdcode(cities.Items, 310000)
 	if !exists || shanghaiCity.PhotoCount != 1 {
 		t.Fatalf("Shanghai city place = %+v", shanghaiCity)
 	}
@@ -81,7 +81,7 @@ func TestChinaPlacesIndexesOnlyVisitedPlaces(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	xihu, exists := chinaPlaceByAdcode(districts.Places, 330106)
+	xihu, exists := chinaPlaceByAdcode(districts.Items, 330106)
 	if !exists || xihu.PhotoCount != 2 {
 		t.Fatalf("Xihu place = %+v", xihu)
 	}
@@ -109,9 +109,9 @@ func TestChinaPlacesRespectsTimeRangeAndParent(t *testing.T) {
 		t.Fatal(err)
 	}
 	if scoped.Total != 2 {
-		t.Fatalf("scoped places = %d, want 2: %+v", scoped.Total, scoped.Places)
+		t.Fatalf("scoped places = %d, want 2: %+v", scoped.Total, scoped.Items)
 	}
-	zhejiang, _ := chinaPlaceByAdcode(scoped.Places, 330000)
+	zhejiang, _ := chinaPlaceByAdcode(scoped.Items, 330000)
 	if zhejiang.PhotoCount != 1 {
 		t.Fatalf("Zhejiang place in 2019 = %+v", zhejiang)
 	}
@@ -122,10 +122,10 @@ func TestChinaPlacesRespectsTimeRangeAndParent(t *testing.T) {
 		t.Fatal(err)
 	}
 	if inside.Total != 1 {
-		t.Fatalf("places under Zhejiang = %d, want 1: %+v", inside.Total, inside.Places)
+		t.Fatalf("places under Zhejiang = %d, want 1: %+v", inside.Total, inside.Items)
 	}
-	if _, exists := chinaPlaceByAdcode(inside.Places, 330100); !exists {
-		t.Fatalf("Hangzhou is missing from the scoped index: %+v", inside.Places)
+	if _, exists := chinaPlaceByAdcode(inside.Items, 330100); !exists {
+		t.Fatalf("Hangzhou is missing from the scoped index: %+v", inside.Items)
 	}
 }
 
@@ -146,14 +146,14 @@ func TestChinaTripsDistinguishStaysAndTrips(t *testing.T) {
 	})
 	service := NewChinaLocationService()
 
-	trips, err := service.Trips(snapshot, records, 1, validator, chinaAdminCityLevel, ChinaTimeRange{})
+	trips, err := service.Trips(snapshot, records, 1, validator, chinaAdminCityLevel, ChinaTimeRange{}, ChinaTripMaxGapDays)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if trips.Total != 2 {
-		t.Fatalf("trips = %d, want 2: %+v", trips.Total, trips.Trips)
+		t.Fatalf("trips = %d, want 2: %+v", trips.Total, trips.Items)
 	}
-	first := chinaTripByIndex(trips.Trips, 0)
+	first := chinaTripByIndex(trips.Items, 0)
 	if first.Kind != chinaTripKindTrip {
 		t.Fatalf("first trip kind = %q, want a trip: %+v", first.Kind, first)
 	}
@@ -172,7 +172,7 @@ func TestChinaTripsDistinguishStaysAndTrips(t *testing.T) {
 	if len(first.CoverResourceIDs) == 0 {
 		t.Fatal("first trip has no cover photo")
 	}
-	second := chinaTripByIndex(trips.Trips, 1)
+	second := chinaTripByIndex(trips.Items, 1)
 	if second.Kind != chinaTripKindStay {
 		t.Fatalf("second trip kind = %q, want a stay: %+v", second.Kind, second)
 	}
@@ -191,10 +191,47 @@ func TestChinaTripsRejectsUnknownGranularity(t *testing.T) {
 		{Coordinate: [2]float64{30.259242, 120.130396}, Datum: "GCJ-02", CapturedAt: "2019-05-02T10:00:00"},
 	})
 	service := NewChinaLocationService()
-	if _, err := service.Trips(snapshot, records, 1, validator, "township", ChinaTimeRange{}); err == nil {
+	if _, err := service.Trips(snapshot, records, 1, validator, "township", ChinaTimeRange{}, ChinaTripMaxGapDays); err == nil {
 		t.Fatal("trips accepted an unknown granularity")
 	}
 	if _, err := service.Places(snapshot, records, 1, validator, "township", 0, ChinaTimeRange{}); err == nil {
 		t.Fatal("places accepted an unknown granularity")
+	}
+}
+
+// TestChinaTripsGapWidthChangesTheSegmentation 守住行程的切分口径。
+//
+// 两天的口径是「回来算又一次到访」，把出门一趟切成好几段；十四天的
+// 口径把两周之内还连着拍的地方算作同一段出行。
+func TestChinaTripsGapWidthChangesTheSegmentation(t *testing.T) {
+	root := t.TempDir()
+	files := writeAIJobImages(t, root, 4)
+	catalog := aiJobCatalog(root, files)
+	snapshot := catalog.Acquire()
+	validator := aiTestPathValidator(t, root)
+	records := chinaTestRecords(t, catalog, files, []chinaTestPhoto{
+		{Coordinate: [2]float64{30.259242, 120.130396}, Datum: "GCJ-02", CapturedAt: "2019-05-02T10:00:00"},
+		{Coordinate: [2]float64{30.259242, 120.130396}, Datum: "GCJ-02", CapturedAt: "2019-05-05T10:00:00"},
+		{Coordinate: [2]float64{30.259242, 120.130396}, Datum: "GCJ-02", CapturedAt: "2019-05-10T10:00:00"},
+		{Coordinate: [2]float64{31.230416, 121.473701}, Datum: "GCJ-02", CapturedAt: "2019-05-11T10:00:00"},
+	})
+	service := NewChinaLocationService()
+
+	narrow, err := service.Trips(snapshot, records, 1, validator, chinaAdminCityLevel, ChinaTimeRange{}, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if narrow.Total != 3 {
+		t.Fatalf("two-day trips = %d, want 3: %+v", narrow.Total, narrow.Items)
+	}
+	wide, err := service.Trips(snapshot, records, 1, validator, chinaAdminCityLevel, ChinaTimeRange{}, 14)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if wide.Total != 1 {
+		t.Fatalf("fourteen-day trips = %d, want 1: %+v", wide.Total, wide.Items)
+	}
+	if wide.GapDays != 14 {
+		t.Fatalf("gap days = %d", wide.GapDays)
 	}
 }

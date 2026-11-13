@@ -113,10 +113,11 @@ function chinaPlacesQueryKey(
 /** 行程的查询键。 */
 function chinaTripsQueryKey(
   granularity: string,
+  gapDays: number,
   from: string | null,
   to: string | null,
 ) {
-  return ["china-locations", "trips", granularity, from, to] as const;
+  return ["china-locations", "trips", granularity, gapDays, from, to] as const;
 }
 
 /**
@@ -136,7 +137,7 @@ export function useChinaPlaces(
     queryFn: () =>
       aiJobsApi
         .chinaPlaces(level, parent, timeRange)
-        .then((result) => result.places),
+        .then((result) => result.places.items),
   });
 }
 
@@ -144,15 +145,16 @@ export function useChinaPlaces(
 export function useChinaTrips(
   granularity: string,
   timeRange?: ChinaTimeRange,
+  gapDays?: number,
 ) {
   const from = timeRange?.from ?? null;
   const to = timeRange?.to ?? null;
   return useQuery({
-    queryKey: chinaTripsQueryKey(granularity, from, to),
+    queryKey: chinaTripsQueryKey(granularity, gapDays ?? 0, from, to),
     queryFn: () =>
       aiJobsApi
-        .chinaTrips(granularity, timeRange)
-        .then((result) => result.trips),
+        .chinaTrips(granularity, timeRange, gapDays)
+        .then((result) => result.trips.items),
   });
 }
 

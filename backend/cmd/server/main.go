@@ -422,8 +422,6 @@ func main() {
 	api.Get("/locations/china/geometry/:level", boundaryGzip, handlers.ChinaGeometryHandler())
 	api.Get("/locations/china/places", handlers.ChinaPlacesHandler(resourceCatalog, aiJobs, chinaLocations, safetyState.Validate))
 	api.Get("/locations/china/trips", handlers.ChinaTripsHandler(resourceCatalog, aiJobs, chinaLocations, safetyState.Validate))
-	api.Get("/locations", handlers.GPSLocationsHandler(resourceCatalog, aiJobs, safetyState.Validate, picks))
-	api.Get("/locations/:id/media", handlers.GPSLocationsHandler(resourceCatalog, aiJobs, safetyState.Validate, picks))
 	api.Get("/people", handlers.PeopleHandler(peopleService, aiJobs, resourceCatalog, safetyState.Validate))
 	api.Delete("/people", handlers.PeopleHandler(peopleService, aiJobs, resourceCatalog, safetyState.Validate))
 	api.Get("/people/:id/media", handlers.PersonMediaHandler(peopleService, aiJobs, resourceCatalog, safetyState.Validate))

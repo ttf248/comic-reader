@@ -207,7 +207,8 @@ export interface SemanticSearchRequest {
   kind: AppMode;
   albumId?: string;
   year?: string;
-  locationId?: string;
+  /** 行政区划码（六位）。筛一个省包含它下面的市与区县。 */
+  adcode?: number;
   personId?: string;
   favoriteOnly?: boolean;
   pickedOnly?: boolean;
@@ -298,6 +299,14 @@ export interface ChinaLocationRegionInfo {
   level: string;
   photoCount: number;
   unmatchedAreaPhotoCount: number;
+  /** 按到访口径切出的次数。 */
+  visitCount: number;
+  /** 有可信拍摄时间的第一天；没有可信时间时是空串。 */
+  firstAt: string;
+  /** 有可信拍摄时间的最后一天；没有可信时间时是空串。 */
+  lastAt: string;
+  /** 代表照的资源 ID，最多 4 张。 */
+  coverResourceIds: string[];
   /** 上级区划码；省级区域为 null。 */
   parentAdcode: number | null;
   /** 按全国到直接上级顺序排列，用于完整面包屑导航。 */
@@ -331,6 +340,10 @@ export interface ChinaLocationSummary {
   trajectory: ChinaLocationStop[];
   /** 有位置但没有可信拍摄时间的照片数。 */
   untimedPhotoCount: number;
+  /** 各有照片的行政区数量：省 / 市 / 区县。 */
+  provinceCount: number;
+  cityCount: number;
+  districtCount: number;
 }
 
 /** 某个区域的下一级地图；regions 为空表示这个区域没有更细的边界。 */
@@ -455,7 +468,7 @@ export interface ChinaPlaces {
   chinaPhotoCount: number;
   unassignedPhotoCount: number;
   untimedPhotoCount: number;
-  places: ChinaPlace[];
+  items: ChinaPlace[];
 }
 
 /** 一次行程里的一个停留段。 */
@@ -491,10 +504,9 @@ export interface ChinaTrips {
   boundaryVersion: string;
   granularity: string;
   total: number;
-  trips: ChinaTrip[];
+  items: ChinaTrip[];
   untimedPhotoCount: number;
 }
-
 
 export interface PersonGroup {
   id: string;
@@ -627,10 +639,15 @@ export const aiJobsApi = {
       },
     }),
   /** 行程与停留：什么时候去了哪些地方。 */
-  chinaTrips: (granularity?: string, timeRange?: ChinaTimeRange) =>
+  chinaTrips: (
+    granularity?: string,
+    timeRange?: ChinaTimeRange,
+    gapDays?: number,
+  ) =>
     api<{ ok: boolean; trips: ChinaTrips }>("/api/locations/china/trips", {
       params: {
         granularity: granularity ?? undefined,
+        gapDays: gapDays ?? undefined,
         ...chinaTimeRangeParams(timeRange),
       },
     }),
