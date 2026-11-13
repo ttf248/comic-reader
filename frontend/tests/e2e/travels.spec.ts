@@ -62,7 +62,24 @@ test("时间轴是一排月格，两端能拖出一个区间", async ({ page }) 
   await expect(page).toHaveURL(/to=/);
 });
 
-test("行程一行一段，点开才展开照片", async ({ page }) => {
+test("行程按年份倒序，两栏并排", async ({ page }) => {
+  await page.goto("/photo/travels");
+
+  // 行程目录是异步来的：先等第一个年份出现，再读整列。
+  await expect(page.locator(".travel-trips__year").first()).toBeVisible();
+  // 年份倒序：最近的一段排在最前面。
+  const years = await page.locator(".travel-trips__year").allTextContents();
+  expect(years).toEqual(["2025", "2024"]);
+
+  // 宽屏上两栏并排 —— 一段行程只有两行高，一列排下来整页是空的。
+  const columns = await page
+    .locator(".travel-trips__list")
+    .first()
+    .evaluate((element) => getComputedStyle(element).gridTemplateColumns);
+  expect(columns.split(" ").length).toBe(2);
+});
+
+test("一段行程是一张卡片，点开才展开照片", async ({ page }) => {
   await page.goto("/photo/travels");
 
   // 杭州 → 上海相隔一天，是同一段行程；北京隔了一年，另起一段。
@@ -94,9 +111,9 @@ test("展开一段，就地把这一段的照片取回来", async ({ page }) => 
   const segment = page.getByRole("region", { name: "2024-05-02 至 2024-05-03" });
   await segment.getByRole("button", { name: /2024-05-02 至 2024-05-03/ }).click();
 
-  await expect(segment.locator(".travel-segment__grid")).toBeVisible();
+  await expect(segment.locator(".travel-trip-card__grid")).toBeVisible();
   // 整段的五张照片都在展开后的照片墙里。
-  await expect(segment.locator(".travel-segment__grid img")).toHaveCount(5);
+  await expect(segment.locator(".travel-trip-card__grid img")).toHaveCount(5);
 });
 
 test("「地方」列出去过的地方", async ({ page }) => {

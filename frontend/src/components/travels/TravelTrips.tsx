@@ -10,7 +10,7 @@ import { ChevronRightIcon } from "../common/Icon";
 import ThumbImage from "../common/ThumbImage";
 
 interface TravelTripsProps {
-  /** 行程与停留，按开始时间升序。 */
+  /** 行程与停留，按时间倒序读。 */
   trips: ChinaTrip[];
   /** 当前选中的段。 */
   selectedTripId: string | null;
@@ -23,13 +23,23 @@ interface TravelTripsProps {
 }
 
 /**
- * 行程目录：按时间读的一段段行程。
+ * 卡片上最多摆几个地点。
  *
- * 每一段默认收成一行（约 44px）：日期、天数、地点链、张数。点开才就地
- * 展开照片 —— 一次读回几十段的全量照片既慢又没人看。
+ * 一次出行能串十几个地方，全摆出来卡片就高得读不成一行。收起的时候只
+ * 摆前几个，末尾报一句「还有 N 处」；展开时整条地点链都摆出来。
+ */
+const MAX_STOPS = 4;
+
+/**
+ * 行程目录：按时间倒序读的一段段行程。
+ *
+ * 每一段是一张卡片：日期与张数一行，地点链一行。两列并排 —— 一段行程
+ * 本身只有一行高，一列排下来整页读起来是空的。
+ *
+ * 点开才就地展开照片 —— 一次读回几十段的全量照片既慢又没人看。
  *
  * 同时只展开一段：每段都能各自展开的话，整页长度不可控，几百段就是
- * 几万像素的滚动条。
+ * 几万像素的滚动条。展开的那张卡片横跨两列，照片带与照片墙才有地方摆。
  */
 export default function TravelTrips({
   trips,
@@ -39,8 +49,13 @@ export default function TravelTrips({
   onOpenPlace,
 }: TravelTripsProps) {
   const groups = useMemo(() => {
+    // 倒序：最近的出行排在最前面。年份由行程的开始时间决定，所以排好
+    // 行程，年份自然也是倒序。
+    const sorted = [...trips].sort((a, b) =>
+      a.startedAt < b.startedAt ? 1 : a.startedAt > b.startedAt ? -1 : 0,
+    );
     const result: { year: string; trips: ChinaTrip[] }[] = [];
-    for (const trip of trips) {
+    for (const trip of sorted) {
       const year = trip.startedAt.slice(0, 4);
       const last = result[result.length - 1];
       if (last && last.year === year) last.trips.push(trip);
@@ -64,8 +79,11 @@ export default function TravelTrips({
           <h3 className="travel-trips__year">{group.year}</h3>
           <ul className="travel-trips__list">
             {group.trips.map((trip) => (
-              <li key={trip.id}>
-                <TravelTripRow
+              <li
+                key={trip.id}
+                data-selected={selectedTripId === trip.id ? "true" : undefined}
+              >
+                <TravelTripCard
                   trip={trip}
                   selected={selectedTripId === trip.id}
                   onSelect={() =>
@@ -83,7 +101,7 @@ export default function TravelTrips({
   );
 }
 
-interface TravelTripRowProps {
+interface TravelTripCardProps {
   trip: ChinaTrip;
   selected: boolean;
   onSelect: () => void;
@@ -94,16 +112,16 @@ interface TravelTripRowProps {
 /**
  * 一段行程。
  *
- * 收着的时候是一行：日期、天数、地点链、类型与张数。展开后是这一段的
+ * 收着的时候是一张卡片：日期与张数一行，地点链一行。展开后是这一段的
  * 照片：一条照片带，再往下是整段的照片墙。
  */
-function TravelTripRow({
+function TravelTripCard({
   trip,
   selected,
   onSelect,
   granularity,
   onOpenPlace,
-}: TravelTripRowProps) {
+}: TravelTripCardProps) {
   const [viewerResourceId, setViewerResourceId] = useState<string | null>(null);
   const density = usePhotoStore((state) => state.density);
   const picks = usePicks();
@@ -142,75 +160,81 @@ function TravelTripRow({
     viewerResourceId,
   ]);
 
+  // 收起时只摆前几个地点；展开后整条链都摆出来。
+  const stops = selected ? trip.stops : trip.stops.slice(0, MAX_STOPS);
+  const hiddenStops = trip.stops.length - stops.length;
+
   return (
     <section
-      className="travel-segment"
+      className="travel-trip-card"
       data-selected={selected ? "true" : undefined}
       aria-label={`${trip.startedAt} 至 ${trip.endedAt}`}
     >
-      <div className="travel-segment__head">
+      <div className="travel-trip-card__head">
         <button
           type="button"
           onClick={onSelect}
           aria-pressed={selected}
-          className="travel-segment__date"
+          className="travel-trip-card__date"
           aria-label={`${trip.startedAt} 至 ${trip.endedAt}，${trip.dayCount} 天，${
             selected ? "收起这段的照片" : "看这段去了哪儿"
           }`}
         >
-          <span className="travel-segment__range">
+          <span className="travel-trip-card__range">
             {trip.startedAt}
             {trip.endedAt !== trip.startedAt ? ` – ${trip.endedAt.slice(5)}` : ""}
           </span>
-          <span className="travel-segment__days">{trip.dayCount} 天</span>
         </button>
 
-        <span className="travel-segment__route">
-          {trip.stops.map((stop, index) => (
-            <span key={`${stop.adcode}-${stop.at}`} className="flex items-center gap-1">
-              {index > 0 ? (
-                <ChevronRightIcon size={12} className="travel-segment__arrow" />
-              ) : null}
-              <button
-                type="button"
-                onClick={() => onOpenPlace(stop.adcode)}
-                className="travel-segment__stop"
-                title={`${stop.name} · ${stop.photoCount} 张`}
-              >
-                {stop.name}
-                <span className="travel-segment__stop-count">
-                  {stop.photoCount.toLocaleString()}
-                </span>
-              </button>
-            </span>
-          ))}
-        </span>
-
-        <span className="travel-segment__meta">
+        <span className="travel-trip-card__meta">
           <span
             className={
               trip.kind === "stay"
-                ? "travel-segment__kind travel-segment__kind--stay"
-                : "travel-segment__kind"
+                ? "travel-trip-card__kind travel-trip-card__kind--stay"
+                : "travel-trip-card__kind"
             }
           >
             {trip.kind === "stay" ? "停留" : "行程"}
           </span>
-          <span className="tabular-nums text-fg-muted">
-            {trip.photoCount.toLocaleString()} 张
-          </span>
+          <span className="tabular-nums">{trip.dayCount} 天</span>
+          <span className="tabular-nums">{trip.photoCount.toLocaleString()} 张</span>
         </span>
       </div>
+
+      <div className="travel-trip-card__route">
+        {stops.map((stop, index) => (
+          <span key={`${stop.adcode}-${stop.at}`} className="flex items-center gap-1">
+            {index > 0 ? (
+              <ChevronRightIcon size={12} className="travel-trip-card__arrow" />
+            ) : null}
+            <button
+              type="button"
+              onClick={() => onOpenPlace(stop.adcode)}
+              className="travel-trip-card__stop"
+              title={`${stop.name} · ${stop.photoCount} 张`}
+            >
+              {stop.name}
+              <span className="travel-trip-card__stop-count">
+                {stop.photoCount.toLocaleString()}
+              </span>
+            </button>
+          </span>
+        ))}
+        {hiddenStops > 0 ? (
+          <span className="travel-trip-card__more">还有 {hiddenStops} 处</span>
+        ) : null}
+      </div>
+
 
       {selected ? (
         <>
           {trip.bandResourceIds.length > 0 ? (
-            <div className="travel-segment__band">
+            <div className="travel-trip-card__band">
               {trip.bandResourceIds.map((id) => (
                 <button
                   key={id}
                   type="button"
-                  className="travel-segment__photo"
+                  className="travel-trip-card__photo"
                   onClick={() => setViewerResourceId(id)}
                   aria-label="看这一段的照片"
                 >
@@ -225,7 +249,7 @@ function TravelTripRow({
             </div>
           ) : null}
 
-          <div className="travel-segment__grid">
+          <div className="travel-trip-card__grid">
             {media.isError ? (
               <p className="py-8 text-center text-body text-fg-muted">
                 这一段的照片暂时读不出来。

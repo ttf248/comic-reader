@@ -174,6 +174,29 @@ const trips = {
         coverResourceIds: ["f_3"],
         bandResourceIds: ["f_3"],
       },
+      {
+        id: "2021-08-20-330100",
+        index: 2,
+        kind: "stay" as const,
+        startedAt: "2021-08-20",
+        endedAt: "2021-08-20",
+        dayCount: 1,
+        photoCount: 1,
+        stops: [
+          {
+            adcode: 330100,
+            name: "杭州市",
+            level: "city",
+            parentAdcode: 330000,
+            at: "2021-08-20",
+            until: "2021-08-20",
+            dayCount: 1,
+            photoCount: 1,
+          },
+        ],
+        coverResourceIds: ["f_5"],
+        bandResourceIds: ["f_5"],
+      },
     ],
   },
 };
@@ -352,7 +375,27 @@ describe("足迹页", () => {
     });
   });
 
-  it("行程一行一段，点开才展开照片", async () => {
+  it("行程按年份倒序，一段一张卡片", async () => {
+    renderPage();
+
+    // 年份倒序：最近的排在最前面。
+    await waitFor(() => {
+      expect(document.querySelectorAll(".travel-trips__year").length).toBe(2);
+    });
+    const years = Array.from(
+      document.querySelectorAll(".travel-trips__year"),
+    ).map((element) => element.textContent);
+    expect(years).toEqual(["2021", "2019"]);
+
+    // 一段一张卡片；同一年的几段摆在一张列表里（窄屏一列、宽屏两列）。
+    expect(document.querySelectorAll(".travel-trip-card").length).toBe(3);
+    const lists = document.querySelectorAll(".travel-trips__list");
+    expect(lists.length).toBe(2);
+    expect(lists[0].querySelectorAll("li").length).toBe(2);
+    expect(lists[1].querySelectorAll("li").length).toBe(1);
+  });
+
+  it("一段行程是一张卡片，点开才展开照片", async () => {
     renderPage();
 
     const segment = await screen.findByRole("region", {

@@ -2334,7 +2334,9 @@ button:not(:disabled):active {
     outline-offset: 2px;
   }
 
-  /* --- 行程目录：按年分组，一段一行 --- */
+  /* --- 行程目录：年份倒序，两栏紧凑 ---
+     一段行程收着的时候只有两行高；一列排下来整页读起来是空的。两栏
+     并排，展开的那张横跨两列，照片带与照片墙才有地方摆。 */
   .travel-trips {
     margin-top: 22px;
   }
@@ -2353,67 +2355,80 @@ button:not(:disabled):active {
     background: var(--bg);
   }
   .travel-trips__list {
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  @media (min-width: 640px) {
+    .travel-trips__list {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+  /* 展开的那张横跨两列：照片带与照片墙在一栏里摆不下。 */
+  .travel-trips__list > li[data-selected="true"] {
+    grid-column: 1 / -1;
   }
 
-  /* --- 段：一行一段，展开才是照片 --- */
-  .travel-segment {
-    padding-block: 10px 12px;
-    border-top: 1px solid var(--border-faint);
+  /* --- 一段行程：一张卡片 --- */
+  .travel-trip-card {
+    position: relative;
+    padding: 8px 10px 9px;
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius-tile);
+    background: var(--bg-elevated);
   }
-  .travel-segment:first-child {
-    border-top: none;
+  .travel-trip-card[data-selected="true"] {
+    border-color: color-mix(in srgb, var(--brand-ink) 40%, var(--border-faint));
+    background: color-mix(in srgb, var(--brand) 6%, var(--bg-elevated));
   }
-  .travel-segment[data-selected="true"] {
-    padding-bottom: 18px;
-  }
-
-  /* --- 段头：日期、地方链、张数 --- */
-  .travel-segment__head {
+  .travel-trip-card__head {
     display: flex;
-    flex-wrap: wrap;
     align-items: baseline;
-    gap: 8px 18px;
-    margin-bottom: 12px;
+    justify-content: space-between;
+    gap: 10px;
   }
-  .travel-segment__date {
+  .travel-trip-card__date {
     display: inline-flex;
     align-items: baseline;
-    gap: 10px;
     min-height: 28px;
+    border-radius: var(--radius-xs);
     font-family: var(--font-mono);
     font-size: var(--text-label);
     font-variant-numeric: tabular-nums;
     color: var(--fg);
     text-align: left;
   }
-  .travel-segment__date:hover {
+  .travel-trip-card__date:hover {
     color: var(--brand-ink);
   }
-  .travel-segment[data-selected="true"] .travel-segment__date {
+  .travel-trip-card[data-selected="true"] .travel-trip-card__date {
     color: var(--brand-ink);
   }
-  /* 选中的那一段要一眼看得出来：段头整行淡染，比只换一个字色更明确。
-     负边距抵掉内边距，照片带的位置不受影响。 */
-  .travel-segment[data-selected="true"] .travel-segment__head {
-    margin-inline: -12px;
-    padding-inline: 12px;
-    border-radius: var(--radius-media);
-    background: color-mix(in srgb, var(--brand) 8%, transparent);
-  }
-  .travel-segment__days {
+  .travel-trip-card__meta {
+    display: inline-flex;
+    flex: none;
+    align-items: baseline;
+    gap: 10px;
     font-size: var(--text-meta);
+    color: var(--fg-muted);
+  }
+  .travel-trip-card__kind {
+    letter-spacing: 0.08em;
+    color: var(--fg-muted);
+  }
+  /* 停留只有一个地方，弱一些：它是一句实话，不是「走过很多地方」。 */
+  .travel-trip-card__kind--stay {
     color: var(--fg-subtle);
   }
-  .travel-segment__route {
+  .travel-trip-card__route {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 4px 8px;
+    gap: 4px 6px;
     min-width: 0;
+    margin-top: 6px;
   }
-  .travel-segment__stop {
+  .travel-trip-card__stop {
     display: inline-flex;
     align-items: baseline;
     gap: 6px;
@@ -2424,62 +2439,54 @@ button:not(:disabled):active {
     font-size: var(--text-meta);
     color: var(--fg);
   }
-  .travel-segment__stop:hover {
+  .travel-trip-card__stop:hover {
     background: var(--bg-strong);
     color: var(--brand-ink);
   }
-  .travel-segment__stop-count {
+  .travel-trip-card__stop-count {
     color: var(--fg-subtle);
     font-variant-numeric: tabular-nums;
   }
-  .travel-segment__arrow {
+  .travel-trip-card__arrow {
+    flex: none;
     color: var(--fg-subtle);
   }
-  .travel-segment__meta {
-    display: inline-flex;
-    align-items: center;
-    gap: 12px;
-    margin-left: auto;
-  }
-  .travel-segment__kind {
+  /* 收起时只摆前几个地点，其余收成一句。 */
+  .travel-trip-card__more {
     font-size: var(--text-meta);
-    letter-spacing: 0.08em;
-    color: var(--fg-muted);
-  }
-  /* 停留只有一个地方，弱一些：它是一句实话，不是「走过很多地方」。 */
-  .travel-segment__kind--stay {
     color: var(--fg-subtle);
   }
 
   /* --- 照片带：这一段的门面 --- */
-  .travel-segment__band {
+  .travel-trip-card__band {
     display: flex;
     gap: 4px;
     height: 132px;
+    margin-top: 10px;
     overflow-x: auto;
     scrollbar-width: thin;
   }
-  .travel-segment__photo {
+  .travel-trip-card__photo {
     flex: 1 1 0;
     min-width: 104px;
     overflow: hidden;
     border-radius: var(--radius-media);
     background: var(--bg-media);
   }
-  .travel-segment__photo img {
+  .travel-trip-card__photo img {
     display: block;
     width: 100%;
     height: 100%;
     object-fit: cover;
     transition: transform 300ms var(--dur);
   }
-  .travel-segment__photo:hover img {
+  .travel-trip-card__photo:hover img {
     transform: scale(1.03);
   }
 
   /* --- 展开后的整段照片 --- */
-  .travel-segment__grid {
-    margin-top: 14px;
+  .travel-trip-card__grid {
+    margin-top: 10px;
     height: min(62vh, 620px);
     overflow: hidden;
     border-radius: var(--radius-media);
