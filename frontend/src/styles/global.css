@@ -1881,14 +1881,14 @@ button:not(:disabled):active {
      足迹页：数字台、时间轴、地点卡、行程、紧凑地图
      ========================================================== */
 
-  /* --- 两栏抬头：左边标题与数字，右边一块地图 ---
-     数字不再各自占一格：四个数并成一句话，数字重一档、单位降一档，
-     像漫画侧详情页的计数行那样读。地图升格成抬头的一块面板。 */
+  /* --- 抬头：左边标题，右边规模 ---
+     地图不在抬头里了：它升格成正文右栏的一块，随页面滚动一直跟着。
+     抬头于是只剩两件事 —— 这是哪个页面、这个库有多大。 */
   .travel-head {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 288px;
-    gap: clamp(20px, 3vw, 44px);
-    align-items: start;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 14px clamp(20px, 3vw, 44px);
     padding-block: 20px 18px;
   }
   .travel-head__title {
@@ -1900,20 +1900,6 @@ button:not(:disabled):active {
     letter-spacing: -0.02em;
     color: var(--fg);
   }
-  .travel-head__meta {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 3px 18px;
-    margin-top: 12px;
-    font-size: var(--text-body);
-    color: var(--fg-muted);
-  }
-  .travel-head__value {
-    color: var(--fg);
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-  }
 
   /* --- 规模条：一个主数字 + 一句补充 ---
      一排同样大小的数字读不出主次；主数字（全库照片总数）是分母，
@@ -1922,8 +1908,8 @@ button:not(:disabled):active {
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
+    justify-content: flex-end;
     gap: 6px 20px;
-    margin-top: 12px;
   }
   .travel-stats__hero {
     display: flex;
@@ -1958,20 +1944,64 @@ button:not(:disabled):active {
     font-weight: 600;
     font-variant-numeric: tabular-nums;
   }
-  .travel-stats__scope {
-    color: var(--brand-ink);
-    font-weight: 600;
-  }
   .travel-head__actions {
+    grid-column: 1 / -1;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 10px;
-    margin-top: 14px;
   }
-  .travel-head__map {
+
+  /* --- 正文分栏：左时间轴与行程，右地图 ---
+     地图占一条竖直的窄栏（320–440px），滚动时钉在视口里：读行程的时候
+     手边得一直有个方位。时间轴因此让出右边一段，格子按剩下的宽度铺。 */
+  .travel-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) clamp(300px, 24vw, 440px);
+    grid-template-areas:
+      "timeline aside"
+      "trips    aside";
+    column-gap: clamp(20px, 2.4vw, 36px);
+    padding-top: 20px;
+    align-items: start;
+  }
+  .travel-layout__timeline {
+    grid-area: timeline;
+    min-width: 0;
+  }
+  .travel-layout__trips {
+    grid-area: trips;
+    min-width: 0;
+  }
+  .travel-layout__aside {
+    grid-area: aside;
+    position: sticky;
+    top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  /* 地图上方的一条窄栏：名字与「地方」清单的入口。 */
+  .travel-aside__bar {
     position: relative;
-    height: 144px;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 28px;
+  }
+  .travel-aside__label {
+    font-size: var(--text-meta);
+    letter-spacing: 0.06em;
+    color: var(--fg-subtle);
+  }
+  /* 地图面板：方一点，照片位置按屏幕像素画，看得出疏密。 */
+  .travel-aside__map {
+    position: relative;
+    z-index: 1;
+    aspect-ratio: 1 / 1;
+    max-height: 68vh;
     overflow: hidden;
     border: 1px solid var(--border-faint);
     border-radius: var(--radius-tile);
@@ -2074,8 +2104,8 @@ button:not(:disabled):active {
     padding-inline: clamp(20px, 3vw, 48px);
   }
 
-  /* --- 小地图：抬头右栏的那一块 ---
-     只读，不提供操作：236 像素宽的图上，一个市只有几个像素宽，
+  /* --- 地图：正文右栏的那一块 ---
+     只读，不提供操作：几百像素宽的图上，一个市只有几个像素宽，
      拖不动也点不准。要去某个地方，从旁边的「地方」清单进。 */
   .travel-mini-map {
     position: relative;
@@ -2118,11 +2148,12 @@ button:not(:disabled):active {
     background: var(--bg-elevated);
     box-shadow: var(--shadow-lg);
   }
-  /* 从抬头右边那块地图面板下方展开的菜单：贴着右缘，向左开。 */
+  /* 从地图上方那块窄栏里展开的菜单：往左开，地图留在原地不遮。 */
   .travel-place-list--menu {
     top: calc(100% + 6px);
-    right: 0;
+    right: 100%;
     left: auto;
+    margin-right: 12px;
     width: min(320px, calc(100vw - 48px));
     max-height: min(56vh, 520px);
   }
@@ -2165,7 +2196,7 @@ button:not(:disabled):active {
      一格一个月，深浅是那一个月的张数。格子是离散的，读得出确切是多少，
      也读得出空档 —— 曲线把这些抹平了。行程是格子上方的一颗颗钉。 */
   .travel-timeline {
-    margin-top: 22px;
+    margin-top: 0;
   }
   .travel-timeline__head {
     display: flex;
@@ -2464,13 +2495,30 @@ button:not(:disabled):active {
   }
 
   @media (max-width: 1023px) {
-    /* 窄屏上抬头变一栏：地图落到下面占满一行，仍然是抬头的一部分。 */
+    /* 窄屏上抬头变一栏：规模跟在标题下面，粒度控件在最后。 */
     .travel-head {
       grid-template-columns: minmax(0, 1fr);
-      gap: 16px;
+      gap: 14px 16px;
     }
-    .travel-head__map {
-      height: 132px;
+    .travel-stats {
+      justify-content: flex-start;
+    }
+    /* 正文也变一栏：地图夹在时间轴与行程之间，不再钉在边上。 */
+    .travel-layout {
+      grid-template-columns: minmax(0, 1fr);
+      grid-template-areas:
+        "timeline"
+        "aside"
+        "trips";
+      row-gap: 20px;
+    }
+    .travel-layout__aside {
+      position: static;
+    }
+    .travel-aside__map {
+      /* 窄屏上地图是个大块：压扁一点，别把行程挤到屏幕外。 */
+      aspect-ratio: 4 / 3;
+      max-height: 46vh;
     }
     .travel-place-list {
       max-height: min(42vh, 420px);

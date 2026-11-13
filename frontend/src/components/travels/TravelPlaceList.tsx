@@ -7,8 +7,8 @@ interface TravelPlaceListProps {
   /**
    * 挂在哪里。
    *
-   * map 是浮在大地图左上角的一层；menu 是从信息栏右边那块小地图下方
-   * 展开的菜单。
+   * map 是浮在大地图左上角的一层；menu 是从地图上方那条窄栏里往左展开
+   * 的菜单 —— 地图留在原地不遮。
    */
   anchor?: "map" | "menu";
   /** 收起清单。 */

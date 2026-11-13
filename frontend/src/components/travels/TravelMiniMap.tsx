@@ -29,15 +29,14 @@ interface TravelMiniMapProps {
 }
 
 /**
- * 小地图：数字台右端的那一块。
+ * 地图：正文右栏的那一块。
  *
  * 它不占一屏，也不该占一屏 —— 但「去过哪些地方」这件事得一直看得见。
- * 所以地图缩成信息栏右边的一块：去过的地方按张数深浅着色，照片集中的
- * 位置泛出一点光。
+ * 所以地图做成右栏里的一块，滚动时跟着：去过的地方按张数深浅着色，
+ * 照片集中的位置泛出一点光。
  *
  * 这个尺寸下画不出行政区的细节，也不需要 —— 它是一眼扫过去的方位感，
- * 不是用来读图的，更不是用来点的：236 像素宽的图上，一个市只有几个
- * 像素宽，点了也点不准。要去某个地方，从旁边的「地方」清单进。
+ * 不是用来读图的，更不是用来点的。要去某个地方，从旁边的「地方」清单进。
  */
 export default function TravelMiniMap({
   regions,
@@ -73,7 +72,7 @@ export default function TravelMiniMap({
     return () => observer.disconnect();
   }, []);
 
-  const aspect = size.height > 0 ? size.height / size.width : 104 / 236;
+  const aspect = size.height > 0 ? size.height / size.width : 1;
 
   const projection = useMemo(
     () => createMapProjection([...(backdrop ?? []), ...regions]),
@@ -175,7 +174,7 @@ export default function TravelMiniMap({
               const hasPhotos = region.photoCount > 0;
               // 这个尺寸下填色只是底：太实了就成了一块蓝。
               const opacity = hasPhotos
-                ? levelOpacity(region.photoCount, levelTotal) * 0.55
+                ? levelOpacity(region.photoCount, levelTotal) * 0.7
                 : 0;
               return (
                 <path
@@ -201,7 +200,7 @@ export default function TravelMiniMap({
               const share =
                 maxPointCount > 0 ? Math.sqrt(cell.count / maxPointCount) : 0;
               // 点很小，才看得出是一颗一颗的照片位置，不是一团糊影。
-              const radius = (1.3 + 2.1 * share) / Math.max(scale, 0.0001);
+              const radius = (1.8 + 3 * share) / Math.max(scale, 0.0001);
               return (
                 <circle
                   key={`${cell.lon}-${cell.lat}`}

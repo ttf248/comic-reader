@@ -22,11 +22,11 @@ test("侧栏的足迹入口打开的是新的地点页", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "足迹" })).toBeVisible();
 });
 
-test("小地图在抬头右栏，照片位置画成点云", async ({ page }) => {
+test("地图在正文右栏，照片位置画成点云", async ({ page }) => {
   await page.goto("/photo/travels");
 
-  // 地图不用选中什么就一直在：它就在抬头的右栏里。
-  const map = page.getByRole("img", { name: /小地图/ });
+  // 地图不用选中什么就一直在：它就在正文右栏里，滚动时跟着。
+  const map = page.locator(".travel-layout__aside").getByRole("img", { name: /小地图/ });
   await expect(map).toBeVisible();
 
   // 临时库里三个坐标（杭州 ×3、上海 ×2、北京 ×1）—— 这一条断言是

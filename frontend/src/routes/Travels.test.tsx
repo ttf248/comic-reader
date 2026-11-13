@@ -265,10 +265,10 @@ describe("足迹页", () => {
     });
   });
 
-  it("抬头分两栏：左边是标题与规模，右边是一块小地图", async () => {
+  it("抬头说清规模，地图升格到正文右栏", async () => {
     renderPage();
 
-    // 标题与规模并成一条，不拆成四个各自占一格的大数字。
+    // 抬头：左边是标题，右边是规模，不拆成四个各自占一格的大数字。
     expect(await screen.findByRole("heading", { name: "足迹" })).toBeTruthy();
     const head = document.querySelector(".travel-head") as HTMLElement;
     const stats = head.querySelector(".travel-stats") as HTMLElement;
@@ -283,9 +283,10 @@ describe("足迹页", () => {
     expect(stats.textContent).toContain("1 个市");
     expect(stats.textContent).toContain("1 张没有拍摄时间");
 
-    // 地图在抬头的右栏里，不用选中什么就一直在。
+    // 地图不在抬头里，搬到了正文右栏，滚动时一直跟着。
+    const aside = document.querySelector(".travel-layout__aside") as HTMLElement;
     const map = await screen.findByRole("img", { name: /小地图/ });
-    expect(map).toBeTruthy();
+    expect(aside.contains(map)).toBe(true);
     // 点云是照片的真实位置：两个网格，两点。
     await waitFor(() => {
       expect(map.querySelectorAll(".travel-mini-map__point").length).toBe(2);

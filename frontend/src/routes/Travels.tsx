@@ -50,9 +50,9 @@ const SPAN_YEARS: Record<Exclude<TravelSpan, "all">, number> = {
 };
 
 /**
- * 小地图上照片位置的网格边长。
+ * 地图上照片位置的网格边长。
  *
- * 地图只有 288 像素宽，照片位置按几公里一格聚合根本看不见 —— 一格在
+ * 地图只有几百像素宽，照片位置按几公里一格聚合根本看不见 —— 一格在
  * 全国范围里还不到一个像素。这里用二十公里一格：格子够大才画得出，
  * 又不至于把同城不同角落的照片并成一坨。
  */
@@ -61,10 +61,10 @@ const MINI_MAP_CELL = 0.2;
 /**
  * 足迹：我去过哪些地方，什么时候去的。
  *
- * 抬头分两栏：左边是标题、一行数字摘要与控件，右边是一块小地图 ——
- * 去过的地方按张数深浅着色，照片真正的位置泛成一层光。下面是一条按真实
- * 时间比例铺开的月格带，拖两端可以圈出一段时间；最下面是这段时间里的
- * 行程，一段一段读。
+ * 抬头只说两件事：这是哪个页面、这个库有多大。真正的内容分两栏：左边是
+ * 一条按真实时间比例铺开的月格带（拖两端可以圈出一段时间）和这段时间
+ * 里的行程；右边是地图，占着一条竖直的窄栏，滚动时一直跟着 ——
+ * 去过的地方按张数深浅着色，照片真正的位置泛成一层光。
  */
 export default function Travels() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -259,62 +259,36 @@ export default function Travels() {
             <div className="min-w-0">
               <p className="page-eyebrow">离线解析</p>
               <h1 className="travel-head__title">足迹</h1>
-
-              {/* 规模：说的是这个库的事实，不随区间变。 */}
-              <TravelStats
-                totalPhotos={whole?.totalPhotoCount ?? null}
-                gpsPhotos={whole?.gpsPhotoCount ?? 0}
-                provinces={whole?.provinceCount ?? 0}
-                cities={whole?.cityCount ?? 0}
-                untimed={untimedCount}
-              />
-
-              <div className="travel-head__actions">
-                <Segmented
-                  label="归并粒度"
-                  value={level}
-                  onChange={setLevel}
-                  options={[
-                    { value: "province", label: "省" },
-                    { value: "city", label: "市" },
-                    { value: "district", label: "区县" },
-                  ]}
-                />
-                <button
-                  type="button"
-                  className="btn btn-sm btn-outline"
-                  aria-pressed={placeListOpen}
-                  onClick={() => setPlaceListOpen((value) => !value)}
-                >
-                  地方
-                </button>
-              </div>
             </div>
 
-            {/* 右栏是地图：抬头的一半，不是一条贴在边上的窄带。 */}
-            <div className="travel-head__map">
-              <TravelMiniMap
-                regions={regions}
-                backdrop={backdrop}
-                points={points}
-                levelTotal={levelTotal}
-                scopeLabel="足迹"
+            {/* 规模：说的是这个库的事实，不随区间变。 */}
+            <TravelStats
+              totalPhotos={whole?.totalPhotoCount ?? null}
+              gpsPhotos={whole?.gpsPhotoCount ?? 0}
+              provinces={whole?.provinceCount ?? 0}
+              cities={whole?.cityCount ?? 0}
+              untimed={untimedCount}
+            />
+
+            {/* 粒度是整页的：地图上的区划与行程的切法都跟着它变。 */}
+            <div className="travel-head__actions">
+              <Segmented
+                label="归并粒度"
+                value={level}
+                onChange={setLevel}
+                options={[
+                  { value: "province", label: "省" },
+                  { value: "city", label: "市" },
+                  { value: "district", label: "区县" },
+                ]}
               />
-              {placeListOpen ? (
-                <TravelPlaceList
-                  places={places}
-                  anchor="menu"
-                  onClose={() => setPlaceListOpen(false)}
-                  onOpenPlace={openPlace}
-                />
-              ) : null}
             </div>
           </div>
         </div>
       </header>
 
-      <div className="page-bleed">
-        {error ? (
+      {error ? (
+        <div className="page-bleed">
           <div
             role="alert"
             className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-danger/30 bg-bg-elevated px-4 py-3 text-body text-danger"
@@ -331,45 +305,83 @@ export default function Travels() {
               重新加载
             </button>
           </div>
-        ) : null}
+        </div>
+      ) : null}
 
-        {whole ? (
-          <TravelTimeline
-            months={whole.months}
-            trips={windowTrips}
-            span={span}
-            from={from}
-            to={to}
-            onChange={setRange}
-            onChangeSpan={setSpan}
-            onSelectTrip={(trip) => selectTrip(trip.id)}
-            selectedTripId={selectedTripId}
-          />
-        ) : null}
+      <div className="page-bleed travel-layout">
+        <div className="travel-layout__timeline">
+          {whole ? (
+            <TravelTimeline
+              months={whole.months}
+              trips={windowTrips}
+              span={span}
+              from={from}
+              to={to}
+              onChange={setRange}
+              onChangeSpan={setSpan}
+              onSelectTrip={(trip) => selectTrip(trip.id)}
+              selectedTripId={selectedTripId}
+            />
+          ) : null}
+        </div>
 
-        {whole ? (
-          <TravelTrips
-            trips={windowTrips}
-            selectedTripId={selectedTripId}
-            onSelect={(trip) => selectTrip(trip?.id ?? null)}
-            granularity={level}
-            onOpenPlace={openPlace}
-          />
-        ) : (
-          <div className="flex min-h-64 items-center justify-center text-body text-fg-muted">
-            正在载入足迹…
+        {/* 地图占着右栏，滚动时一直跟着 —— 读行程的时候手边得有个方位。 */}
+        <aside className="travel-layout__aside">
+          <div className="travel-aside__bar">
+            <span className="travel-aside__label">足迹地图</span>
+            <button
+              type="button"
+              className="btn btn-sm btn-outline"
+              aria-pressed={placeListOpen}
+              onClick={() => setPlaceListOpen((value) => !value)}
+            >
+              地方
+            </button>
+            {placeListOpen ? (
+              <TravelPlaceList
+                places={places}
+                anchor="menu"
+                onClose={() => setPlaceListOpen(false)}
+                onOpenPlace={openPlace}
+              />
+            ) : null}
           </div>
-        )}
+          <div className="travel-aside__map">
+            <TravelMiniMap
+              regions={regions}
+              backdrop={backdrop}
+              points={points}
+              levelTotal={levelTotal}
+              scopeLabel="足迹"
+            />
+          </div>
+        </aside>
 
-        <p className="travel-footnote">
-          坐标与边界均在本机处理；时间按 EXIF
-          拍摄时间的日历日计算，跨时区旅行按拍摄地的当地日期。 离线边界采用
-          AreaCity 2026 年 4
-          月版省市区县数据，边界以高德为主并整合行政区划信息，坐标系为
-          GCJ-02；不含乡镇边界。地图上的点按网格聚合（约二十公里一格），
-          不还原到单张照片的坐标；库里约四分之三的坐标来自基站与网络而非
-          GPS 芯片，行政区归属可能有百米量级的偏差。
-        </p>
+        <div className="travel-layout__trips">
+          {whole ? (
+            <TravelTrips
+              trips={windowTrips}
+              selectedTripId={selectedTripId}
+              onSelect={(trip) => selectTrip(trip?.id ?? null)}
+              granularity={level}
+              onOpenPlace={openPlace}
+            />
+          ) : (
+            <div className="flex min-h-64 items-center justify-center text-body text-fg-muted">
+              正在载入足迹…
+            </div>
+          )}
+
+          <p className="travel-footnote">
+            坐标与边界均在本机处理；时间按 EXIF
+            拍摄时间的日历日计算，跨时区旅行按拍摄地的当地日期。 离线边界采用
+            AreaCity 2026 年 4
+            月版省市区县数据，边界以高德为主并整合行政区划信息，坐标系为
+            GCJ-02；不含乡镇边界。地图上的点按网格聚合（约二十公里一格），
+            不还原到单张照片的坐标；库里约四分之三的坐标来自基站与网络而非
+            GPS 芯片，行政区归属可能有百米量级的偏差。
+          </p>
+        </div>
       </div>
     </div>
   );
