@@ -60,32 +60,19 @@ export function picksRoute(): string {
 }
 
 /** 照片侧的 GPS 地点智能相册。 */
-export function locationsRoute(locationId?: string): string {
-  const base = `${MODE_PREFIX.photo}/locations`;
-  return locationId ? `${base}/${encodeURIComponent(locationId)}` : base;
+/**
+ * 足迹页。
+ *
+ * 地点详情用路径段（区划码是稳定的六位数字），时间区间与归并粒度走
+ * 查询参数：它们是筛选，不该占路径。
+ */
+export function travelsRoute(): string {
+  return `${MODE_PREFIX.photo}/travels`;
 }
 
-/**
- * 离线地点图谱里聚焦某个行政区。
- *
- * 与 locationsRoute(locationId) 的那一个路径段不是一回事：那里放的是
- * 坐标聚类的相册 ID（loc_ 前缀），这里放的是六位行政区划码。两套 ID
- * 规则互不通用，所以下钻状态走查询参数，不占路径段。
- *
- * 时间区间（from / to）也带在地址里：时间是跨层级的一维，下钻与返回
- * 都要留着它，浏览器前进后退也才对得上。
- */
-export function locationRegionRoute(
-  adcode: number | null,
-  from?: string | null,
-  to?: string | null,
-): string {
-  const params = new URLSearchParams();
-  if (adcode !== null) params.set("adcode", String(adcode));
-  if (from) params.set("from", from);
-  if (to) params.set("to", to);
-  const query = params.toString();
-  return `${MODE_PREFIX.photo}/locations${query ? `?${query}` : ""}`;
+/** 足迹页里的某个地点。 */
+export function travelPlaceRoute(adcode: number): string {
+  return `${MODE_PREFIX.photo}/travels/place/${adcode}`;
 }
 
 /** 照片侧的人物候选分组相册。 */

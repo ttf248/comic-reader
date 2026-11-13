@@ -268,17 +268,6 @@ export interface ImageMetadataResponse {
   error?: { code: string; message: string };
 }
 
-export interface GPSLocationAlbum {
-  id: string;
-  name: string;
-  latitude: number;
-  longitude: number;
-  fileCount: number;
-  albumCount: number;
-  coverResourceId?: string;
-  cellPrecision: number;
-}
-
 export type ChinaLocationPoint = [number, number];
 
 export type ChinaLocationGeometry =
@@ -412,8 +401,6 @@ export interface ChinaLocationVisits {
   visits: ChinaLocationVisit[];
   untimedPhotoCount: number;
 }
-
-export type GPSLocationMedia = LibraryFeedItem;
 
 /** 绘图用的一个行政区轮廓。 */
 export interface ChinaGeometryFeature {
@@ -705,21 +692,6 @@ export const aiJobsApi = {
       nonIdempotent: true,
     });
   },
-  locations: (cursor?: string) =>
-    api<{ ok: boolean; page: LibraryPage<GPSLocationAlbum> }>(
-      "/api/locations",
-      { params: { cursor, limit: 60 } },
-    ),
-  locationMedia: (id: string, cursor?: string) =>
-    api<{
-      ok: boolean;
-      page: LibraryPage<GPSLocationMedia> & {
-        albums: { id: string; name: string; count: number }[];
-        location: GPSLocationAlbum;
-      };
-    }>(`/api/locations/${encodeURIComponent(id)}/media`, {
-      params: { cursor, limit: 200 },
-    }),
   people: (includeHidden = false) =>
     api<{
       ok: boolean;

@@ -23,7 +23,8 @@ const Tag = lazy(() => import("./routes/Tag"));
 const Reader = lazy(() => import("./routes/Reader"));
 const Settings = lazy(() => import("./routes/Settings"));
 const TaskCenter = lazy(() => import("./routes/TaskCenter"));
-const GPSLocations = lazy(() => import("./routes/GPSLocations"));
+const Travels = lazy(() => import("./routes/Travels"));
+const TravelPlace = lazy(() => import("./routes/TravelPlace"));
 const People = lazy(() => import("./routes/People"));
 const SemanticSearch = lazy(() => import("./routes/SemanticSearch"));
 
@@ -83,11 +84,8 @@ export default function App() {
             <Route path="/photo/picks" element={lazyPage(Picks)} />
             {/* 年份墙也只属于照片侧：漫画按作品与卷组织，年份对它没有意义。 */}
             <Route path="/photo/years/:year" element={lazyPage(YearPhotos)} />
-            <Route path="/photo/locations" element={lazyPage(GPSLocations)} />
-            <Route
-              path="/photo/locations/:locationId"
-              element={lazyPage(GPSLocations)}
-            />
+            <Route path="/photo/travels" element={lazyPage(Travels)} />
+            <Route path="/photo/travels/place/:placeId" element={lazyPage(TravelPlace)} />
             <Route path="/photo/semantic" element={lazyPage(SemanticSearch)} />
             <Route path="/photo/people" element={lazyPage(People)} />
             <Route path="/photo/people/:personId" element={lazyPage(People)} />

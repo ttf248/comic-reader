@@ -73,7 +73,7 @@ export default function AppShell() {
       [favoritesRoute(mode)]: mode === "comic" ? "收藏漫画" : "收藏照片",
       [unreadRoute()]: "未读",
       "/tasks": "任务中心",
-      "/photo/locations": "拍摄地点",
+      "/photo/travels": "足迹",
       "/photo/people": "人物相册",
       "/settings": "设置",
     };
@@ -84,8 +84,8 @@ export default function AppShell() {
         // 标签段只解码一次：路径里可能是字面 %xx。
         const raw = decodePathTail(path, "/tags/");
         base = raw || "标签";
-      } else if (path.startsWith("/photo/locations/")) {
-        base = "拍摄地点";
+      } else if (path.startsWith("/photo/travels/place/")) {
+        base = "足迹";
       } else if (path.startsWith("/photo/people/")) {
         base = "人物相册";
       } else {

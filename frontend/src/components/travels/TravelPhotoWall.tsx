@@ -1,14 +1,15 @@
 import { useMemo, useState } from "react";
 import PhotoWall from "../wall/PhotoWall";
 import PhotoViewer from "../wall/PhotoViewer";
-import { type ChinaTimeRange, type GPSLocationMedia } from "../../api/aiJobs";
+import type { ChinaTimeRange } from "../../api/aiJobs";
+import type { LibraryFeedItem } from "../../api/library";
 import { useChinaRegionMedia } from "../../hooks/useChinaLocations";
 import { usePicks } from "../../hooks/usePicks";
 import { usePhotoStore, wallTargetHeight } from "../../store/photoStore";
 import { useUIStore } from "../../store/uiStore";
 import { albumRoute } from "../../utils/path";
 
-interface RegionPhotoWallProps {
+interface TravelPhotoWallProps {
   /** 当前叶子的区划码。 */
   adcode: number;
   /** 区域名称。 */
@@ -24,19 +25,19 @@ interface RegionPhotoWallProps {
  *
  * 地图的最后一层就是照片本身：看完分布就落到照片，而不是停在数字上。
  */
-export default function RegionPhotoWall({
+export default function TravelPhotoWall({
   adcode,
   name,
   visit = null,
   timeRange,
-}: RegionPhotoWallProps) {
+}: TravelPhotoWallProps) {
   const density = usePhotoStore((state) => state.density);
   const picks = usePicks();
   const pushToast = useUIStore((state) => state.pushToast);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const query = useChinaRegionMedia(adcode, timeRange, visit);
 
-  const items = useMemo<GPSLocationMedia[]>(
+  const items = useMemo<LibraryFeedItem[]>(
     () => query.data?.pages.flatMap((page) => page.items) ?? [],
     [query.data],
   );

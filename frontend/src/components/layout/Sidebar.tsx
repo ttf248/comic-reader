@@ -30,7 +30,7 @@ import {
   albumRoute,
   favoritesRoute,
   homeRoute,
-  locationsRoute,
+  travelsRoute,
   semanticSearchRoute,
   picksRoute,
   recentsRoute,
@@ -81,7 +81,7 @@ const PHOTO_GROUP: NavEntry[] = [
   { to: recentsRoute("photo"), label: "最近浏览", Icon: ClockIcon },
   { to: favoritesRoute("photo"), label: "收藏照片", Icon: StarIcon },
   { to: picksRoute(), label: "精选照片", Icon: PickIcon },
-  { to: locationsRoute(), label: "拍摄地点", Icon: MapPinIcon },
+  { to: travelsRoute(), label: "足迹", Icon: MapPinIcon },
   { to: "/photo/people", label: "人物相册", Icon: PeopleIcon },
   { to: semanticSearchRoute(), label: "智能搜索", Icon: FolderSearchIcon },
 ];

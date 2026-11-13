@@ -266,8 +266,8 @@ SIGINT/SIGTERM 触发停止接收连接、取消扫描/转码并强制刷新扫�
 ### 查询、导航与网格
 
 - TanStack Query 管理库、媒体、偏好、收藏与历史；Zustand 管理本机 UI、阅读器和扫描连接会话。主题与 Toast 在应用层统一挂载，阅读器独立于 AppShell 但仍有错误边界与访问门禁。
-- 路由在 `App.tsx` 懒加载，**模式进 URL 路径**：`/photo`（照片库）、`/photo/recents`、`/photo/favorites`、`/photo/picks`（精选照片）、`/photo/albums/*`、`/photo/tags/*`、`/photo/locations`（离线地点地图）、`/photo/people`（人物候选）；`/comic`（漫画库）、`/comic/unread`、`/comic/recents`、`/comic/favorites`、`/comic/albums/*`、`/comic/tags/*`；漫画阅读器 `/comic/read/:albumId` 使用相册 ID 和 0-based index，视频加 `type=video`；设置页 `/settings` 与模式无关。根路径 `/` 按服务端记住的偏好落到某一侧。标签按单个路径段编码，路径段只解码一次（从原始 pathname 切段，不用 `useParams`），直接打开链接的返回有应用内兜底。
-- 地点地图的下钻状态放查询参数：`/photo/locations?adcode=<六位区划码>&from=<YYYY-MM>&to=<YYYY-MM>`。`adcode` 指向当前聚焦的区域，页面显示它的下一级地图；它没有下一级（叶子）时显示该区域的照片墙。它不用路径段，因为同一段路径上已经有坐标聚类相册 ID（`/photo/locations/:locationId`），两套 ID 规则不可混用。面包屑的祖先链由区划父子关系推导，祖先可点，「返回」回到上一级地图而不是退出页面。时间区间是跨层级的一维：下钻、返回与换面板都带着它，缺省表示全部时间。
+- 路由在 `App.tsx` 懒加载，**模式进 URL 路径**：`/photo`（照片库）、`/photo/recents`、`/photo/favorites`、`/photo/picks`（精选照片）、`/photo/albums/*`、`/photo/tags/*`、`/photo/travels`（足迹）、`/photo/people`（人物候选）；`/comic`（漫画库）、`/comic/unread`、`/comic/recents`、`/comic/favorites`、`/comic/albums/*`、`/comic/tags/*`；漫画阅读器 `/comic/read/:albumId` 使用相册 ID 和 0-based index，视频加 `type=video`；设置页 `/settings` 与模式无关。根路径 `/` 按服务端记住的偏好落到某一侧。标签按单个路径段编码，路径段只解码一次（从原始 pathname 切段，不用 `useParams`），直接打开链接的返回有应用内兜底。
+- 足迹页在 `/photo/travels`，地点详情在 `/photo/travels/place/<六位区划码>`。筛选状态（时间区间 `from`/`to`、归并粒度 `level`）放查询参数，时间区间是跨层级的一维：换粒度与下钻都带着它，缺省表示全部时间。旧的 `/photo/locations` 与坐标聚类相册 ID 一并作废，不留兼容跳转。
 - **模式有且只有一个真相源：URL 路径前缀。** 服务端 `Prefs.appMode` 只决定根路径落到哪一侧；前端 `appModeStore` 只镜像这个偏好，不持有「当前模式」。`WorkbenchModeProvider`（`components/layout/`）挂在应用最外层，从 `useLocation` 推导模式并经上下文下发，因此整屏脱离外壳的阅读器也在同一套上下文里。切换模式 = 导航到对侧对应页 + 写回偏好，两件事缺一不可。
 - 模式切换的语义只有一张表（`utils/path.ts` 的 `counterpartRoute`）：两侧都有的同名页（最近 / 收藏 / 标签）一一对应；相册与阅读器只属于一侧，未读只属于漫画侧，精选只属于照片侧，它们都回落到对侧首页。
 - 相册入口按内容属性分派：照片目录的相册 `/photo/albums/<相册 id>` 直接渲染照片墙，漫画目录的相册重定向到阅读器。属性由服务端给出（所属目录的 `kind`），前端不按图片数量推断。

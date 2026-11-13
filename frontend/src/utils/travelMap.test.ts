@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ChinaLocationGeometry } from "../api/aiJobs";
 import {
+  boundsOfPhotos,
   createMapProjection,
   levelOpacity,
   monthBuckets,
@@ -11,7 +12,7 @@ import {
   trajectoryPath,
   type MapRegion,
   type TrajectoryStop,
-} from "./chinaMap";
+} from "./travelMap";
 
 const square: ChinaLocationGeometry = {
   type: "Polygon",
@@ -94,6 +95,12 @@ describe("离线地图几何", () => {
     expect(point?.[1]).toBeLessThanOrEqual(41);
   });
 
+  it("没有轮廓的区域不参与绘制", () => {
+    const projection = createMapProjection([region({ geometry: null })]);
+    expect(regionPath(null, projection.project)).toBe("");
+    expect(regionLabelPoint(null)).toBeNull();
+  });
+
   it("色阶的分母是本层合计，换一层就换一个深浅", () => {
     expect(levelOpacity(0, 100)).toBe(0);
     expect(levelOpacity(10, 0)).toBe(0);
@@ -119,6 +126,42 @@ describe("离线地图几何", () => {
       { year: "2019", count: 6 },
       { year: "2021", count: 3 },
     ]);
+  });
+
+  it("有照片的区域给出内容范围，没有照片的给不出", () => {
+    const bounds = boundsOfPhotos([
+      region({ adcode: 1, photoCount: 5 }),
+      region({ adcode: 2, photoCount: 0 }),
+    ]);
+    expect(bounds).not.toBeNull();
+    expect(bounds?.minLongitude).toBeLessThanOrEqual(115);
+    expect(bounds?.maxLongitude).toBeGreaterThanOrEqual(117);
+    expect(boundsOfPhotos([region({ photoCount: 0 })])).toBeNull();
+  });
+
+  it("裁到内容范围后画面里只剩下那一片", () => {
+    const east: MapRegion = region({ adcode: 1, photoCount: 5 });
+    const west: MapRegion = {
+      ...region({ adcode: 2, photoCount: 0 }),
+      geometry: {
+        type: "Polygon",
+        coordinates: [
+          [
+            [80, 20],
+            [85, 20],
+            [85, 25],
+            [80, 20],
+          ],
+        ],
+      },
+    };
+    const full = createMapProjection([east, west]);
+    const cropped = createMapProjection([east, west], boundsOfPhotos([east, west]));
+    // 裁剪之后画面里只有内容那一片：同样一段经度在屏幕上占得更宽。
+    const fullWidth = full.project([117, 40])[0] - full.project([115, 40])[0];
+    const croppedWidth =
+      cropped.project([117, 40])[0] - cropped.project([115, 40])[0];
+    expect(croppedWidth).toBeGreaterThan(fullWidth);
   });
 
   it("轨迹折线在间隔太久处断开", () => {
