@@ -167,6 +167,7 @@ function PersonCard({ person }: { person: PersonGroup }) {
 }
 
 function PersonAlbum({ personId }: { personId: string }) {
+  const facePageSize = 200;
   const navigate = useNavigate();
   const client = useQueryClient();
   const density = usePhotoStore((state) => state.density);
@@ -176,6 +177,7 @@ function PersonAlbum({ personId }: { personId: string }) {
   const [name, setName] = useState("");
   const [targetId, setTargetId] = useState("");
   const [selectedFaces, setSelectedFaces] = useState<string[]>([]);
+  const [visibleFaceCount, setVisibleFaceCount] = useState(facePageSize);
   const query = useInfiniteQuery({
     queryKey: ["person-media", personId],
     queryFn: ({ pageParam }) =>
@@ -339,7 +341,7 @@ function PersonAlbum({ personId }: { personId: string }) {
               拆分选中的人脸（当前已加载照片）
             </summary>
             <div className="mt-2 grid max-h-40 grid-cols-1 gap-x-4 gap-y-1 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
-              {faces.slice(0, 500).map((face) => {
+              {faces.slice(0, visibleFaceCount).map((face) => {
                 const item = items.find(
                   (candidate) => candidate.id === face.resourceId,
                 );
@@ -365,6 +367,17 @@ function PersonAlbum({ personId }: { personId: string }) {
                 );
               })}
             </div>
+            {faces.length > visibleFaceCount ? (
+              <button
+                type="button"
+                className="btn btn-sm btn-outline mt-2"
+                onClick={() =>
+                  setVisibleFaceCount((count) => count + facePageSize)
+                }
+              >
+                {`继续显示 ${Math.min(facePageSize, faces.length - visibleFaceCount)} 张脸（${visibleFaceCount}/${faces.length}）`}
+              </button>
+            ) : null}
             <button
               type="button"
               className="btn btn-sm btn-outline mt-2"

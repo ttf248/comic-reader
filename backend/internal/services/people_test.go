@@ -2,8 +2,11 @@ package services
 
 import (
 	"encoding/json"
+	"fmt"
+	"math"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -135,6 +138,218 @@ func TestPeopleServiceIncrementalReplacesChangedResourceFaces(t *testing.T) {
 	if len(faces) != 1 || faces[0].FaceIndex != 0 || faces[0].MTimeNs != updated.MTimeNs {
 		t.Fatalf("incremental face replacement = %+v", faces)
 	}
+}
+
+func TestPeopleServiceSyncIsIndependentOfRecordOrder(t *testing.T) {
+	records := []AIAnalysisRecord{
+		peopleTestRecord("a_first", peopleTestAngle(0)),
+		peopleTestRecord("b_middle", peopleTestAngle(60)),
+		peopleTestRecord("c_last", peopleTestAngle(120)),
+	}
+	ordered, err := OpenPeopleService(filepath.Join(t.TempDir(), "ordered-state.json"), filepath.Join(t.TempDir(), "ordered-index.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ordered.Sync(records); err != nil {
+		t.Fatal(err)
+	}
+	shuffled, err := OpenPeopleService(filepath.Join(t.TempDir(), "shuffled-state.json"), filepath.Join(t.TempDir(), "shuffled-index.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := shuffled.Sync([]AIAnalysisRecord{records[2], records[0], records[1]}); err != nil {
+		t.Fatal(err)
+	}
+	if got, want := peopleFaceGroups(shuffled.AllFaces()), peopleFaceGroups(ordered.AllFaces()); !reflect.DeepEqual(got, want) {
+		t.Fatalf("record order changed person groups: got %v, want %v", got, want)
+	}
+}
+
+func TestPeopleServiceEarlierIncrementalFacePreservesNameAcrossRebuild(t *testing.T) {
+	root := t.TempDir()
+	statePath := filepath.Join(root, "state", "people.json")
+	indexPath := filepath.Join(root, "derived", "people-index.json")
+	initial := peopleTestRecord("z_existing", peopleTestVector(0, 0))
+	people, err := OpenPeopleService(statePath, indexPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := people.Sync([]AIAnalysisRecord{initial}); err != nil {
+		t.Fatal(err)
+	}
+	oldID := people.AllFaces()[0].PersonID
+	if err := people.Rename(oldID, "已命名的人物"); err != nil {
+		t.Fatal(err)
+	}
+	if err := people.SetHidden(oldID, true); err != nil {
+		t.Fatal(err)
+	}
+	inserted := peopleTestRecord("a_inserted", peopleTestVector(0, .02))
+	if err := people.ApplyRecords([]AIAnalysisRecord{inserted}); err != nil {
+		t.Fatal(err)
+	}
+	groups := people.Groups(true)
+	if len(groups) != 1 || groups[0].Name != "已命名的人物" || !groups[0].Hidden {
+		t.Fatalf("corrections were lost when an earlier face changed the cluster anchor: %+v", groups)
+	}
+	if groups[0].ID == oldID {
+		t.Fatalf("test did not exercise an automatic ID change: old=%q new=%q", oldID, groups[0].ID)
+	}
+
+	restarted, err := OpenPeopleService(statePath, indexPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := restarted.Sync([]AIAnalysisRecord{initial, inserted}); err != nil {
+		t.Fatal(err)
+	}
+	if got := restarted.Groups(true); !reflect.DeepEqual(got, groups) {
+		t.Fatalf("restart changed person group or its corrections: got %+v, want %+v", got, groups)
+	}
+}
+
+func TestPeopleServiceKeepsCorrectedGroupsSeparateWhenAutomaticClustersMerge(t *testing.T) {
+	root := t.TempDir()
+	statePath := filepath.Join(root, "state", "people.json")
+	indexPath := filepath.Join(root, "derived", "people-index.json")
+	first := peopleTestRecord("a_first", peopleTestVector(0, 0))
+	second := peopleTestRecord("z_second", peopleTestVector(1, 0))
+	people, err := OpenPeopleService(statePath, indexPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := people.Sync([]AIAnalysisRecord{first, second}); err != nil {
+		t.Fatal(err)
+	}
+	ids := make(map[string]string)
+	for _, face := range people.AllFaces() {
+		ids[face.ResourceID] = face.PersonID
+	}
+	if ids[first.ResourceID] == ids[second.ResourceID] {
+		t.Fatal("test setup did not create separate automatic groups")
+	}
+	if err := people.Rename(ids[first.ResourceID], "第一人"); err != nil {
+		t.Fatal(err)
+	}
+	if err := people.Rename(ids[second.ResourceID], "第二人"); err != nil {
+		t.Fatal(err)
+	}
+	if err := people.SetHidden(ids[second.ResourceID], true); err != nil {
+		t.Fatal(err)
+	}
+
+	updatedSecond := peopleTestRecord(second.ResourceID, peopleTestVector(0, 0))
+	updatedSecond.MTimeNs++
+	if err := people.ApplyRecords([]AIAnalysisRecord{updatedSecond}); err != nil {
+		t.Fatal(err)
+	}
+	groups := people.Groups(true)
+	if len(groups) != 2 {
+		t.Fatalf("automatic rebuild merged corrected groups: %+v", groups)
+	}
+	byName := make(map[string]PersonGroup, len(groups))
+	for _, group := range groups {
+		byName[group.Name] = group
+	}
+	if byName["第一人"].FaceCount != 1 || byName["第二人"].FaceCount != 1 || !byName["第二人"].Hidden {
+		t.Fatalf("person corrections were lost after automatic merge: %+v", groups)
+	}
+
+	restarted, err := OpenPeopleService(statePath, indexPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := restarted.Sync([]AIAnalysisRecord{first, updatedSecond}); err != nil {
+		t.Fatal(err)
+	}
+	if got := restarted.Groups(true); !reflect.DeepEqual(got, groups) {
+		t.Fatalf("restart changed corrected groups: got %+v, want %+v", got, groups)
+	}
+}
+
+func TestPeopleServiceKeepsCorrectedGroupTogetherWhenAutomaticClustersSplit(t *testing.T) {
+	root := t.TempDir()
+	statePath := filepath.Join(root, "state", "people.json")
+	indexPath := filepath.Join(root, "derived", "people-index.json")
+	first := peopleTestRecord("a_first", peopleTestVector(0, 0))
+	second := peopleTestRecord("z_second", peopleTestVector(0, 0))
+	people, err := OpenPeopleService(statePath, indexPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := people.Sync([]AIAnalysisRecord{first, second}); err != nil {
+		t.Fatal(err)
+	}
+	group := people.Groups(true)[0]
+	if err := people.Rename(group.ID, "确认的人物"); err != nil {
+		t.Fatal(err)
+	}
+	if err := people.SetHidden(group.ID, true); err != nil {
+		t.Fatal(err)
+	}
+
+	updatedSecond := peopleTestRecord(second.ResourceID, peopleTestVector(1, 0))
+	updatedSecond.MTimeNs++
+	if err := people.ApplyRecords([]AIAnalysisRecord{updatedSecond}); err != nil {
+		t.Fatal(err)
+	}
+	groups := people.Groups(true)
+	if len(groups) != 1 || groups[0].Name != "确认的人物" || groups[0].FaceCount != 2 || !groups[0].Hidden {
+		t.Fatalf("automatic rebuild split a corrected group: %+v", groups)
+	}
+
+	restarted, err := OpenPeopleService(statePath, indexPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := restarted.Sync([]AIAnalysisRecord{first, updatedSecond}); err != nil {
+		t.Fatal(err)
+	}
+	if got := restarted.Groups(true); !reflect.DeepEqual(got, groups) {
+		t.Fatalf("restart changed corrected group: got %+v, want %+v", got, groups)
+	}
+}
+
+func TestPeopleServiceRetainsFacesAboveFormerLimit(t *testing.T) {
+	const faceCount = 30025
+	records := make([]AIAnalysisRecord, 0, faceCount/100+1)
+	for start := 0; start < faceCount; start += 100 {
+		count := min(100, faceCount-start)
+		vectors := make([][]float32, count)
+		for index := range vectors {
+			vectors[index] = peopleTestVector(0, 0)
+		}
+		records = append(records, peopleTestRecord(fmt.Sprintf("f_%05d", start), vectors...))
+	}
+	root := t.TempDir()
+	people, err := OpenPeopleService(filepath.Join(root, "state.json"), filepath.Join(root, "index.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := people.Sync(records); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(people.AllFaces()); got != faceCount {
+		t.Fatalf("indexed face count = %d, want %d", got, faceCount)
+	}
+	if people.GroupingLimited() {
+		t.Fatal("single-cluster evaluation unexpectedly hit the comparison limit")
+	}
+}
+
+func peopleTestAngle(degrees float64) []float32 {
+	vector := make([]float32, peopleEmbeddingDimension)
+	vector[0] = float32(math.Cos(degrees * math.Pi / 180))
+	vector[1] = float32(math.Sin(degrees * math.Pi / 180))
+	return vector
+}
+
+func peopleFaceGroups(faces []PersonFace) map[string]string {
+	groups := make(map[string]string, len(faces))
+	for _, face := range faces {
+		groups[face.Key] = face.PersonID
+	}
+	return groups
 }
 
 func containsPeopleEmbedding(data []byte) bool {

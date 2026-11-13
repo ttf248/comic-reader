@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import People from "./People";
@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   people: vi.fn(),
   clearPeople: vi.fn(),
+  personMedia: vi.fn(),
 }));
 
 vi.mock("../api/aiJobs", () => ({
@@ -15,6 +16,10 @@ vi.mock("../api/aiJobs", () => ({
     list: mocks.list,
     people: mocks.people,
     clearPeople: mocks.clearPeople,
+    personMedia: mocks.personMedia,
+    updatePerson: vi.fn(),
+    mergePeople: vi.fn(),
+    splitPerson: vi.fn(),
   },
 }));
 
@@ -86,5 +91,50 @@ describe("人物相册", () => {
           element.textContent?.replace(/\s+/g, "") === "2张",
       ),
     ).toBeInTheDocument();
+  });
+
+  it("人物相册的拆分列表分批显示已加载人脸", async () => {
+    mocks.personMedia.mockResolvedValue({
+      ok: true,
+      page: {
+        revision: 3,
+        person: {
+          id: "p_123456",
+          name: "大组",
+          faceCount: 205,
+          photoCount: 0,
+          hidden: false,
+        },
+        items: [],
+        faces: Array.from({ length: 205 }, (_, index) => ({
+          key: `r${index}#0`,
+          resourceId: `r${index}`,
+          faceIndex: 0,
+          personId: "p_123456",
+          box: [0, 0, 1, 1],
+          score: 0.9,
+        })),
+        total: 0,
+      },
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter initialEntries={["/photo/people/p_123456"]}>
+          <Routes>
+            <Route path="/photo/people/:personId?" element={<People />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    fireEvent.click(
+      await screen.findByText("拆分选中的人脸（当前已加载照片）"),
+    );
+    expect(screen.getAllByRole("checkbox")).toHaveLength(200);
+    fireEvent.click(screen.getByRole("button", { name: /继续显示 5 张脸/ }));
+    expect(screen.getAllByRole("checkbox")).toHaveLength(205);
   });
 });

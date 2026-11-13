@@ -19,7 +19,6 @@ const (
 	peopleIndexVersion          = 1
 	peopleSimilarityThreshold   = 0.363
 	peopleEmbeddingDimension    = 128
-	peopleMaxFaces              = 30000
 	peopleMaxClusterComparisons = 2000000
 	peopleMaxSplitFaces         = 200
 )
@@ -78,9 +77,10 @@ type peopleIndexDisk struct {
 type peopleManualState = PeopleCorrections
 
 type peopleCluster struct {
-	sum     []float64
-	count   int
-	members map[string]struct{}
+	sum      []float64
+	centroid []float32
+	count    int
+	members  map[string]struct{}
 }
 
 // PeopleService keeps a rebuildable face grouping index separate from the small
@@ -91,6 +91,7 @@ type PeopleService struct {
 	derivedPath     string
 	faces           map[string]PersonFace
 	clusters        map[string]*peopleCluster
+	previousIDs     map[string]string
 	manual          peopleManualState
 	comparisons     int
 	groupingLimited bool
@@ -103,7 +104,8 @@ func OpenPeopleService(statePath, derivedPath string) (*PeopleService, error) {
 	service := &PeopleService{
 		statePath: statePath, derivedPath: derivedPath,
 		faces: make(map[string]PersonFace), clusters: make(map[string]*peopleCluster),
-		manual: emptyPeopleManualState(),
+		previousIDs: make(map[string]string),
+		manual:      emptyPeopleManualState(),
 	}
 	data, err := os.ReadFile(statePath)
 	if err != nil && !os.IsNotExist(err) {
@@ -113,6 +115,21 @@ func OpenPeopleService(statePath, derivedPath string) (*PeopleService, error) {
 		var state peopleManualState
 		if json.Unmarshal(data, &state) == nil && state.Version == peopleIndexVersion {
 			service.manual = normalizePeopleManualState(state)
+		}
+	}
+	data, err = os.ReadFile(derivedPath)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+	if err == nil {
+		var index peopleIndexDisk
+		if json.Unmarshal(data, &index) == nil && index.Version == peopleIndexVersion {
+			referencedIDs := peopleReferencedIDs(service.manual)
+			for _, face := range index.Faces {
+				if face.Key != "" && referencedIDs[face.ClusterID] {
+					service.previousIDs[face.Key] = face.ClusterID
+				}
+			}
 		}
 	}
 	return service, nil
@@ -136,24 +153,35 @@ func normalizePeopleManualState(state peopleManualState) peopleManualState {
 	return state
 }
 
+func peopleReferencedIDs(state peopleManualState) map[string]bool {
+	result := make(map[string]bool, len(state.Names)+len(state.Hidden)+len(state.Assignments))
+	for id := range state.Names {
+		result[id] = true
+	}
+	for id := range state.Hidden {
+		result[id] = true
+	}
+	for _, id := range state.Assignments {
+		result[id] = true
+	}
+	return result
+}
+
 // Sync rebuilds clusters from the existing face-analysis records after startup.
 func (s *PeopleService) Sync(records []AIAnalysisRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.faces = make(map[string]PersonFace)
-	s.clusters = make(map[string]*peopleCluster)
-	s.comparisons = 0
-	s.groupingLimited = false
-	s.manual = normalizePeopleManualState(s.manual)
+	previousIDs := cloneStringMap(s.previousIDs)
+	for key, face := range s.faces {
+		previousIDs[key] = face.PersonID
+	}
+	faces := make(map[string]PersonFace)
 	for _, record := range records {
 		for _, face := range peopleFacesFromRecord(record) {
-			if len(s.faces) >= peopleMaxFaces {
-				s.groupingLimited = true
-				break
-			}
-			s.addFaceLocked(face)
+			faces[face.Key] = face
 		}
 	}
+	s.rebuildLocked(faces, previousIDs)
 	s.cleanAssignmentsLocked()
 	return s.persistLocked()
 }
@@ -163,7 +191,19 @@ func (s *PeopleService) ApplyRecords(records []AIAnalysisRecord) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	changed := false
-	for _, record := range records {
+	previousIDs := make(map[string]string, len(s.faces))
+	lastExisting := PersonFace{}
+	for key, face := range s.faces {
+		previousIDs[key] = face.PersonID
+		if lastExisting.Key == "" || personFaceLess(lastExisting, face) {
+			lastExisting = face
+		}
+	}
+	orderedRecords := append([]AIAnalysisRecord(nil), records...)
+	sort.Slice(orderedRecords, func(i, j int) bool { return orderedRecords[i].ResourceID < orderedRecords[j].ResourceID })
+	appendedFaces := make([]PersonFace, 0)
+	appendOnly := true
+	for _, record := range orderedRecords {
 		if record.Type != AIJobTypeFace {
 			continue
 		}
@@ -173,22 +213,208 @@ func (s *PeopleService) ApplyRecords(records []AIAnalysisRecord) error {
 			continue
 		}
 		for _, face := range current {
-			s.removeFaceLocked(face.Key)
+			delete(s.faces, face.Key)
+			appendOnly = false
 		}
 		for _, face := range incoming {
-			if len(s.faces) >= peopleMaxFaces {
-				s.groupingLimited = true
-				break
+			if lastExisting.Key != "" && !personFaceLess(lastExisting, face) {
+				appendOnly = false
 			}
-			s.addFaceLocked(face)
+			appendedFaces = append(appendedFaces, face)
 		}
 		changed = true
 	}
 	if !changed {
 		return nil
 	}
+	if appendOnly {
+		sort.Slice(appendedFaces, func(i, j int) bool { return personFaceLess(appendedFaces[i], appendedFaces[j]) })
+		for _, face := range appendedFaces {
+			s.addFaceLocked(face)
+		}
+	} else {
+		for _, face := range appendedFaces {
+			s.faces[face.Key] = face
+		}
+		s.rebuildLocked(s.faces, previousIDs)
+	}
 	s.cleanAssignmentsLocked()
 	return s.persistLocked()
+}
+
+// rebuildLocked makes greedy centroid grouping independent of batch arrival
+// order and remaps corrections through the largest face overlap.
+func (s *PeopleService) rebuildLocked(faces map[string]PersonFace, previousIDs map[string]string) {
+	keys := make([]string, 0, len(faces))
+	for key := range faces {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool { return personFaceLess(faces[keys[i]], faces[keys[j]]) })
+	s.faces = make(map[string]PersonFace, len(faces))
+	s.clusters = make(map[string]*peopleCluster)
+	s.comparisons = 0
+	s.groupingLimited = false
+	for _, key := range keys {
+		s.addFaceLocked(faces[key])
+	}
+	s.remapCorrectionsLocked(previousIDs)
+}
+
+func personFaceLess(left, right PersonFace) bool {
+	if left.ResourceID != right.ResourceID {
+		return left.ResourceID < right.ResourceID
+	}
+	return left.FaceIndex < right.FaceIndex
+}
+
+func (s *PeopleService) remapCorrectionsLocked(previousIDs map[string]string) {
+	newIDByKey := make(map[string]string, len(s.faces))
+	for key, face := range s.faces {
+		newIDByKey[key] = face.PersonID
+	}
+	type overlap struct {
+		oldID string
+		newID string
+		count int
+	}
+	overlapsByOldID := make(map[string]map[string]int)
+	for key, oldID := range previousIDs {
+		newID := newIDByKey[key]
+		if oldID == "" || newID == "" {
+			continue
+		}
+		if overlapsByOldID[oldID] == nil {
+			overlapsByOldID[oldID] = make(map[string]int)
+		}
+		overlapsByOldID[oldID][newID]++
+	}
+	var overlaps []overlap
+	for oldID, destinations := range overlapsByOldID {
+		for newID, count := range destinations {
+			overlaps = append(overlaps, overlap{oldID: oldID, newID: newID, count: count})
+		}
+	}
+	sort.Slice(overlaps, func(i, j int) bool {
+		if overlaps[i].count != overlaps[j].count {
+			return overlaps[i].count > overlaps[j].count
+		}
+		if (overlaps[i].oldID == overlaps[i].newID) != (overlaps[j].oldID == overlaps[j].newID) {
+			return overlaps[i].oldID == overlaps[i].newID
+		}
+		if overlaps[i].oldID != overlaps[j].oldID {
+			return overlaps[i].oldID < overlaps[j].oldID
+		}
+		return overlaps[i].newID < overlaps[j].newID
+	})
+	oldToNew := make(map[string]string, len(overlapsByOldID))
+	overlapCount := make(map[string]int, len(overlapsByOldID))
+	for _, candidate := range overlaps {
+		if _, decided := oldToNew[candidate.oldID]; !decided {
+			oldToNew[candidate.oldID] = candidate.newID
+			overlapCount[candidate.oldID] = candidate.count
+		}
+	}
+	// If automatic clustering now combines multiple previously corrected
+	// people, keep each corrected group distinct until the user merges it.
+	// Otherwise two labels would collapse to one ID and one would be lost.
+	destinationByOldID := make(map[string]string, len(previousIDs))
+	for oldID, newID := range oldToNew {
+		destinationByOldID[oldID] = newID
+	}
+	for key, oldID := range previousIDs {
+		if destinationByOldID[oldID] == "" && newIDByKey[key] == oldID {
+			destinationByOldID[oldID] = oldID
+		}
+	}
+	oldIDsByDestination := make(map[string][]string)
+	for oldID, newID := range destinationByOldID {
+		oldIDsByDestination[newID] = append(oldIDsByDestination[newID], oldID)
+	}
+	referencedIDs := peopleReferencedIDs(s.manual)
+	pinnedOldIDs := make(map[string]bool)
+	for oldID, destinations := range overlapsByOldID {
+		if referencedIDs[oldID] && len(destinations) > 1 {
+			// Keep the complete previously corrected group together when new
+			// embeddings would otherwise split it across automatic clusters.
+			pinnedOldIDs[oldID] = true
+		}
+	}
+	correctedByDestination := make(map[string][]string)
+	for newID, oldIDs := range oldIDsByDestination {
+		if len(oldIDs) < 2 {
+			continue
+		}
+		for _, oldID := range oldIDs {
+			if referencedIDs[oldID] && !pinnedOldIDs[oldID] {
+				correctedByDestination[newID] = append(correctedByDestination[newID], oldID)
+			}
+		}
+	}
+	for newID, oldIDs := range correctedByDestination {
+		destinationWasAnOldID := destinationByOldID[newID] == newID
+		if destinationWasAnOldID && !referencedIDs[newID] {
+			for _, oldID := range oldIDs {
+				pinnedOldIDs[oldID] = true
+			}
+			continue
+		}
+		sort.Slice(oldIDs, func(i, j int) bool {
+			// Keep an existing cluster whose stable ID is still the destination.
+			// Otherwise prefer the corrected group with the most surviving faces.
+			if (oldIDs[i] == newID) != (oldIDs[j] == newID) {
+				return oldIDs[i] == newID
+			}
+			if overlapCount[oldIDs[i]] != overlapCount[oldIDs[j]] {
+				return overlapCount[oldIDs[i]] > overlapCount[oldIDs[j]]
+			}
+			return oldIDs[i] < oldIDs[j]
+		})
+		keeper := oldIDs[0]
+		for _, oldID := range oldIDs {
+			if oldID != keeper {
+				pinnedOldIDs[oldID] = true
+			}
+		}
+	}
+	if len(oldToNew) == 0 && len(pinnedOldIDs) == 0 {
+		return
+	}
+	for key, oldID := range previousIDs {
+		if pinnedOldIDs[oldID] && s.manual.Assignments[key] == "" {
+			s.manual.Assignments[key] = oldID
+		}
+	}
+
+	names := make(map[string]string, len(s.manual.Names))
+	hidden := make(map[string]bool, len(s.manual.Hidden))
+	for id, name := range s.manual.Names {
+		if _, remapped := oldToNew[id]; !remapped || pinnedOldIDs[id] {
+			names[id] = name
+		}
+	}
+	for id, value := range s.manual.Hidden {
+		if _, remapped := oldToNew[id]; !remapped || pinnedOldIDs[id] {
+			hidden[id] = value
+		}
+	}
+	for _, candidate := range overlaps {
+		if oldToNew[candidate.oldID] != candidate.newID || pinnedOldIDs[candidate.oldID] {
+			continue
+		}
+		if name := s.manual.Names[candidate.oldID]; name != "" && names[candidate.newID] == "" {
+			names[candidate.newID] = name
+		}
+		if s.manual.Hidden[candidate.oldID] {
+			hidden[candidate.newID] = true
+		}
+	}
+	for key, id := range s.manual.Assignments {
+		if newID := oldToNew[id]; newID != "" && !pinnedOldIDs[id] {
+			s.manual.Assignments[key] = newID
+		}
+	}
+	s.manual.Names = names
+	s.manual.Hidden = hidden
 }
 
 func (s *PeopleService) addFaceLocked(face PersonFace) {
@@ -206,15 +432,18 @@ func (s *PeopleService) addFaceLocked(face PersonFace) {
 		}
 		s.comparisons++
 		cluster := s.clusters[id]
-		centroid := normalizedCentroid(cluster.sum)
-		score := peopleCosine(face.embedding, centroid)
+		score := peopleCosine(face.embedding, cluster.centroid)
 		if score > bestScore {
 			bestID, bestScore = id, score
 		}
 	}
 	if bestID == "" {
 		bestID = stablePersonID(face.Key)
-		s.clusters[bestID] = &peopleCluster{sum: make([]float64, peopleEmbeddingDimension), members: map[string]struct{}{}}
+		s.clusters[bestID] = &peopleCluster{
+			sum:      make([]float64, peopleEmbeddingDimension),
+			centroid: make([]float32, peopleEmbeddingDimension),
+			members:  map[string]struct{}{},
+		}
 	}
 	cluster := s.clusters[bestID]
 	for index, value := range face.embedding {
@@ -222,8 +451,25 @@ func (s *PeopleService) addFaceLocked(face PersonFace) {
 	}
 	cluster.count++
 	cluster.members[face.Key] = struct{}{}
+	updatePeopleCentroid(cluster)
 	face.PersonID = bestID
 	s.faces[face.Key] = face
+}
+
+func updatePeopleCentroid(cluster *peopleCluster) {
+	var norm float64
+	for _, value := range cluster.sum {
+		rounded := float32(value)
+		norm += float64(rounded) * float64(rounded)
+	}
+	if norm == 0 {
+		clear(cluster.centroid)
+		return
+	}
+	length := float32(math.Sqrt(norm))
+	for index, value := range cluster.sum {
+		cluster.centroid[index] = float32(value) / length
+	}
 }
 
 func (s *PeopleService) removeFaceLocked(key string) {
@@ -250,6 +496,7 @@ func (s *PeopleService) removeFaceLocked(key string) {
 		}
 		cluster.count++
 	}
+	updatePeopleCentroid(cluster)
 }
 
 func (s *PeopleService) facesForResourceLocked(resourceID string) []PersonFace {
@@ -629,6 +876,7 @@ func (s *PeopleService) Clear() error {
 	defer s.mu.Unlock()
 	s.faces = make(map[string]PersonFace)
 	s.clusters = make(map[string]*peopleCluster)
+	s.previousIDs = make(map[string]string)
 	s.comparisons = 0
 	s.groupingLimited = false
 	s.manual = emptyPeopleManualState()
@@ -661,6 +909,13 @@ func (s *PeopleService) persistLocked() error {
 	}
 	if err := writeAIJSONAtomic(s.derivedPath, disk); err != nil {
 		return err
+	}
+	referencedIDs := peopleReferencedIDs(s.manual)
+	s.previousIDs = make(map[string]string)
+	for key, face := range s.faces {
+		if referencedIDs[face.PersonID] {
+			s.previousIDs[key] = face.PersonID
+		}
 	}
 	return s.persistManualLocked()
 }
