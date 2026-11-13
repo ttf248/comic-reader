@@ -279,7 +279,6 @@ describe("足迹页", () => {
     expect(stats.textContent).toContain("120");
     expect(stats.textContent).toContain("张照片 · 全库");
     expect(stats.textContent).toContain("8 张带位置");
-    expect(stats.textContent).toContain("2 段出行");
     expect(stats.textContent).toContain("2 个省");
     expect(stats.textContent).toContain("1 个市");
     expect(stats.textContent).toContain("1 张没有拍摄时间");
@@ -313,6 +312,29 @@ describe("足迹页", () => {
         name: /2019-05-02 至 2019-05-05，4 天，6 张照片/,
       }),
     ).toBeTruthy();
+  });
+
+  it("时间跨度可以切换，默认是最近五年", async () => {
+    renderPage();
+
+    const timeline = await screen.findByRole("region", { name: "时间轴" });
+    const spans = within(timeline).getByRole("radiogroup", { name: "时间跨度" });
+    // 缺省是最近五年：不用等全库的历史铺开。
+    expect(within(spans).getByRole("radio", { name: "5年" }).getAttribute("aria-checked")).toBe("true");
+    // 夹具里的历史只有 26 个月，五年已经全罩住了。
+    expect(timeline.querySelectorAll(".travel-timeline__cell").length).toBe(26);
+
+    // 换成最近一年，就只剩十二个月。
+    fireEvent.click(within(spans).getByRole("radio", { name: "1年" }));
+
+    await waitFor(() => {
+      expect(
+        within(timeline).getAllByRole("slider")[0].getAttribute("aria-valuetext"),
+      ).toBe("2020-07");
+    });
+    expect(timeline.querySelectorAll(".travel-timeline__cell").length).toBe(12);
+    // 跨度写进地址，刷新与分享都带着它。
+    expect(screen.getByTestId("location-search").textContent).toContain("span=1y");
   });
 
   it("拖动刷手把时间区间写进地址", async () => {

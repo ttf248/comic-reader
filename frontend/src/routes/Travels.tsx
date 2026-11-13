@@ -5,6 +5,7 @@ import TravelMiniMap from "../components/travels/TravelMiniMap";
 import TravelPlaceList from "../components/travels/TravelPlaceList";
 import TravelStats from "../components/travels/TravelStats";
 import TravelTimeline from "../components/travels/TravelTimeline";
+import type { TravelSpan } from "../components/travels/TravelTimeline";
 import TravelTrips from "../components/travels/TravelTrips";
 import {
   useChinaFeatures,
@@ -12,11 +13,11 @@ import {
   useChinaPlacesAll,
   useChinaPoints,
   useChinaProvinceOutline,
-  useChinaSummary,
   useChinaSummaryAll,
   useChinaTripsAll,
 } from "../hooks/useChinaLocations";
 import { travelPlaceRoute } from "../utils/path";
+import { monthIndex, monthKey } from "../utils/travelMap";
 import type { MapRegion } from "../utils/travelMap";
 
 /** 归并粒度：地方与行程都按哪一层分组。 */
@@ -27,6 +28,26 @@ function parseMonth(raw: string | null): string | null {
   if (!raw || !/^\d{4}-\d{2}$/.test(raw)) return null;
   return raw;
 }
+
+/**
+ * 时间轴的跨度。
+ *
+ * 缺省是最近五年：十几年的历史一次铺开，格子会细到读不出来；想看更早
+ * 的再按按钮。
+ */
+function parseSpan(raw: string | null): TravelSpan {
+  return raw === "1y" || raw === "3y" || raw === "10y" || raw === "all"
+    ? raw
+    : "5y";
+}
+
+/** 各跨度对应的年数。 */
+const SPAN_YEARS: Record<Exclude<TravelSpan, "all">, number> = {
+  "1y": 1,
+  "3y": 3,
+  "5y": 5,
+  "10y": 10,
+};
 
 /**
  * 小地图上照片位置的网格边长。
@@ -50,17 +71,30 @@ export default function Travels() {
   const navigate = useNavigate();
   const from = parseMonth(searchParams.get("from"));
   const to = parseMonth(searchParams.get("to"));
-  const timeRange = useMemo(() => ({ from, to }), [from, to]);
+  const span = parseSpan(searchParams.get("span"));
   const level = (searchParams.get("level") as PlaceLevel | null) ?? "city";
   const selectedTripId = searchParams.get("trip");
   const [placeListOpen, setPlaceListOpen] = useState(false);
 
-  // 两份汇总：一份带区间（数字台用），一份不带（时间轴要知道整条历史
-  // 有多长，才画得出那把尺子）。
-  const summaryQuery = useChinaSummary(timeRange);
-  const summary = summaryQuery.data;
+  // 两份汇总：一份不带区间（时间轴要知道整条历史有多长，才画得出那把
+  // 尺子），一份带区间（数字台用）。
   const wholeQuery = useChinaSummaryAll();
   const whole = wholeQuery.data;
+
+  // 跨度锚在有照片的最后一月：最近五年是从那一刻往回数的五年。
+  const spanFrom = useMemo(() => {
+    const months = whole?.months ?? [];
+    if (months.length === 0 || span === "all") return null;
+    const last = months[months.length - 1].month;
+    return monthKey(monthIndex(last) - SPAN_YEARS[span] * 12 + 1);
+  }, [span, whole?.months]);
+
+  // 生效的区间：刷手圈的优先，没圈就用跨度。
+  const timeRange = useMemo(
+    () => ({ from: from ?? spanFrom, to }),
+    [from, spanFrom, to],
+  );
+
 
   // 行程不随时间区间重切：段的下标要能寻址到照片，两边必须同一套口径。
   const tripsQuery = useChinaTripsAll(level);
@@ -104,6 +138,20 @@ export default function Travels() {
     [searchParams, setSearchParams],
   );
 
+  const setSpan = useCallback(
+    (next: TravelSpan) => {
+      const nextParams = new URLSearchParams(searchParams);
+      // 缺省就是最近五年，不写进地址。
+      if (next === "5y") nextParams.delete("span");
+      else nextParams.set("span", next);
+      // 换跨度等于换了一个范围：刷手圈出的区间留在里面会打架。
+      nextParams.delete("from");
+      nextParams.delete("to");
+      setSearchParams(nextParams, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
+
   const setLevel = useCallback(
     (next: string) => {
       const nextParams = new URLSearchParams(searchParams);
@@ -139,24 +187,21 @@ export default function Travels() {
     [from, level, navigate, to],
   );
 
-  // 区间内与行程有交集的段。
+  // 生效区间内与行程有交集的段。
   const windowTrips = useMemo(
     () =>
       trips.filter(
         (trip) =>
-          (!to || trip.startedAt <= to) && (!from || trip.endedAt >= from),
+          (!timeRange.to || trip.startedAt <= timeRange.to) &&
+          (!timeRange.from || trip.endedAt >= timeRange.from),
       ),
-    [from, to, trips],
+    [timeRange.from, timeRange.to, trips],
   );
 
-  const tripCount = windowTrips.length;
-
-  const untimedCount = summary?.untimedPhotoCount ?? 0;
-
-  const hasWindow = Boolean(from || to);
+  const untimedCount = whole?.untimedPhotoCount ?? 0;
 
   const error =
-    summaryQuery.isError || wholeQuery.isError || tripsQuery.isError;
+    wholeQuery.isError || tripsQuery.isError;
 
   // 地图上的单元：去过的那些地方，各自的形状与区间内的张数。
   const counts = useMemo(() => {
@@ -215,15 +260,13 @@ export default function Travels() {
               <p className="page-eyebrow">离线解析</p>
               <h1 className="travel-head__title">足迹</h1>
 
-              {/* 规模：一个主数字（全库照片总数）加一句补充。 */}
+              {/* 规模：说的是这个库的事实，不随区间变。 */}
               <TravelStats
-                totalPhotos={summary?.totalPhotoCount ?? null}
-                gpsPhotos={summary?.gpsPhotoCount ?? 0}
-                trips={tripCount}
-                provinces={summary?.provinceCount ?? 0}
-                cities={summary?.cityCount ?? 0}
+                totalPhotos={whole?.totalPhotoCount ?? null}
+                gpsPhotos={whole?.gpsPhotoCount ?? 0}
+                provinces={whole?.provinceCount ?? 0}
+                cities={whole?.cityCount ?? 0}
                 untimed={untimedCount}
-                scoped={hasWindow}
               />
 
               <div className="travel-head__actions">
@@ -281,7 +324,6 @@ export default function Travels() {
               type="button"
               className="btn btn-sm btn-outline"
               onClick={() => {
-                void summaryQuery.refetch();
                 void wholeQuery.refetch();
                 void tripsQuery.refetch();
               }}
@@ -294,16 +336,18 @@ export default function Travels() {
         {whole ? (
           <TravelTimeline
             months={whole.months}
-            trips={trips}
+            trips={windowTrips}
+            span={span}
             from={from}
             to={to}
             onChange={setRange}
+            onChangeSpan={setSpan}
             onSelectTrip={(trip) => selectTrip(trip.id)}
             selectedTripId={selectedTripId}
           />
         ) : null}
 
-        {summary ? (
+        {whole ? (
           <TravelTrips
             trips={windowTrips}
             selectedTripId={selectedTripId}

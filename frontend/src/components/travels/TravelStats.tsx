@@ -1,17 +1,13 @@
 interface TravelStatsProps {
   /** 全库图片总数（不含视频）；null 表示还没取到。 */
   totalPhotos: number | null;
-  /** 区间内带位置的照片数。 */
+  /** 带位置的照片数。 */
   gpsPhotos: number;
-  /** 区间内的段数。 */
-  trips: number;
-  /** 区间内去过的省、市数。 */
+  /** 去过的省、市数。 */
   provinces: number;
   cities: number;
-  /** 区间内没有可信拍摄时间的照片数。 */
+  /** 没有可信拍摄时间的照片数。 */
   untimed: number;
-  /** 统计是否限定在某个时间区间里。 */
-  scoped: boolean;
 }
 
 /**
@@ -24,11 +20,9 @@ interface TravelStatsProps {
 export default function TravelStats({
   totalPhotos,
   gpsPhotos,
-  trips,
   provinces,
   cities,
   untimed,
-  scoped,
 }: TravelStatsProps) {
   return (
     <div className="travel-stats">
@@ -39,12 +33,8 @@ export default function TravelStats({
         <span className="travel-stats__hero-label">张照片 · 全库</span>
       </p>
       <div className="travel-stats__rest">
-        {scoped ? <span className="travel-stats__scope">本区间</span> : null}
         <span>
           <b className="travel-stats__value">{gpsPhotos.toLocaleString()}</b> 张带位置
-        </span>
-        <span>
-          <b className="travel-stats__value">{trips.toLocaleString()}</b> 段出行
         </span>
         <span>
           <b className="travel-stats__value">{provinces}</b> 个省

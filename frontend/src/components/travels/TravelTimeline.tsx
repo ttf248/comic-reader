@@ -8,6 +8,7 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import type { ChinaTrip } from "../../api/aiJobs";
+import Segmented from "../common/Segmented";
 import {
   fillMonthRange,
   monthIndex,
@@ -15,16 +16,36 @@ import {
   type MonthCount,
 } from "../../utils/travelMap";
 
+/**
+ * 时间轴显示的跨度。
+ *
+ * 十几年、几十年的历史一次铺开，格子会细到读不出来；默认只画最近五年，
+ * 想看更早的再按按钮。
+ */
+export type TravelSpan = "1y" | "3y" | "5y" | "10y" | "all";
+
+/** 各跨度对应的年数。 */
+const SPAN_YEARS: Record<Exclude<TravelSpan, "all">, number> = {
+  "1y": 1,
+  "3y": 3,
+  "5y": 5,
+  "10y": 10,
+};
+
 interface TravelTimelineProps {
   /** 全库的逐月照片数（不带时间区间）。这条轴是全局的那把尺子。 */
   months: MonthCount[];
-  /** 全库的行程与停留（不带时间区间）。段的下标要能寻址到照片。 */
+  /** 当前范围内的行程与停留。段的下标要能寻址到照片。 */
   trips: ChinaTrip[];
-  /** 当前区间（左闭右闭，"YYYY-MM"）；null 表示全部时间。 */
+  /** 轴显示的跨度，锚在有照片的最后一月。 */
+  span: TravelSpan;
+  /** 当前区间（左闭右闭，"YYYY-MM"）；null 表示不限。 */
   from: string | null;
   to: string | null;
   /** 改区间。 */
   onChange: (from: string | null, to: string | null) => void;
+  /** 改时间跨度。 */
+  onChangeSpan: (span: TravelSpan) => void;
   /** 选中某一段。 */
   onSelectTrip?: (trip: ChinaTrip) => void;
   /** 当前选中的段。 */
@@ -85,9 +106,11 @@ function cellFill(count: number, maxCount: number): string {
 export default function TravelTimeline({
   months,
   trips,
+  span,
   from,
   to,
   onChange,
+  onChangeSpan,
   onSelectTrip,
   selectedTripId,
 }: TravelTimelineProps) {
@@ -112,11 +135,36 @@ export default function TravelTimeline({
     () => (filled.length > 0 ? monthIndex(filled[filled.length - 1].month) : 0),
     [filled],
   );
-  const spanMonths = Math.max(lastIndex - firstIndex + 1, 1);
+
+  // 轴显示的范围：跨度给的那一段，刷手圈的区间若在外面也要装得下。
+  const domain = useMemo(() => {
+    const spanFirst =
+      span === "all"
+        ? firstIndex
+        : Math.max(firstIndex, lastIndex - SPAN_YEARS[span] * 12 + 1);
+    const brushFirst = from ? monthIndex(from) : null;
+    const brushLast = to ? monthIndex(to) : null;
+    return {
+      first: Math.min(spanFirst, brushFirst ?? spanFirst),
+      last: Math.max(lastIndex, brushLast ?? lastIndex),
+    };
+  }, [firstIndex, from, lastIndex, span, to]);
+
+  const spanMonths = Math.max(domain.last - domain.first + 1, 1);
+
+  // 只画范围内的那几个月。
+  const visible = useMemo(
+    () =>
+      filled.filter((entry) => {
+        const index = monthIndex(entry.month);
+        return index >= domain.first && index <= domain.last;
+      }),
+    [domain.first, domain.last, filled],
+  );
 
   const maxMonthCount = useMemo(
-    () => filled.reduce((max, entry) => Math.max(max, entry.count), 0),
-    [filled],
+    () => visible.reduce((max, entry) => Math.max(max, entry.count), 0),
+    [visible],
   );
 
   // 量出容器宽度，决定每个月占多少像素。
@@ -142,40 +190,54 @@ export default function TravelTimeline({
 
   /** 月份序号 → 像素位置（该月的左缘）。 */
   const xOf = useCallback(
-    (index: number) => (index - firstIndex) * pixelsPerMonth,
-    [firstIndex, pixelsPerMonth],
+    (index: number) => (index - domain.first) * pixelsPerMonth,
+    [domain.first, pixelsPerMonth],
   );
 
   /** 像素位置 → 月份序号。 */
   const monthAt = useCallback(
     (clientX: number) => {
       const element = scrollRef.current;
-      if (!element) return firstIndex;
+      if (!element) return domain.first;
       const bounds = element.getBoundingClientRect();
       const offset = clientX - bounds.left + element.scrollLeft;
       return Math.min(
-        Math.max(firstIndex + Math.round(offset / pixelsPerMonth), firstIndex),
-        lastIndex,
+        Math.max(
+          domain.first + Math.round(offset / pixelsPerMonth),
+          domain.first,
+        ),
+        domain.last,
       );
     },
-    [firstIndex, lastIndex, pixelsPerMonth],
+    [domain.first, domain.last, pixelsPerMonth],
   );
 
-  const fromIndex = from ? monthIndex(from) : firstIndex;
-  const toIndex = to ? monthIndex(to) : lastIndex;
+  const fromIndex = from ? monthIndex(from) : domain.first;
+  const toIndex = to ? monthIndex(to) : domain.last;
   const hasWindow = Boolean(from || to);
+
+  // 只画范围内的行程：跨进范围的也算，它在范围内待过。
+  const visibleTrips = useMemo(
+    () =>
+      trips.filter((trip) => {
+        const start = monthIndex(trip.startedAt.slice(0, 7));
+        const end = monthIndex(trip.endedAt.slice(0, 7));
+        return start <= domain.last && end >= domain.first;
+      }),
+    [domain.first, domain.last, trips],
+  );
 
   // 同一个月里的几段行程要错开，否则钉会叠在一起。
   const tripsByMonth = useMemo(() => {
     const map = new Map<number, ChinaTrip[]>();
-    for (const trip of trips) {
+    for (const trip of visibleTrips) {
       const index = monthIndex(trip.startedAt.slice(0, 7));
       const list = map.get(index);
       if (list) list.push(trip);
       else map.set(index, [trip]);
     }
     return map;
-  }, [trips]);
+  }, [visibleTrips]);
 
   const maxTripCount = useMemo(
     () => trips.reduce((max, trip) => Math.max(max, trip.photoCount), 0),
@@ -252,12 +314,12 @@ export default function TravelTimeline({
       // 整段平移：长度不变，只挪位置。
       const length = toIndex - fromIndex;
       const nextFrom = Math.min(
-        Math.max(fromIndex + (month - anchor), firstIndex),
-        lastIndex - length,
+        Math.max(fromIndex + (month - anchor), domain.first),
+        domain.last - length,
       );
       applyWindow(nextFrom, nextFrom + length);
     },
-    [applyWindow, drag, firstIndex, fromIndex, lastIndex, monthAt, toIndex],
+    [applyWindow, domain.first, domain.last, drag, fromIndex, monthAt, toIndex],
   );
 
   const endDrag = useCallback(() => {
@@ -268,19 +330,33 @@ export default function TravelTimeline({
 
   const years = useMemo(() => {
     const result: { year: string; index: number }[] = [];
-    for (let index = firstIndex; index <= lastIndex; index += 1) {
+    for (let index = domain.first; index <= domain.last; index += 1) {
       const key = monthKey(index);
       if (key.endsWith("-01")) result.push({ year: key.slice(0, 4), index });
     }
     return result;
-  }, [firstIndex, lastIndex]);
+  }, [domain.first, domain.last]);
 
   const hoverTripData = useMemo(
     () => trips.find((trip) => trip.id === hoverTrip) ?? null,
     [hoverTrip, trips],
   );
 
-  // 读数带：悬停什么就报什么，平时报当前区间。
+  // 读数带：悬停什么就报什么，平时报当前范围。
+  const rangeSummary = useMemo(() => {
+    const photos = visibleTrips.reduce(
+      (sum, trip) => sum + trip.photoCount,
+      0,
+    );
+    const label =
+      hasWindow
+        ? `${from} – ${to}`
+        : span === "all"
+          ? "全部时间"
+          : `最近 ${SPAN_YEARS[span]} 年`;
+    return `${label} · ${visibleTrips.length} 段出行 · ${photos.toLocaleString()} 张`;
+  }, [from, hasWindow, span, to, visibleTrips]);
+
   const readout = hoverTripData
     ? `${hoverTripData.startedAt}${
         hoverTripData.endedAt !== hoverTripData.startedAt
@@ -289,9 +365,7 @@ export default function TravelTimeline({
       } · ${hoverTripData.stops.map((stop) => stop.name).join(" → ")} · ${hoverTripData.photoCount} 张`
     : hoverMonth
       ? hoverMonth
-      : hasWindow
-        ? `${from} – ${to}`
-        : "全部时间";
+      : rangeSummary;
 
   if (filled.length === 0) {
     return (
@@ -311,6 +385,18 @@ export default function TravelTimeline({
     <section aria-label="时间轴" className="travel-timeline">
       <div className="travel-timeline__head">
         <h2 className="font-display text-label font-medium text-fg">时间轴</h2>
+        <Segmented
+          label="时间跨度"
+          value={span}
+          onChange={onChangeSpan}
+          options={[
+            { value: "1y", label: "1年" },
+            { value: "3y", label: "3年" },
+            { value: "5y", label: "5年" },
+            { value: "10y", label: "10年" },
+            { value: "all", label: "全部" },
+          ]}
+        />
         <div className="travel-timeline__legend">
           <span className="travel-timeline__legend-item">
             <span className="travel-timeline__swatch" />
@@ -331,7 +417,7 @@ export default function TravelTimeline({
               className="btn btn-sm btn-outline"
               onClick={() => onChange(null, null)}
             >
-              看全部时间
+              清除区间
             </button>
           ) : null}
         </div>
@@ -351,7 +437,7 @@ export default function TravelTimeline({
             viewBox={`0 0 ${contentWidth} ${STRIP_HEIGHT}`}
             height={STRIP_HEIGHT}
             role="group"
-            aria-label={`按月的照片分布与行程，共 ${trips.length} 段`}
+            aria-label={`按月的照片分布与行程，共 ${visibleTrips.length} 段`}
           >
             <defs>
               {/*
@@ -379,7 +465,7 @@ export default function TravelTimeline({
             <g mask="url(#travel-timeline-window)">
               {/* 格子带：一格一个月，深浅是那一个月的张数。 */}
               <g>
-                {filled.map((entry) => {
+                {visible.map((entry) => {
                   const index = monthIndex(entry.month);
                   return (
                     <rect
@@ -413,7 +499,7 @@ export default function TravelTimeline({
               </g>
               {/* 行程钉：落在开始的那个月。 */}
               <g>
-                {trips.map((trip) => {
+                {visibleTrips.map((trip) => {
                   const index = monthIndex(trip.startedAt.slice(0, 7));
                   const sameMonth = tripsByMonth.get(index) ?? [];
                   const position = sameMonth.indexOf(trip);
