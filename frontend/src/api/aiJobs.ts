@@ -298,6 +298,13 @@ export interface ChinaLocationRegionInfo {
   unmatchedAreaPhotoCount: number;
   /** 上级区划码；省级区域为 null。 */
   parentAdcode: number | null;
+  /** 按全国到直接上级顺序排列，用于完整面包屑导航。 */
+  ancestors: ChinaLocationAncestor[];
+}
+
+export interface ChinaLocationAncestor {
+  adcode: number;
+  name: string;
 }
 
 /** 某个区域的下一级区域。 */

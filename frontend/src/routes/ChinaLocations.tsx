@@ -92,40 +92,34 @@ export default function ChinaLocations() {
     }));
   }, [childRegions, isNationLevel, summary?.provinces]);
 
-  // 色阶与占比的分母：本层的照片总数。全国是匹配到省份的总数，
-  // 省内是该省的照片总数（含省内未细分的那部分）。
+  // 色阶与占比的分母：本层的照片总数，含未细分到直接下级的部分。
   const levelTotal = isNationLevel
     ? (summary?.chinaPhotoCount ?? 0)
     : (regionInfo?.photoCount ?? 0);
 
   const levelName = useMemo(() => {
     if (isNationLevel) return "省级区域";
-    const level = childRegions[0]?.level;
-    return level === "district" ? "区县" : "地级区域";
+    const hasCities = childRegions.some((region) => region.level === "city");
+    const hasDistricts = childRegions.some(
+      (region) => region.level === "district",
+    );
+    if (hasCities && hasDistricts) return "地级区域与区县";
+    return hasDistricts ? "区县" : "地级区域";
   }, [childRegions, isNationLevel]);
 
   const levelLabel = isNationLevel ? "全国" : (regionInfo?.name ?? "全国");
 
   const chain = useMemo<LocationCrumb[]>(() => {
     if (!regionInfo) return [{ adcode: null, name: "全国" }];
-    if (regionInfo.parentAdcode === null) {
-      return [
-        { adcode: null, name: "全国" },
-        { adcode: regionInfo.adcode, name: regionInfo.name },
-      ];
-    }
-    const parent = summary?.provinces.find(
-      (province) => province.adcode === regionInfo.parentAdcode,
-    );
     return [
       { adcode: null, name: "全国" },
-      {
-        adcode: regionInfo.parentAdcode,
-        name: parent?.name ?? "上级区域",
-      },
+      ...regionInfo.ancestors.map((ancestor) => ({
+        adcode: ancestor.adcode,
+        name: ancestor.name,
+      })),
       { adcode: regionInfo.adcode, name: regionInfo.name },
     ];
-  }, [regionInfo, summary?.provinces]);
+  }, [regionInfo]);
 
   const rankingRegions: RankingRegion[] = useMemo(
     () =>
@@ -287,7 +281,7 @@ export default function ChinaLocations() {
                             ? `${regions.length} 个省级区域 · 点击省份进入该省地图`
                             : `${regions.length} 个${levelName} · 点击区域下钻`}
                           {regionInfo && regionInfo.unmatchedAreaPhotoCount > 0
-                            ? ` · 省内未细分 ${regionInfo.unmatchedAreaPhotoCount.toLocaleString()} 张`
+                            ? ` · 未细分 ${regionInfo.unmatchedAreaPhotoCount.toLocaleString()} 张`
                             : ""}
                         </p>
                       </div>
@@ -385,9 +379,10 @@ export default function ChinaLocations() {
             </div>
             <p className="px-1 text-meta leading-relaxed text-fg-subtle">
               坐标与边界均在本机处理；时间轴按 EXIF
-              拍摄时间切分，跨时区旅行按拍摄地的当地日期计算。
-              离线边界数据来自阿里云 DataV
-              GeoAtlas（areas_v3，2021.5）；官方说明为学习交流用途，商业使用请先联系数据权利方。
+              拍摄时间切分，跨时区旅行按拍摄地的当地日期计算。 离线边界采用
+              AreaCity 2026 年 4
+              月版省市区县数据，边界以高德为主并整合行政区划信息，坐标系为
+              GCJ-02；不含乡镇边界。
             </p>
           </>
         ) : loading ? (

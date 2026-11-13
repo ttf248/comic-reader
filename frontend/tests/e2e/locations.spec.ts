@@ -20,9 +20,10 @@ test.beforeEach(async ({ request }) => {
 test("拍摄地点逐级下钻并可返回", async ({ page }) => {
   await page.goto("/photo/locations");
 
+  // 首次访问时，后端会一次性解压并建立全国区县边界索引。
   await expect(
     page.getByRole("heading", { name: "全国省级照片地图" }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 15_000 });
   const provinceButtons = page.locator(
     'svg[aria-label*="照片地图"] g[role="button"]',
   );
@@ -31,7 +32,7 @@ test("拍摄地点逐级下钻并可返回", async ({ page }) => {
   // 全国层级没有上级，不该摆一个会退出页面的返回按钮。
   await expect(page.getByRole("button", { name: "返回" })).toHaveCount(0);
 
-  await mapRegion(page, "北京市").click();
+  await mapRegion(page, "北京市").press("Enter");
 
   await expect(page).toHaveURL(/adcode=110000/);
   await expect(page.getByRole("heading", { name: "北京市地图" })).toBeVisible();
@@ -62,6 +63,27 @@ test("排行面板也能进入区域", async ({ page }) => {
   await rankingRow(page, "北京市").click();
   await expect(page).toHaveURL(/adcode=110000/);
   await expect(mapRegion(page, "东城区")).toBeVisible();
+});
+
+test("城市地图继续下钻到区县并显示完整祖先链", async ({ page }) => {
+  await page.goto("/photo/locations");
+
+  await mapRegion(page, "浙江省").click();
+  await expect(page).toHaveURL(/adcode=330000/);
+  await expect(page.getByRole("heading", { name: "浙江省地图" })).toBeVisible();
+
+  await mapRegion(page, "杭州市").click();
+  await expect(page).toHaveURL(/adcode=330100/);
+  await expect(page.getByRole("heading", { name: "杭州市地图" })).toBeVisible();
+  await expect(mapRegion(page, "西湖区")).toBeVisible();
+
+  await mapRegion(page, "西湖区").click();
+  await expect(page).toHaveURL(/adcode=330106/);
+  const crumb = page.getByRole("navigation", { name: "地点层级" });
+  await expect(crumb).toContainText("全国");
+  await expect(crumb).toContainText("浙江省");
+  await expect(crumb).toContainText("杭州市");
+  await expect(crumb).toContainText("西湖区");
 });
 
 test("时间轴在没有拍摄时间时如实说明", async ({ page }) => {

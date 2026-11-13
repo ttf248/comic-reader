@@ -50,7 +50,7 @@ const summary = {
   ok: true as const,
   locations: {
     revision: 4,
-    boundaryVersion: "datav-areas_v3-2021.5",
+    boundaryVersion: "areacity-2025.251231.260403",
     gpsPhotoCount: 8,
     chinaPhotoCount: 8,
     unassignedPhotoCount: 0,
@@ -98,7 +98,7 @@ const zhejiang = {
   ok: true as const,
   regions: {
     revision: 4,
-    boundaryVersion: "datav-areas_v3-2021.5",
+    boundaryVersion: "areacity-2025.251231.260403",
     region: {
       adcode: 330000,
       name: "浙江省",
@@ -106,6 +106,7 @@ const zhejiang = {
       photoCount: 5,
       unmatchedAreaPhotoCount: 0,
       parentAdcode: null,
+      ancestors: [],
     },
     regions: [
       {
@@ -144,7 +145,7 @@ const hangzhou = {
   ok: true as const,
   regions: {
     revision: 4,
-    boundaryVersion: "datav-areas_v3-2021.5",
+    boundaryVersion: "areacity-2025.251231.260403",
     region: {
       adcode: 330100,
       name: "杭州市",
@@ -152,6 +153,46 @@ const hangzhou = {
       photoCount: 3,
       unmatchedAreaPhotoCount: 0,
       parentAdcode: 330000,
+      ancestors: [{ adcode: 330000, name: "浙江省" }],
+    },
+    regions: [
+      {
+        adcode: 330106,
+        name: "西湖区",
+        level: "district",
+        photoCount: 3,
+        geometry: polygon,
+      },
+      {
+        adcode: 330105,
+        name: "拱墅区",
+        level: "district",
+        photoCount: 0,
+        geometry: polygon,
+      },
+    ],
+    months: [{ month: "2019-05", count: 3 }],
+    trajectory: [],
+    untimedPhotoCount: 0,
+  },
+};
+
+const xihu = {
+  ok: true as const,
+  regions: {
+    revision: 4,
+    boundaryVersion: "areacity-2025.251231.260403",
+    region: {
+      adcode: 330106,
+      name: "西湖区",
+      level: "district",
+      photoCount: 3,
+      unmatchedAreaPhotoCount: 3,
+      parentAdcode: 330100,
+      ancestors: [
+        { adcode: 330000, name: "浙江省" },
+        { adcode: 330100, name: "杭州市" },
+      ],
     },
     regions: [],
     months: [{ month: "2019-05", count: 3 }],
@@ -164,7 +205,7 @@ const visits = {
   ok: true as const,
   visits: {
     revision: 4,
-    boundaryVersion: "datav-areas_v3-2021.5",
+    boundaryVersion: "areacity-2025.251231.260403",
     region: {
       adcode: 330100,
       name: "杭州市",
@@ -172,6 +213,7 @@ const visits = {
       photoCount: 3,
       unmatchedAreaPhotoCount: 0,
       parentAdcode: 330000,
+      ancestors: [{ adcode: 330000, name: "浙江省" }],
     },
     visits: [
       {
@@ -215,6 +257,7 @@ describe("拍摄地点逐级下钻", () => {
       async (adcode: number) => {
         if (adcode === 330000) return zhejiang;
         if (adcode === 330100) return hangzhou;
+        if (adcode === 330106) return xihu;
         throw new Error(`unexpected adcode ${adcode}`);
       },
     );
@@ -244,6 +287,7 @@ describe("拍摄地点逐级下钻", () => {
           photoCount: 3,
           unmatchedAreaPhotoCount: 0,
           parentAdcode: 330000,
+          ancestors: [{ adcode: 330000, name: "浙江省" }],
         },
       },
     });
@@ -335,15 +379,22 @@ describe("拍摄地点逐级下钻", () => {
     });
   });
 
-  it("叶子区域给出该区域的照片墙", async () => {
+  it("城市可继续进入区县，面包屑列出完整层级", async () => {
     renderPage("/photo/locations?adcode=330100");
 
+    expect(await screen.findByText("杭州市地图")).toBeInTheDocument();
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "西湖区，3 张照片，占本层 100.0%",
+      }),
+    );
     expect(await screen.findByText("西湖.jpg")).toBeInTheDocument();
     expect(screen.getByTestId("photo-wall")).toBeInTheDocument();
     const crumb = screen.getByRole("navigation", { name: "地点层级" });
     expect(crumb).toHaveTextContent("全国");
     expect(crumb).toHaveTextContent("浙江省");
     expect(crumb).toHaveTextContent("杭州市");
+    expect(crumb).toHaveTextContent("西湖区");
   });
 });
 
@@ -355,6 +406,7 @@ describe("拍摄地点的时间维度", () => {
       async (adcode: number) => {
         if (adcode === 330000) return zhejiang;
         if (adcode === 330100) return hangzhou;
+        if (adcode === 330106) return xihu;
         throw new Error(`unexpected adcode ${adcode}`);
       },
     );
@@ -384,6 +436,7 @@ describe("拍摄地点的时间维度", () => {
           photoCount: 3,
           unmatchedAreaPhotoCount: 0,
           parentAdcode: 330000,
+          ancestors: [{ adcode: 330000, name: "浙江省" }],
         },
       },
     });
@@ -443,6 +496,7 @@ describe("拍摄地点的时间维度", () => {
 
   it("城市层级给出到访清单，点一次到访打开那几天的照片", async () => {
     renderPage("/photo/locations?adcode=330100");
+    fireEvent.click(await screen.findByRole("button", { name: "到访" }));
 
     const visit = await screen.findByRole("button", {
       name: /2019-05-02 至 2019-05-04，3 天，3 张照片/,
