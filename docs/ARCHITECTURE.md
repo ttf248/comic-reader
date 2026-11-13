@@ -143,7 +143,7 @@ EXIF 解析器保存拍摄墙上时间、朝向、相机信息和 GPS 附属字�
 
 > 服务端手上本来就有比 0.01° 更细的位置（它拿来做点位判定），但**对外给出的最细粒度是 0.01° 一格**。同一台服务器本来就通过媒体接口提供这些照片本身，网格化只是把「连续坐标」降成「格点计数」，不新增一类信息。
 
-格边长只认六档（0.01 / 0.02 / 0.05 / 0.1 / 0.2 / 0.5 度）：它是「画多细」的档位，不是一个连续参数。白名单也让前端能按缩放级别挑档 —— 地图铺满全国时几公里的一格小得看不见，推到一座城市里同样的格子又太粗，于是**格子跟着缩放走**。格数超过 4000 时服务端自动调粗，`cell` 里回报实际生效的那一档。
+格边长只认六档（0.01 / 0.02 / 0.05 / 0.1 / 0.2 / 0.5 度）：它是「画多细」的档位，不是一个连续参数。白名单让前端能按画布大小挑档 —— 小地图只有 236 像素宽，几公里的一格在画面里不到一个像素，点会糊成一片噪点，因此足迹页固定用 0.2 度这一档。格数超过 4000 时服务端自动调粗，`cell` 里回报实际生效的那一档。
 
 格心取 `floor(lon/cell) * cell + cell/2`，**不是照片坐标的平均值**：平均值会把点拉回真实位置，格心不会 —— 一格里到底有没有照片，地图上看不出来，也不该看出来。
 
@@ -284,7 +284,7 @@ SIGINT/SIGTERM 触发停止接收连接、取消扫描/转码并强制刷新扫�
 - TanStack Query 管理库、媒体、偏好、收藏与历史；Zustand 管理本机 UI、阅读器和扫描连接会话。主题与 Toast 在应用层统一挂载，阅读器独立于 AppShell 但仍有错误边界与访问门禁。
 - 路由在 `App.tsx` 懒加载，**模式进 URL 路径**：`/photo`（照片库）、`/photo/recents`、`/photo/favorites`、`/photo/picks`（精选照片）、`/photo/albums/*`、`/photo/tags/*`、`/photo/travels`（足迹）、`/photo/people`（人物候选）；`/comic`（漫画库）、`/comic/unread`、`/comic/recents`、`/comic/favorites`、`/comic/albums/*`、`/comic/tags/*`；漫画阅读器 `/comic/read/:albumId` 使用相册 ID 和 0-based index，视频加 `type=video`；设置页 `/settings` 与模式无关。根路径 `/` 按服务端记住的偏好落到某一侧。标签按单个路径段编码，路径段只解码一次（从原始 pathname 切段，不用 `useParams`），直接打开链接的返回有应用内兜底。
 - 足迹页在 `/photo/travels`，地点详情在 `/photo/travels/place/<六位区划码>`。筛选状态（时间区间 `from`/`to`、归并粒度 `level`）放查询参数，时间区间是跨层级的一维：换粒度与下钻都带着它，缺省表示全部时间。旧的 `/photo/locations` 与坐标聚类相册 ID 一并作废，不留兼容跳转。
-- 足迹页的组成：`routes/Travels.tsx` 是通栏单栏的骨架（页头 + 数字台 + 地图 + 时间带 + 行程目录），`components/travels/TravelMapCanvas.tsx` 是常驻的地图舞台（离线行政边界 + 照片位置的点云 + 拖动缩放），`components/travels/TravelTimeRibbon.tsx` 是按真实时间比例铺开的横向时间带（带两个可拖动的刷手），`components/travels/TravelTrips.tsx` 是行程目录（按年分组，一行一段，点开才就地展开照片），`components/travels/TravelPlaceList.tsx` 是浮在地图上的「去过的地方」清单。段的照片按需取回：`hooks/useChinaLocations.ts` 的 `useChinaTripMedia` 在展开或点开时才发请求。
+- 足迹页的组成：`routes/Travels.tsx` 是通栏单栏的骨架（页头 + 数字台 + 时间轴 + 行程目录），`components/travels/TravelMiniMap.tsx` 是嵌在数字台右端的只读小地图（离线行政边界 + 照片位置的点云，236×104），`components/travels/TravelTimeline.tsx` 是按真实时间比例铺开的时间轴（逐月的张数画成一条平滑曲线，行程是线上的珠子，两端各一个可拖动的抓手），`components/travels/TravelTrips.tsx` 是行程目录（按年分组，一行一段，点开才就地展开照片），`components/travels/TravelPlaceList.tsx` 是从小地图下缘展开的「去过的地方」清单。段的照片按需取回：`hooks/useChinaLocations.ts` 的 `useChinaTripMedia` 在展开或点开时才发请求。
 - **行程不随时间区间重切。** 段是按「粒度 + 两周间隔」切出来的，`/trips/:index/media` 按段的下标寻址 —— 段若随区间重排，下标就再也指不到同一段照片了。因此足迹页的行程列表与行程照片端点**都不带时间区间**，时间带上的刷选只决定哪些段被点亮、地图与数字台过滤到什么范围。查询键里因此有「全量」与「区间」两套（`useChinaTripsAll` / `useChinaSummaryAll` / `useChinaPlacesAll`），两者不能共用同一个键，否则会互相顶掉。
 - **模式有且只有一个真相源：URL 路径前缀。** 服务端 `Prefs.appMode` 只决定根路径落到哪一侧；前端 `appModeStore` 只镜像这个偏好，不持有「当前模式」。`WorkbenchModeProvider`（`components/layout/`）挂在应用最外层，从 `useLocation` 推导模式并经上下文下发，因此整屏脱离外壳的阅读器也在同一套上下文里。切换模式 = 导航到对侧对应页 + 写回偏好，两件事缺一不可。
 - 模式切换的语义只有一张表（`utils/path.ts` 的 `counterpartRoute`）：两侧都有的同名页（最近 / 收藏 / 标签）一一对应；相册与阅读器只属于一侧，未读只属于漫画侧，精选只属于照片侧，它们都回落到对侧首页。

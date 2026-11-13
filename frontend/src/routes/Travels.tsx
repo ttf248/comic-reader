@@ -2,10 +2,10 @@ import { useCallback, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import PageHeading from "../components/common/PageHeading";
 import Segmented from "../components/common/Segmented";
-import TravelMapCanvas from "../components/travels/TravelMapCanvas";
+import TravelMiniMap from "../components/travels/TravelMiniMap";
 import TravelPlaceList from "../components/travels/TravelPlaceList";
 import TravelStatLedger from "../components/travels/TravelStatLedger";
-import TravelTimeRibbon from "../components/travels/TravelTimeRibbon";
+import TravelTimeline from "../components/travels/TravelTimeline";
 import TravelTrips from "../components/travels/TravelTrips";
 import {
   useChinaFeatures,
@@ -30,24 +30,20 @@ function parseMonth(raw: string | null): string | null {
 }
 
 /**
- * 缩放倍数 → 照片位置的网格边长。
+ * 小地图上照片位置的网格边长。
  *
- * 地图铺满全国时，几公里的一格小得看不见；推到一座城市里，同样的格子
- * 又太粗。格子跟着缩放走：放得越大，画得越细。
+ * 地图只有 236 像素宽，照片位置按几公里一格聚合根本看不见 —— 一格在
+ * 全国范围里还不到一个像素。这里用二十公里一格：格子够大才画得出，
+ * 又不至于把同城不同角落的照片并成一坨。
  */
-function cellForZoom(zoom: number): number {
-  if (zoom < 1.6) return 0.1;
-  if (zoom < 3) return 0.05;
-  if (zoom < 6) return 0.02;
-  return 0.01;
-}
+const MINI_MAP_CELL = 0.2;
 
 /**
  * 足迹：我去过哪些地方，什么时候去的。
  *
- * 页面先给一张地图：照片的真实位置浮在离线行政边界上，一眼看出去过
- * 哪些城市、在城市里拍了多少。下面是一条按真实时间比例铺开的时间带，
- * 拖两端可以圈出一段时间；再下面是这段时间里的行程，一段一段读。
+ * 页头下面是一条数字台，右端嵌着一块小地图：去过的地方按张数深浅着色，
+ * 照片真正的位置泛成一层光。再下面是一条按真实时间比例铺开的曲线，
+ * 拖两端可以圈出一段时间；最下面是这段时间里的行程，一段一段读。
  */
 export default function Travels() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -58,9 +54,8 @@ export default function Travels() {
   const level = (searchParams.get("level") as PlaceLevel | null) ?? "city";
   const selectedTripId = searchParams.get("trip");
   const [placeListOpen, setPlaceListOpen] = useState(false);
-  const [cell, setCell] = useState(0.02);
 
-  // 两份汇总：一份带区间（数字台用），一份不带（时间带要知道整条历史
+  // 两份汇总：一份带区间（数字台用），一份不带（时间轴要知道整条历史
   // 有多长，才画得出那把尺子）。
   const summaryQuery = useChinaSummary(timeRange);
   const summary = summaryQuery.data;
@@ -91,13 +86,8 @@ export default function Travels() {
     [level, wholePlaces],
   );
   const placeFeatures = useChinaFeatures(placeAdcodes);
-  const pointsQuery = useChinaPoints(timeRange, cell);
+  const pointsQuery = useChinaPoints(timeRange, MINI_MAP_CELL);
   const points = useMemo(() => pointsQuery.data?.items ?? [], [pointsQuery.data]);
-
-  // 地图放得越大，照片位置就要画得越细。
-  const handleZoomChange = useCallback((zoom: number) => {
-    setCell(cellForZoom(zoom));
-  }, []);
 
   const setRange = useCallback(
     (nextFrom: string | null, nextTo: string | null) => {
@@ -147,11 +137,6 @@ export default function Travels() {
       navigate(`${travelPlaceRoute(adcode)}${query ? `?${query}` : ""}`);
     },
     [from, level, navigate, to],
-  );
-
-  const selectedTrip = useMemo(
-    () => trips.find((trip) => trip.id === selectedTripId) ?? null,
-    [selectedTripId, trips],
   );
 
   // 区间内与行程有交集的段。
@@ -237,11 +222,6 @@ export default function Travels() {
     [regions],
   );
 
-  const highlightedAdcodes = useMemo(
-    () => selectedTrip?.stops.map((stop) => stop.adcode) ?? [],
-    [selectedTrip],
-  );
-
   return (
     <div className="h-full overflow-y-auto pb-12">
       <div className="page-bleed">
@@ -249,28 +229,18 @@ export default function Travels() {
           contained
           eyebrow="离线解析"
           title="足迹"
-          description="照片坐标在本机匹配到行政区边界，并聚成网格画在这张地图上。这里按时间讲一遍：你去过哪些地方，是什么时候去的。"
+          description="照片坐标在本机匹配到行政区边界，并聚成网格画在那块小地图上。这里按时间讲一遍：你去过哪些地方，是什么时候去的。"
           action={
-            <div className="flex flex-wrap items-center gap-3">
-              <button
-                type="button"
-                className="btn btn-sm btn-outline"
-                aria-pressed={placeListOpen}
-                onClick={() => setPlaceListOpen((value) => !value)}
-              >
-                地方
-              </button>
-              <Segmented
-                label="归并粒度"
-                value={level}
-                onChange={setLevel}
-                options={[
-                  { value: "province", label: "省" },
-                  { value: "city", label: "市" },
-                  { value: "district", label: "区县" },
-                ]}
-              />
-            </div>
+            <Segmented
+              label="归并粒度"
+              value={level}
+              onChange={setLevel}
+              options={[
+                { value: "province", label: "省" },
+                { value: "city", label: "市" },
+                { value: "district", label: "区县" },
+              ]}
+            />
           }
         />
 
@@ -294,37 +264,42 @@ export default function Travels() {
           </div>
         ) : null}
 
-        {summary ? <TravelStatLedger items={ledger} /> : null}
-      </div>
-
-      <div className="page-bleed travel-world">
-        <TravelMapCanvas
-          regions={regions}
-          backdrop={backdrop}
-          points={points}
-          highlightedAdcodes={highlightedAdcodes}
-          highlightedRange={
-            selectedTrip
-              ? { from: selectedTrip.startedAt, to: selectedTrip.endedAt }
-              : null
-          }
-          levelTotal={levelTotal}
-          scopeLabel="足迹"
-          onSelect={(region) => openPlace(region.adcode)}
-          onZoomChange={handleZoomChange}
-        />
-        {placeListOpen ? (
-          <TravelPlaceList
-            places={places}
-            onClose={() => setPlaceListOpen(false)}
-            onOpenPlace={openPlace}
-          />
+        {/* 数字台与小地图并成一条：数字说规模，右边那张图说位置。 */}
+        {summary ? (
+          <div className="travel-ledger-row">
+            <TravelStatLedger items={ledger} />
+            <div className="travel-ledger-map">
+              <TravelMiniMap
+                regions={regions}
+                backdrop={backdrop}
+                points={points}
+                levelTotal={levelTotal}
+                scopeLabel="足迹"
+              />
+              <button
+                type="button"
+                className="travel-ledger-map__toggle"
+                aria-pressed={placeListOpen}
+                onClick={() => setPlaceListOpen((value) => !value)}
+              >
+                地方
+              </button>
+              {placeListOpen ? (
+                <TravelPlaceList
+                  places={places}
+                  anchor="menu"
+                  onClose={() => setPlaceListOpen(false)}
+                  onOpenPlace={openPlace}
+                />
+              ) : null}
+            </div>
+          </div>
         ) : null}
       </div>
 
       <div className="page-bleed">
         {whole ? (
-          <TravelTimeRibbon
+          <TravelTimeline
             months={whole.months}
             trips={trips}
             from={from}
@@ -354,7 +329,7 @@ export default function Travels() {
           拍摄时间的日历日计算，跨时区旅行按拍摄地的当地日期。 离线边界采用
           AreaCity 2026 年 4
           月版省市区县数据，边界以高德为主并整合行政区划信息，坐标系为
-          GCJ-02；不含乡镇边界。地图上的点按网格聚合（最细约一公里一格），
+          GCJ-02；不含乡镇边界。地图上的点按网格聚合（约二十公里一格），
           不还原到单张照片的坐标；库里约四分之三的坐标来自基站与网络而非
           GPS 芯片，行政区归属可能有百米量级的偏差。
         </p>

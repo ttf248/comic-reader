@@ -4,6 +4,13 @@ import ThumbImage from "../common/ThumbImage";
 interface TravelPlaceListProps {
   /** 地点索引：去过哪些地方。 */
   places: ChinaPlace[];
+  /**
+   * 挂在哪里。
+   *
+   * map 是浮在大地图左上角的一层；menu 是从信息栏右边那块小地图下方
+   * 展开的菜单。
+   */
+  anchor?: "map" | "menu";
   /** 收起清单。 */
   onClose: () => void;
   /** 打开某个地点的详情页。 */
@@ -25,11 +32,20 @@ const LEVEL_LABEL: Record<string, string> = {
  */
 export default function TravelPlaceList({
   places,
+  anchor = "map",
   onClose,
   onOpenPlace,
 }: TravelPlaceListProps) {
   return (
-    <div className="travel-place-list" role="complementary" aria-label="去过的地方">
+    <div
+      className={
+        anchor === "menu"
+          ? "travel-place-list travel-place-list--menu"
+          : "travel-place-list"
+      }
+      role="complementary"
+      aria-label="去过的地方"
+    >
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="font-display text-label font-medium text-fg">
           去过的地方

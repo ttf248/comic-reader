@@ -264,7 +264,7 @@ describe("足迹页", () => {
     });
   });
 
-  it("先给规模，再给一张常驻的地图", async () => {
+  it("先给规模，右端嵌着一块小地图", async () => {
     renderPage();
 
     // 数字台：段足迹、去过的地方、带位置的照片。
@@ -273,33 +273,35 @@ describe("足迹页", () => {
     expect(within(ledger).getByText("段足迹")).toBeTruthy();
     expect(within(ledger).getByText("2 个省 · 1 个市")).toBeTruthy();
 
-    // 地图不用选中什么就一直在：它是页面的第一眼。
-    const map = await screen.findByRole("group", { name: /照片地图/ });
+    // 地图缩在信息栏的右端，不用选中什么就一直在。
+    const map = await screen.findByRole("img", { name: /小地图/ });
     expect(map).toBeTruthy();
     // 点云是照片的真实位置：两个网格，两点。
-    expect(map.querySelectorAll(".travel-map-canvas__point").length).toBe(2);
+    expect(map.querySelectorAll(".travel-mini-map__point").length).toBe(2);
   });
 
-  it("时间带按真实时间比例铺开，两端各有一个刷手", async () => {
+  it("时间轴是一条曲线，两端各有一个刷手", async () => {
     renderPage();
 
-    const ribbon = await screen.findByRole("region", { name: "时间带" });
-    const handles = within(ribbon).getAllByRole("slider");
+    const timeline = await screen.findByRole("region", { name: "时间轴" });
+    const handles = within(timeline).getAllByRole("slider");
     expect(handles.length).toBe(2);
     // 尺子是整条历史：2019-05 到 2021-06。
     expect(handles[0].getAttribute("aria-valuetext")).toBe("2019-05");
     expect(handles[1].getAttribute("aria-valuetext")).toBe("2021-06");
-    // 每段行程在带子上占一个块。
+    // 每段行程是线上的一颗珠子。
     expect(
-      within(ribbon).getByRole("button", { name: /时间带上的行程：2019-05-02/ }),
+      within(timeline).getByRole("button", {
+        name: /2019-05-02 至 2019-05-05，4 天，6 张照片/,
+      }),
     ).toBeTruthy();
   });
 
   it("拖动刷手把时间区间写进地址", async () => {
     renderPage();
 
-    const ribbon = await screen.findByRole("region", { name: "时间带" });
-    const handle = within(ribbon).getAllByRole("slider")[0];
+    const timeline = await screen.findByRole("region", { name: "时间轴" });
+    const handle = within(timeline).getAllByRole("slider")[0];
     fireEvent.keyDown(handle, { key: "ArrowRight" });
 
     await waitFor(() => {
@@ -333,7 +335,7 @@ describe("足迹页", () => {
     expect(within(expanded).getByTestId("photo-wall")).toBeTruthy();
   });
 
-  it("「地方」列出��过的地方", async () => {
+  it("「地方」列出去过的地方", async () => {
     renderPage();
 
     fireEvent.click(await screen.findByRole("button", { name: "地方" }));
@@ -366,7 +368,10 @@ describe("足迹页", () => {
   it("点地名直接进这个地方，并且带着筛选条件", async () => {
     renderPage("/photo/travels?from=2019-01&to=2019-12&level=city");
 
-    const stops = await screen.findAllByRole("button", { name: /杭州市/ });
+    const segment = await screen.findByRole("region", {
+      name: "2019-05-02 至 2019-05-05",
+    });
+    const stops = within(segment).getAllByRole("button", { name: /杭州市/ });
     fireEvent.click(stops[0]);
 
     await waitFor(() => {

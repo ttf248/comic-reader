@@ -22,30 +22,30 @@ test("侧栏的足迹入口打开的是新的地点页", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "足迹" })).toBeVisible();
 });
 
-test("地图常驻在页面上，照片位置画成点云", async ({ page }) => {
+test("小地图常驻在数字台右端，照片位置画成点云", async ({ page }) => {
   await page.goto("/photo/travels");
 
-  // 地图不用选中什么就一直在：它是页面的第一眼。
-  const map = page.getByRole("group", { name: /照片地图/ });
+  // 地图不用选中什么就一直在：它就嵌在信息栏的右端。
+  const map = page.getByRole("img", { name: /小地图/ });
   await expect(map).toBeVisible();
 
   // 临时库里三个坐标（杭州 ×3、上海 ×2、北京 ×1）—— 这一条断言是
   // EXIF → 匹配 → 聚合 → 端点 → 渲染整条链路的端到端验证。
-  await expect(page.locator(".travel-map-canvas__point")).toHaveCount(3);
+  await expect(page.locator(".travel-mini-map__point")).toHaveCount(3);
 });
 
-test("时间带按真实时间铺开，两端能拖出一个区间", async ({ page }) => {
+test("时间轴是一条曲线，两端能拖出一个区间", async ({ page }) => {
   await page.goto("/photo/travels");
 
-  const ribbon = page.getByRole("region", { name: "时间带" });
-  await expect(ribbon).toBeVisible();
-  const handles = ribbon.getByRole("slider");
+  const timeline = page.getByRole("region", { name: "时间轴" });
+  await expect(timeline).toBeVisible();
+  const handles = timeline.getByRole("slider");
   await expect(handles).toHaveCount(2);
   // 临时库的照片拍在 2024-05 与 2025-09：尺子量的是整条历史。
   await expect(handles.first()).toHaveAttribute("aria-valuetext", "2024-05");
 
   // 拖右端的手柄：区间写进地址。
-  // 时间带在页面下半屏，先滚到可见处 —— 否则鼠标坐标落在视口之外。
+  // 时间轴在页面下半屏，先滚到可见处 —— 否则鼠标坐标落在视口之外。
   const end = handles.nth(1);
   await end.scrollIntoViewIfNeeded();
   const box = await end.boundingBox();
