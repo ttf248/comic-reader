@@ -5,6 +5,13 @@ test.describe("本机智能照片功能", () => {
     await page.goto("/photo/people");
     await expect(page.getByRole("heading", { name: "人物相册" })).toBeVisible();
     await expect(page.getByText("人物分析默认关闭")).toBeVisible();
+    const peopleResponse = await page.request.get("/api/people");
+    expect(peopleResponse.ok()).toBeTruthy();
+    await expect(peopleResponse.json()).resolves.toMatchObject({
+      people: [],
+      totalGroups: 0,
+      limit: 50,
+    });
     await page.getByRole("link", { name: "打开任务中心" }).click();
     await expect(page).toHaveURL(/\/tasks$/);
     await expect(

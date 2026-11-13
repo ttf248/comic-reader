@@ -692,14 +692,16 @@ export const aiJobsApi = {
       nonIdempotent: true,
     });
   },
-  people: (includeHidden = false) =>
+  people: (includeHidden = false, includeAll = false) =>
     api<{
       ok: boolean;
       people: PersonGroup[];
+      totalGroups: number;
+      limit: number;
       groupingLimited: boolean;
       threshold: number;
       revision: number;
-    }>("/api/people", { params: { includeHidden } }),
+    }>("/api/people", { params: { includeHidden, includeAll } }),
   personMedia: (id: string, cursor?: string) =>
     api<{ ok: boolean; page: PersonMediaPage }>(
       `/api/people/${encodeURIComponent(id)}/media`,

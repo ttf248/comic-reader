@@ -17,6 +17,8 @@ type personMediaPage struct {
 	NextCursor string                   `json:"nextCursor,omitempty"`
 }
 
+const peopleListLimit = 50
+
 // PeopleHandler lists current photo-only person albums and clears all face-derived data.
 func PeopleHandler(people *services.PeopleService, jobs *services.AIJobService, catalog *services.ResourceCatalog, validatePath func(string) (string, error)) fiber.Handler {
 	return func(c *fiber.Ctx) error {
@@ -35,59 +37,22 @@ func PeopleHandler(people *services.PeopleService, jobs *services.AIJobService, 
 			}
 			return c.JSON(fiber.Map{"ok": true, "cleared": true, "peopleEnabled": false})
 		}
+		limit := peopleListLimit
+		if c.Query("includeAll") == "true" {
+			limit = 0
+		}
 		snapshot := requestCatalogSnapshot(c, catalog)
 		if !snapshot.Ready() {
-			return c.JSON(fiber.Map{"ok": true, "people": []services.PersonGroup{}, "groupingLimited": false, "revision": snapshot.Revision()})
+			return c.JSON(fiber.Map{
+				"ok": true, "people": []services.PersonGroup{}, "totalGroups": 0,
+				"limit": limit, "groupingLimited": false, "revision": snapshot.Revision(),
+			})
 		}
-		groupByID := make(map[string]services.PersonGroup)
-		for _, group := range people.Groups(true) {
-			groupByID[group.ID] = group
-		}
-		validGroups := make(map[string]*services.PersonGroup)
-		photos := make(map[string]map[string]struct{})
-		validResources := map[string]bool{}
-		for _, face := range people.AllFaces() {
-			valid, checked := validResources[face.ResourceID]
-			if !checked {
-				_, err := currentFaceRecord(jobs, snapshot, face.ResourceID, validatePath)
-				valid = err == nil
-				validResources[face.ResourceID] = valid
-			}
-			if !valid {
-				continue
-			}
-			group, exists := groupByID[face.PersonID]
-			if !exists || group.Hidden && c.Query("includeHidden") != "true" {
-				continue
-			}
-			current := validGroups[face.PersonID]
-			if current == nil {
-				copy := group
-				copy.FaceCount = 0
-				copy.PhotoCount = 0
-				copy.CoverResourceID = ""
-				validGroups[face.PersonID] = &copy
-				photos[face.PersonID] = map[string]struct{}{}
-				current = &copy
-			}
-			current.FaceCount++
-			photos[face.PersonID][face.ResourceID] = struct{}{}
-			if current.CoverResourceID == "" || face.ResourceID < current.CoverResourceID {
-				current.CoverResourceID = face.ResourceID
-			}
-		}
-		groups := make([]services.PersonGroup, 0, len(validGroups))
-		for id, group := range validGroups {
-			group.PhotoCount = len(photos[id])
-			groups = append(groups, *group)
-		}
-		sort.Slice(groups, func(i, j int) bool {
-			if groups[i].Name == groups[j].Name {
-				return groups[i].ID < groups[j].ID
-			}
-			return groups[i].Name < groups[j].Name
+		groups, total := people.TopGroups(limit, c.Query("includeHidden") == "true", snapshot.IsPhotoImage)
+		return c.JSON(fiber.Map{
+			"ok": true, "people": groups, "totalGroups": total, "limit": limit,
+			"groupingLimited": people.GroupingLimited(), "threshold": 0.363, "revision": snapshot.Revision(),
 		})
-		return c.JSON(fiber.Map{"ok": true, "people": groups, "groupingLimited": people.GroupingLimited(), "threshold": 0.363, "revision": snapshot.Revision()})
 	}
 }
 

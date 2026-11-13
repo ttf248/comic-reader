@@ -93,6 +93,31 @@ describe("人物相册", () => {
     ).toBeInTheDocument();
   });
 
+  it("说明列表仅展示照片数最多的前50组", async () => {
+    mocks.people.mockResolvedValue({
+      ok: true,
+      people: Array.from({ length: 50 }, (_, index) => ({
+        id: `p_${String(index).padStart(6, "0")}`,
+        name: `人物 ${index}`,
+        faceCount: index + 1,
+        photoCount: 100 - index,
+        hidden: false,
+      })),
+      totalGroups: 83,
+      limit: 50,
+      groupingLimited: false,
+      threshold: 0.363,
+      revision: 3,
+    });
+    renderPeople();
+
+    expect(
+      await screen.findByText(/照片数最多的 50 \/ 共 83 组 · 按照片数排序/),
+    ).toBeInTheDocument();
+    expect(screen.getByText("人物 0")).toBeInTheDocument();
+    expect(screen.getByText("人物 49")).toBeInTheDocument();
+  });
+
   it("人物相册的拆分列表分批显示已加载人脸", async () => {
     mocks.personMedia.mockResolvedValue({
       ok: true,

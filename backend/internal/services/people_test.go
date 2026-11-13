@@ -337,6 +337,53 @@ func TestPeopleServiceRetainsFacesAboveFormerLimit(t *testing.T) {
 	}
 }
 
+func TestPeopleServiceTopGroupsRanksPhotoCountsAndLimitsResults(t *testing.T) {
+	const groupCount = 55
+	records := make([]AIAnalysisRecord, 0)
+	for groupIndex := 0; groupIndex < groupCount; groupIndex++ {
+		for photoIndex := 0; photoIndex <= groupIndex; photoIndex++ {
+			vector := make([]float32, peopleEmbeddingDimension)
+			vector[groupIndex] = 1
+			records = append(records, peopleTestRecord(fmt.Sprintf("photo_%02d_%03d", groupIndex, photoIndex), vector))
+		}
+	}
+
+	root := t.TempDir()
+	people, err := OpenPeopleService(filepath.Join(root, "state.json"), filepath.Join(root, "index.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := people.Sync(records); err != nil {
+		t.Fatal(err)
+	}
+	for _, group := range people.Groups(true) {
+		if group.PhotoCount == groupCount {
+			if err := people.SetHidden(group.ID, true); err != nil {
+				t.Fatal(err)
+			}
+			break
+		}
+	}
+
+	visible, totalVisible := people.TopGroups(50, false, nil)
+	if len(visible) != 50 || totalVisible != groupCount-1 {
+		t.Fatalf("visible top groups = %d, total = %d; want 50 of %d", len(visible), totalVisible, groupCount-1)
+	}
+	if visible[0].PhotoCount != groupCount-1 || visible[len(visible)-1].PhotoCount != 5 {
+		t.Fatalf("visible photo-count range = %d..%d, want 54..5", visible[0].PhotoCount, visible[len(visible)-1].PhotoCount)
+	}
+	for index := 1; index < len(visible); index++ {
+		if peopleGroupRanksBefore(visible[index], visible[index-1]) {
+			t.Fatalf("groups are not ordered by descending photo count at %d: %+v before %+v", index, visible[index-1], visible[index])
+		}
+	}
+
+	all, totalAll := people.TopGroups(0, true, nil)
+	if len(all) != groupCount || totalAll != groupCount || all[0].PhotoCount != groupCount {
+		t.Fatalf("all top groups = %d, total = %d, highest count = %d", len(all), totalAll, all[0].PhotoCount)
+	}
+}
+
 func peopleTestAngle(degrees float64) []float32 {
 	vector := make([]float32, peopleEmbeddingDimension)
 	vector[0] = float32(math.Cos(degrees * math.Pi / 180))

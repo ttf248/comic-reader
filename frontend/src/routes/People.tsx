@@ -40,6 +40,7 @@ function PeopleList() {
     },
   });
   const groups = query.data?.people ?? [];
+  const totalGroups = query.data?.totalGroups ?? groups.length;
 
   return (
     <div className="h-full overflow-y-auto pb-12">
@@ -85,7 +86,10 @@ function PeopleList() {
         <section className="page-shell mt-6">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <p className="text-meta text-fg-muted">
-              {groups.length.toLocaleString()} 组 · 阈值{" "}
+              {totalGroups > groups.length
+                ? `照片数最多的 ${groups.length.toLocaleString()} / 共 ${totalGroups.toLocaleString()} 组`
+                : `${totalGroups.toLocaleString()} 组`}
+              {" · 按照片数排序 · 阈值 "}
               {query.data?.threshold.toFixed(3) ?? "0.363"}（候选分组参考值）
             </p>
             <div className="flex flex-wrap items-center gap-3">
@@ -186,12 +190,12 @@ function PersonAlbum({ personId }: { personId: string }) {
     getNextPageParam: (page) => page.nextCursor,
   });
   const groupsQuery = useQuery({
-    queryKey: ["people", false],
-    queryFn: () => aiJobsApi.people(false),
+    queryKey: ["people", false, "all"],
+    queryFn: () => aiJobsApi.people(false, true),
   });
   const allGroupsQuery = useQuery({
-    queryKey: ["people", true],
-    queryFn: () => aiJobsApi.people(true),
+    queryKey: ["people", true, "all"],
+    queryFn: () => aiJobsApi.people(true, true),
   });
   const groups = allGroupsQuery.data?.people ?? groupsQuery.data?.people ?? [];
   const person =

@@ -425,7 +425,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 ### 人物相册 API
 
-- `GET /api/people?includeHidden=true` 返回当前有效的照片候选组；默认隐藏手动隐藏的分组。结果只包含资源 ID、人数统计、名称和封面 ID，不返回特征向量或文件系统路径。
+- `GET /api/people` 默认返回照片数最多的 50 个候选组，按照片数降序排列，照片数相同时按封面资源 ID 与人物 ID 稳定排序。`totalGroups` 是当前照片目录下的候选组总数，`limit` 为 50；`includeHidden=true` 将手动隐藏组加入统计与结果。人物详情中的合并目标查询可带 `includeAll=true` 读取完整列表，此时 `limit` 为 0。结果只包含资源 ID、人数统计、名称和封面 ID，不返回特征向量或文件系统路径；媒体读取仍按当前目录与文件重新校验路径。
 - `GET /api/people/:personId/media?cursor=…&limit=200` 返回人物相册分页、当前照片 DTO 与可供纠错的脸部框/序号。
 - `PUT /api/people/:personId` 接受 `name` 和/或 `hidden`；空名称恢复默认名称。
 - `POST /api/people/merge` 接受 `{ "sourceId": "…", "targetId": "…" }`，将来源组的脸分配给目标组。

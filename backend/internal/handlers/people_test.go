@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -228,6 +229,81 @@ func TestPeopleHTTPGroupingCorrectionsAndClear(t *testing.T) {
 		t.Fatalf("clear did not remove face data and opt-in: status=%d enabled=%v records=%d", cleared.StatusCode, jobs.PeopleEnabled(), len(jobs.Records(services.AIJobTypeFace)))
 	}
 	cleared.Body.Close()
+}
+
+func TestPeopleHTTPListReturnsTop50ByPhotoCount(t *testing.T) {
+	const groupCount = 51
+	root := t.TempDir()
+	photoRoot := filepath.Join(root, "photos")
+	if err := os.MkdirAll(photoRoot, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	catalog := services.NewResourceCatalog()
+	files := make([]string, 0)
+	records := make([]services.AIAnalysisRecord, 0)
+	for groupIndex := 0; groupIndex < groupCount; groupIndex++ {
+		vector := make([]float32, 128)
+		vector[groupIndex] = 1
+		for photoIndex := 0; photoIndex <= groupIndex; photoIndex++ {
+			path := filepath.Join(photoRoot, fmt.Sprintf("photo-%02d-%03d.jpg", groupIndex, photoIndex))
+			if err := os.WriteFile(path, []byte("temporary test image"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			files = append(files, path)
+		}
+	}
+	catalog.Publish(&models.ScanResult{
+		Roots: []string{root},
+		Albums: []models.Album{{
+			Type: "album", Name: "人物列表测试", Path: photoRoot, SourceRoot: root,
+			ContentKind: string(models.ContentKindPhoto), ImageFiles: files, CoverImage: files[0],
+		}},
+	}, []string{root})
+	for groupIndex := 0; groupIndex < groupCount; groupIndex++ {
+		output := peopleHandlerOutput(groupIndex)
+		for photoIndex := 0; photoIndex <= groupIndex; photoIndex++ {
+			path := filepath.Join(photoRoot, fmt.Sprintf("photo-%02d-%03d.jpg", groupIndex, photoIndex))
+			records = append(records, services.AIAnalysisRecord{
+				Type: services.AIJobTypeFace, ResourceID: catalog.ExternalID(path, services.ResourceFile),
+				Size: 100, MTimeNs: 200, ModuleVersion: services.FaceAnalyzerVersion,
+				Status: "faces_found", Data: output.Data, Fields: output.Fields, UpdatedAt: time.Now(),
+			})
+		}
+	}
+	people, err := services.OpenPeopleService(filepath.Join(root, "state", "people.json"), filepath.Join(root, "derived", "people-index.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := people.Sync(records); err != nil {
+		t.Fatal(err)
+	}
+	safety, _ := middleware.PathSafetyMiddleware([]string{root}, catalog)
+	app := fiber.New()
+	app.Use(safety)
+	app.Get("/api/people", PeopleHandler(people, nil, catalog, nil))
+
+	list := peopleHandlerRequest(t, app, fiber.MethodGet, "/api/people", "")
+	var listBody struct {
+		People      []services.PersonGroup `json:"people"`
+		TotalGroups int                    `json:"totalGroups"`
+		Limit       int                    `json:"limit"`
+	}
+	decodePeopleBody(t, list, &listBody)
+	if len(listBody.People) != 50 || listBody.TotalGroups != groupCount || listBody.Limit != 50 {
+		t.Fatalf("top people response = %d groups, total %d, limit %d; want 50 of %d", len(listBody.People), listBody.TotalGroups, listBody.Limit, groupCount)
+	}
+	if listBody.People[0].PhotoCount != groupCount || listBody.People[49].PhotoCount != 2 {
+		t.Fatalf("returned photo-count range = %d..%d, want %d..2", listBody.People[0].PhotoCount, listBody.People[49].PhotoCount, groupCount)
+	}
+
+	all := peopleHandlerRequest(t, app, fiber.MethodGet, "/api/people?includeAll=true", "")
+	var allBody struct {
+		People []services.PersonGroup `json:"people"`
+	}
+	decodePeopleBody(t, all, &allBody)
+	if len(allBody.People) != groupCount {
+		t.Fatalf("includeAll returned %d groups, want %d", len(allBody.People), groupCount)
+	}
 }
 
 func peopleHandlerRequest(t *testing.T, app *fiber.App, method, path, body string) *http.Response {

@@ -1,6 +1,7 @@
 package services
 
 import (
+	"container/heap"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -87,6 +88,7 @@ type peopleCluster struct {
 // user-owned names, visibility flags, and corrections stored under state/.
 type PeopleService struct {
 	mu              sync.RWMutex
+	persistMu       sync.Mutex
 	statePath       string
 	derivedPath     string
 	faces           map[string]PersonFace
@@ -169,6 +171,8 @@ func peopleReferencedIDs(state peopleManualState) map[string]bool {
 
 // Sync rebuilds clusters from the existing face-analysis records after startup.
 func (s *PeopleService) Sync(records []AIAnalysisRecord) error {
+	s.persistMu.Lock()
+	defer s.persistMu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	previousIDs := cloneStringMap(s.previousIDs)
@@ -188,8 +192,9 @@ func (s *PeopleService) Sync(records []AIAnalysisRecord) error {
 
 // ApplyRecords updates affected resources without replacing the task system's records.
 func (s *PeopleService) ApplyRecords(records []AIAnalysisRecord) error {
+	s.persistMu.Lock()
+	defer s.persistMu.Unlock()
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	changed := false
 	previousIDs := make(map[string]string, len(s.faces))
 	lastExisting := PersonFace{}
@@ -225,6 +230,7 @@ func (s *PeopleService) ApplyRecords(records []AIAnalysisRecord) error {
 		changed = true
 	}
 	if !changed {
+		s.mu.Unlock()
 		return nil
 	}
 	if appendOnly {
@@ -239,7 +245,15 @@ func (s *PeopleService) ApplyRecords(records []AIAnalysisRecord) error {
 		s.rebuildLocked(s.faces, previousIDs)
 	}
 	s.cleanAssignmentsLocked()
-	return s.persistLocked()
+	disk := s.indexSnapshotLocked()
+	s.mu.Unlock()
+	if err := s.persistIndexSnapshot(disk); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.updatePreviousIDsLocked()
+	return s.persistManualLocked()
 }
 
 // rebuildLocked makes greedy centroid grouping independent of batch arrival
@@ -656,6 +670,110 @@ func (s *PeopleService) Groups(includeHidden bool) []PersonGroup {
 	return result
 }
 
+// TopGroups aggregates current face records and returns the most photographed
+// people. A nil resource filter includes every indexed resource; limit <= 0
+// returns all matching groups.
+func (s *PeopleService) TopGroups(limit int, includeHidden bool, includeResource func(string) bool) ([]PersonGroup, int) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	groups := make(map[string]*PersonGroup)
+	photos := make(map[string]map[string]struct{})
+	for _, face := range s.faces {
+		if includeResource != nil && !includeResource(face.ResourceID) {
+			continue
+		}
+		id := s.effectivePersonIDLocked(face)
+		if !includeHidden && s.manual.Hidden[id] {
+			continue
+		}
+		group := groups[id]
+		if group == nil {
+			name := s.manual.Names[id]
+			if name == "" {
+				suffix := strings.TrimPrefix(id, "p_")
+				name = "人物 " + suffix[:min(6, len(suffix))]
+			}
+			group = &PersonGroup{ID: id, Name: name, Hidden: s.manual.Hidden[id]}
+			groups[id] = group
+			photos[id] = make(map[string]struct{})
+		}
+		group.FaceCount++
+		photos[id][face.ResourceID] = struct{}{}
+		if group.CoverResourceID == "" || face.ResourceID < group.CoverResourceID {
+			group.CoverResourceID = face.ResourceID
+		}
+	}
+
+	capacity := 0
+	if limit > 0 {
+		capacity = min(limit, len(s.faces))
+	}
+	selected := make(peopleGroupHeap, 0, capacity)
+	if limit > 0 {
+		heap.Init(&selected)
+	}
+	result := make([]PersonGroup, 0, len(groups))
+	total := 0
+	for id, group := range groups {
+		group.PhotoCount = len(photos[id])
+		if !includeHidden && group.Hidden {
+			continue
+		}
+		total++
+		if limit <= 0 {
+			result = append(result, *group)
+			continue
+		}
+		if len(selected) < limit {
+			heap.Push(&selected, *group)
+			continue
+		}
+		if peopleGroupRanksBefore(*group, selected[0]) {
+			selected[0] = *group
+			heap.Fix(&selected, 0)
+		}
+	}
+	if limit > 0 {
+		result = append(result, selected...)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return peopleGroupRanksBefore(result[i], result[j])
+	})
+	return result, total
+}
+
+func peopleGroupRanksBefore(left, right PersonGroup) bool {
+	if left.PhotoCount != right.PhotoCount {
+		return left.PhotoCount > right.PhotoCount
+	}
+	if left.CoverResourceID != right.CoverResourceID {
+		return left.CoverResourceID < right.CoverResourceID
+	}
+	return left.ID < right.ID
+}
+
+type peopleGroupHeap []PersonGroup
+
+func (groups peopleGroupHeap) Len() int { return len(groups) }
+
+func (groups peopleGroupHeap) Less(i, j int) bool {
+	return peopleGroupRanksBefore(groups[j], groups[i])
+}
+
+func (groups peopleGroupHeap) Swap(i, j int) { groups[i], groups[j] = groups[j], groups[i] }
+
+func (groups *peopleGroupHeap) Push(value any) {
+	*groups = append(*groups, value.(PersonGroup))
+}
+
+func (groups *peopleGroupHeap) Pop() any {
+	previous := *groups
+	last := previous[len(previous)-1]
+	*groups = previous[:len(previous)-1]
+	return last
+}
+
 func (s *PeopleService) Faces(personID string) []PersonFace {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -872,6 +990,8 @@ func cloneBoolMap(source map[string]bool) map[string]bool {
 }
 
 func (s *PeopleService) Clear() error {
+	s.persistMu.Lock()
+	defer s.persistMu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.faces = make(map[string]PersonFace)
@@ -894,22 +1014,30 @@ func (s *PeopleService) persistManualLocked() error {
 }
 
 func (s *PeopleService) persistLocked() error {
-	disk := peopleIndexDisk{Version: peopleIndexVersion, Faces: make([]peopleFaceDisk, 0, len(s.faces))}
-	keys := make([]string, 0, len(s.faces))
-	for key := range s.faces {
-		keys = append(keys, key)
+	if err := s.persistIndexSnapshot(s.indexSnapshotLocked()); err != nil {
+		return err
 	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		face := s.faces[key]
+	s.updatePreviousIDsLocked()
+	return s.persistManualLocked()
+}
+
+func (s *PeopleService) indexSnapshotLocked() peopleIndexDisk {
+	disk := peopleIndexDisk{Version: peopleIndexVersion, Faces: make([]peopleFaceDisk, 0, len(s.faces))}
+	for _, face := range s.faces {
 		disk.Faces = append(disk.Faces, peopleFaceDisk{
 			Key: face.Key, ResourceID: face.ResourceID, FaceIndex: face.FaceIndex,
 			ClusterID: face.PersonID, Box: face.Box, Score: face.Score, Size: face.Size, MTimeNs: face.MTimeNs,
 		})
 	}
-	if err := writeAIJSONAtomic(s.derivedPath, disk); err != nil {
-		return err
-	}
+	return disk
+}
+
+func (s *PeopleService) persistIndexSnapshot(disk peopleIndexDisk) error {
+	sort.Slice(disk.Faces, func(i, j int) bool { return disk.Faces[i].Key < disk.Faces[j].Key })
+	return writeAIJSONAtomic(s.derivedPath, disk)
+}
+
+func (s *PeopleService) updatePreviousIDsLocked() {
 	referencedIDs := peopleReferencedIDs(s.manual)
 	s.previousIDs = make(map[string]string)
 	for key, face := range s.faces {
@@ -917,5 +1045,4 @@ func (s *PeopleService) persistLocked() error {
 			s.previousIDs[key] = face.PersonID
 		}
 	}
-	return s.persistManualLocked()
 }

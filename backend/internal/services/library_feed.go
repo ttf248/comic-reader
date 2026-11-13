@@ -88,6 +88,26 @@ func LookupLibraryFeedItem(snapshot CatalogSnapshot, id string) (FeedMediaItem, 
 	return FeedMediaItem{LibraryMediaItem: item, AlbumID: ref.albumID, AlbumName: name}, true
 }
 
+// IsPhotoImage reports whether a resource belongs to a photo album in the
+// published library snapshot. It reads only the in-memory index; media serving
+// still performs the normal path and file validation for the resource.
+func (s CatalogSnapshot) IsPhotoImage(id string) bool {
+	if !s.Ready() || s.state == nil || s.state.library == nil {
+		return false
+	}
+	library := s.state.library
+	ref, exists := library.mediaByFile[id]
+	if !exists || ref.index < 0 {
+		return false
+	}
+	media := library.media[ref.albumID]
+	if ref.index >= len(media) || media[ref.index].Kind != "image" {
+		return false
+	}
+	album, exists := library.nodes[ref.albumID]
+	return exists && album.ContentKind == string(models.ContentKindPhoto)
+}
+
 // ResolveLibraryFeedItems 按给定 ID 顺序解析当前快照里的媒体条目，并补上原相册定位。
 // 路径仅在服务端用于再次校验与计算版本，不会出现在返回 DTO 中。
 func ResolveLibraryFeedItems(snapshot CatalogSnapshot, ids []string, validatePath func(string) (string, error)) []FeedMediaItem {
