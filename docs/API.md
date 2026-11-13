@@ -434,9 +434,13 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 人物分组使用 SFace 余弦相似度 `0.363` 作为候选阈值；这是参考基准，不代表身份确认。分组对每次构建限制最多 30,000 张脸与 2,000,000 次组中心比较，超出部分保留为独立候选组。用户名称、隐藏标记和手动拆分/合并保存在 `state/people.json`；可重建索引位于 `derived/ai/people-index.json`，只存资源 ID、文件指纹、脸部框和组 ID。人脸特征仍只保存在现有 `derived/metadata/face/` 结果中。
 
+### `GET /api/locations/china`
+
+返回离线省级地图与市区照片统计：`locations` 含当前 `revision`、带 GPS/匹配省份/未匹配照片数、34 个省级 `provinces`（含绘图用 `geometry`）及 `areas`（城市/区县名称、级别和照片数）。只统计当前快照中仍存在、版本指纹匹配且路径通过当前媒体根校验的照片。WGS84 GPS 会在本机转换到边界使用的 GCJ-02 后做点位匹配；响应不包含照片原始坐标与文件路径。边界数据来源、版本和限制见 [架构文档](./ARCHITECTURE.md#exifgps-与离线地点地图)。
+
 ### `GET /api/locations` / `GET /api/locations/:locationId/media`
 
-地点索引仅汇总当前扫描快照中仍存在、版本指纹匹配且路径通过当前媒体根校验的照片 GPS 结果。响应按有限坐标网格聚合，并给出坐标、照片数、来源相册数与封面 ID；媒体页额外返回地点摘要、照片分页与来源相册 ID/名称。游标绑定当前 library revision。失效地点返回 `404 location_not_found`。地点不做在线反向地理编码；没有可靠离线地名数据时显示坐标，不请求外部地图服务。`locationId` 是聚类 ID，不是资源授权凭据。
+该坐标聚类接口仅汇总当前扫描快照中仍存在、版本指纹匹配且路径通过当前媒体根校验的照片 GPS 结果。响应按有限坐标网格聚合，并给出坐标、照片数、来源相册数与封面 ID；媒体页额外返回地点摘要、照片分页与来源相册 ID/名称。它继续供语义筛选和既有地点照片分页使用；地点主页面改读 `/api/locations/china` 展示行政区名称，不发起在线反向地理编码。游标绑定当前 library revision。失效地点返回 `404 location_not_found`。`locationId` 是聚类 ID，不是资源授权凭据。
 
 ## 相册与搜索
 

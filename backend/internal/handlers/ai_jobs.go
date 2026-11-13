@@ -394,3 +394,21 @@ func GPSLocationsHandler(catalog *services.ResourceCatalog, jobs *services.AIJob
 		return c.JSON(fiber.Map{"ok": true, "page": page})
 	}
 }
+
+// ChinaLocationsHandler 返回离线省级地图和省内城市/区县照片数。
+func ChinaLocationsHandler(catalog *services.ResourceCatalog, jobs *services.AIJobService, validate func(string) (string, error)) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		if jobs == nil {
+			return writeError(c, fiber.StatusServiceUnavailable, "analysis_unavailable", "analysis service is unavailable")
+		}
+		snapshot := requestCatalogSnapshot(c, catalog)
+		locations, err := services.ChinaLocations(snapshot, jobs.Records(services.AIJobTypeMetadata), validate)
+		if err != nil {
+			if errors.Is(err, services.ErrLibraryNotReady) {
+				return writeLibraryPageError(c, err, snapshot.Revision())
+			}
+			return writeError(c, fiber.StatusInternalServerError, "location_map_unavailable", "offline location boundaries are unavailable")
+		}
+		return c.JSON(fiber.Map{"ok": true, "locations": locations})
+	}
+}

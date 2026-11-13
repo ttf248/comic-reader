@@ -408,6 +408,7 @@ func main() {
 	api.Get("/library/dashboard", handlers.LibraryHomeDashboardHandler(resourceCatalog, activities, unreadIndex))
 	api.Get("/library/unread", handlers.LibraryUnreadAlbumsPageHandler(resourceCatalog, activities, unreadIndex))
 	api.Delete("/library", handlers.ScanCacheClearHandler(scanCache, resourceCatalog, runner))
+	api.Get("/locations/china", handlers.ChinaLocationsHandler(resourceCatalog, aiJobs, safetyState.Validate))
 	api.Get("/locations", handlers.GPSLocationsHandler(resourceCatalog, aiJobs, safetyState.Validate, picks))
 	api.Get("/locations/:id/media", handlers.GPSLocationsHandler(resourceCatalog, aiJobs, safetyState.Validate, picks))
 	api.Get("/people", handlers.PeopleHandler(peopleService, aiJobs, resourceCatalog, safetyState.Validate))

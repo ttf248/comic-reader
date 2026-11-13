@@ -23,7 +23,7 @@ Fiber middleware → handlers → services/store → models + 本地文件
 | [internal/handlers/](../backend/internal/handlers/)                                                                                         | HTTP/SSE 输入输出、状态码与公共 DTO                        |
 | [services/scanner.go](../backend/internal/services/scanner.go)、[scan_runner.go](../backend/internal/services/scan_runner.go)               | 目录工作池、扫描生命周期与进度订阅                         |
 | [resource_catalog.go](../backend/internal/services/resource_catalog.go)、[library_page.go](../backend/internal/services/library_page.go)    | 不可变库快照、资源 ID、分页/搜索索引                       |
-| [ai_jobs.go](../backend/internal/services/ai_jobs.go)、[exif_metadata.go](../backend/internal/services/exif_metadata.go)                     | 持久分析任务、EXIF/GPS 解析、模块结果与地点相册            |
+| [ai_jobs.go](../backend/internal/services/ai_jobs.go)、[exif_metadata.go](../backend/internal/services/exif_metadata.go)、[china_geolocation.go](../backend/internal/services/china_geolocation.go) | 持久分析任务、EXIF/GPS 解析、省级地图与市区照片统计         |
 | [thumbnail.go](../backend/internal/services/thumbnail.go)、[video_transcode.go](../backend/internal/services/video_transcode.go) 等媒体服务 | 缩略图、预览、格式转换、视频封面、元数据、faststart 与转码 |
 | [internal/store/](../backend/internal/store/)                                                                                               | 偏好与媒体活动分文件持久化，锁内部分更新、原子写入         |
 | [frontend/src/App.tsx](../frontend/src/App.tsx)、[main.tsx](../frontend/src/main.tsx)                                                       | 应用入口、懒加载路由、访问门禁、主题、活动同步与错误边界   |
@@ -102,7 +102,11 @@ AI Worker 使用独立 `backend/aiworker/.venv`（Python 3.11）。Windows/Linux
 
 EXIF 解析器保存拍摄墙上时间、朝向、相机信息和 GPS 附属字段。缺少 EXIF/不支持格式属于正常解析状态，损坏文件计入单项失败。EXIF 日期只作为元数据返回；相册业务日期仍维持 `filename > folder > modified`，不会被 EXIF 改写。
 
-地点相册只由当前快照中仍存在、大小与修改时间匹配、路径再次通过 `PathValidator` 的照片结果生成。坐标按 Geohash 精度 5 分组，地点卡片显示聚合坐标与照片数，并保留来源相册 ID/名称。当前不附带可靠的离线地名数据，因此只显示坐标；不调用在线地图、反向地理编码或外部 AI 服务。
+## EXIF/GPS 与离线地点地图
+
+地点页同时使用两套本地数据：旧的 Geohash 精度 5 分组为语义筛选和地点照片分页提供稳定 ID；省级地图接口则读取嵌入的省、市、区县边界，将有效 GPS 匹配到省份及最细可用的区县（无区县边界命中时退回城市），分别统计照片数。每次请求都从当前 catalog revision 重新筛选元数据，要求资源仍是图片、路径通过 `PathValidator`，且大小与修改时间戳仍匹配；地图响应只含行政边界和聚合数量，不返回原始照片坐标或文件路径。EXIF GPS 默认按 WGS84 处理并转为边界使用的 GCJ-02；显式标记为 GCJ-02 的坐标不重复转换，未知 datum 不参与地图匹配。
+
+离线边界文件 `backend/internal/services/geodata/china-admin.geojson.gz` 来自阿里云 DataV GeoAtlas `areas_v3`（数据更新于 2021 年 5 月），其官方说明称数据来源于高德地图并限学习交流用途，商业使用需联系数据权利方。地图只使用省份几何绘制底图，城市/区县几何用于服务端点位匹配；当前子区域数据不含台湾。地图渲染与坐标匹配不发起外部地图、反向地理编码或 AI 请求。
 
 ## 媒体管线
 
