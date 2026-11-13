@@ -316,11 +316,12 @@ func main() {
 	storageUsage := services.NewAIStorageService(30 * time.Second)
 	jobOutputs := services.NewJobOutputService(cacheLayout.Root, 60*time.Second)
 	aiJobs, err = services.NewAIJobService(services.AIJobServiceOptions{
-		StatePath:    cacheLayout.AIJobsPath,
-		MetadataDir:  cacheLayout.MetadataDir,
-		Catalog:      resourceCatalog,
-		ValidatePath: safetyState.Validate,
-		Analyzers:    []services.AIAnalyzer{services.MetadataAnalyzer{}, embeddingAnalyzer, ocrAnalyzer, faceAnalyzer},
+		StatePath:          cacheLayout.AIJobsPath,
+		MetadataDir:        cacheLayout.MetadataDir,
+		Catalog:            resourceCatalog,
+		ValidatePath:       safetyState.Validate,
+		FaceImageConverter: imageConverter,
+		Analyzers:          []services.AIAnalyzer{services.MetadataAnalyzer{}, embeddingAnalyzer, ocrAnalyzer, faceAnalyzer},
 		OnRecordsCommitted: func(records []services.AIAnalysisRecord) {
 			if indexErr := ocrSearchIndex.ApplyRecords(records); indexErr != nil {
 				log.Printf("更新 OCR 搜索索引失败: %v", indexErr)

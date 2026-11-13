@@ -32,12 +32,13 @@ const (
 	AIJobModeFull        = "full"
 	AIJobModeIncremental = "incremental"
 
-	AIJobStatusPending   = "pending"
-	AIJobStatusRunning   = "running"
-	AIJobStatusPaused    = "paused"
-	AIJobStatusCompleted = "completed"
-	AIJobStatusFailed    = "failed"
-	AIJobStatusCancelled = "cancelled"
+	AIJobStatusPending       = "pending"
+	AIJobStatusRunning       = "running"
+	AIJobStatusPaused        = "paused"
+	AIJobStatusCompleted     = "completed"
+	AIJobStatusFailed        = "failed"
+	AIJobStatusCancelled     = "cancelled"
+	faceAnalysisMaxDimension = 4096
 
 	// 分析模块在单条结果里报告的字段标识，用于按字段统计任务产出。
 	AIFieldExifTime  = "exifTime"
@@ -94,9 +95,16 @@ type AIAnalyzerHardware interface {
 type AIAnalysisInput struct {
 	ResourceID    string
 	Path          string
+	AnalysisPath  string
 	Size          int64
 	MTimeNs       int64
 	ComputeDevice string
+}
+
+// AIImageConverter converts formats that the local image worker cannot decode.
+type AIImageConverter interface {
+	Available() bool
+	ConvertJPEGBytesContext(context.Context, string, int) ([]byte, error)
 }
 
 type AIAnalyzerReadiness interface {
@@ -284,7 +292,8 @@ type AIJobServiceOptions struct {
 	OnRecordsCommitted func([]AIAnalysisRecord)
 	// OnRecordsCleared 在某个模块的派生结果被整体删除后调用，
 	// 让按目录统计的占用缓存重新扫描。
-	OnRecordsCleared func()
+	OnRecordsCleared   func()
+	FaceImageConverter AIImageConverter
 }
 
 type aiJobDiskState struct {
@@ -328,6 +337,7 @@ type AIJobService struct {
 	metadataDir        string
 	catalog            *ResourceCatalog
 	validatePath       func(string) (string, error)
+	faceImageConverter AIImageConverter
 	analyzers          map[string]AIAnalyzer
 	workerCount        int
 	now                func() time.Time
@@ -378,6 +388,7 @@ func NewAIJobService(options AIJobServiceOptions) (*AIJobService, error) {
 		metadataDir:        options.MetadataDir,
 		catalog:            options.Catalog,
 		validatePath:       options.ValidatePath,
+		faceImageConverter: options.FaceImageConverter,
 		analyzers:          make(map[string]AIAnalyzer, len(options.Analyzers)),
 		workerCount:        options.WorkerCount,
 		now:                options.Now,
@@ -1723,6 +1734,12 @@ func (s *AIJobService) processAnalyzerBatch(ctx context.Context, analyzer AIAnal
 	results := make([]AIAnalysisRecord, len(targets))
 	inputs := make([]AIAnalysisInput, 0, len(targets))
 	inputPositions := make([]int, 0, len(targets))
+	tempDir := ""
+	defer func() {
+		if tempDir != "" {
+			_ = os.RemoveAll(tempDir)
+		}
+	}()
 	for index, target := range targets {
 		results[index] = AIAnalysisRecord{
 			Type: analyzer.Type(), ResourceID: target.resourceID, Size: target.size,
@@ -1745,7 +1762,41 @@ func (s *AIJobService) processAnalyzerBatch(ctx context.Context, analyzer AIAnal
 			results[index] = failedAIRecord(results[index], "source_changed", "分析期间图片已发生变化")
 			continue
 		}
-		inputs = append(inputs, AIAnalysisInput{ResourceID: target.resourceID, Path: validated, Size: target.size, MTimeNs: target.mtimeNs, ComputeDevice: computeDevice})
+		analysisPath := ""
+		if analyzer.Type() == AIJobTypeFace && isHEIFPath(validated) && s.faceImageConverter != nil && s.faceImageConverter.Available() {
+			if tempDir == "" {
+				tempDir, err = os.MkdirTemp("", "local-gallery-face-")
+				if err != nil {
+					results[index] = failedAIRecord(results[index], "image_conversion_failed", "图片格式转换失败")
+					continue
+				}
+			}
+			converted, convertErr := s.faceImageConverter.ConvertJPEGBytesContext(ctx, validated, faceAnalysisMaxDimension)
+			if convertErr != nil {
+				if ctx.Err() != nil {
+					continue
+				}
+				results[index] = failedAIRecord(results[index], "image_conversion_failed", "图片格式转换失败")
+				continue
+			}
+			file, createErr := os.CreateTemp(tempDir, "image-*.jpg")
+			if createErr != nil {
+				results[index] = failedAIRecord(results[index], "image_conversion_failed", "图片格式转换失败")
+				continue
+			}
+			analysisPath = file.Name()
+			_, writeErr := file.Write(converted)
+			closeErr := file.Close()
+			if writeErr != nil || closeErr != nil {
+				_ = os.Remove(analysisPath)
+				results[index] = failedAIRecord(results[index], "image_conversion_failed", "图片格式转换失败")
+				continue
+			}
+		}
+		inputs = append(inputs, AIAnalysisInput{
+			ResourceID: target.resourceID, Path: validated, AnalysisPath: analysisPath,
+			Size: target.size, MTimeNs: target.mtimeNs, ComputeDevice: computeDevice,
+		})
 		inputPositions = append(inputPositions, index)
 	}
 	if len(inputs) == 0 || ctx.Err() != nil {
@@ -1849,6 +1900,15 @@ func failedAIRecord(record AIAnalysisRecord, code, message string) AIAnalysisRec
 	record.ErrorCode = code
 	record.ErrorMessage = message
 	return record
+}
+
+func isHEIFPath(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".heic", ".heif":
+		return true
+	default:
+		return false
+	}
 }
 
 func analysisFailureMessage(moduleType string) string {

@@ -119,7 +119,10 @@ func analyzeImageBatch(
 	}
 	paths := make([]string, len(inputs))
 	for index, input := range inputs {
-		paths[index] = input.Path
+		paths[index] = input.AnalysisPath
+		if paths[index] == "" {
+			paths[index] = input.Path
+		}
 	}
 	device := inputs[0].ComputeDevice
 	results, err := analyze(ctx, paths, device)

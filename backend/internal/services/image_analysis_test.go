@@ -9,9 +9,10 @@ import (
 )
 
 type fakeImageAnalysisWorker struct {
-	modules map[string]AIWorkerModuleStatus
-	ocr     []AIWorkerAnalysis
-	faces   []AIWorkerAnalysis
+	modules   map[string]AIWorkerModuleStatus
+	ocr       []AIWorkerAnalysis
+	faces     []AIWorkerAnalysis
+	facePaths []string
 }
 
 func (f *fakeImageAnalysisWorker) Status(context.Context) (AIWorkerStatus, error) {
@@ -26,7 +27,8 @@ func (f *fakeImageAnalysisWorker) EmbedTexts(context.Context, []string) ([]AIWor
 func (f *fakeImageAnalysisWorker) AnalyzeOCR(context.Context, []string) ([]AIWorkerAnalysis, error) {
 	return f.ocr, nil
 }
-func (f *fakeImageAnalysisWorker) AnalyzeFaces(context.Context, []string) ([]AIWorkerAnalysis, error) {
+func (f *fakeImageAnalysisWorker) AnalyzeFaces(_ context.Context, paths []string) ([]AIWorkerAnalysis, error) {
+	f.facePaths = append(f.facePaths, paths...)
 	return f.faces, nil
 }
 func (f *fakeImageAnalysisWorker) ModuleStatus(moduleType string) AIWorkerModuleStatus {
@@ -65,6 +67,26 @@ func TestImageAnalyzersProducePersistentModuleResults(t *testing.T) {
 	}
 	if !face.RecordCurrent(AIAnalysisRecord{Type: AIJobTypeFace, Status: "faces_found", ModuleVersion: FaceAnalyzerVersion}) {
 		t.Fatal("current face record was rejected")
+	}
+}
+
+func TestFaceAnalyzerUsesConvertedAnalysisPath(t *testing.T) {
+	worker := &fakeImageAnalysisWorker{
+		modules: map[string]AIWorkerModuleStatus{AIJobTypeFace: {Ready: true}},
+		faces:   []AIWorkerAnalysis{{Data: json.RawMessage(`{"faces":[{"box":[1,2,3,4],"score":0.9,"embedding":[1]}]}`)}},
+	}
+	analyzer, err := NewFaceAnalyzer(worker)
+	if err != nil {
+		t.Fatal(err)
+	}
+	outputs, err := analyzer.AnalyzeBatch(context.Background(), []AIAnalysisInput{{
+		ResourceID: "f_heic", Path: "source.heic", AnalysisPath: "converted.jpg",
+	}})
+	if err != nil || len(outputs) != 1 || outputs[0].Status != "faces_found" {
+		t.Fatalf("face analysis outputs = %+v, error = %v", outputs, err)
+	}
+	if len(worker.facePaths) != 1 || worker.facePaths[0] != "converted.jpg" {
+		t.Fatalf("face worker paths = %v, want converted JPEG path", worker.facePaths)
 	}
 }
 

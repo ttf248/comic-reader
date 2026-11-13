@@ -102,10 +102,20 @@ func (c *ImageConverter) Convert(absPath string, targetWidth int) (image.Image, 
 // 少一次解码 + 重编码，画质损失更小、内存占用也更低。用于"原图直出"
 // 这类浏览器原生解不了的格式（HEIC/HEIF/TIFF）。
 func (c *ImageConverter) ConvertJPEGBytes(absPath string, maxDim int) ([]byte, error) {
+	return c.ConvertJPEGBytesContext(context.Background(), absPath, maxDim)
+}
+
+// ConvertJPEGBytesContext converts an image to JPEG while honoring the caller's
+// cancellation and the converter's own timeout.
+func (c *ImageConverter) ConvertJPEGBytesContext(parent context.Context, absPath string, maxDim int) ([]byte, error) {
 	if maxDim <= 0 {
 		maxDim = 2560
 	}
-	_, out, err := c.convert(absPath, maxDim, maxDim)
+	filter := fmt.Sprintf(
+		"[0:v:0]scale=%d:%d:force_original_aspect_ratio=decrease[v]",
+		maxDim, maxDim,
+	)
+	_, out, err := c.convertFilterContext(parent, absPath, filter)
 	return out, err
 }
 
@@ -134,10 +144,14 @@ func (c *ImageConverter) convert(absPath string, scaleW, scaleH int) (image.Imag
 
 // convertFilter 按给定的滤镜执行 ffmpeg 转换。
 func (c *ImageConverter) convertFilter(absPath, filter string) (image.Image, []byte, error) {
+	return c.convertFilterContext(context.Background(), absPath, filter)
+}
+
+func (c *ImageConverter) convertFilterContext(parent context.Context, absPath, filter string) (image.Image, []byte, error) {
 	if !c.Available() {
 		return nil, nil, ErrImageConvertUnavailable
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
+	ctx, cancel := context.WithTimeout(parent, c.timeout)
 	defer cancel()
 
 	// HEIF/AVIF 的码流由多个帧组成，ffmpeg 会把它当作"复杂滤镜图"，
