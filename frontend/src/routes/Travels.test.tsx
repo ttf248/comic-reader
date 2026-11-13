@@ -419,6 +419,31 @@ describe("足迹页", () => {
     expect(within(expanded).getByTestId("photo-wall")).toBeTruthy();
   });
 
+  it("悬停一段行程，浮出这一段的轨迹图", async () => {
+    renderPage();
+
+    const segment = await screen.findByRole("region", {
+      name: "2019-05-02 至 2019-05-05",
+    });
+    fireEvent.mouseEnter(segment);
+
+    const preview = await screen.findByRole("group", {
+      name: "这一段的行程轨迹",
+    });
+    // 杭州 → 上海：两站、一段轨迹、一个箭头。
+    expect(preview.querySelectorAll(".travel-preview__step").length).toBe(2);
+    expect(preview.querySelectorAll(".travel-preview__route").length).toBe(1);
+    expect(preview.querySelectorAll(".travel-preview__arrowhead").length).toBe(1);
+    // 序号按次序摆。
+    const labels = Array.from(
+      preview.querySelectorAll(".travel-preview__step-label"),
+    ).map((element) => element.textContent);
+    expect(labels).toEqual(["1", "2"]);
+    // 站点表给出每一站的日期与张数。
+    expect(preview.textContent).toContain("杭州市");
+    expect(preview.textContent).toContain("上海市");
+  });
+
   it("「地方」列出去过的地方", async () => {
     renderPage();
 

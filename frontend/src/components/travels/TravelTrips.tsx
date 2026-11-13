@@ -8,6 +8,8 @@ import PhotoViewer from "../wall/PhotoViewer";
 import PhotoWall from "../wall/PhotoWall";
 import { ChevronRightIcon } from "../common/Icon";
 import ThumbImage from "../common/ThumbImage";
+import TravelTripPreview from "./TravelTripPreview";
+import type { MapRegion } from "../../utils/travelMap";
 
 interface TravelTripsProps {
   /** 行程与停留，按时间倒序读。 */
@@ -20,6 +22,10 @@ interface TravelTripsProps {
   granularity: string;
   /** 打开某个地点的详情页。 */
   onOpenPlace: (adcode: number) => void;
+  /** 各地点的形状：预览里的轨迹图靠它画。 */
+  regions: MapRegion[];
+  /** 参照层：全国省界。 */
+  backdrop?: MapRegion[];
 }
 
 /**
@@ -47,6 +53,8 @@ export default function TravelTrips({
   onSelect,
   granularity,
   onOpenPlace,
+  regions,
+  backdrop,
 }: TravelTripsProps) {
   const groups = useMemo(() => {
     // 倒序：最近的出行排在最前面。年份由行程的开始时间决定，所以排好
@@ -91,6 +99,8 @@ export default function TravelTrips({
                   }
                   granularity={granularity}
                   onOpenPlace={onOpenPlace}
+                  regions={regions}
+                  backdrop={backdrop}
                 />
               </li>
             ))}
@@ -107,6 +117,8 @@ interface TravelTripCardProps {
   onSelect: () => void;
   granularity: string;
   onOpenPlace: (adcode: number) => void;
+  regions: MapRegion[];
+  backdrop?: MapRegion[];
 }
 
 /**
@@ -114,6 +126,9 @@ interface TravelTripCardProps {
  *
  * 收着的时候是一张卡片：日期与张数一行，地点链一行。展开后是这一段的
  * 照片：一条照片带，再往下是整段的照片墙。
+ *
+ * 悬停（或焦点落进来）时，底下浮出一张轨迹图：这一段去过的地方按次序
+ * 连成一条带箭头的线，每一站标着序号。
  */
 function TravelTripCard({
   trip,
@@ -121,8 +136,11 @@ function TravelTripCard({
   onSelect,
   granularity,
   onOpenPlace,
+  regions,
+  backdrop,
 }: TravelTripCardProps) {
   const [viewerResourceId, setViewerResourceId] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const density = usePhotoStore((state) => state.density);
   const picks = usePicks();
   const pushToast = useUIStore((state) => state.pushToast);
@@ -169,6 +187,15 @@ function TravelTripCard({
       className="travel-trip-card"
       data-selected={selected ? "true" : undefined}
       aria-label={`${trip.startedAt} 至 ${trip.endedAt}`}
+      onMouseEnter={() => setPreviewOpen(true)}
+      onMouseLeave={() => setPreviewOpen(false)}
+      onFocus={() => setPreviewOpen(true)}
+      onBlur={(event) => {
+        // 焦点还在这张卡里就别收：地点链上的按钮挨个 Tab 时预览要留着。
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setPreviewOpen(false);
+        }
+      }}
     >
       <div className="travel-trip-card__head">
         <button
@@ -225,6 +252,20 @@ function TravelTripCard({
         ) : null}
       </div>
 
+      {/* 悬停时浮出来的轨迹图：这一段按次序走过哪些地方。 */}
+      {previewOpen ? (
+        <div
+          className="travel-trip-card__preview"
+          role="group"
+          aria-label="这一段的行程轨迹"
+        >
+          <TravelTripPreview
+            trip={trip}
+            regions={regions}
+            backdrop={backdrop}
+          />
+        </div>
+      ) : null}
 
       {selected ? (
         <>

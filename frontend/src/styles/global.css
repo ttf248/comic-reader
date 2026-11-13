@@ -2492,6 +2492,87 @@ button:not(:disabled):active {
     border-radius: var(--radius-media);
   }
 
+  /* --- 悬停时浮出来的轨迹图 ---
+     一张地图加一张站点表。地图上按次序连成一条带箭头的线，每一站标着
+     序号 —— 读的是「按顺序走过这些地方」，不是「沿哪条路走的」。
+     浮层不接指针事件：它盖在下一张卡片上，但不该把悬停打断。 */
+  .travel-trip-card__preview {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 30;
+    width: min(340px, 100%);
+    padding: 10px 12px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-tile);
+    background: var(--bg-elevated);
+    box-shadow: var(--shadow-lg);
+    pointer-events: none;
+  }
+  .travel-preview__map {
+    display: block;
+    width: 100%;
+    height: auto;
+    border-radius: var(--radius-media);
+    background: var(--bg-subtle);
+  }
+  .travel-preview__shape {
+    fill: color-mix(in srgb, var(--brand) 14%, transparent);
+    stroke: color-mix(in srgb, var(--brand-ink) 55%, transparent);
+    stroke-width: 1;
+    stroke-linejoin: round;
+  }
+  .travel-preview__route {
+    stroke: var(--brand-ink);
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-dasharray: 5 3;
+  }
+  .travel-preview__arrowhead {
+    fill: var(--brand-ink);
+  }
+  .travel-preview__step {
+    fill: var(--brand);
+    stroke: var(--bg);
+    stroke-width: 2;
+  }
+  .travel-preview__step-label {
+    fill: var(--bg);
+    font-size: 11px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .travel-preview__stops {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 8px;
+  }
+  .travel-preview__stop {
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr) auto;
+    align-items: baseline;
+    gap: 8px;
+    font-size: var(--text-meta);
+    color: var(--fg-muted);
+  }
+  .travel-preview__stop-index {
+    font-weight: 600;
+    color: var(--brand-ink);
+    font-variant-numeric: tabular-nums;
+  }
+  /* 末尾那句「还有 N 站」占满整行，不挤进序号那一列。 */
+  .travel-preview__stop--more {
+    display: block;
+    color: var(--fg-subtle);
+  }
+  .travel-preview__stop-name {
+    color: var(--fg);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   /* --- 页脚说明：口径与误差 --- */
   .travel-footnote {
     padding: 24px 0 8px;

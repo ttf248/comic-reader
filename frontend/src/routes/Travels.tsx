@@ -365,6 +365,8 @@ export default function Travels() {
               onSelect={(trip) => selectTrip(trip?.id ?? null)}
               granularity={level}
               onOpenPlace={openPlace}
+              regions={regions}
+              backdrop={backdrop}
             />
           ) : (
             <div className="flex min-h-64 items-center justify-center text-body text-fg-muted">

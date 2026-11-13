@@ -116,6 +116,22 @@ test("展开一段，就地把这一段的照片取回来", async ({ page }) => 
   await expect(segment.locator(".travel-trip-card__grid img")).toHaveCount(5);
 });
 
+test("悬停一段行程，浮出带箭头的轨迹图", async ({ page }) => {
+  await page.goto("/photo/travels");
+
+  const segment = page.getByRole("region", { name: "2024-05-02 至 2024-05-03" });
+  await segment.hover();
+
+  const preview = page.locator(".travel-trip-card__preview");
+  await expect(preview).toBeVisible();
+  // 临时库里那一段是杭州 → 上海：两站、一段轨迹、一个箭头。
+  await expect(preview.locator(".travel-preview__step")).toHaveCount(2);
+  await expect(preview.locator(".travel-preview__route")).toHaveCount(1);
+  await expect(preview.locator(".travel-preview__arrowhead")).toHaveCount(1);
+  // 站点表按次序给出每一站。
+  await expect(preview.locator(".travel-preview__stop")).toHaveCount(2);
+});
+
 test("「地方」列出去过的地方", async ({ page }) => {
   await page.goto("/photo/travels");
 
