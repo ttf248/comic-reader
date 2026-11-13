@@ -315,3 +315,54 @@ export async function ensureLibraryReady(request: APIRequestContext) {
     .poll(async () => (await request.get("/api/library/manifest")).status())
     .toBe(200);
 }
+
+/**
+ * 让临时库带上 EXIF 解析结果。
+ *
+ * 坐标不是扫描时读出来的，而是元数据分析任务的产物：不跑过这一趟，库里
+ * 一张带位置的照片都没有，足迹页也就没有行程可讲。已经有结果时直接返回，
+ * 免得每条用例都等一遍全量分析。
+ */
+export async function ensureMetadataReady(request: APIRequestContext) {
+  const trips = await request.get(
+    "/api/locations/china/trips?granularity=city",
+  );
+  if (trips.ok()) {
+    const body = (await trips.json()) as { trips: { total: number } };
+    if (body.trips.total > 0) return;
+  }
+  const started = await request.post("/api/ai/jobs", {
+    data: { type: "metadata", mode: "full" },
+  });
+  // 409 表示已有任务在跑：等那一个，不抢。
+  expect(started.ok() || started.status() === 409).toBeTruthy();
+  const jobId = started.ok()
+    ? ((await started.json()) as { job: { id: string } }).job.id
+    : await activeJobId(request);
+  await expect
+    .poll(
+      async () => {
+        const response = await request.get(
+          `/api/ai/jobs/${encodeURIComponent(jobId)}`,
+        );
+        if (!response.ok()) return "missing";
+        return ((await response.json()) as { job: { status: string } }).job
+          .status;
+      },
+      { timeout: 180_000 },
+    )
+    .toMatch(/^(completed|failed|cancelled)$/);
+}
+
+/** 正在跑的那个分析任务。 */
+async function activeJobId(request: APIRequestContext) {
+  const response = await request.get("/api/ai/jobs");
+  const body = (await response.json()) as {
+    snapshot: { jobs: { id: string; status: string }[]; queue: string[] };
+  };
+  const running = body.snapshot.jobs.find(
+    (job) => job.status === "running" || job.status === "pending",
+  );
+  expect(running, "没有正在运行的分析任务").toBeTruthy();
+  return running!.id;
+}

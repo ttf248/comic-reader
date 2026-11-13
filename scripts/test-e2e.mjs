@@ -6,6 +6,7 @@ import { mkdir, mkdtemp, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { gpsJpeg } from './exif-fixture.mjs'
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const backendRoot = path.join(repoRoot, 'backend')
@@ -28,11 +29,15 @@ const coverVideo = Buffer.from('GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYEC
 const keyboardVideo = Buffer.from('GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAAVnEU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHWTbuMU6uEElTDZ1OsggEyTbuMU6uEHFO7a1OsggVR7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsCrXsYMPQkBNgIxMYXZmNjMuMS4xMDFXQYxMYXZmNjMuMS4xMDFEiYhA04gAAAAAABZUrmvXrgEAAAAAAABO14EBc8WIOcx4BAve1WucgQAitZyDdW5kiIEAhoVWX1ZQOIOBASPjg4Q7msoA4JCwgRC6gRCagQJVsIRVuYEBVe6BAOwBAAAAAAAAAgAAElTDZ/pzc59jwIBnyJlFo4dFTkNPREVSRIeMTGF2ZjYzLjEuMTAxc3PVY8CLY8WIOcx4BAve1WtnyKBFo4dFTkNPREVSRIeTTGF2YzYzLjEuMTAxIGxpYnZweGfIoUWjiERVUkFUSU9ORIeTMDA6MDA6MjAuMDAwMDAwMDAwAB9DtnVBGeeBAKO9gQAAgLACAJ0BKhAAEAAARwiFhYiZhIgCAgJ1qgP4Agz9+wD+/00S//xKp/Eqn8Sqf/Eqn/0Yfww/hh/eEKOpgQPoALEBAAUQrAAYADA/9AwA7wD+8mav/XAfnAfnAfzLeB4fh4fhugCjqYEH0ACxAQAFEKwAGAAwP/QMAO8A/vJmr/1wH5wH5wH8y3geH4eH4boAo6mBC7gAsQEABRCsABgAMD/0DADvAP7yZq/9cB+cB+cB/Mt4Hh+Hh+G6AKOpgQ+gALEBAAUQrAAYADA/9AwA7wD+8mav/XAfnAfnAfzLeB4fh4fhugCjqYETiACxAQAFEKwAGAAwP/QMAO8A/vJmr/1wH5wH5wH8y3geH4eH4boAH0O2dUEL54IXcKOpgQAAALEBAAUQrAAYADA/9AwA7wD+8mav/XAfnAfnAfzLeB4fh4fhugCjroED6ACxAQAFEBAUYADA/9AwA7wA/v9NEv/8SqfxKp/Eqn/xKp/9GH8MP4Yf3hCjqYEH0ACxAQAFEKwAGAAwP/QMAO8A/vJmr/1wH5wH5wH8y3geH4eH4boAo6mBC7gAsQEABRCsABgAMD/0DADvAP7yZq/9cB+cB+cB/Mt4Hh+Hh+G6AKOpgQ+gALEBAAUQrAAYADA/9AwA7wD+8mav/XAfnAfnAfzLeB4fh4fhugCjqYETiACxAQAFEKwAGAAwP/QMAO8A/vJmr/1wH5wH5wH8y3geH4eH4boAH0O2dUEL54Iu4KOpgQAAALEBAAUQrAAYADA/9AwA7wD+8mav/XAfnAfnAfzLeB4fh4fhugCjqYED6ACxAQAFEKwAGAAwP/QMAO8A/vJmr/1wH5wH5wH8y3geH4eH4boAo66BB9AAsQEABRAQFGAAwP/QMAO8AP7/TRL//Eqn8SqfxKp/8Sqf/Rh/DD+GH94Qo6mBC7gAsQEABRCsABgAMD/0DADvAP7yZq/9cB+cB+cB/Mt4Hh+Hh+G6AKOpgQ+gALEBAAUQrAAYADA/9AwA7wD+8mav/XAfnAfnAfzLeB4fh4fhugCjqYETiACxAQAFEKwAGAAwP/QMAO8A/vJmr/1wH5wH5wH8y3geH4eH4boAH0O2ddrngkZQo6mBAAAAsQEABRCsABgAMD/0DADvAP7yZq/9cB+cB+cB/Mt4Hh+Hh+G6AKOpgQPoALEBAAUQrAAYADA/9AwA7wD+8mav/XAfnAfnAfzLeB4fh4fhugAcU7trkbuPs4EAt4r3gQHxggGx8IED', 'base64')
 
 function run(command, commandArgs, options = {}) {
-  const result = spawnSync(command, commandArgs, {
+  const shell = process.platform === 'win32'
+  // Windows 上走 cmd.exe：可执行文件路径里有空格时必须自己加引号，
+  // 否则 cmd 会把 "C:\Program Files\nodejs\node.exe" 截成 "C:\Program"。
+  const shellCommand = shell && /\s/.test(command) ? '"' + command + '"' : command
+  const result = spawnSync(shellCommand, commandArgs, {
     cwd: options.cwd,
     env: options.env ?? process.env,
     stdio: 'inherit',
-    shell: process.platform === 'win32',
+    shell,
   })
   if (result.error) throw result.error
   if (result.status !== 0) throw new Error(command + ' exited with ' + result.status)
@@ -86,6 +91,20 @@ async function makeFixtures(root) {
   const capture = await writeFixture(media, 'zz-capture-date/IMG_20240115_120000.png')
   await utimes(capture, new Date('2019-05-05T00:00:00Z'), new Date('2019-05-05T00:00:00Z'))
   await utimes(path.dirname(capture), new Date('2019-05-05T00:00:00Z'), new Date('2019-05-05T00:00:00Z'))
+
+  // 带 GPS 的照片：足迹页的行程、停留点与地图全靠它们。
+  // 杭州 → 上海是同一段行程（相隔一天），北京隔了一年另起一段。
+  const gpsSamples = [
+    { name: 'zz-足迹/杭州-1.jpg', latitude: 30.2741, longitude: 120.1551, takenAt: '2024:05:02 10:00:00' },
+    { name: 'zz-足迹/杭州-2.jpg', latitude: 30.2741, longitude: 120.1551, takenAt: '2024:05:02 11:00:00' },
+    { name: 'zz-足迹/杭州-3.jpg', latitude: 30.2741, longitude: 120.1551, takenAt: '2024:05:02 12:00:00' },
+    { name: 'zz-足迹/上海-1.jpg', latitude: 31.2304, longitude: 121.4737, takenAt: '2024:05:03 09:00:00' },
+    { name: 'zz-足迹/上海-2.jpg', latitude: 31.2304, longitude: 121.4737, takenAt: '2024:05:03 10:00:00' },
+    { name: 'zz-足迹远行/北京-1.jpg', latitude: 39.9042, longitude: 116.4074, takenAt: '2025:09:10 08:00:00' },
+  ]
+  for (const sample of gpsSamples) {
+    await writeFixture(media, sample.name, gpsJpeg(sample))
+  }
 
   for (let i = 1; i <= 3; i++) await writeFixture(comic, 'sample-comic/page-' + i + '.png')
   const collection = path.join(comic, 'zz-scroll-collection')
