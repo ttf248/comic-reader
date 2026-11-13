@@ -1,9 +1,12 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/jpeg"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -66,8 +69,12 @@ func TestPeopleHTTPGroupingCorrectionsAndClear(t *testing.T) {
 		filepath.Join(albumPath, "second.jpg"),
 		filepath.Join(albumPath, "other.jpg"),
 	}
+	var encodedImage bytes.Buffer
+	if err := jpeg.Encode(&encodedImage, image.NewRGBA(image.Rect(0, 0, 640, 480)), nil); err != nil {
+		t.Fatal(err)
+	}
 	for _, path := range files {
-		if err := os.WriteFile(path, []byte("temporary test image"), 0o600); err != nil {
+		if err := os.WriteFile(path, encodedImage.Bytes(), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -102,6 +109,15 @@ func TestPeopleHTTPGroupingCorrectionsAndClear(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	dimensions, err := services.NewMediaDimensionService(filepath.Join(t.TempDir(), "dimensions.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := dimensions.Close(); err != nil {
+			t.Errorf("close media dimensions: %v", err)
+		}
+	})
 	if _, err := jobs.SetGPUEnabled(false); err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +155,7 @@ func TestPeopleHTTPGroupingCorrectionsAndClear(t *testing.T) {
 	api.Use(safety)
 	api.Get("/people", PeopleHandler(people, jobs, catalog, safetyState.Validate))
 	api.Delete("/people", PeopleHandler(people, jobs, catalog, safetyState.Validate))
-	api.Get("/people/:id/media", PersonMediaHandler(people, jobs, catalog, safetyState.Validate))
+	api.Get("/people/:id/media", PersonMediaHandler(people, jobs, catalog, dimensions, safetyState.Validate))
 	api.Put("/people/:id", PersonHandler(people))
 	api.Post("/people/merge", PeopleMergeHandler(people))
 	api.Post("/people/split", PeopleSplitHandler(people))
@@ -174,8 +190,9 @@ func TestPeopleHTTPGroupingCorrectionsAndClear(t *testing.T) {
 	}
 	var mediaBody struct {
 		Page struct {
-			Faces []services.PersonFace `json:"faces"`
-			Total int                   `json:"total"`
+			Faces []services.PersonFace    `json:"faces"`
+			Items []services.FeedMediaItem `json:"items"`
+			Total int                      `json:"total"`
 		} `json:"page"`
 	}
 	if err := json.Unmarshal(mediaData, &mediaBody); err != nil {
@@ -183,6 +200,9 @@ func TestPeopleHTTPGroupingCorrectionsAndClear(t *testing.T) {
 	}
 	if mediaBody.Page.Total != 2 || len(mediaBody.Page.Faces) != 2 {
 		t.Fatalf("person media page = %+v", mediaBody.Page)
+	}
+	if len(mediaBody.Page.Items) != 2 || mediaBody.Page.Items[0].Width != 640 || mediaBody.Page.Items[0].Height != 480 {
+		t.Fatalf("person media dimensions = %+v, want 640x480", mediaBody.Page.Items)
 	}
 
 	nameBody, _ := json.Marshal(map[string]string{"name": "旅行同伴"})

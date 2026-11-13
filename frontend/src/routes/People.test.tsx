@@ -247,6 +247,9 @@ describe("人物相册", () => {
     );
 
     expect(await screen.findByText("当前人物")).toBeInTheDocument();
+    expect(
+      screen.getByText(/照片框线标出属于「当前人物」分组的人脸/),
+    ).toBeInTheDocument();
     expect(mocks.people).not.toHaveBeenCalled();
     expect(mocks.searchPeople).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "合并人物" }));

@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useRef, type MouseEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  type MouseEvent,
+  type ReactNode,
+} from "react";
 import { Virtuoso, type ListRange, type VirtuosoHandle } from "react-virtuoso";
 import type { LibraryMediaItem } from "../../api/library";
 import { useElementSize } from "../../hooks/useElementSize";
@@ -41,6 +47,8 @@ interface Props<T extends LibraryMediaItem = LibraryMediaItem> {
   albumLabel?: (item: T) => string | undefined;
   /** 可选媒体角标，如语义搜索相似度。 */
   itemBadge?: (item: T) => string | undefined;
+  /** 照片上的额外标记，如人物相册中属于当前分组的人脸框。 */
+  itemOverlay?: (item: T, tile: { width: number; height: number }) => ReactNode;
   /** 是否处于多选模式。多选时点击照片改为勾选，不再打开大图。 */
   selecting?: boolean;
   /** 某张照片是否已被勾选。 */
@@ -99,6 +107,7 @@ export default function PhotoWall<
   onContextMenu,
   albumLabel,
   itemBadge,
+  itemOverlay,
   selecting = false,
   isSelected,
   onToggleSelect,
@@ -241,6 +250,10 @@ export default function PhotoWall<
                 // 跨相册的墙上，照片的出处比文件名更值得说。
                 const sourceLabel = albumLabel?.(item);
                 const badge = itemBadge?.(item);
+                const overlay = itemOverlay?.(item, {
+                  width: tile.width,
+                  height: row.tileHeight,
+                });
                 return (
                   // 触发层是覆盖在封面之上的独立按钮：视频封面自带「重试」
                   // 按钮，把它包进 <button> 会产生嵌套按钮（无效 HTML，
@@ -271,6 +284,7 @@ export default function PhotoWall<
                         className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
                       />
                     )}
+                    {overlay}
                     {badge && (
                       <span className="pointer-events-none absolute right-1.5 top-1.5 z-10 rounded-md bg-black/70 px-2 py-1 text-meta font-medium tabular-nums text-white backdrop-blur">
                         {badge}

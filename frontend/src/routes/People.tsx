@@ -12,11 +12,12 @@ import RenditionImage from "../components/common/RenditionImage";
 import PhotoViewer from "../components/wall/PhotoViewer";
 import PhotoWall from "../components/wall/PhotoWall";
 import PeopleMergeDialog from "../components/people/PeopleMergeDialog";
-import { aiJobsApi, type PersonGroup } from "../api/aiJobs";
+import { aiJobsApi, type PersonFace, type PersonGroup } from "../api/aiJobs";
 import { usePicks } from "../hooks/usePicks";
 import { usePhotoStore, wallTargetHeight } from "../store/photoStore";
 import { useUIStore } from "../store/uiStore";
 import { albumRoute, homeRoute, peopleRoute } from "../utils/path";
+import { personFaceFrameStyle } from "../utils/personFaceFrame";
 
 export default function People() {
   const { personId } = useParams();
@@ -193,6 +194,15 @@ function PersonAlbum({ personId }: { personId: string }) {
     () => query.data?.pages.flatMap((page) => page.faces) ?? [],
     [query.data],
   );
+  const facesByResource = useMemo(() => {
+    const grouped = new Map<string, PersonFace[]>();
+    for (const face of faces) {
+      const resourceFaces = grouped.get(face.resourceId) ?? [];
+      resourceFaces.push(face);
+      grouped.set(face.resourceId, resourceFaces);
+    }
+    return grouped;
+  }, [faces]);
   const total = query.data?.pages[0]?.total ?? 0;
   const savePerson = useMutation({
     mutationFn: (body: { name?: string; hidden?: boolean }) =>
@@ -270,6 +280,14 @@ function PersonAlbum({ personId }: { personId: string }) {
           {person?.photoCount.toLocaleString() ?? 0} 张照片 ·{" "}
           {person?.faceCount.toLocaleString() ?? 0}{" "}
           张脸。分组只表示相似度候选，不代表身份确认。
+        </p>
+        <p className="flex items-center gap-2 text-meta text-fg-muted">
+          <span
+            aria-hidden="true"
+            className="h-4 w-4 shrink-0 rounded border-2 border-white bg-bg-subtle shadow-[0_0_0_2px_var(--overlay-bg)]"
+          />
+          照片框线标出属于「{person?.name ?? "当前人物"}
+          」分组的人脸；合照里未框住的人脸不在本组。
         </p>
         <div className="flex flex-wrap items-center gap-2">
           <form
@@ -383,6 +401,34 @@ function PersonAlbum({ personId }: { personId: string }) {
             isLoadingMore={query.isFetchingNextPage}
             onLoadMore={loadMore}
             onOpen={(_item, index) => setViewerIndex(index)}
+            itemOverlay={(item, tile) => {
+              const itemFaces = facesByResource.get(item.id);
+              if (!itemFaces?.length) return null;
+              return (
+                <div
+                  aria-hidden="true"
+                  className="pointer-events-none absolute inset-0 z-[5]"
+                >
+                  {itemFaces.map((face) => {
+                    const style = personFaceFrameStyle(
+                      face.box,
+                      item.width ?? 0,
+                      item.height ?? 0,
+                      tile.width,
+                      tile.height,
+                    );
+                    return style ? (
+                      <span
+                        key={face.key}
+                        data-testid="person-face-highlight"
+                        className="absolute rounded border-2 border-white shadow-[0_0_0_2px_var(--overlay-bg)]"
+                        style={style}
+                      />
+                    ) : null;
+                  })}
+                </div>
+              );
+            }}
             albumLabel={(item) => item.albumName}
             isPicked={picks.isPicked}
             onTogglePick={(item) => {

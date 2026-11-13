@@ -85,7 +85,7 @@ func PeopleHandler(people *services.PeopleService, jobs *services.AIJobService, 
 }
 
 // PersonMediaHandler returns a paged photo-wall feed for one current person group.
-func PersonMediaHandler(people *services.PeopleService, jobs *services.AIJobService, catalog *services.ResourceCatalog, validatePath func(string) (string, error)) fiber.Handler {
+func PersonMediaHandler(people *services.PeopleService, jobs *services.AIJobService, catalog *services.ResourceCatalog, dimensions *services.MediaDimensionService, validatePath func(string) (string, error)) fiber.Handler {
 	return func(c *fiber.Ctx) error {
 		limit, ok := parseLibraryPageLimit(c)
 		if !ok {
@@ -152,6 +152,12 @@ func PersonMediaHandler(people *services.PeopleService, jobs *services.AIJobServ
 				pageFaces = pageFaces[:500]
 				break
 			}
+		}
+		for i := range pageItems {
+			enrichMediaDimension(snapshot, &pageItems[i].LibraryMediaItem, dimensions)
+		}
+		if dimensions != nil {
+			dimensions.Flush()
 		}
 		page := personMediaPage{Revision: snapshot.Revision(), Person: selected, Items: pageItems, Faces: pageFaces, Total: len(items), NextCursor: next}
 		return c.JSON(fiber.Map{"ok": true, "page": page})
