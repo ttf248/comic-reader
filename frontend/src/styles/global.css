@@ -1881,40 +1881,53 @@ button:not(:disabled):active {
      足迹页：数字台、时间轴、地点卡、行程、紧凑地图
      ========================================================== */
 
-  /* --- 数字台：规模先行，不装进卡片 ---
-     一排数字比一排卡片轻：卡片给每个数字都加了边框与底色，
-     四个数字读起来像四件独立的事，实际上它们是同一句话。 */
-  .travel-ledger-row {
-    display: flex;
-    align-items: stretch;
-    border-block: 1px solid var(--border-faint);
-  }
-  .travel-ledger {
+  /* --- 两栏抬头：左边标题与数字，右边一块地图 ---
+     数字不再各自占一格：四个数并成一句话，数字重一档、单位降一档，
+     像漫画侧详情页的计数行那样读。地图升格成抬头的一块面板。 */
+  .travel-head {
     display: grid;
-    flex: 1 1 auto;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 1px;
-    background: var(--border-faint);
+    grid-template-columns: minmax(0, 1fr) 288px;
+    gap: clamp(20px, 3vw, 44px);
+    align-items: start;
+    padding-block: 20px 18px;
   }
-  .travel-ledger__item {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding: 14px 16px 15px;
-    background: var(--bg);
-  }
-  .travel-ledger__value {
+  .travel-head__title {
+    margin-top: 6px;
     font-family: var(--font-display);
-    font-size: 26px;
-    line-height: 1.1;
+    font-size: clamp(24px, 2.2vw, 30px);
+    line-height: 1.2;
     font-weight: 600;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.02em;
     color: var(--fg);
+  }
+  .travel-head__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 3px 18px;
+    margin-top: 12px;
+    font-size: var(--text-body);
+    color: var(--fg-muted);
+  }
+  .travel-head__value {
+    color: var(--fg);
+    font-weight: 600;
     font-variant-numeric: tabular-nums;
   }
-  .travel-ledger__label {
-    font-size: var(--text-meta);
-    color: var(--fg-muted);
+  .travel-head__actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-top: 14px;
+  }
+  .travel-head__map {
+    position: relative;
+    height: 144px;
+    overflow: hidden;
+    border: 1px solid var(--border-faint);
+    border-radius: var(--radius-tile);
+    background: var(--bg-subtle);
   }
 
   /* --- 时间轴：横在整页上的一条轴，不是卡片里的一排小柱 --- */
@@ -2013,21 +2026,16 @@ button:not(:disabled):active {
     padding-inline: clamp(20px, 3vw, 48px);
   }
 
-  /* --- 小地图：数字台右端的那一块 ---
-     地图不再占一整屏，但「去过哪些地方」得一直看得见，所以它缩到信息
-     栏的右端：左边是数字，右边是位置，中间没有第三个东西。 */
-  .travel-ledger-map {
-    position: relative;
-    flex: 0 0 236px;
-    border-left: 1px solid var(--border-faint);
-    background: var(--bg-subtle);
-  }
+  /* --- 小地图：抬头右栏的那一块 ---
+     只读，不提供操作：236 像素宽的图上，一个市只有几个像素宽，
+     拖不动也点不准。要去某个地方，从旁边的「地方」清单进。 */
   .travel-mini-map {
     position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
-    height: 104px;
+    width: 100%;
+    height: 100%;
     padding: 8px;
     overflow: hidden;
   }
@@ -2043,28 +2051,6 @@ button:not(:disabled):active {
   /* 照片位置：一层泛开的光。 */
   .travel-mini-map__point {
     fill: var(--brand);
-  }
-  .travel-ledger-map__toggle {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    z-index: 10;
-    min-height: 28px;
-    padding: 4px 10px;
-    border: 1px solid var(--border-faint);
-    border-radius: var(--radius-xs);
-    background: color-mix(in srgb, var(--bg) 82%, transparent);
-    font-size: var(--text-meta);
-    color: var(--fg-muted);
-    backdrop-filter: blur(4px);
-  }
-  .travel-ledger-map__toggle:hover {
-    color: var(--fg);
-    border-color: var(--border-strong);
-  }
-  .travel-ledger-map__toggle[aria-pressed="true"] {
-    color: var(--brand-ink);
-    border-color: var(--brand);
   }
 
   /* --- 地方清单 ---
@@ -2084,7 +2070,7 @@ button:not(:disabled):active {
     background: var(--bg-elevated);
     box-shadow: var(--shadow-lg);
   }
-  /* 从信息栏右边那块小地图下方展开的菜单：贴着右缘，向左开。 */
+  /* 从抬头右边那块地图面板下方展开的菜单：贴着右缘，向左开。 */
   .travel-place-list--menu {
     top: calc(100% + 6px);
     right: 0;
@@ -2127,21 +2113,56 @@ button:not(:disabled):active {
     object-fit: cover;
   }
 
-  /* --- 时间轴：一条会呼吸的线 ---
-     逐月的张数画成一条起伏的曲线，行程是线上的一颗颗珠子。过去那版把
-     密度、行程块、刷手轨道分作三层叠着，读起来像三张图表拼在一起；
-     现在它们合成一条线。 */
+  /* --- 时间轴：一条月格纹理带 ---
+     一格一个月，深浅是那一个月的张数。格子是离散的，读得出确切是多少，
+     也读得出空档 —— 曲线把这些抹平了。行程是格子上方的一颗颗钉。 */
   .travel-timeline {
-    margin-top: 26px;
+    margin-top: 22px;
   }
   .travel-timeline__head {
     display: flex;
     flex-wrap: wrap;
-    align-items: baseline;
-    justify-content: space-between;
-    gap-x: 16px;
-    gap-y: 6px;
-    margin-bottom: 6px;
+    align-items: center;
+    gap: 8px 16px;
+    margin-bottom: 8px;
+  }
+  .travel-timeline__legend {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px 14px;
+    font-size: var(--text-meta);
+    color: var(--fg-muted);
+  }
+  .travel-timeline__legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  /* 图例的记号与带子上的记号同形：格子与钉。 */
+  .travel-timeline__swatch {
+    width: 12px;
+    height: 10px;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--brand) 55%, var(--bg));
+  }
+  .travel-timeline__legend-pin {
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: var(--brand-ink);
+  }
+  .travel-timeline__readout-group {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: auto;
+  }
+  .travel-timeline__readout {
+    min-width: 12ch;
+    font-size: var(--text-meta);
+    color: var(--fg-muted);
+    text-align: right;
   }
   .travel-timeline__scroll {
     overflow-x: auto;
@@ -2154,29 +2175,24 @@ button:not(:disabled):active {
     padding-bottom: 2px;
     cursor: crosshair;
   }
-  .travel-timeline__curve {
+  .travel-timeline__strip {
     display: block;
     width: 100%;
     overflow: visible;
   }
-  .travel-timeline__line {
-    fill: none;
-    stroke: var(--brand);
-    stroke-width: 1.6;
-    stroke-linecap: round;
-    stroke-linejoin: round;
+  /* 悬停的那一格描一圈：局部反馈，确切数字在读数行里。 */
+  .travel-timeline__cell--hover {
+    stroke: var(--brand-ink);
+    stroke-width: 1.5;
   }
-  /* 珠子：行程落在线上的位置。 */
-  .travel-timeline__bead {
+  /* 行程钉。 */
+  .travel-timeline__pin {
     fill: var(--brand-ink);
     stroke: var(--bg);
-    stroke-width: 1.5;
+    stroke-width: 2;
     cursor: pointer;
   }
-  .travel-timeline__bead:hover {
-    fill: var(--brand);
-  }
-  .travel-timeline__bead--selected {
+  .travel-timeline__pin--selected {
     fill: var(--brand);
     stroke: var(--brand-ink);
   }
@@ -2193,48 +2209,50 @@ button:not(:disabled):active {
     color: var(--fg-subtle);
     transform: translateX(2px);
   }
-  /* 选中的区间：一层很淡的底色。抓手不切进曲线里 —— 曲线是内容，
+  /* 选中的区间：一层很淡的底色。抓手不切进带子里 —— 带子是内容，
      抓手只是把手。 */
   .travel-timeline__window {
     position: absolute;
     top: 0;
-    height: 104px;
+    height: 41px;
     background: color-mix(in srgb, var(--brand) 7%, transparent);
     border-inline: 1px solid
       color-mix(in srgb, var(--brand-ink) 40%, transparent);
     pointer-events: none;
   }
+  /* 抓手是一根发丝线加一个底部的圆钮 —— 不是一条粗柱：粗柱在带子两端
+     看着像滚动条。 */
   .travel-timeline__handle {
     position: absolute;
-    top: 84px;
-    width: 10px;
-    height: 20px;
-    border-radius: 3px;
-    background: var(--brand-ink);
+    top: 0;
+    width: 12px;
+    height: 41px;
+    border-left: 1px solid color-mix(in srgb, var(--brand-ink) 55%, transparent);
     cursor: ew-resize;
     touch-action: none;
     transform: translateX(-50%);
   }
-  .travel-timeline__handle:hover {
+  .travel-timeline__handle--end {
+    border-left: none;
+    border-right: 1px solid color-mix(in srgb, var(--brand-ink) 55%, transparent);
+  }
+  .travel-timeline__handle::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: 1px;
+    width: 9px;
+    height: 9px;
+    border-radius: 999px;
+    background: var(--brand-ink);
+    transform: translateX(-50%);
+  }
+  .travel-timeline__handle:hover::after {
     background: var(--brand);
   }
   .travel-timeline__handle:focus-visible {
     outline: 2px solid var(--focus);
     outline-offset: 2px;
-  }
-  /* 悬停行程时浮出的一段说明。 */
-  .travel-timeline__tip {
-    position: absolute;
-    bottom: calc(100% + 6px);
-    z-index: 20;
-    max-width: 260px;
-    padding: 6px 10px;
-    border: 1px solid var(--border-faint);
-    border-radius: var(--radius-media);
-    background: var(--bg-strong);
-    box-shadow: var(--shadow-lg);
-    transform: translateX(-50%);
-    pointer-events: none;
   }
 
   /* --- 行程目录：按年分组，一段一行 --- */
@@ -2398,17 +2416,12 @@ button:not(:disabled):active {
   }
 
   @media (max-width: 1023px) {
-    /* 窄屏上数字台与小地图上下排：小地图占满一行，仍然是信息栏的
-       一部分，而不是另一个区块。 */
-    .travel-ledger-row {
-      flex-direction: column;
+    /* 窄屏上抬头变一栏：地图落到下面占满一行，仍然是抬头的一部分。 */
+    .travel-head {
+      grid-template-columns: minmax(0, 1fr);
+      gap: 16px;
     }
-    .travel-ledger-map {
-      flex: none;
-      border-left: none;
-      border-top: 1px solid var(--border-faint);
-    }
-    .travel-mini-map {
+    .travel-head__map {
       height: 132px;
     }
     .travel-place-list {

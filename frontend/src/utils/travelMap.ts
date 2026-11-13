@@ -268,11 +268,17 @@ export function panViewportBy(
  *
  * 一张库里的照片往往只落在几个省，整张中国地图里大半是空的；裁到内容
  * 范围，那一片才填满画面。
+ *
+ * fit 决定内容与画面的关系：
+ * - cover（默认）：画面装满内容，多出来的一边裁掉。内容填满画面，但
+ *   会切掉照片最远的那一角。
+ * - contain：内容整个留下，多出来的一边留白。宁可留白也不切掉照片。
  */
 export function photoViewport(
   projection: MapProjection,
   bounds: MapBounds | null,
   aspect?: number,
+  fit: "cover" | "contain" = "cover",
 ): MapViewport {
   if (!bounds) return fitViewport(projection, aspect);
   const corners: ChinaLocationPoint[] = [
@@ -295,11 +301,15 @@ export function photoViewport(
   const ratio = aspect ?? worldAspect(projection);
   const contentWidth = Math.max(maxX - minX, 1);
   const contentHeight = Math.max(maxY - minY, 1);
-  // 取小的一边：画面装满内容，多出来的一边裁掉。
-  const width = Math.min(
-    Math.min(projection.worldWidth, projection.worldHeight / ratio) * 2,
-    Math.min(contentWidth, contentHeight / ratio) * 1.12,
-  );
+  const width =
+    fit === "contain"
+      ? // 取大的一边：内容整个留下，多出来的一边留白。
+        Math.max(contentWidth, contentHeight / ratio) * 1.06
+      : // 取小的一边：画面装满内容，多出来的一边裁掉。
+        Math.min(
+          Math.min(projection.worldWidth, projection.worldHeight / ratio) * 2,
+          Math.min(contentWidth, contentHeight / ratio) * 1.12,
+        );
   return clampViewport(
     projection,
     {
@@ -388,25 +398,6 @@ export function boundsOfPoints(
   }
   if (!Number.isFinite(minLongitude)) return null;
   return { minLongitude, maxLongitude, minLatitude, maxLatitude };
-}
-
-/**
- * 两个范围合起来。
- *
- * 有一边没有内容时就是另一边。
- */
-export function unionBounds(
-  left: MapBounds | null,
-  right: MapBounds | null,
-): MapBounds | null {
-  if (!left) return right;
-  if (!right) return left;
-  return {
-    minLongitude: Math.min(left.minLongitude, right.minLongitude),
-    maxLongitude: Math.max(left.maxLongitude, right.maxLongitude),
-    minLatitude: Math.min(left.minLatitude, right.minLatitude),
-    maxLatitude: Math.max(left.maxLatitude, right.maxLatitude),
-  };
 }
 
 /** 把几何拆成多边形数组，Polygon 与 MultiPolygon 都一样处理。 */
@@ -568,50 +559,6 @@ export function fillMonthRange(months: MonthCount[]): MonthCount[] {
     filled.push({ month: key, count: known.get(key) ?? 0 });
   }
   return filled;
-}
-
-/**
- * 把一串点画成平滑的曲线（Catmull-Rom 转三次贝塞尔）。
- *
- * 时间轴用它把逐月的张数画成一条起伏的线：相邻月份之间不该有折角，
- * 那道折角读起来像数据噪声，不像一段生活。
- */
-export function smoothCurvePath(points: [number, number][]): string {
-  if (points.length === 0) return "";
-  if (points.length === 1) return `M${points[0][0]},${points[0][1]}`;
-  let path = `M${points[0][0]},${points[0][1]}`;
-  for (let index = 0; index < points.length - 1; index += 1) {
-    const p0 = points[index - 1] ?? points[index];
-    const p1 = points[index];
-    const p2 = points[index + 1];
-    const p3 = points[index + 2] ?? p2;
-    const c1x = p1[0] + (p2[0] - p0[0]) / 6;
-    const c1y = p1[1] + (p2[1] - p0[1]) / 6;
-    const c2x = p2[0] - (p3[0] - p1[0]) / 6;
-    const c2y = p2[1] - (p3[1] - p1[1]) / 6;
-    path += `C${c1x},${c1y} ${c2x},${c2y} ${p2[0]},${p2[1]}`;
-  }
-  return path;
-}
-
-/**
- * 平滑曲线加基线围成的面积。
- *
- * baseline 是曲线下方的基线位置（y 坐标）。控制点不能越过基线 —— 那是
- * 「这个月没有照片」，曲线掉到基线以下就说成了负数。
- */
-export function smoothAreaPath(
-  points: [number, number][],
-  baseline: number,
-): string {
-  if (points.length === 0) return "";
-  const clamped = points.map(
-    ([x, y]) => [x, Math.min(y, baseline)] as [number, number],
-  );
-  const curve = smoothCurvePath(clamped);
-  const first = clamped[0];
-  const last = clamped[clamped.length - 1];
-  return `${curve}L${last[0]},${baseline}L${first[0]},${baseline}Z`;
 }
 
 function polygonArea(ring: ChinaLocationPoint[]): number {

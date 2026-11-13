@@ -264,23 +264,32 @@ describe("足迹页", () => {
     });
   });
 
-  it("先给规模，右端嵌着一块小地图", async () => {
+  it("抬头分两栏：左边是标题与数字，右边是一块小地图", async () => {
     renderPage();
 
-    // 数字台：段足迹、去过的地方、带位置的照片。
-    const ledger = await screen.findByRole("region", { name: /规模/ });
-    expect(await screen.findByText("段足迹")).toBeTruthy();
-    expect(within(ledger).getByText("段足迹")).toBeTruthy();
-    expect(within(ledger).getByText("2 个省 · 1 个市")).toBeTruthy();
+    // 标题与规模并成一句话，不拆成四个各自占一格的大数字。
+    expect(await screen.findByRole("heading", { name: "足迹" })).toBeTruthy();
+    const head = document.querySelector(".travel-head") as HTMLElement;
+    const meta = head.querySelector(".travel-head__meta") as HTMLElement;
+    await waitFor(() => {
+      expect(meta.textContent).toContain("张带位置");
+    });
+    expect(meta.textContent).toContain("2 段足迹");
+    expect(meta.textContent).toContain("2 个省");
+    expect(meta.textContent).toContain("1 个市");
+    expect(meta.textContent).toContain("8 张带位置");
+    expect(meta.textContent).toContain("1 张没有拍摄时间");
 
-    // 地图缩在信息栏的右端，不用选中什么就一直在。
+    // 地图在抬头的右栏里，不用选中什么就一直在。
     const map = await screen.findByRole("img", { name: /小地图/ });
     expect(map).toBeTruthy();
     // 点云是照片的真实位置：两个网格，两点。
-    expect(map.querySelectorAll(".travel-mini-map__point").length).toBe(2);
+    await waitFor(() => {
+      expect(map.querySelectorAll(".travel-mini-map__point").length).toBe(2);
+    });
   });
 
-  it("时间轴是一条曲线，两端各有一个刷手", async () => {
+  it("时间轴是一排月格，两端各有一个刷手", async () => {
     renderPage();
 
     const timeline = await screen.findByRole("region", { name: "时间轴" });
@@ -289,7 +298,12 @@ describe("足迹页", () => {
     // 尺子是整条历史：2019-05 到 2021-06。
     expect(handles[0].getAttribute("aria-valuetext")).toBe("2019-05");
     expect(handles[1].getAttribute("aria-valuetext")).toBe("2021-06");
-    // 每段行程是线上的一颗珠子。
+
+    // 一格一个月：2019-05 到 2021-06 共 26 个月，空档的月份也占位。
+    const cells = timeline.querySelectorAll(".travel-timeline__cell");
+    expect(cells.length).toBe(26);
+
+    // 每段行程是格子上方的一颗钉。
     expect(
       within(timeline).getByRole("button", {
         name: /2019-05-02 至 2019-05-05，4 天，6 张照片/,
@@ -387,8 +401,11 @@ describe("足迹页", () => {
   it("没有拍摄时间的照片如实说明", async () => {
     renderPage();
 
-    const ledger = await screen.findByRole("region", { name: /规模/ });
-    expect(within(ledger).getByText("张没有拍摄时间")).toBeTruthy();
-    expect(within(ledger).getByText("1")).toBeTruthy();
+    const head = document.querySelector(".travel-head") as HTMLElement;
+    const meta = head.querySelector(".travel-head__meta") as HTMLElement;
+    await waitFor(() => {
+      expect(meta.textContent).toContain("2 个省");
+    });
+    expect(meta.textContent).toContain("1 张没有拍摄时间");
   });
 });

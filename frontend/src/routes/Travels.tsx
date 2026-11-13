@@ -1,10 +1,8 @@
 import { useCallback, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import PageHeading from "../components/common/PageHeading";
 import Segmented from "../components/common/Segmented";
 import TravelMiniMap from "../components/travels/TravelMiniMap";
 import TravelPlaceList from "../components/travels/TravelPlaceList";
-import TravelStatLedger from "../components/travels/TravelStatLedger";
 import TravelTimeline from "../components/travels/TravelTimeline";
 import TravelTrips from "../components/travels/TravelTrips";
 import {
@@ -32,7 +30,7 @@ function parseMonth(raw: string | null): string | null {
 /**
  * 小地图上照片位置的网格边长。
  *
- * 地图只有 236 像素宽，照片位置按几公里一格聚合根本看不见 —— 一格在
+ * 地图只有 288 像素宽，照片位置按几公里一格聚合根本看不见 —— 一格在
  * 全国范围里还不到一个像素。这里用二十公里一格：格子够大才画得出，
  * 又不至于把同城不同角落的照片并成一坨。
  */
@@ -41,9 +39,10 @@ const MINI_MAP_CELL = 0.2;
 /**
  * 足迹：我去过哪些地方，什么时候去的。
  *
- * 页头下面是一条数字台，右端嵌着一块小地图：去过的地方按张数深浅着色，
- * 照片真正的位置泛成一层光。再下面是一条按真实时间比例铺开的曲线，
- * 拖两端可以圈出一段时间；最下面是这段时间里的行程，一段一段读。
+ * 抬头分两栏：左边是标题、一行数字摘要与控件，右边是一块小地图 ——
+ * 去过的地方按张数深浅着色，照片真正的位置泛成一层光。下面是一条按真实
+ * 时间比例铺开的月格带，拖两端可以圈出一段时间；最下面是这段时间里的
+ * 行程，一段一段读。
  */
 export default function Travels() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -153,24 +152,6 @@ export default function Travels() {
 
   const untimedCount = summary?.untimedPhotoCount ?? 0;
 
-  const ledger = useMemo(() => {
-    const placeCount = summary
-      ? `${summary.provinceCount} 个省 · ${summary.cityCount} 个市`
-      : "—";
-    return [
-      { value: tripCount.toLocaleString(), label: "段足迹" },
-      { value: placeCount, label: "去过的地方" },
-      {
-        value: (summary?.gpsPhotoCount ?? 0).toLocaleString(),
-        label: "张带位置的照片",
-      },
-      {
-        value: untimedCount.toLocaleString(),
-        label: "张没有拍摄时间",
-      },
-    ];
-  }, [summary, tripCount, untimedCount]);
-
   const error =
     summaryQuery.isError || wholeQuery.isError || tripsQuery.isError;
 
@@ -224,30 +205,91 @@ export default function Travels() {
 
   return (
     <div className="h-full overflow-y-auto pb-12">
-      <div className="page-bleed">
-        <PageHeading
-          contained
-          eyebrow="离线解析"
-          title="足迹"
-          description="照片坐标在本机匹配到行政区边界，并聚成网格画在那块小地图上。这里按时间讲一遍：你去过哪些地方，是什么时候去的。"
-          action={
-            <Segmented
-              label="归并粒度"
-              value={level}
-              onChange={setLevel}
-              options={[
-                { value: "province", label: "省" },
-                { value: "city", label: "市" },
-                { value: "district", label: "区县" },
-              ]}
-            />
-          }
-        />
+      <header className="border-b border-border-faint bg-bg">
+        <div className="page-bleed">
+          <div className="travel-head">
+            <div className="min-w-0">
+              <p className="page-eyebrow">离线解析</p>
+              <h1 className="travel-head__title">足迹</h1>
 
+              {/* 规模并成一句话，不拆成四个各自占一格的大数字。 */}
+              <p className="travel-head__meta">
+                <span>
+                  <span className="travel-head__value">{tripCount}</span> 段足迹
+                </span>
+                <span>
+                  <span className="travel-head__value">
+                    {summary?.provinceCount ?? "—"}
+                  </span>{" "}
+                  个省
+                  <span className="travel-head__value ml-3">
+                    {summary?.cityCount ?? "—"}
+                  </span>{" "}
+                  个市
+                </span>
+                <span>
+                  <span className="travel-head__value">
+                    {(summary?.gpsPhotoCount ?? 0).toLocaleString()}
+                  </span>{" "}
+                  张带位置
+                </span>
+                <span>
+                  <span className="travel-head__value">
+                    {untimedCount.toLocaleString()}
+                  </span>{" "}
+                  张没有拍摄时间
+                </span>
+              </p>
+
+              <div className="travel-head__actions">
+                <Segmented
+                  label="归并粒度"
+                  value={level}
+                  onChange={setLevel}
+                  options={[
+                    { value: "province", label: "省" },
+                    { value: "city", label: "市" },
+                    { value: "district", label: "区县" },
+                  ]}
+                />
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline"
+                  aria-pressed={placeListOpen}
+                  onClick={() => setPlaceListOpen((value) => !value)}
+                >
+                  地方
+                </button>
+              </div>
+            </div>
+
+            {/* 右栏是地图：抬头的一半，不是一条贴在边上的窄带。 */}
+            <div className="travel-head__map">
+              <TravelMiniMap
+                regions={regions}
+                backdrop={backdrop}
+                points={points}
+                levelTotal={levelTotal}
+                scopeLabel="足迹"
+              />
+              {placeListOpen ? (
+                <TravelPlaceList
+                  places={places}
+                  anchor="menu"
+                  onClose={() => setPlaceListOpen(false)}
+                  onOpenPlace={openPlace}
+                />
+              ) : null}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <div className="page-bleed">
         {error ? (
           <div
             role="alert"
-            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-danger/30 bg-bg-elevated px-4 py-3 text-body text-danger"
+            className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-danger/30 bg-bg-elevated px-4 py-3 text-body text-danger"
           >
             <span>足迹数据加载失败，请稍后重试。</span>
             <button
@@ -264,40 +306,6 @@ export default function Travels() {
           </div>
         ) : null}
 
-        {/* 数字台与小地图并成一条：数字说规模，右边那张图说位置。 */}
-        {summary ? (
-          <div className="travel-ledger-row">
-            <TravelStatLedger items={ledger} />
-            <div className="travel-ledger-map">
-              <TravelMiniMap
-                regions={regions}
-                backdrop={backdrop}
-                points={points}
-                levelTotal={levelTotal}
-                scopeLabel="足迹"
-              />
-              <button
-                type="button"
-                className="travel-ledger-map__toggle"
-                aria-pressed={placeListOpen}
-                onClick={() => setPlaceListOpen((value) => !value)}
-              >
-                地方
-              </button>
-              {placeListOpen ? (
-                <TravelPlaceList
-                  places={places}
-                  anchor="menu"
-                  onClose={() => setPlaceListOpen(false)}
-                  onOpenPlace={openPlace}
-                />
-              ) : null}
-            </div>
-          </div>
-        ) : null}
-      </div>
-
-      <div className="page-bleed">
         {whole ? (
           <TravelTimeline
             months={whole.months}

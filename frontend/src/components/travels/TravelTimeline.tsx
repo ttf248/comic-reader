@@ -12,8 +12,6 @@ import {
   fillMonthRange,
   monthIndex,
   monthKey,
-  smoothAreaPath,
-  smoothCurvePath,
   type MonthCount,
 } from "../../utils/travelMap";
 
@@ -39,21 +37,50 @@ const MIN_PIXELS_PER_MONTH = 4;
 /** 默认每个月占多少像素（跨度太长时用它，轴随之横向滚动）。 */
 const DEFAULT_PIXELS_PER_MONTH = 8;
 
-/** 曲线的画布高度。 */
-const CURVE_HEIGHT = 104;
+/** 行程钉那一层的高。 */
+const PIN_ROW = 16;
+
+/** 钉层与格子带之间的缝。 */
+const PIN_GAP = 3;
+
+/** 格子带的高。 */
+const CELL_ROW = 22;
+
+/** 整条带子（钉 + 格子）的高。 */
+const STRIP_HEIGHT = PIN_ROW + PIN_GAP + CELL_ROW;
+
+/** 钉的命中区半径：28px 是布局审计给交互控件的下限。 */
+const PIN_HIT_RADIUS = 14;
+
+/** 相邻格之间留的缝（表面色分隔，不描边）。 */
+const CELL_GAP = 2;
 
 /** 拖动模式：拖的是窗口的哪一部分。 */
 type DragMode = "new" | "start" | "end" | "window" | null;
 
 /**
- * 时间轴：一条会呼吸的线。
+ * 格子颜色：单色渐层，深浅 = 这个月的张数。
  *
- * 逐月的张数画成一条起伏的曲线 —— 出门多的年份鼓起来，几年没动的地方
- * 塌下去，整条线读下来就是这些年的节奏。行程是线上的一颗颗珠子：点它
- * 选中那一次出行。
+ * 没有照片的月份给一层极淡的底 —— 空档的那几年在带子上明显更浅，
+ * 一眼看得见那几年其实没怎么出门。
+ */
+function cellFill(count: number, maxCount: number): string {
+  if (count <= 0) return "color-mix(in srgb, var(--brand) 6%, var(--bg))";
+  const ratio = maxCount > 0 ? Math.sqrt(count / maxCount) : 0;
+  const percent = Math.round(14 + 74 * ratio);
+  return `color-mix(in srgb, var(--brand) ${percent}%, var(--bg))`;
+}
+
+/**
+ * 时间轴：一条月格纹理带。
  *
- * 只此一件东西。过去那版把密度直方图、行程块、刷手轨道分作三层叠着，
- * 每层各说各的，读起来像三张图表拼在一起 —— 现在它们合成一条线。
+ * 逐月的张数画成一排格子，一格一个月，深浅是那一个月的张数 —— 格子是
+ * 离散的，读得出确切是多少，也读得出空档；曲线把这些抹平了。
+ *
+ * 行程是格子上方的一颗颗钉，落在它开始的那个月。点钉选中那一次出行。
+ *
+ * 只此一件东西。此前那版把密度直方图、行程块、刷手轨道分作三层叠着，
+ * 每层各说各的，读起来像三张图表拼在一起。
  */
 export default function TravelTimeline({
   months,
@@ -69,6 +96,7 @@ export default function TravelTimeline({
   const [pixelsPerMonth, setPixelsPerMonth] = useState(DEFAULT_PIXELS_PER_MONTH);
   const [drag, setDrag] = useState<DragMode>(null);
   const [hoverTrip, setHoverTrip] = useState<string | null>(null);
+  const [hoverMonth, setHoverMonth] = useState<string | null>(null);
   const dragAnchor = useRef<number | null>(null);
   /** 手柄按下的那一端。手指落在手柄上时，拖的是那一端，不是整段。 */
   const grabbedEnd = useRef<"start" | "end" | null>(null);
@@ -112,7 +140,7 @@ export default function TravelTimeline({
 
   const contentWidth = Math.max(spanMonths * pixelsPerMonth, measured);
 
-  /** 月份序号 → 像素位置。 */
+  /** 月份序号 → 像素位置（该月的左缘）。 */
   const xOf = useCallback(
     (index: number) => (index - firstIndex) * pixelsPerMonth,
     [firstIndex, pixelsPerMonth],
@@ -137,22 +165,22 @@ export default function TravelTimeline({
   const toIndex = to ? monthIndex(to) : lastIndex;
   const hasWindow = Boolean(from || to);
 
-  // 曲线：每个月的张数画成一个点，平滑后连成一条线。
-  const curvePoints = useMemo<[number, number][]>(() => {
-    const baseline = CURVE_HEIGHT - 16;
-    const height = baseline - 10;
-    return filled.map((entry) => {
-      const index = monthIndex(entry.month);
-      const ratio = maxMonthCount > 0 ? entry.count / maxMonthCount : 0;
-      return [xOf(index), baseline - Math.sqrt(ratio) * height] as [number, number];
-    });
-  }, [filled, maxMonthCount, xOf]);
+  // 同一个月里的几段行程要错开，否则钉会叠在一起。
+  const tripsByMonth = useMemo(() => {
+    const map = new Map<number, ChinaTrip[]>();
+    for (const trip of trips) {
+      const index = monthIndex(trip.startedAt.slice(0, 7));
+      const list = map.get(index);
+      if (list) list.push(trip);
+      else map.set(index, [trip]);
+    }
+    return map;
+  }, [trips]);
 
-  const areaPath = useMemo(
-    () => smoothAreaPath(curvePoints, CURVE_HEIGHT - 16),
-    [curvePoints],
+  const maxTripCount = useMemo(
+    () => trips.reduce((max, trip) => Math.max(max, trip.photoCount), 0),
+    [trips],
   );
-  const linePath = useMemo(() => smoothCurvePath(curvePoints), [curvePoints]);
 
   const applyWindow = useCallback(
     (nextFrom: number, nextTo: number) => {
@@ -247,15 +275,23 @@ export default function TravelTimeline({
     return result;
   }, [firstIndex, lastIndex]);
 
-  /** 曲线在某个月的高度，用来把行程的珠子放到线上。 */
-  const yAt = useCallback(
-    (index: number) => {
-      const position = index - firstIndex;
-      const point = curvePoints[position];
-      return point ? point[1] : CURVE_HEIGHT - 16;
-    },
-    [curvePoints, firstIndex],
+  const hoverTripData = useMemo(
+    () => trips.find((trip) => trip.id === hoverTrip) ?? null,
+    [hoverTrip, trips],
   );
+
+  // 读数带：悬停什么就报什么，平时报当前区间。
+  const readout = hoverTripData
+    ? `${hoverTripData.startedAt}${
+        hoverTripData.endedAt !== hoverTripData.startedAt
+          ? ` – ${hoverTripData.endedAt.slice(5)}`
+          : ""
+      } · ${hoverTripData.stops.map((stop) => stop.name).join(" → ")} · ${hoverTripData.photoCount} 张`
+    : hoverMonth
+      ? hoverMonth
+      : hasWindow
+        ? `${from} – ${to}`
+        : "全部时间";
 
   if (filled.length === 0) {
     return (
@@ -269,14 +305,25 @@ export default function TravelTimeline({
 
   const windowLeft = xOf(fromIndex);
   const windowWidth = Math.max(xOf(toIndex + 1) - windowLeft, 0);
+  const cellWidth = Math.max(pixelsPerMonth - CELL_GAP, 1);
 
   return (
     <section aria-label="时间轴" className="travel-timeline">
       <div className="travel-timeline__head">
         <h2 className="font-display text-label font-medium text-fg">时间轴</h2>
-        <div className="flex items-center gap-3">
-          <span className="text-meta tabular-nums text-fg-muted">
-            {hasWindow ? `${from} – ${to}` : "全部时间"}
+        <div className="travel-timeline__legend">
+          <span className="travel-timeline__legend-item">
+            <span className="travel-timeline__swatch" />
+            每月张数
+          </span>
+          <span className="travel-timeline__legend-item">
+            <span className="travel-timeline__legend-pin" />
+            行程
+          </span>
+        </div>
+        <div className="travel-timeline__readout-group">
+          <span className="travel-timeline__readout tabular-nums">
+            {readout}
           </span>
           {hasWindow ? (
             <button
@@ -300,9 +347,9 @@ export default function TravelTimeline({
       >
         <div className="travel-timeline__content" style={{ width: contentWidth }}>
           <svg
-            className="travel-timeline__curve"
-            viewBox={`0 0 ${contentWidth} ${CURVE_HEIGHT}`}
-            height={CURVE_HEIGHT}
+            className="travel-timeline__strip"
+            viewBox={`0 0 ${contentWidth} ${STRIP_HEIGHT}`}
+            height={STRIP_HEIGHT}
             role="group"
             aria-label={`按月的照片分布与行程，共 ${trips.length} 段`}
           >
@@ -316,86 +363,117 @@ export default function TravelTimeline({
                   x={0}
                   y={0}
                   width={contentWidth}
-                  height={CURVE_HEIGHT}
+                  height={STRIP_HEIGHT}
                   fill="#8a8a8a"
                 />
                 <rect
                   x={windowLeft}
                   y={0}
                   width={windowWidth}
-                  height={CURVE_HEIGHT}
+                  height={STRIP_HEIGHT}
                   fill="#ffffff"
                 />
               </mask>
-              <linearGradient id="travel-timeline-fill" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="var(--brand)" stopOpacity="0.42" />
-                <stop offset="100%" stopColor="var(--brand)" stopOpacity="0.05" />
-              </linearGradient>
             </defs>
 
             <g mask="url(#travel-timeline-window)">
-              <path d={areaPath} fill="url(#travel-timeline-fill)" />
-              <path d={linePath} className="travel-timeline__line" />
-              {trips.map((trip) => {
-                const index = monthIndex(trip.startedAt.slice(0, 7));
-                const x = xOf(index);
-                const y = yAt(index);
-                const selected = selectedTripId === trip.id;
-                const radius = Math.min(
-                  6,
-                  3 + 3 * Math.sqrt(trip.photoCount / Math.max(maxMonthCount, 1)),
-                );
-                return (
-                  <g
-                    key={trip.id}
-                    tabIndex={0}
-                    role="button"
-                    aria-label={`${trip.startedAt} 至 ${trip.endedAt}，${trip.dayCount} 天，${trip.photoCount} 张照片`}
-                    onMouseEnter={() => setHoverTrip(trip.id)}
-                    onMouseLeave={() =>
-                      setHoverTrip((current) =>
-                        current === trip.id ? null : current,
-                      )
-                    }
-                    onFocus={() => setHoverTrip(trip.id)}
-                    onBlur={() =>
-                      setHoverTrip((current) =>
-                        current === trip.id ? null : current,
-                      )
-                    }
-                    onClick={() => onSelectTrip?.(trip)}
-                    onKeyDown={(event) => {
-                      // SVG 里的 g 不是真的按钮，回车与空格得自己接。
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        onSelectTrip?.(trip);
-                      }
-                    }}
-                  >
-                    {/* 看得见的珠子只有几像素大；命中区给足手指与键盘的尺寸。 */}
-                    <circle
-                      cx={x}
-                      cy={y}
-                      r={14}
-                      fill="transparent"
-                      pointerEvents="all"
-                    />
-                    <circle
-                      cx={x}
-                      cy={y}
-                      r={selected ? radius + 3 : radius}
+              {/* 格子带：一格一个月，深浅是那一个月的张数。 */}
+              <g>
+                {filled.map((entry) => {
+                  const index = monthIndex(entry.month);
+                  return (
+                    <rect
+                      key={entry.month}
+                      x={xOf(index)}
+                      y={PIN_ROW + PIN_GAP}
+                      width={cellWidth}
+                      height={CELL_ROW}
+                      rx={2}
+                      fill={cellFill(entry.count, maxMonthCount)}
                       className={
-                        selected
-                          ? "travel-timeline__bead travel-timeline__bead--selected"
-                          : "travel-timeline__bead"
+                        hoverMonth === entry.month
+                          ? "travel-timeline__cell travel-timeline__cell--hover"
+                          : "travel-timeline__cell"
                       }
-                      pointerEvents="none"
+                      onMouseEnter={() => setHoverMonth(entry.month)}
+                      onMouseLeave={() =>
+                        setHoverMonth((current) =>
+                          current === entry.month ? null : current,
+                        )
+                      }
                     >
-                      <title>{`${trip.startedAt} – ${trip.endedAt} · ${trip.stops.map((stop) => stop.name).join(" → ")} · ${trip.photoCount} 张`}</title>
-                    </circle>
-                  </g>
-                );
-              })}
+                      <title>
+                        {entry.count > 0
+                          ? `${entry.month} · ${entry.count} 张`
+                          : `${entry.month} · 没有照片`}
+                      </title>
+                    </rect>
+                  );
+                })}
+              </g>
+              {/* 行程钉：落在开始的那个月。 */}
+              <g>
+                {trips.map((trip) => {
+                  const index = monthIndex(trip.startedAt.slice(0, 7));
+                  const sameMonth = tripsByMonth.get(index) ?? [];
+                  const position = sameMonth.indexOf(trip);
+                  const spread = sameMonth.length > 1 ? (position - (sameMonth.length - 1) / 2) * 9 : 0;
+                  const x = xOf(index) + pixelsPerMonth / 2 + spread;
+                  const selected = selectedTripId === trip.id;
+                  const radius = Math.min(
+                    5,
+                    3 + 2 * Math.sqrt(trip.photoCount / Math.max(maxTripCount, 1)),
+                  );
+                  return (
+                    <g
+                      key={trip.id}
+                      tabIndex={0}
+                      role="button"
+                      aria-label={`${trip.startedAt} 至 ${trip.endedAt}，${trip.dayCount} 天，${trip.photoCount} 张照片`}
+                      onMouseEnter={() => setHoverTrip(trip.id)}
+                      onMouseLeave={() =>
+                        setHoverTrip((current) =>
+                          current === trip.id ? null : current,
+                        )
+                      }
+                      onFocus={() => setHoverTrip(trip.id)}
+                      onBlur={() =>
+                        setHoverTrip((current) =>
+                          current === trip.id ? null : current,
+                        )
+                      }
+                      onClick={() => onSelectTrip?.(trip)}
+                      onKeyDown={(event) => {
+                        // SVG 里的 g 不是真的按钮，回车与空格得自己接。
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          onSelectTrip?.(trip);
+                        }
+                      }}
+                    >
+                      {/* 看得见的钉只有几像素大；命中区给足手指与键盘的尺寸。 */}
+                      <circle
+                        cx={x}
+                        cy={PIN_ROW / 2}
+                        r={PIN_HIT_RADIUS}
+                        fill="transparent"
+                        pointerEvents="all"
+                      />
+                      <circle
+                        cx={x}
+                        cy={PIN_ROW / 2}
+                        r={selected ? radius + 2 : radius}
+                        className={
+                          selected
+                            ? "travel-timeline__pin travel-timeline__pin--selected"
+                            : "travel-timeline__pin"
+                        }
+                        pointerEvents="none"
+                      />
+                    </g>
+                  );
+                })}
+              </g>
             </g>
           </svg>
 
@@ -488,32 +566,6 @@ export default function TravelTimeline({
               }
             }}
           />
-
-          {hoverTrip
-            ? (() => {
-                const trip = trips.find((item) => item.id === hoverTrip);
-                if (!trip) return null;
-                return (
-                  <div
-                    className="travel-timeline__tip"
-                    style={{
-                      left: xOf(monthIndex(trip.startedAt.slice(0, 7))),
-                    }}
-                  >
-                    <p className="text-label font-medium text-fg">
-                      {trip.startedAt}
-                      {trip.endedAt !== trip.startedAt
-                        ? ` – ${trip.endedAt.slice(5)}`
-                        : ""}
-                    </p>
-                    <p className="mt-0.5 text-meta text-fg-muted">
-                      {trip.stops.map((stop) => stop.name).join(" → ")} ·{" "}
-                      {trip.photoCount} 张
-                    </p>
-                  </div>
-                );
-              })()
-            : null}
         </div>
       </div>
     </section>

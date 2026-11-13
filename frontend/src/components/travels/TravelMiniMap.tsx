@@ -12,7 +12,6 @@ import {
   levelOpacity,
   photoViewport,
   regionPath,
-  unionBounds,
   type MapRegion,
 } from "../../utils/travelMap";
 
@@ -81,15 +80,18 @@ export default function TravelMiniMap({
     [backdrop, regions],
   );
 
-  // 画面裁到有内容的那一片：去过的地方与照片的位置合起来。
+  // 画面裁到照片真正在的那一片：行政区比照片的位置大得多（一个市
+  // 几百公里，照片往往只在市区那几公里里），按行政区裁会裁出一大片空白。
   const contentBounds = useMemo(
-    () => unionBounds(boundsOfPhotos(regions), boundsOfPoints(points ?? [])),
+    () => boundsOfPoints(points ?? []) ?? boundsOfPhotos(regions),
     [points, regions],
   );
 
   const viewBox = useMemo(() => {
     if (!contentBounds) return projection.viewBox;
-    const viewport = photoViewport(projection, contentBounds, aspect);
+    // contain：内容整个留下。这个尺寸下宁可两边留白，也不要切掉
+    // 最远的那几张照片。
+    const viewport = photoViewport(projection, contentBounds, aspect, "contain");
     const height = viewport.width * aspect;
     return `${viewport.centerX - viewport.width / 2} ${viewport.centerY - height / 2} ${viewport.width} ${height}`;
   }, [aspect, contentBounds, projection]);

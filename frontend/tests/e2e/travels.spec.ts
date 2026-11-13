@@ -22,10 +22,10 @@ test("侧栏的足迹入口打开的是新的地点页", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "足迹" })).toBeVisible();
 });
 
-test("小地图常驻在数字台右端，照片位置画成点云", async ({ page }) => {
+test("小地图在抬头右栏，照片位置画成点云", async ({ page }) => {
   await page.goto("/photo/travels");
 
-  // 地图不用选中什么就一直在：它就嵌在信息栏的右端。
+  // 地图不用选中什么就一直在：它就在抬头的右栏里。
   const map = page.getByRole("img", { name: /小地图/ });
   await expect(map).toBeVisible();
 
@@ -34,7 +34,7 @@ test("小地图常驻在数字台右端，照片位置画成点云", async ({ pa
   await expect(page.locator(".travel-mini-map__point")).toHaveCount(3);
 });
 
-test("时间轴是一条曲线，两端能拖出一个区间", async ({ page }) => {
+test("时间轴是一排月格，两端能拖出一个区间", async ({ page }) => {
   await page.goto("/photo/travels");
 
   const timeline = page.getByRole("region", { name: "时间轴" });
@@ -43,6 +43,9 @@ test("时间轴是一条曲线，两端能拖出一个区间", async ({ page }) 
   await expect(handles).toHaveCount(2);
   // 临时库的照片拍在 2024-05 与 2025-09：尺子量的是整条历史。
   await expect(handles.first()).toHaveAttribute("aria-valuetext", "2024-05");
+
+  // 一格一个月：2024-05 到 2025-09 共 17 个月，空档的月份也占位。
+  await expect(page.locator(".travel-timeline__cell")).toHaveCount(17);
 
   // 拖右端的手柄：区间写进地址。
   // 时间轴在页面下半屏，先滚到可见处 —— 否则鼠标坐标落在视口之外。
