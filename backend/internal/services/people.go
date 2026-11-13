@@ -18,7 +18,7 @@ import (
 
 const (
 	peopleIndexVersion         = 1
-	peopleGroupingVersion      = 4
+	peopleGroupingVersion      = 5
 	peopleEmbeddingDimension   = 128
 	peopleClusterExemplarLimit = 3
 	peopleMaxSplitFaces        = 200
@@ -29,7 +29,7 @@ const PeopleGroupingCentroidThreshold = 0.6
 
 // PeopleGroupingExemplarThreshold prevents a drifting center from merging
 // faces that do not match any stable high-confidence member of a cluster.
-const PeopleGroupingExemplarThreshold = 0.68
+const PeopleGroupingExemplarThreshold = 0.72
 
 var (
 	ErrPersonNotFound = errors.New("person not found")

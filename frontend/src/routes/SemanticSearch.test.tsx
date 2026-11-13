@@ -168,7 +168,7 @@ describe("智能搜索", () => {
         },
       ],
       centroidThreshold: 0.6,
-      exemplarThreshold: 0.68,
+      exemplarThreshold: 0.72,
       revision: 1,
     });
     mocks.semanticSearch.mockResolvedValue({

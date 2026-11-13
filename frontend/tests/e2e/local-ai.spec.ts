@@ -12,7 +12,7 @@ test.describe("本机智能照片功能", () => {
       totalGroups: 0,
       limit: 50,
       centroidThreshold: 0.6,
-      exemplarThreshold: 0.68,
+      exemplarThreshold: 0.72,
     });
     const peopleSearchResponse = await page.request.get(
       "/api/people?q=%E4%B8%8D%E5%AD%98%E5%9C%A8&limit=20",
@@ -23,7 +23,7 @@ test.describe("本机智能照片功能", () => {
       totalGroups: 0,
       limit: 20,
       centroidThreshold: 0.6,
-      exemplarThreshold: 0.68,
+      exemplarThreshold: 0.72,
     });
     await page.getByRole("link", { name: "打开任务中心" }).click();
     await expect(page).toHaveURL(/\/tasks$/);

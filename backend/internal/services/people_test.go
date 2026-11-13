@@ -195,8 +195,8 @@ func TestPeopleServiceRequiresCentroidAndExemplarThresholds(t *testing.T) {
 	aboveAnchor := make([]float32, peopleEmbeddingDimension)
 	aboveAnchor[2] = 1
 	aboveNeighbor := make([]float32, peopleEmbeddingDimension)
-	aboveNeighbor[2] = 0.72
-	aboveNeighbor[3] = float32(math.Sqrt(1 - 0.72*0.72))
+	aboveNeighbor[2] = 0.74
+	aboveNeighbor[3] = float32(math.Sqrt(1 - 0.74*0.74))
 
 	records := []AIAnalysisRecord{
 		peopleTestRecord("a_below_anchor", belowAnchor),
@@ -215,7 +215,7 @@ func TestPeopleServiceRequiresCentroidAndExemplarThresholds(t *testing.T) {
 		t.Fatal("0.58 similarity unexpectedly merged below the centroid threshold")
 	}
 	if ids["c_above_anchor"] != ids["d_above_neighbor"] {
-		t.Fatal("0.72 similarity did not merge above the centroid and exemplar thresholds")
+		t.Fatal("0.74 similarity did not merge above the centroid and exemplar thresholds")
 	}
 }
 
@@ -252,7 +252,10 @@ func TestPeopleServiceRejectsCentroidDriftWithoutExemplarMatch(t *testing.T) {
 	if got := addFaceToCluster(0.669); got == "p_existing" {
 		t.Fatal("face matching only the moving centroid joined without a strong exemplar match")
 	}
-	if got := addFaceToCluster(0.7136); got != "p_existing" {
+	if got := addFaceToCluster(0.7116); got == "p_existing" {
+		t.Fatal("cross-style near match unexpectedly joined the cluster")
+	}
+	if got := addFaceToCluster(0.73); got != "p_existing" {
 		t.Fatalf("face with a strong exemplar match joined %q, want p_existing", got)
 	}
 }
