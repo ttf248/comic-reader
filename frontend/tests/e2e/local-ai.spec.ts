@@ -12,6 +12,15 @@ test.describe("本机智能照片功能", () => {
       totalGroups: 0,
       limit: 50,
     });
+    const peopleSearchResponse = await page.request.get(
+      "/api/people?q=%E4%B8%8D%E5%AD%98%E5%9C%A8&limit=20",
+    );
+    expect(peopleSearchResponse.ok()).toBeTruthy();
+    await expect(peopleSearchResponse.json()).resolves.toMatchObject({
+      people: [],
+      totalGroups: 0,
+      limit: 20,
+    });
     await page.getByRole("link", { name: "打开任务中心" }).click();
     await expect(page).toHaveURL(/\/tasks$/);
     await expect(

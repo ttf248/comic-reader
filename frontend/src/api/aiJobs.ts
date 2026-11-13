@@ -740,7 +740,7 @@ export const aiJobsApi = {
       nonIdempotent: true,
     });
   },
-  people: (includeHidden = false, includeAll = false) =>
+  people: (includeHidden = false) =>
     api<{
       ok: boolean;
       people: PersonGroup[];
@@ -749,7 +749,17 @@ export const aiJobsApi = {
       groupingLimited: boolean;
       threshold: number;
       revision: number;
-    }>("/api/people", { params: { includeHidden, includeAll } }),
+    }>("/api/people", { params: { includeHidden } }),
+  searchPeople: (query: string) =>
+    api<{
+      ok: boolean;
+      people: PersonGroup[];
+      totalGroups: number;
+      limit: number;
+      groupingLimited: boolean;
+      threshold: number;
+      revision: number;
+    }>("/api/people", { params: { q: query, limit: 20 } }),
   personMedia: (id: string, cursor?: string) =>
     api<{ ok: boolean; page: PersonMediaPage }>(
       `/api/people/${encodeURIComponent(id)}/media`,

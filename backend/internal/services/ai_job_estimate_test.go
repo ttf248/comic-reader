@@ -334,4 +334,10 @@ func TestAIJobEstimateReportsLibraryNotReady(t *testing.T) {
 	if estimate.TotalImages != 0 {
 		t.Fatalf("total images = %d, want 0", estimate.TotalImages)
 	}
+	if estimate.Sequence.Incremental.Modules == nil || estimate.Sequence.Full.Modules == nil {
+		t.Fatalf("sequence module lists must be empty arrays while the library is unavailable: %+v", estimate.Sequence)
+	}
+	if len(estimate.Sequence.Incremental.Modules) != 0 || len(estimate.Sequence.Full.Modules) != 0 {
+		t.Fatalf("sequence module lists must be empty while the library is unavailable: %+v", estimate.Sequence)
+	}
 }

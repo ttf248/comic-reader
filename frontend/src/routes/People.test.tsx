@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import People from "./People";
@@ -7,18 +7,21 @@ import People from "./People";
 const mocks = vi.hoisted(() => ({
   list: vi.fn(),
   people: vi.fn(),
+  searchPeople: vi.fn(),
   clearPeople: vi.fn(),
   personMedia: vi.fn(),
+  mergePeople: vi.fn(),
 }));
 
 vi.mock("../api/aiJobs", () => ({
   aiJobsApi: {
     list: mocks.list,
     people: mocks.people,
+    searchPeople: mocks.searchPeople,
     clearPeople: mocks.clearPeople,
     personMedia: mocks.personMedia,
     updatePerson: vi.fn(),
-    mergePeople: vi.fn(),
+    mergePeople: mocks.mergePeople,
     splitPerson: vi.fn(),
   },
 }));
@@ -40,6 +43,14 @@ function renderPeople() {
 
 describe("人物相册", () => {
   beforeEach(() => {
+    Object.assign(HTMLDialogElement.prototype, {
+      showModal(this: HTMLDialogElement) {
+        this.open = true;
+      },
+      close(this: HTMLDialogElement) {
+        this.open = false;
+      },
+    });
     vi.clearAllMocks();
     mocks.list.mockResolvedValue({
       ok: true,
@@ -52,7 +63,17 @@ describe("人物相册", () => {
       threshold: 0.363,
       revision: 1,
     });
+    mocks.searchPeople.mockResolvedValue({
+      ok: true,
+      people: [],
+      totalGroups: 0,
+      limit: 20,
+      groupingLimited: false,
+      threshold: 0.363,
+      revision: 1,
+    });
     mocks.clearPeople.mockResolvedValue({ ok: true, cleared: true });
+    mocks.mergePeople.mockResolvedValue({ ok: true });
   });
 
   it("未启用时说明人物分析默认关闭并引导到任务中心", async () => {
@@ -161,5 +182,64 @@ describe("人物相册", () => {
     expect(screen.getAllByRole("checkbox")).toHaveLength(200);
     fireEvent.click(screen.getByRole("button", { name: /继续显示 5 张脸/ }));
     expect(screen.getAllByRole("checkbox")).toHaveLength(205);
+  });
+
+  it("详情页不请求全量人物表，打开合并弹窗后才按需搜索", async () => {
+    mocks.personMedia.mockResolvedValue({
+      ok: true,
+      page: {
+        revision: 4,
+        person: {
+          id: "p_123456",
+          name: "当前人物",
+          faceCount: 2,
+          photoCount: 2,
+          hidden: false,
+        },
+        items: [],
+        faces: [],
+        total: 0,
+      },
+    });
+    mocks.searchPeople.mockResolvedValue({
+      ok: true,
+      people: [
+        {
+          id: "p_abcdef",
+          name: "合并目标",
+          faceCount: 3,
+          photoCount: 2,
+          hidden: false,
+        },
+      ],
+      totalGroups: 1,
+      limit: 20,
+      groupingLimited: false,
+      threshold: 0.363,
+      revision: 4,
+    });
+    render(
+      <QueryClientProvider
+        client={
+          new QueryClient({
+            defaultOptions: { queries: { retry: false } },
+          })
+        }
+      >
+        <MemoryRouter initialEntries={["/photo/people/p_123456"]}>
+          <Routes>
+            <Route path="/photo/people/:personId?" element={<People />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText("当前人物")).toBeInTheDocument();
+    expect(mocks.people).not.toHaveBeenCalled();
+    expect(mocks.searchPeople).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "合并人物" }));
+    expect(await screen.findByRole("dialog")).toBeInTheDocument();
+    await waitFor(() => expect(mocks.searchPeople).toHaveBeenCalledWith(""));
+    expect(await screen.findByText("合并目标")).toBeInTheDocument();
   });
 });

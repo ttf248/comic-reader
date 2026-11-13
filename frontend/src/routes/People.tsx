@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   useInfiniteQuery,
@@ -11,6 +11,7 @@ import PageHeading from "../components/common/PageHeading";
 import RenditionImage from "../components/common/RenditionImage";
 import PhotoViewer from "../components/wall/PhotoViewer";
 import PhotoWall from "../components/wall/PhotoWall";
+import PeopleMergeDialog from "../components/people/PeopleMergeDialog";
 import { aiJobsApi, type PersonGroup } from "../api/aiJobs";
 import { usePicks } from "../hooks/usePicks";
 import { usePhotoStore, wallTargetHeight } from "../store/photoStore";
@@ -179,7 +180,7 @@ function PersonAlbum({ personId }: { personId: string }) {
   const pushToast = useUIStore((state) => state.pushToast);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   const [name, setName] = useState("");
-  const [targetId, setTargetId] = useState("");
+  const [mergeDialogOpen, setMergeDialogOpen] = useState(false);
   const [selectedFaces, setSelectedFaces] = useState<string[]>([]);
   const [visibleFaceCount, setVisibleFaceCount] = useState(facePageSize);
   const query = useInfiniteQuery({
@@ -189,18 +190,7 @@ function PersonAlbum({ personId }: { personId: string }) {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.nextCursor,
   });
-  const groupsQuery = useQuery({
-    queryKey: ["people", false, "all"],
-    queryFn: () => aiJobsApi.people(false, true),
-  });
-  const allGroupsQuery = useQuery({
-    queryKey: ["people", true, "all"],
-    queryFn: () => aiJobsApi.people(true, true),
-  });
-  const groups = allGroupsQuery.data?.people ?? groupsQuery.data?.people ?? [];
-  const person =
-    query.data?.pages[0]?.person ??
-    groups.find((group) => group.id === personId);
+  const person = query.data?.pages[0]?.person;
   const items = useMemo(
     () => query.data?.pages.flatMap((page) => page.items) ?? [],
     [query.data],
@@ -223,9 +213,10 @@ function PersonAlbum({ personId }: { personId: string }) {
     onError: () => pushToast({ kind: "error", message: "保存人物分组失败" }),
   });
   const merge = useMutation({
-    mutationFn: () => aiJobsApi.mergePeople(personId, targetId),
-    onSuccess: async () => {
+    mutationFn: (targetId: string) => aiJobsApi.mergePeople(personId, targetId),
+    onSuccess: async (_result, targetId) => {
       await client.invalidateQueries({ queryKey: ["people"] });
+      setMergeDialogOpen(false);
       navigate(peopleRoute(targetId));
     },
     onError: () => pushToast({ kind: "error", message: "合并分组失败" }),
@@ -247,6 +238,10 @@ function PersonAlbum({ personId }: { personId: string }) {
         ? current.filter((value) => value !== key)
         : [...current, key],
     );
+
+  useEffect(() => {
+    setName(person?.name ?? "");
+  }, [person?.id, person?.name]);
 
   if (query.isError || (!person && !query.isLoading)) {
     return (
@@ -313,30 +308,13 @@ function PersonAlbum({ personId }: { personId: string }) {
           >
             {person?.hidden ? "取消隐藏" : "隐藏分组"}
           </button>
-          <label className="flex items-center gap-2 text-meta text-fg-muted">
-            <span>合并到</span>
-            <select
-              className="rounded-md border border-border bg-bg-elevated px-2 py-1.5 text-body text-fg"
-              value={targetId}
-              onChange={(event) => setTargetId(event.target.value)}
-            >
-              <option value="">选择人物</option>
-              {groups
-                .filter((group) => group.id !== personId && !group.hidden)
-                .map((group) => (
-                  <option key={group.id} value={group.id}>
-                    {group.name}
-                  </option>
-                ))}
-            </select>
-          </label>
           <button
             type="button"
             className="btn btn-sm btn-outline"
-            disabled={!targetId || merge.isPending}
-            onClick={() => merge.mutate()}
+            disabled={merge.isPending}
+            onClick={() => setMergeDialogOpen(true)}
           >
-            合并
+            合并人物
           </button>
         </div>
         {faces.length > 0 ? (
@@ -444,6 +422,14 @@ function PersonAlbum({ personId }: { personId: string }) {
                 pushToast({ kind: "error", message: "精选操作失败" }),
               );
           }}
+        />
+      ) : null}
+      {mergeDialogOpen ? (
+        <PeopleMergeDialog
+          personId={personId}
+          isMerging={merge.isPending}
+          onClose={() => setMergeDialogOpen(false)}
+          onMerge={(targetId) => merge.mutate(targetId)}
         />
       ) : null}
     </div>

@@ -296,13 +296,24 @@ func TestPeopleHTTPListReturnsTop50ByPhotoCount(t *testing.T) {
 		t.Fatalf("returned photo-count range = %d..%d, want %d..2", listBody.People[0].PhotoCount, listBody.People[49].PhotoCount, groupCount)
 	}
 
-	all := peopleHandlerRequest(t, app, fiber.MethodGet, "/api/people?includeAll=true", "")
-	var allBody struct {
-		People []services.PersonGroup `json:"people"`
+	var target services.PersonGroup
+	for _, group := range people.Groups(true) {
+		if group.PhotoCount == 1 {
+			target = group
+			break
+		}
 	}
-	decodePeopleBody(t, all, &allBody)
-	if len(allBody.People) != groupCount {
-		t.Fatalf("includeAll returned %d groups, want %d", len(allBody.People), groupCount)
+	if target.ID == "" {
+		t.Fatal("could not find a person outside the top 50")
+	}
+	search := peopleHandlerRequest(t, app, fiber.MethodGet, "/api/people?q="+target.ID, "")
+	var searchBody struct {
+		People []services.PersonGroup `json:"people"`
+		Limit  int                    `json:"limit"`
+	}
+	decodePeopleBody(t, search, &searchBody)
+	if len(searchBody.People) != 1 || searchBody.People[0].ID != target.ID || searchBody.Limit != 20 {
+		t.Fatalf("bounded search response = %+v; want target %s", searchBody, target.ID)
 	}
 }
 

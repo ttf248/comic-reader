@@ -3,6 +3,8 @@ package handlers
 import (
 	"errors"
 	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/tianlongxiang/local-gallery/internal/services"
@@ -18,6 +20,7 @@ type personMediaPage struct {
 }
 
 const peopleListLimit = 50
+const peopleSearchLimit = 20
 
 // PeopleHandler lists current photo-only person albums and clears all face-derived data.
 func PeopleHandler(people *services.PeopleService, jobs *services.AIJobService, catalog *services.ResourceCatalog, validatePath func(string) (string, error)) fiber.Handler {
@@ -37,9 +40,26 @@ func PeopleHandler(people *services.PeopleService, jobs *services.AIJobService, 
 			}
 			return c.JSON(fiber.Map{"ok": true, "cleared": true, "peopleEnabled": false})
 		}
+		query := strings.TrimSpace(c.Query("q"))
 		limit := peopleListLimit
-		if c.Query("includeAll") == "true" {
-			limit = 0
+		if query != "" {
+			if len([]rune(query)) < 2 {
+				return writeError(c, fiber.StatusBadRequest, "invalid_people_query", "search with at least two characters")
+			}
+			limit = peopleSearchLimit
+			if rawLimit := strings.TrimSpace(c.Query("limit")); rawLimit != "" {
+				parsed, err := strconv.Atoi(rawLimit)
+				if err != nil || parsed < 1 || parsed > 50 {
+					return writeError(c, fiber.StatusBadRequest, "invalid_people_limit", "limit must be between 1 and 50")
+				}
+				limit = parsed
+			}
+		} else if rawLimit := strings.TrimSpace(c.Query("limit")); rawLimit != "" {
+			parsed, err := strconv.Atoi(rawLimit)
+			if err != nil || parsed < 1 || parsed > peopleListLimit {
+				return writeError(c, fiber.StatusBadRequest, "invalid_people_limit", "limit must be between 1 and 50")
+			}
+			limit = parsed
 		}
 		snapshot := requestCatalogSnapshot(c, catalog)
 		if !snapshot.Ready() {
@@ -48,7 +68,7 @@ func PeopleHandler(people *services.PeopleService, jobs *services.AIJobService, 
 				"limit": limit, "groupingLimited": false, "revision": snapshot.Revision(),
 			})
 		}
-		groups, total := people.TopGroups(limit, c.Query("includeHidden") == "true", snapshot.IsPhotoImage)
+		groups, total := people.SearchGroups(query, limit, c.Query("includeHidden") == "true", snapshot.IsPhotoImage)
 		return c.JSON(fiber.Map{
 			"ok": true, "people": groups, "totalGroups": total, "limit": limit,
 			"groupingLimited": people.GroupingLimited(), "threshold": 0.363, "revision": snapshot.Revision(),
@@ -65,25 +85,16 @@ func PersonMediaHandler(people *services.PeopleService, jobs *services.AIJobServ
 		}
 		snapshot := requestCatalogSnapshot(c, catalog)
 		personID := c.Params("id")
-		var selected services.PersonGroup
-		for _, group := range people.Groups(true) {
-			if group.ID == personID {
-				selected = group
-				break
-			}
-		}
-		if selected.ID == "" {
+		selected, faces, exists := people.GroupAndFaces(personID)
+		if !exists {
 			return writeError(c, fiber.StatusNotFound, "person_not_found", "person group was not found")
 		}
 		unique := map[string]struct{}{}
 		items := make([]services.FeedMediaItem, 0)
 		facesByResource := map[string][]services.PersonFace{}
-		for _, face := range people.Faces(personID) {
+		for _, face := range faces {
 			facesByResource[face.ResourceID] = append(facesByResource[face.ResourceID], face)
 			if _, exists := unique[face.ResourceID]; exists {
-				continue
-			}
-			if _, err := currentFaceRecord(jobs, snapshot, face.ResourceID, validatePath); err != nil {
 				continue
 			}
 			item, exists := services.LookupLibraryFeedItem(snapshot, face.ResourceID)
@@ -121,15 +132,20 @@ func PersonMediaHandler(people *services.PeopleService, jobs *services.AIJobServ
 				return writeError(c, fiber.StatusInternalServerError, "page_cursor_unavailable", "person album page could not be created")
 			}
 		}
+		pageItems := make([]services.FeedMediaItem, 0, end-start)
 		pageFaces := make([]services.PersonFace, 0)
 		for _, item := range items[start:end] {
+			if _, err := currentFaceRecord(jobs, snapshot, item.ID, validatePath); err != nil {
+				continue
+			}
+			pageItems = append(pageItems, item)
 			pageFaces = append(pageFaces, facesByResource[item.ID]...)
 			if len(pageFaces) >= 500 {
 				pageFaces = pageFaces[:500]
 				break
 			}
 		}
-		page := personMediaPage{Revision: snapshot.Revision(), Person: selected, Items: items[start:end], Faces: pageFaces, Total: len(items), NextCursor: next}
+		page := personMediaPage{Revision: snapshot.Revision(), Person: selected, Items: pageItems, Faces: pageFaces, Total: len(items), NextCursor: next}
 		return c.JSON(fiber.Map{"ok": true, "page": page})
 	}
 }

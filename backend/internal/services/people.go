@@ -743,6 +743,117 @@ func (s *PeopleService) TopGroups(limit int, includeHidden bool, includeResource
 	return result, total
 }
 
+// SearchGroups returns a bounded set of people matching a display name or ID.
+// An empty query returns the most photographed groups, which gives merge dialogs
+// useful initial choices without sending the full people index to the browser.
+func (s *PeopleService) SearchGroups(query string, limit int, includeHidden bool, includeResource func(string) bool) ([]PersonGroup, int) {
+	query = strings.ToLower(strings.TrimSpace(query))
+	if query == "人物" {
+		query = ""
+	}
+	if strings.HasPrefix(query, "人物 ") {
+		query = strings.TrimSpace(strings.TrimPrefix(query, "人物 "))
+	}
+	if query == "" {
+		return s.TopGroups(limit, includeHidden, includeResource)
+	}
+	if limit <= 0 {
+		limit = 20
+	}
+
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	groups := make(map[string]*PersonGroup)
+	photos := make(map[string]map[string]struct{})
+	for _, face := range s.faces {
+		if includeResource != nil && !includeResource(face.ResourceID) {
+			continue
+		}
+		id := s.effectivePersonIDLocked(face)
+		if !includeHidden && s.manual.Hidden[id] {
+			continue
+		}
+		name := s.personNameLocked(id)
+		if !strings.Contains(strings.ToLower(name), query) && !strings.Contains(strings.ToLower(id), query) {
+			continue
+		}
+		group := groups[id]
+		if group == nil {
+			group = &PersonGroup{ID: id, Name: name, Hidden: s.manual.Hidden[id]}
+			groups[id] = group
+			photos[id] = make(map[string]struct{})
+		}
+		group.FaceCount++
+		photos[id][face.ResourceID] = struct{}{}
+		if group.CoverResourceID == "" || face.ResourceID < group.CoverResourceID {
+			group.CoverResourceID = face.ResourceID
+		}
+	}
+
+	selected := make(peopleGroupHeap, 0, min(limit, len(groups)))
+	heap.Init(&selected)
+	total := 0
+	for _, group := range groups {
+		group.PhotoCount = len(photos[group.ID])
+		total++
+		if len(selected) < limit {
+			heap.Push(&selected, *group)
+			continue
+		}
+		if peopleGroupRanksBefore(*group, selected[0]) {
+			selected[0] = *group
+			heap.Fix(&selected, 0)
+		}
+	}
+	result := append(make([]PersonGroup, 0, len(selected)), selected...)
+	sort.Slice(result, func(i, j int) bool {
+		return peopleGroupRanksBefore(result[i], result[j])
+	})
+	return result, total
+}
+
+// GroupAndFaces returns one group's current summary and its faces in one pass.
+func (s *PeopleService) GroupAndFaces(personID string) (PersonGroup, []PersonFace, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	group := PersonGroup{ID: personID, Name: s.personNameLocked(personID), Hidden: s.manual.Hidden[personID]}
+	photos := make(map[string]struct{})
+	faces := make([]PersonFace, 0)
+	for _, face := range s.faces {
+		if s.effectivePersonIDLocked(face) != personID {
+			continue
+		}
+		group.FaceCount++
+		photos[face.ResourceID] = struct{}{}
+		if group.CoverResourceID == "" || face.ResourceID < group.CoverResourceID {
+			group.CoverResourceID = face.ResourceID
+		}
+		face.PersonID = personID
+		face.embedding = nil
+		face.recordHash = ""
+		faces = append(faces, face)
+	}
+	if group.FaceCount == 0 {
+		return PersonGroup{}, nil, false
+	}
+	group.PhotoCount = len(photos)
+	sort.Slice(faces, func(i, j int) bool {
+		if faces[i].ResourceID == faces[j].ResourceID {
+			return faces[i].FaceIndex < faces[j].FaceIndex
+		}
+		return faces[i].ResourceID < faces[j].ResourceID
+	})
+	return group, faces, true
+}
+
+func (s *PeopleService) personNameLocked(personID string) string {
+	if name := s.manual.Names[personID]; name != "" {
+		return name
+	}
+	suffix := strings.TrimPrefix(personID, "p_")
+	return "人物 " + suffix[:min(6, len(suffix))]
+}
+
 func peopleGroupRanksBefore(left, right PersonGroup) bool {
 	if left.PhotoCount != right.PhotoCount {
 		return left.PhotoCount > right.PhotoCount

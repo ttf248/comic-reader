@@ -384,6 +384,76 @@ func TestPeopleServiceTopGroupsRanksPhotoCountsAndLimitsResults(t *testing.T) {
 	}
 }
 
+func TestPeopleServiceSearchGroupsIsBoundedAndFindsIDsOutsideTopFifty(t *testing.T) {
+	root := t.TempDir()
+	records := []AIAnalysisRecord{
+		peopleTestRecord("photo_first", peopleTestVector(0, 0)),
+		peopleTestRecord("photo_second", peopleTestVector(1, 0)),
+		peopleTestRecord("photo_third", peopleTestVector(2, 0)),
+	}
+	people, err := OpenPeopleService(filepath.Join(root, "state.json"), filepath.Join(root, "index.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := people.Sync(records); err != nil {
+		t.Fatal(err)
+	}
+	all := people.Groups(true)
+	if len(all) != 3 {
+		t.Fatalf("people groups = %d, want 3", len(all))
+	}
+	target := all[0]
+	if err := people.Rename(target.ID, "家人同伴"); err != nil {
+		t.Fatal(err)
+	}
+	byName, total := people.SearchGroups("家人", 2, false, nil)
+	if total != 1 || len(byName) != 1 || byName[0].ID != target.ID {
+		t.Fatalf("name search = %+v, total %d", byName, total)
+	}
+	byID, total := people.SearchGroups(target.ID[len(target.ID)-6:], 2, false, nil)
+	if total != 1 || len(byID) != 1 || byID[0].ID != target.ID {
+		t.Fatalf("ID search = %+v, total %d", byID, total)
+	}
+	initial, total := people.SearchGroups("", 2, false, nil)
+	if len(initial) != 2 || total != 3 {
+		t.Fatalf("empty search = %d groups, total %d; want top 2 of 3", len(initial), total)
+	}
+	missing, total := people.SearchGroups("不存在", 20, false, nil)
+	if missing == nil || len(missing) != 0 || total != 0 {
+		t.Fatalf("missing search = %#v, total %d; want an empty non-nil result", missing, total)
+	}
+}
+
+func TestPeopleServiceGroupAndFacesReturnsOneGroupWithoutEmbeddings(t *testing.T) {
+	root := t.TempDir()
+	people, err := OpenPeopleService(filepath.Join(root, "state.json"), filepath.Join(root, "index.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := people.Sync([]AIAnalysisRecord{
+		peopleTestRecord("photo_a", peopleTestVector(0, 0)),
+		peopleTestRecord("photo_b", peopleTestVector(0, .05)),
+		peopleTestRecord("photo_other", peopleTestVector(1, 0)),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var groupID string
+	for _, group := range people.Groups(true) {
+		if group.FaceCount == 2 {
+			groupID = group.ID
+		}
+	}
+	group, faces, exists := people.GroupAndFaces(groupID)
+	if !exists || group.FaceCount != 2 || group.PhotoCount != 2 || len(faces) != 2 {
+		t.Fatalf("group summary = %+v, faces %d, exists %v", group, len(faces), exists)
+	}
+	for _, face := range faces {
+		if face.embedding != nil || face.recordHash != "" {
+			t.Fatal("group face response retained private embedding data")
+		}
+	}
+}
+
 func peopleTestAngle(degrees float64) []float32 {
 	vector := make([]float32, peopleEmbeddingDimension)
 	vector[0] = float32(math.Cos(degrees * math.Pi / 180))

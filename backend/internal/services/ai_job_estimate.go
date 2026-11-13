@@ -130,6 +130,10 @@ func (s *AIJobService) Estimate(ctx context.Context) (AIJobEstimate, error) {
 
 	if !estimate.LibraryReady {
 		estimate.Modules = estimateModules(modules, peopleEnabled, 0, nil, versions, samples)
+		estimate.Sequence = AIJobEstimateSequence{
+			Incremental: AIJobEstimateTotal{Modules: []string{}},
+			Full:        AIJobEstimateTotal{Modules: []string{}},
+		}
 		return estimate, nil
 	}
 
