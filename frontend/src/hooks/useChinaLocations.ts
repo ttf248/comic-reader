@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import {
+  keepPreviousData,
   useInfiniteQuery,
   useQueries,
   useQuery,
@@ -10,12 +11,17 @@ import type {
   ChinaLocationRegions,
   ChinaLocationSummary,
   ChinaLocationVisits,
+  ChinaPoints,
   ChinaTimeRange,
 } from "../api/aiJobs";
 
 /** 全国省级地图的查询键。 */
-function chinaSummaryQueryKey(from: string | null, to: string | null) {
-  return ["china-locations", "summary", from, to] as const;
+function chinaSummaryQueryKey(
+  scope: "window" | "all",
+  from: string | null,
+  to: string | null,
+) {
+  return ["china-locations", "summary", scope, from, to] as const;
 }
 
 /** 绘图轮廓的查询键。 */
@@ -85,9 +91,23 @@ export function useChinaSummary(
   const from = timeRange?.from ?? null;
   const to = timeRange?.to ?? null;
   return useQuery({
-    queryKey: chinaSummaryQueryKey(from, to),
+    queryKey: chinaSummaryQueryKey("window", from, to),
     queryFn: () =>
       aiJobsApi.chinaLocations(timeRange).then((result) => result.locations),
+  });
+}
+
+/**
+ * 全库的月度分布与照片数，不带时间区间。
+ *
+ * 时间带要靠它画出那把尺子：窗口只是尺子上的一段高亮，尺子本身不能随
+ * 窗口变。查询键与带区间的那个分开，否则两者会互相顶掉。
+ */
+export function useChinaSummaryAll(): UseQueryResult<ChinaLocationSummary> {
+  return useQuery({
+    queryKey: chinaSummaryQueryKey("all", null, null),
+    queryFn: () =>
+      aiJobsApi.chinaLocations().then((result) => result.locations),
   });
 }
 
@@ -134,22 +154,32 @@ export function useChinaOutline(parent: number | null, enabled = true) {
 
 /** 地点索引的查询键。 */
 function chinaPlacesQueryKey(
+  scope: "window" | "all",
   level: string,
   parent: number | null,
   from: string | null,
   to: string | null,
 ) {
-  return ["china-locations", "places", level, parent, from, to] as const;
+  return ["china-locations", "places", scope, level, parent, from, to] as const;
 }
 
 /** 行程的查询键。 */
 function chinaTripsQueryKey(
+  scope: "window" | "all",
   granularity: string,
   gapDays: number,
   from: string | null,
   to: string | null,
 ) {
-  return ["china-locations", "trips", granularity, gapDays, from, to] as const;
+  return [
+    "china-locations",
+    "trips",
+    scope,
+    granularity,
+    gapDays,
+    from,
+    to,
+  ] as const;
 }
 
 /**
@@ -165,10 +195,26 @@ export function useChinaPlaces(
   const from = timeRange?.from ?? null;
   const to = timeRange?.to ?? null;
   return useQuery({
-    queryKey: chinaPlacesQueryKey(level, parent, from, to),
+    queryKey: chinaPlacesQueryKey("window", level, parent, from, to),
     queryFn: () =>
       aiJobsApi
         .chinaPlaces(level, parent, timeRange)
+        .then((result) => result.places.items),
+  });
+}
+
+/**
+ * 去过的所有地方，不带时间区间。
+ *
+ * 地图上的形状取这一份：拖时间区间时地图不该重画 —— 位置稳定的图比
+ * 每次都换一张的图好读。区间里的张数另取一份。
+ */
+export function useChinaPlacesAll(level: string, parent: number | null) {
+  return useQuery({
+    queryKey: chinaPlacesQueryKey("all", level, parent, null, null),
+    queryFn: () =>
+      aiJobsApi
+        .chinaPlaces(level, parent, undefined)
         .then((result) => result.places.items),
   });
 }
@@ -199,10 +245,29 @@ export function useChinaTrips(
   const from = timeRange?.from ?? null;
   const to = timeRange?.to ?? null;
   return useQuery({
-    queryKey: chinaTripsQueryKey(granularity, gapDays ?? 0, from, to),
+    queryKey: chinaTripsQueryKey("window", granularity, gapDays ?? 0, from, to),
     queryFn: () =>
       aiJobsApi
         .chinaTrips(granularity, timeRange, gapDays)
+        .then((result) => result.trips.items),
+  });
+}
+
+/**
+ * 全库的行程与停留，不带时间区间。
+ *
+ * 行程不随时间区间重切：段是按「粒度 + 间隔」切出来的，照片端点按段
+ * 的下标寻址，两边必须同一套口径。带区间的行程会随区间重排，段的
+ * 下标就再也指不到同一段照片了。
+ *
+ * 因此时间带画的是全量行程，区间只决定哪些段被点亮。
+ */
+export function useChinaTripsAll(granularity: string, gapDays?: number) {
+  return useQuery({
+    queryKey: chinaTripsQueryKey("all", granularity, gapDays ?? 0, null, null),
+    queryFn: () =>
+      aiJobsApi
+        .chinaTrips(granularity, undefined, gapDays)
         .then((result) => result.trips.items),
   });
 }
@@ -234,6 +299,87 @@ export function useChinaTripMedia(
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page) => page.nextCursor,
     enabled: index !== null,
+  });
+}
+
+/** 点位聚合的查询键。 */
+function chinaPointsQueryKey(from: string | null, to: string | null, cell: number) {
+  return ["china-locations", "points", from, to, cell] as const;
+}
+
+/** 按区划码取轮廓的查询键。 */
+function chinaFeaturesQueryKey(adcodes: number[]) {
+  return ["china-locations", "features", adcodes.join(",")] as const;
+}
+
+/** 一批区划码的上限：URL 放不下更多，轮廓本身也不小。 */
+const CHINA_FEATURE_BATCH = 200;
+
+/**
+ * 照片位置的网格聚合。
+ *
+ * 点位是地图的密度来源：行政区只说「落在哪个市」，点位才画得出城市
+ * 的样子。坐标只以网格下发。
+ */
+export function useChinaPoints(
+  timeRange?: ChinaTimeRange,
+  cell = 0.02,
+): UseQueryResult<ChinaPoints> {
+  const from = timeRange?.from ?? null;
+  const to = timeRange?.to ?? null;
+  return useQuery({
+    queryKey: chinaPointsQueryKey(from, to, cell),
+    queryFn: () =>
+      aiJobsApi.chinaPoints(timeRange, cell).then((result) => result.points),
+    // 换区间时先留着上一批点：地图不该闪一下空白。
+    placeholderData: keepPreviousData,
+  });
+}
+
+/**
+ * 按区划码取绘图轮廓。
+ *
+ * 地图画的单元就是「去过的地方」本身，按各自的区划码取形状 —— 直辖市、
+ * 省直辖县级市这些层级不齐的地方，前端推不出父级。
+ */
+export function useChinaFeatures(adcodes: number[]) {
+  const key = useMemo(
+    () => [...new Set(adcodes)].sort((left, right) => left - right),
+    [adcodes],
+  );
+  const batches = useMemo(() => {
+    const result: number[][] = [];
+    for (let index = 0; index < key.length; index += CHINA_FEATURE_BATCH) {
+      result.push(key.slice(index, index + CHINA_FEATURE_BATCH));
+    }
+    return result;
+  }, [key]);
+  const results = useQueries({
+    queries: batches.map((batch) => ({
+      queryKey: chinaFeaturesQueryKey(batch),
+      queryFn: () =>
+        aiJobsApi.chinaFeatures(batch).then((result) => result.features),
+      staleTime: Infinity,
+    })),
+  });
+  return useMemo(
+    () => results.flatMap((result) => result.data ?? []),
+    [results],
+  );
+}
+
+/**
+ * 全国省级轮廓。
+ *
+ * 现有的 useChinaOutline 走的是「取上级的下级」，而上级必须是正整数，
+ * 拿全国省图要用 geometry/province。
+ */
+export function useChinaProvinceOutline() {
+  return useQuery({
+    queryKey: ["china-locations", "outline", "province"] as const,
+    queryFn: () =>
+      aiJobsApi.chinaGeometry("province").then((result) => result.features),
+    staleTime: Infinity,
   });
 }
 

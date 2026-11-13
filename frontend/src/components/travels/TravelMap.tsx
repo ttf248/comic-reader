@@ -10,7 +10,9 @@ import type { ChinaLocationGeometry } from "../../api/aiJobs";
 import {
   boundsOfPhotos,
   createMapProjection,
+  fitViewport,
   levelOpacity,
+  photoViewport,
   regionPath,
   shareOf,
   type MapRegion,
@@ -94,10 +96,13 @@ export default function TravelMap({
   );
 
   const photoBounds = useMemo(() => boundsOfPhotos(ordered), [ordered]);
-  const projection = useMemo(
+  const projection = useMemo(() => createMapProjection(ordered), [ordered]);
+  const viewport = useMemo(
     () =>
-      createMapProjection(ordered, crop && cropToPhotos ? photoBounds : null),
-    [crop, cropToPhotos, ordered, photoBounds],
+      crop && cropToPhotos
+        ? photoViewport(projection, photoBounds)
+        : fitViewport(projection),
+    [crop, cropToPhotos, photoBounds, projection],
   );
 
   const paths = useMemo(
@@ -216,7 +221,7 @@ export default function TravelMap({
         <svg
           role="group"
           aria-label={`${scopeLabel}照片地图，可用方向键在区域间移动，回车打开该地区`}
-          viewBox={projection.viewBox}
+          viewBox={projection.viewBoxFor(viewport)}
         >
           <g>
             {paths.map(({ region, path }, index) => {

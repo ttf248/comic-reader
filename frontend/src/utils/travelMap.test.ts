@@ -3,12 +3,21 @@ import type { ChinaLocationGeometry } from "../api/aiJobs";
 import {
   boundsOfPhotos,
   createMapProjection,
+  fillMonthRange,
+  fitViewport,
   levelOpacity,
   monthBuckets,
+  monthIndex,
+  monthKey,
+  MAX_MAP_ZOOM,
+  panViewportBy,
+  photoViewport,
+  pointRadius,
   polygonMaximumLatitude,
   regionLabelPoint,
   regionPath,
   shareOf,
+  zoomViewportAt,
   type MapRegion,
 } from "./travelMap";
 
@@ -153,12 +162,100 @@ describe("离线地图几何", () => {
         ],
       },
     };
-    const full = createMapProjection([east, west]);
-    const cropped = createMapProjection([east, west], boundsOfPhotos([east, west]));
-    // 裁剪之后画面里只有内容那一片：同样一段经度在屏幕上占得更宽。
-    const fullWidth = full.project([117, 40])[0] - full.project([115, 40])[0];
-    const croppedWidth =
-      cropped.project([117, 40])[0] - cropped.project([115, 40])[0];
-    expect(croppedWidth).toBeGreaterThan(fullWidth);
+    const projection = createMapProjection([east, west]);
+    const bounds = boundsOfPhotos([east, west]);
+    expect(bounds).not.toBeNull();
+    const fit = fitViewport(projection);
+    const cropped = photoViewport(projection, bounds);
+    // 裁剪之后画面里只有内容那一片：视口更窄，同样一段经度占得更宽。
+    expect(cropped.width).toBeLessThan(fit.width);
+    const fitWidth = fit.width;
+    const croppedWidth = cropped.width;
+    const fullSpan = projection.project([117, 40])[0] - projection.project([115, 40])[0];
+    expect(fullSpan / croppedWidth).toBeGreaterThan(fullSpan / fitWidth);
+  });
+
+  it("视口换算出的 viewBox 长宽比恒定", () => {
+    const projection = createMapProjection([region()]);
+    const viewport = fitViewport(projection);
+    const [, , width, height] = projection
+      .viewBoxFor(viewport)
+      .split(" ")
+      .map(Number);
+    expect(width).toBe(projection.worldWidth);
+    expect(height / width).toBeCloseTo(
+      projection.worldHeight / projection.worldWidth,
+      6,
+    );
+  });
+
+  it("以指针为锚点缩放时，指针下的地物不动", () => {
+    const projection = createMapProjection([region()]);
+    const viewport = fitViewport(projection);
+    const zoomed = zoomViewportAt(projection, viewport, 4, 0.75, 0.25);
+    // 锚点在缩放前后的基坐标位置应当一致。
+    const before = {
+      x: viewport.centerX + (0.75 - 0.5) * viewport.width,
+      y:
+        viewport.centerY +
+        (0.25 - 0.5) *
+          viewport.width *
+          (projection.worldHeight / projection.worldWidth),
+    };
+    const after = {
+      x: zoomed.centerX + (0.75 - 0.5) * zoomed.width,
+      y:
+        zoomed.centerY +
+        (0.25 - 0.5) *
+          zoomed.width *
+          (projection.worldHeight / projection.worldWidth),
+    };
+    expect(after.x).toBeCloseTo(before.x, 6);
+    expect(after.y).toBeCloseTo(before.y, 6);
+    expect(zoomed.width).toBeCloseTo(viewport.width / 4, 6);
+  });
+
+  it("缩放有上下限，拖不出基坐标", () => {
+    const projection = createMapProjection([region()]);
+    const fit = fitViewport(projection);
+    const zoomedOut = zoomViewportAt(projection, fit, 0.01);
+    expect(zoomedOut.width).toBeCloseTo(fit.width, 6);
+    const zoomedIn = zoomViewportAt(projection, fit, 1000);
+    expect(zoomedIn.width).toBeGreaterThanOrEqual(
+      projection.worldWidth / MAX_MAP_ZOOM - 1e-6,
+    );
+    const panned = panViewportBy(projection, fit, 100, 100);
+    expect(panned.centerX).toBeLessThanOrEqual(projection.worldWidth * 1.25 + 1e-6);
+  });
+
+  it("点的半径按张数开方缩放", () => {
+    const world = 1000;
+    const small = pointRadius(10, 100, world, world);
+    const large = pointRadius(100, 100, world, world);
+    // 十倍的张数不该有十倍的面积。
+    expect(large / small).toBeLessThan(3);
+    expect(large).toBeGreaterThan(small);
+    // 视口放大时半径按比例缩小，屏幕上的大小不变。
+    expect(pointRadius(100, 100, world / 4, world)).toBeCloseTo(large / 4, 6);
+  });
+
+  it("月份序号能来回换", () => {
+    expect(monthIndex("2019-05")).toBe(monthIndex("2019-05"));
+    expect(monthIndex("2020-05") - monthIndex("2019-05")).toBe(12);
+    expect(monthKey(monthIndex("2019-05"))).toBe("2019-05");
+  });
+
+  it("空档的月份也要占位，否则稀疏的年份会被压扁", () => {
+    const filled = fillMonthRange([
+      { month: "2019-01", count: 3 },
+      { month: "2019-04", count: 2 },
+    ]);
+    expect(filled.map((entry) => entry.month)).toEqual([
+      "2019-01",
+      "2019-02",
+      "2019-03",
+      "2019-04",
+    ]);
+    expect(filled[1].count).toBe(0);
   });
 });

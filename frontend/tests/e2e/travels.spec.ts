@@ -22,20 +22,58 @@ test("侧栏的足迹入口打开的是新的地点页", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "足迹" })).toBeVisible();
 });
 
-test("足迹页按时间排成段流，每段带一条照片带", async ({ page }) => {
+test("地图常驻在页面上，照片位置画成点云", async ({ page }) => {
   await page.goto("/photo/travels");
 
-  const ledger = page.getByRole("region", { name: /规模/ });
-  await expect(ledger).toBeVisible();
-  await expect(ledger.getByText("段足迹")).toBeVisible();
+  // 地图不用选中什么就一直在：它是页面的第一眼。
+  const map = page.getByRole("group", { name: /照片地图/ });
+  await expect(map).toBeVisible();
+
+  // 临时库里三个坐标（杭州 ×3、上海 ×2、北京 ×1）—— 这一条断言是
+  // EXIF → 匹配 → 聚合 → 端点 → 渲染整条链路的端到端验证。
+  await expect(page.locator(".travel-map-canvas__point")).toHaveCount(3);
+});
+
+test("时间带按真实时间铺开，两端能拖出一个区间", async ({ page }) => {
+  await page.goto("/photo/travels");
+
+  const ribbon = page.getByRole("region", { name: "时间带" });
+  await expect(ribbon).toBeVisible();
+  const handles = ribbon.getByRole("slider");
+  await expect(handles).toHaveCount(2);
+  // 临时库的照片拍在 2024-05 与 2025-09：尺子量的是整条历史。
+  await expect(handles.first()).toHaveAttribute("aria-valuetext", "2024-05");
+
+  // 拖右端的手柄：区间写进地址。
+  // 时间带在页面下半屏，先滚到可见处 —— 否则鼠标坐标落在视口之外。
+  const end = handles.nth(1);
+  await end.scrollIntoViewIfNeeded();
+  const box = await end.boundingBox();
+  expect(box).not.toBeNull();
+  await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box!.x - 60, box!.y + box!.height / 2, { steps: 8 });
+  await page.mouse.up();
+
+  await expect(page).toHaveURL(/from=/);
+  await expect(page).toHaveURL(/to=/);
+});
+
+test("行程一行一段，点开才展开照片", async ({ page }) => {
+  await page.goto("/photo/travels");
 
   // 杭州 → 上海相隔一天，是同一段行程；北京隔了一年，另起一段。
-  const segment = page.getByRole("region", {
-    name: "2024-05-02 至 2024-05-03",
-  });
+  const segment = page.getByRole("region", { name: "2024-05-02 至 2024-05-03" });
   await expect(segment).toBeVisible();
   await expect(segment.getByRole("button", { name: /杭州市/ })).toBeVisible();
   await expect(segment.getByRole("button", { name: /上海市/ })).toBeVisible();
+
+  // 收起的时候没有照片带。
+  await expect(
+    segment.getByRole("button", { name: "看这一段的照片" }),
+  ).toHaveCount(0);
+
+  await segment.getByRole("button", { name: /2024-05-02 至 2024-05-03/ }).click();
 
   // 照片带是这一段的门面：五张照片都在带子上。
   await expect(
@@ -47,26 +85,15 @@ test("足迹页按时间排成段流，每段带一条照片带", async ({ page 
   ).toBeVisible();
 });
 
-test("选中一段，右栏才出现这段的说明", async ({ page }) => {
+test("展开一段，就地把这一段的照片取回来", async ({ page }) => {
   await page.goto("/photo/travels");
 
-  // 面板平时不存在：地图是一件按需出现的配图，不常驻版面。
-  await expect(page.getByRole("complementary", { name: "上下文" })).toHaveCount(
-    0,
-  );
+  const segment = page.getByRole("region", { name: "2024-05-02 至 2024-05-03" });
+  await segment.getByRole("button", { name: /2024-05-02 至 2024-05-03/ }).click();
 
-  await page
-    .getByRole("button", { name: /2024-05-02 至 2024-05-03/ })
-    .click();
-
-  const panel = page.getByRole("complementary", { name: "上下文" });
-  await expect(panel).toBeVisible();
-  await expect(panel.getByRole("heading", { name: "这段行程" })).toBeVisible();
-  // 地图画的是这段走过的行政区。
-  await expect(panel.getByRole("group", { name: /照片地图/ })).toBeVisible();
-  const stops = panel.locator(".travel-context__stops");
-  await expect(stops.getByText("杭州市")).toBeVisible();
-  await expect(stops.getByText("上海市")).toBeVisible();
+  await expect(segment.locator(".travel-segment__grid")).toBeVisible();
+  // 整段的五张照片都在展开后的照片墙里。
+  await expect(segment.locator(".travel-segment__grid img")).toHaveCount(5);
 });
 
 test("「地方」列出去过的地方", async ({ page }) => {
@@ -74,24 +101,11 @@ test("「地方」列出去过的地方", async ({ page }) => {
 
   await page.getByRole("button", { name: "地方" }).click();
 
-  const panel = page.getByRole("complementary", { name: "上下文" });
-  await expect(panel.getByText("去过的地方")).toBeVisible();
+  const panel = page.getByRole("complementary", { name: "去过的地方" });
+  await expect(panel).toBeVisible();
   await expect(panel.getByText("杭州市")).toBeVisible();
   await expect(panel.getByText("上海市")).toBeVisible();
   await expect(panel.getByText("北京市")).toBeVisible();
-});
-
-test("展开一段，就地把这一段的照片取回来", async ({ page }) => {
-  await page.goto("/photo/travels");
-
-  const segment = page.getByRole("region", {
-    name: "2024-05-02 至 2024-05-03",
-  });
-  await segment.getByRole("button", { name: "看这 5 张" }).click();
-
-  await expect(segment.locator(".travel-segment__grid")).toBeVisible();
-  // 整段的五张照片都在展开后的照片墙里。
-  await expect(segment.locator(".travel-segment__grid img")).toHaveCount(5);
 });
 
 test("点地名进这个地方，并且带着筛选条件", async ({ page }) => {

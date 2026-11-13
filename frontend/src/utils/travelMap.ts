@@ -23,12 +23,41 @@ export interface MapBounds {
   maxLatitude: number;
 }
 
+/**
+ * 地图的视口。
+ *
+ * 投影把经纬度换算成一套固定的「基坐标」，视口决定基坐标里哪一块看得
+ * 见。两者分开，缩放与平移才只是换视口 —— 路径与点位不必重算。
+ */
+export interface MapViewport {
+  /** 视口中心（基坐标）。 */
+  centerX: number;
+  centerY: number;
+  /** 视口宽度（基坐标单位）。 */
+  width: number;
+}
+
 export interface MapProjection {
   project: (point: ChinaLocationPoint) => [number, number];
   /** SVG 的 viewBox，按本层区域的实际长宽比给出。 */
   viewBox: string;
   width: number;
   height: number;
+  /** 基坐标的宽高。视口的取值范围就是它。 */
+  worldWidth: number;
+  worldHeight: number;
+  /**
+   * 视口 → SVG 的 viewBox。
+   *
+   * aspect 是画布的高宽比（容器的高除以宽）。给了它，viewBox 就与画布
+   * 同形，图铺满整块画布而不是缩在中间、两边各空一截。
+   */
+  viewBoxFor: (viewport: MapViewport, aspect?: number) => string;
+}
+
+/** 画布的默认高宽比：与基坐标同形。 */
+function worldAspect(projection: MapProjection): number {
+  return projection.worldHeight / projection.worldWidth;
 }
 
 /**
@@ -48,16 +77,16 @@ const MAP_MAX_HEIGHT = 1400;
 /** 图上什么都不画时的占位画布。 */
 const EMPTY_VIEW_BOX = "0 0 1000 750";
 
+/** 视口最多能放大到铺满的多少倍。 */
+export const MAX_MAP_ZOOM = 32;
+
 /**
  * 造一个投影。
  *
- * bounds 用来把画面裁到有照片的那一片：一张库里的照片往往只落在几个
- * 省，整张中国地图里大半是空的，裁到内容范围才看得见。
+ * 投影覆盖本层所有区域的完整范围，缩放与平移交给视口：一张静态图片
+ * 只能整张缩放，一张地图得能推到某一座城市里。
  */
-export function createMapProjection(
-  regions: MapRegion[],
-  bounds?: MapBounds | null,
-): MapProjection {
+export function createMapProjection(regions: MapRegion[]): MapProjection {
   let minLongitude = Number.POSITIVE_INFINITY;
   let maxLongitude = Number.NEGATIVE_INFINITY;
   let minLatitude = Number.POSITIVE_INFINITY;
@@ -76,18 +105,15 @@ export function createMapProjection(
       }
     }
   }
-  if (bounds) {
-    minLongitude = Math.max(minLongitude, bounds.minLongitude);
-    maxLongitude = Math.min(maxLongitude, bounds.maxLongitude);
-    minLatitude = Math.max(minLatitude, bounds.minLatitude);
-    maxLatitude = Math.min(maxLatitude, bounds.maxLatitude);
-  }
   if (!Number.isFinite(minLongitude) || !Number.isFinite(minLatitude)) {
     return {
       project: () => [0, 0],
       viewBox: EMPTY_VIEW_BOX,
       width: MAP_WIDTH,
       height: 750,
+      worldWidth: MAP_WIDTH,
+      worldHeight: 750,
+      viewBoxFor: () => EMPTY_VIEW_BOX,
     };
   }
 
@@ -102,15 +128,204 @@ export function createMapProjection(
   const drawnWidth = spanX * scale;
   const drawnHeight = spanY * scale;
   const offsetX = (MAP_WIDTH - drawnWidth) / 2;
+  const worldHeight = Math.round(drawnHeight);
+  const project = ([longitude, latitude]: ChinaLocationPoint): [number, number] => [
+    offsetX + (longitude * longitudeScale - scaledMin) * scale,
+    (maxLatitude - latitude) * scale,
+  ];
   return {
-    project: ([longitude, latitude]) => [
-      offsetX + (longitude * longitudeScale - scaledMin) * scale,
-      (maxLatitude - latitude) * scale,
-    ],
-    viewBox: `0 0 ${MAP_WIDTH} ${Math.round(drawnHeight)}`,
+    project,
+    viewBox: `0 0 ${MAP_WIDTH} ${worldHeight}`,
     width: MAP_WIDTH,
-    height: Math.round(drawnHeight),
+    height: worldHeight,
+    worldWidth: MAP_WIDTH,
+    worldHeight,
+    viewBoxFor: (viewport: MapViewport, aspect?: number) => {
+      const width = Math.max(viewport.width, 1);
+      const height = width * (aspect ?? worldHeight / MAP_WIDTH);
+      return `${viewport.centerX - width / 2} ${viewport.centerY - height / 2} ${width} ${height}`;
+    },
   };
+}
+
+/**
+ * 铺满整个基坐标的视口。
+ *
+ * aspect 是画布的高宽比。取「装满画布」而不是「把内容整个放进画布」：
+ * 地图是要铺满一块画布的，露出来的空白不是内容。
+ */
+export function fitViewport(
+  projection: MapProjection,
+  aspect?: number,
+): MapViewport {
+  const ratio = aspect ?? worldAspect(projection);
+  return {
+    centerX: projection.worldWidth / 2,
+    centerY: projection.worldHeight / 2,
+    width: Math.min(projection.worldWidth, projection.worldHeight / ratio),
+  };
+}
+
+/**
+ * 视口的缩放倍数：1 是铺满。
+ */
+export function viewportZoom(
+  projection: MapProjection,
+  viewport: MapViewport,
+): number {
+  return projection.worldWidth / Math.max(viewport.width, 1);
+}
+
+/**
+ * 把视口夹在合理范围内。
+ *
+ * 放大有上限（再推行政区已经糊了），缩小不下于铺满；中心也不许拖出
+ * 基坐标太远，否则会拖到一片空白里。
+ */
+export function clampViewport(
+  projection: MapProjection,
+  viewport: MapViewport,
+  aspect?: number,
+): MapViewport {
+  const ratio = aspect ?? worldAspect(projection);
+  const minimum = projection.worldWidth / MAX_MAP_ZOOM;
+  // 最宽的一档就是「铺满」：画布比基坐标更宽时，铺满要看得更多。
+  const maximum = Math.max(projection.worldWidth, projection.worldHeight / ratio);
+  const width = Math.min(Math.max(viewport.width, minimum), maximum);
+  const slack = projection.worldWidth * 0.25;
+  return {
+    centerX: Math.min(
+      Math.max(viewport.centerX, -slack),
+      projection.worldWidth + slack,
+    ),
+    centerY: Math.min(
+      Math.max(viewport.centerY, -slack),
+      projection.worldHeight + slack,
+    ),
+    width,
+  };
+}
+
+/**
+ * 以某个屏幕位置为锚点缩放。
+ *
+ * anchorX 与 anchorY 是该位置在容器里的比例（0 到 1）。缩放时那个位置
+ * 下的地物不动 —— 滚轮缩放要跟着指针走，不是跟着中心走。
+ */
+export function zoomViewportAt(
+  projection: MapProjection,
+  viewport: MapViewport,
+  factor: number,
+  anchorX = 0.5,
+  anchorY = 0.5,
+  aspect?: number,
+): MapViewport {
+  const ratio = aspect ?? worldAspect(projection);
+  const worldX = viewport.centerX + (anchorX - 0.5) * viewport.width;
+  const worldY = viewport.centerY + (anchorY - 0.5) * viewport.width * ratio;
+  const next = clampViewport(
+    projection,
+    {
+      centerX: viewport.centerX,
+      centerY: viewport.centerY,
+      width: viewport.width / factor,
+    },
+    ratio,
+  );
+  return {
+    centerX: worldX - (anchorX - 0.5) * next.width,
+    centerY: worldY - (anchorY - 0.5) * next.width * ratio,
+    width: next.width,
+  };
+}
+
+/**
+ * 平移视口。
+ *
+ * deltaX 与 deltaY 是位移占容器宽高的比例，正数表示内容往右 / 往下移。
+ */
+export function panViewportBy(
+  projection: MapProjection,
+  viewport: MapViewport,
+  deltaX: number,
+  deltaY: number,
+  aspect?: number,
+): MapViewport {
+  const ratio = aspect ?? worldAspect(projection);
+  return clampViewport(
+    projection,
+    {
+      centerX: viewport.centerX - deltaX * viewport.width,
+      centerY: viewport.centerY - deltaY * viewport.width * ratio,
+      width: viewport.width,
+    },
+    ratio,
+  );
+}
+
+/**
+ * 缩到有照片的那一片的视口。
+ *
+ * 一张库里的照片往往只落在几个省，整张中国地图里大半是空的；裁到内容
+ * 范围，那一片才填满画面。
+ */
+export function photoViewport(
+  projection: MapProjection,
+  bounds: MapBounds | null,
+  aspect?: number,
+): MapViewport {
+  if (!bounds) return fitViewport(projection, aspect);
+  const corners: ChinaLocationPoint[] = [
+    [bounds.minLongitude, bounds.maxLatitude],
+    [bounds.maxLongitude, bounds.maxLatitude],
+    [bounds.minLongitude, bounds.minLatitude],
+    [bounds.maxLongitude, bounds.minLatitude],
+  ];
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let minY = Number.POSITIVE_INFINITY;
+  let maxY = Number.NEGATIVE_INFINITY;
+  for (const corner of corners) {
+    const [x, y] = projection.project(corner);
+    minX = Math.min(minX, x);
+    maxX = Math.max(maxX, x);
+    minY = Math.min(minY, y);
+    maxY = Math.max(maxY, y);
+  }
+  const ratio = aspect ?? worldAspect(projection);
+  const contentWidth = Math.max(maxX - minX, 1);
+  const contentHeight = Math.max(maxY - minY, 1);
+  // 取小的一边：画面装满内容，多出来的一边裁掉。
+  const width = Math.min(
+    Math.min(projection.worldWidth, projection.worldHeight / ratio) * 2,
+    Math.min(contentWidth, contentHeight / ratio) * 1.12,
+  );
+  return clampViewport(
+    projection,
+    {
+      centerX: (minX + maxX) / 2,
+      centerY: (minY + maxY) / 2,
+      width,
+    },
+    ratio,
+  );
+}
+
+/**
+ * 点的半径（基坐标单位）。
+ *
+ * 张数按开方缩放：差十倍的张数不该差十倍的面积。半径随视口一起缩，
+ * 屏幕上的大小不变 —— 放大地图时点不会糊成一坨。
+ */
+export function pointRadius(
+  count: number,
+  maxCount: number,
+  viewportWidth: number,
+  worldWidth: number,
+): number {
+  const share = maxCount > 0 ? Math.sqrt(count / maxCount) : 0;
+  const units = 2.5 + 7 * share;
+  return units * (viewportWidth / Math.max(worldWidth, 1));
 }
 
 /**
@@ -267,6 +482,50 @@ export function monthBuckets(months: MonthCount[]): YearBucket[] {
   return [...counts.entries()]
     .map(([year, count]) => ({ year, count }))
     .sort((left, right) => left.year.localeCompare(right.year));
+}
+
+/**
+ * 月份的序号。
+ *
+ * 时间带按真实时间比例铺开，因此每��月都要占一个位置：2011 年 11 月的
+ * 序号与 2022 年 10 月的序号之间，隔着多少个月就是多少个月。
+ */
+export function monthIndex(month: string): number {
+  const year = Number(month.slice(0, 4));
+  const value = Number(month.slice(5, 7));
+  if (!Number.isFinite(year) || !Number.isFinite(value)) return Number.NaN;
+  return year * 12 + (value - 1);
+}
+
+/**
+ * 序号的月份写法（"YYYY-MM"）。
+ */
+export function monthKey(index: number): string {
+  const year = Math.floor(index / 12);
+  const value = (index % 12) + 1;
+  return `${String(year).padStart(4, "0")}-${String(value).padStart(2, "0")}`;
+}
+
+/**
+ * 补齐两个月之间的空档。
+ *
+ * 逐月分布里只有有照片的月份。时间带按真实时间比例铺开，缺一个月的位置
+ * 就会让后面的月份整体前移 —— 稀疏的那几年会被压扁，看不出那几年其实
+ * 没怎么出门。
+ */
+export function fillMonthRange(months: MonthCount[]): MonthCount[] {
+  const known = new Map(months.map((entry) => [entry.month, entry.count]));
+  const keys = [...known.keys()].filter((key) => Number.isFinite(monthIndex(key)));
+  if (keys.length === 0) return [];
+  const indexes = keys.map(monthIndex).sort((left, right) => left - right);
+  const first = indexes[0];
+  const last = indexes[indexes.length - 1];
+  const filled: MonthCount[] = [];
+  for (let index = first; index <= last; index += 1) {
+    const key = monthKey(index);
+    filled.push({ month: key, count: known.get(key) ?? 0 });
+  }
+  return filled;
 }
 
 function polygonArea(ring: ChinaLocationPoint[]): number {

@@ -12,7 +12,9 @@ vi.mock("../api/aiJobs", () => ({
     chinaRegionVisits: vi.fn(),
     chinaRegionMedia: vi.fn(),
     chinaGeometry: vi.fn(),
+    chinaFeatures: vi.fn(),
     chinaPlaces: vi.fn(),
+    chinaPoints: vi.fn(),
     chinaTrips: vi.fn(),
     chinaTripMedia: vi.fn(),
   },
@@ -175,6 +177,34 @@ const trips = {
   },
 };
 
+const points = {
+  ok: true as const,
+  points: {
+    revision: 4,
+    cell: 0.02,
+    total: 8,
+    cells: 2,
+    items: [
+      {
+        lon: 120.13,
+        lat: 30.25,
+        count: 5,
+        untimed: 0,
+        firstAt: "2019-05-02",
+        lastAt: "2021-06-12",
+      },
+      {
+        lon: 121.47,
+        lat: 31.23,
+        count: 3,
+        untimed: 1,
+        firstAt: "2021-06-12",
+        lastAt: "2021-06-12",
+      },
+    ],
+  },
+};
+
 function LocationProbe() {
   const location = useLocation();
   return (
@@ -211,11 +241,21 @@ describe("足迹页", () => {
     vi.mocked(aiJobsApi.chinaLocations).mockResolvedValue(summary);
     vi.mocked(aiJobsApi.chinaPlaces).mockResolvedValue(places);
     vi.mocked(aiJobsApi.chinaTrips).mockResolvedValue(trips);
+    vi.mocked(aiJobsApi.chinaPoints).mockResolvedValue(points);
+    vi.mocked(aiJobsApi.chinaFeatures).mockResolvedValue({
+      ok: true,
+      boundaryVersion: "areacity-2025.251231.260403-outline1",
+      hash: "outline-hash",
+      features: [
+        { adcode: 330100, name: "杭州市", level: "city", geometry: polygon },
+        { adcode: 310000, name: "上海市", level: "province", geometry: polygon },
+      ],
+    });
     vi.mocked(aiJobsApi.chinaGeometry).mockResolvedValue({
       ok: true,
       boundaryVersion: "areacity-2025.251231.260403-outline1",
       hash: "outline-hash",
-      level: "children",
+      level: "province",
       parentAdcode: 0,
       features: [
         { adcode: 330000, name: "浙江省", level: "province", geometry: polygon },
@@ -224,7 +264,7 @@ describe("足迹页", () => {
     });
   });
 
-  it("先给规模，再给按时间排的段流", async () => {
+  it("先给规模，再给一张常驻的地图", async () => {
     renderPage();
 
     // 数字台：段足迹、去过的地方、带位置的照片。
@@ -233,39 +273,72 @@ describe("足迹页", () => {
     expect(within(ledger).getByText("段足迹")).toBeTruthy();
     expect(within(ledger).getByText("2 个省 · 1 个市")).toBeTruthy();
 
-    // 段流：每一段给出日期、地点链与照片带。
-    expect(
-      await screen.findByRole("region", { name: "2019-05-02 至 2019-05-05" }),
-    ).toBeTruthy();
-    expect(screen.getAllByRole("button", { name: "看这一段的照片" }).length).toBe(
-      4,
-    );
+    // 地图不用选中什么就一直在：它是页面的第一眼。
+    const map = await screen.findByRole("group", { name: /照片地图/ });
+    expect(map).toBeTruthy();
+    // 点云是照片的真实位置：两个网格，两点。
+    expect(map.querySelectorAll(".travel-map-canvas__point").length).toBe(2);
   });
 
-  it("选中一段，右栏才出现这段的说明", async () => {
+  it("时间带按真实时间比例铺开，两端各有一个刷手", async () => {
     renderPage();
 
-    // 面板平时不存在：地图是一件按需出现的配图。
-    expect(screen.queryByRole("complementary", { name: "上下文" })).toBeNull();
-
-    fireEvent.click(
-      await screen.findByRole("button", {
-        name: /2019-05-02 至 2019-05-05，4 天/,
-      }),
-    );
-
-    const panel = await screen.findByRole("complementary", { name: "上下文" });
-    expect(panel.textContent).toContain("这段行程");
-    expect(panel.textContent).toContain("杭州市");
-    expect(panel.textContent).toContain("上海市");
+    const ribbon = await screen.findByRole("region", { name: "时间带" });
+    const handles = within(ribbon).getAllByRole("slider");
+    expect(handles.length).toBe(2);
+    // 尺子是整条历史：2019-05 到 2021-06。
+    expect(handles[0].getAttribute("aria-valuetext")).toBe("2019-05");
+    expect(handles[1].getAttribute("aria-valuetext")).toBe("2021-06");
+    // 每段行程在带子上占一个块。
+    expect(
+      within(ribbon).getByRole("button", { name: /时间带上的行程：2019-05-02/ }),
+    ).toBeTruthy();
   });
 
-  it("「地方」列出去过的地方", async () => {
+  it("拖动刷手把时间区间写进地址", async () => {
+    renderPage();
+
+    const ribbon = await screen.findByRole("region", { name: "时间带" });
+    const handle = within(ribbon).getAllByRole("slider")[0];
+    fireEvent.keyDown(handle, { key: "ArrowRight" });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("location-search").textContent).toContain(
+        "from=2019-06",
+      );
+    });
+  });
+
+  it("行程一行一段，点开才展开照片", async () => {
+    renderPage();
+
+    const segment = await screen.findByRole("region", {
+      name: "2019-05-02 至 2019-05-05",
+    });
+    // 收起的时候没有照片带。
+    expect(
+      within(segment).queryAllByRole("button", { name: "看这一段的照片" }),
+    ).toHaveLength(0);
+
+    fireEvent.click(
+      within(segment).getByRole("button", { name: /2019-05-02 至 2019-05-05/ }),
+    );
+
+    const expanded = await screen.findByRole("region", {
+      name: "2019-05-02 至 2019-05-05",
+    });
+    expect(
+      within(expanded).getAllByRole("button", { name: "看这一段的照片" }).length,
+    ).toBe(3);
+    expect(within(expanded).getByTestId("photo-wall")).toBeTruthy();
+  });
+
+  it("「地方」列出��过的地方", async () => {
     renderPage();
 
     fireEvent.click(await screen.findByRole("button", { name: "地方" }));
 
-    const panel = await screen.findByRole("complementary", { name: "上下文" });
+    const panel = await screen.findByRole("complementary", { name: "去过的地方" });
     expect(panel.textContent).toContain("杭州市");
     expect(panel.textContent).toContain("5 张");
   });
@@ -279,30 +352,14 @@ describe("足迹页", () => {
       expect(aiJobsApi.chinaPlaces).toHaveBeenCalledWith(
         "province",
         null,
-        expect.anything(),
+        undefined,
       );
     });
+    // 行程不随时间区间重切：段的下标要能寻址到照片。
     expect(aiJobsApi.chinaTrips).toHaveBeenCalledWith(
       "province",
-      expect.anything(),
       undefined,
-    );
-  });
-
-  it("选年份后地址里带上时间区间", async () => {
-    renderPage();
-
-    fireEvent.click(
-      await screen.findByRole("button", { name: "2019 年，4 张照片" }),
-    );
-
-    await waitFor(() => {
-      expect(screen.getByTestId("location-search").textContent).toContain(
-        "from=2019-01",
-      );
-    });
-    expect(screen.getByTestId("location-search").textContent).toContain(
-      "to=2019-12",
+      undefined,
     );
   });
 
@@ -325,8 +382,8 @@ describe("足迹页", () => {
   it("没有拍摄时间的照片如实说明", async () => {
     renderPage();
 
-    expect(
-      await screen.findByText("1 张照片没有拍摄时间，未计入时间轴。"),
-    ).toBeTruthy();
+    const ledger = await screen.findByRole("region", { name: /规模/ });
+    expect(within(ledger).getByText("张没有拍摄时间")).toBeTruthy();
+    expect(within(ledger).getByText("1")).toBeTruthy();
   });
 });

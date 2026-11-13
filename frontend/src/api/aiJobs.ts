@@ -424,6 +424,13 @@ export interface ChinaGeometry {
   features: ChinaGeometryFeature[];
 }
 
+/** 按区划码取轮廓的响应。 */
+export interface ChinaFeatures {
+  boundaryVersion: string;
+  hash: string;
+  features: ChinaGeometryFeature[];
+}
+
 /** 地点索引里的一项：去过的一个地方。 */
 export interface ChinaPlace {
   adcode: number;
@@ -500,6 +507,39 @@ export interface ChinaTrip {
   bandResourceIds: string[];
 }
 
+/**
+ * 一个网格里的照片聚合。
+ *
+ * 点位只以网格下发：这里给的是格心（不是照片坐标的平均值）与这一格的
+ * 照片数。响应里没有单张照片的坐标，也没有资源 ID 与路径。
+ */
+export interface ChinaPointCell {
+  /** 格心的经度（GCJ-02）。 */
+  lon: number;
+  /** 格心的纬度（GCJ-02）。 */
+  lat: number;
+  /** 这一格里的照片数。 */
+  count: number;
+  /** 其中没有可信拍摄时间的张数。 */
+  untimed: number;
+  /** 有可信拍摄时间的第一天；这一格全是没时间的照片时是空串。 */
+  firstAt: string;
+  /** 有可信拍摄时间的最后一天。 */
+  lastAt: string;
+}
+
+/** 点位聚合的响应。 */
+export interface ChinaPoints {
+  revision: number;
+  /** 实际生效的格边长（度）。 */
+  cell: number;
+  /** 落进这些格子的照片总数。 */
+  total: number;
+  /** 网格数。 */
+  cells: number;
+  items: ChinaPointCell[];
+}
+
 /** 某一段行程的照片分页。 */
 export interface ChinaTripMediaPage {
   revision: number;
@@ -515,6 +555,8 @@ export interface ChinaTrips {
   revision: number;
   boundaryVersion: string;
   granularity: string;
+  /** 切分两段行程的最大间隔（天）。列表与照片端点必须用同一个值。 */
+  gapDays: number;
   total: number;
   items: ChinaTrip[];
   untimedPhotoCount: number;
@@ -647,6 +689,31 @@ export const aiJobsApi = {
       params: {
         level: level ?? undefined,
         parent: parent ?? undefined,
+        ...chinaTimeRangeParams(timeRange),
+      },
+    }),
+  /**
+   * 按区划码取绘图轮廓。
+   *
+   * 地图要画的是「去过的那些地方自己的形状」。直辖市的区县没有市一级，
+   * 省直辖县级市在市级粒度里会卷到省 —— 前端推不出它们的父级，只能按
+   * 区划码来取。
+   */
+  chinaFeatures: (adcodes: number[]) =>
+    api<{ ok: boolean } & ChinaFeatures>(
+      "/api/locations/china/geometry/features",
+      { params: { adcodes: adcodes.join(",") } },
+    ),
+  /**
+   * 照片位置的网格聚合。
+   *
+   * cell 是格边长（度），只认 0.01 / 0.02 / 0.05 / 0.1 / 0.2 / 0.5 六档；
+   * 缺省 0.02。格数超上限时服务端会调粗，响应里的 cell 是实际生效值。
+   */
+  chinaPoints: (timeRange?: ChinaTimeRange, cell?: number) =>
+    api<{ ok: boolean; points: ChinaPoints }>("/api/locations/china/points", {
+      params: {
+        cell: cell ?? undefined,
         ...chinaTimeRangeParams(timeRange),
       },
     }),

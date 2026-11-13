@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { ChinaTrip, ChinaTimeRange } from "../../api/aiJobs";
+import type { ChinaTrip } from "../../api/aiJobs";
 import { useChinaTripMedia } from "../../hooks/useChinaLocations";
 import { usePicks } from "../../hooks/usePicks";
 import { usePhotoStore, wallTargetHeight } from "../../store/photoStore";
@@ -9,35 +9,46 @@ import PhotoWall from "../wall/PhotoWall";
 import { ChevronRightIcon } from "../common/Icon";
 import ThumbImage from "../common/ThumbImage";
 
-interface TravelJournalProps {
+interface TravelTripsProps {
   /** 行程与停留，按开始时间升序。 */
   trips: ChinaTrip[];
-  /** 当前选中的段（序号）；null 表示没有选中。 */
-  selectedIndex: number | null;
-  /** 选中或取消选中某一段。 */
-  onSelect: (index: number | null) => void;
+  /** 当前选中的段。 */
+  selectedTripId: string | null;
+  /** 选中某一段。 */
+  onSelect: (trip: ChinaTrip | null) => void;
   /** 归并粒度。取照片时必须带上，否则取到的不是这一段。 */
   granularity: string;
-  /** 时间区间。取照片时必须带上。 */
-  timeRange?: ChinaTimeRange;
   /** 打开某个地点的详情页。 */
   onOpenPlace: (adcode: number) => void;
 }
 
 /**
- * 段流：一条按时间排的照片流，被行程切成段。
+ * 行程目录：按时间读的一段段行程。
  *
- * 页面上的主角是照片，行程是照片之间的分段理由。因此每一段都由一张
- * 照片带撑着 —— 只有文字的行程读不出「那几天是什么样」。
+ * 每一段默认收成一行（约 44px）：日期、天数、地点链、张数。点开才就地
+ * 展开照片 —— 一次读回几十段的全量照片既慢又没人看。
+ *
+ * 同时只展开一段：每段都能各自展开的话，整页长度不可控，几百段就是
+ * 几万像素的滚动条。
  */
-export default function TravelJournal({
+export default function TravelTrips({
   trips,
-  selectedIndex,
+  selectedTripId,
   onSelect,
   granularity,
-  timeRange,
   onOpenPlace,
-}: TravelJournalProps) {
+}: TravelTripsProps) {
+  const groups = useMemo(() => {
+    const result: { year: string; trips: ChinaTrip[] }[] = [];
+    for (const trip of trips) {
+      const year = trip.startedAt.slice(0, 4);
+      const last = result[result.length - 1];
+      if (last && last.year === year) last.trips.push(trip);
+      else result.push({ year, trips: [trip] });
+    }
+    return result;
+  }, [trips]);
+
   if (trips.length === 0) {
     return (
       <p className="py-12 text-center text-body text-fg-muted">
@@ -45,59 +56,66 @@ export default function TravelJournal({
       </p>
     );
   }
+
   return (
-    <div className="travel-journal">
-      {trips.map((trip) => (
-        <TravelSegment
-          key={trip.id}
-          trip={trip}
-          selected={selectedIndex === trip.index}
-          onSelect={() =>
-            onSelect(selectedIndex === trip.index ? null : trip.index)
-          }
-          granularity={granularity}
-          timeRange={timeRange}
-          onOpenPlace={onOpenPlace}
-        />
+    <div className="travel-trips">
+      {groups.map((group) => (
+        <section key={group.year} className="travel-trips__group">
+          <h3 className="travel-trips__year">{group.year}</h3>
+          <ul className="travel-trips__list">
+            {group.trips.map((trip) => (
+              <li key={trip.id}>
+                <TravelTripRow
+                  trip={trip}
+                  selected={selectedTripId === trip.id}
+                  onSelect={() =>
+                    onSelect(selectedTripId === trip.id ? null : trip)
+                  }
+                  granularity={granularity}
+                  onOpenPlace={onOpenPlace}
+                />
+              </li>
+            ))}
+          </ul>
+        </section>
       ))}
     </div>
   );
 }
 
-interface TravelSegmentProps {
+interface TravelTripRowProps {
   trip: ChinaTrip;
   selected: boolean;
   onSelect: () => void;
   granularity: string;
-  timeRange?: ChinaTimeRange;
   onOpenPlace: (adcode: number) => void;
 }
 
 /**
  * 一段行程。
  *
- * 照片带是这一段的门面；点它就打开这一段的照片。整段的照片在需要时
- * 才去取 —— 一次读回三十多段的全量照片既慢又没必要。
+ * 收着的时候是一行：日期、天数、地点链、类型与张数。展开后是这一段的
+ * 照片：一条照片带，再往下是整段的照片墙。
  */
-function TravelSegment({
+function TravelTripRow({
   trip,
   selected,
   onSelect,
   granularity,
-  timeRange,
   onOpenPlace,
-}: TravelSegmentProps) {
-  const [expanded, setExpanded] = useState(false);
+}: TravelTripRowProps) {
   const [viewerResourceId, setViewerResourceId] = useState<string | null>(null);
   const density = usePhotoStore((state) => state.density);
   const picks = usePicks();
   const pushToast = useUIStore((state) => state.pushToast);
 
   // 只有这一段被展开或被点开时才去取照片。
+  //
+  // 取照片不能带时间区间：段是按「粒度 + 间隔」切出来的，列表与照片
+  // 端点必须用同一套口径，否则按下标取到的不是这一段。
   const media = useChinaTripMedia(
-    expanded || viewerResourceId !== null ? trip.index : null,
+    selected || viewerResourceId !== null ? trip.index : null,
     granularity,
-    timeRange,
   );
   const items = useMemo(
     () => media.data?.pages.flatMap((page) => page.items) ?? [],
@@ -137,7 +155,7 @@ function TravelSegment({
           aria-pressed={selected}
           className="travel-segment__date"
           aria-label={`${trip.startedAt} 至 ${trip.endedAt}，${trip.dayCount} 天，${
-            selected ? "收起这段的说明" : "看这段去了哪儿"
+            selected ? "收起这段的照片" : "看这段去了哪儿"
           }`}
         >
           <span className="travel-segment__range">
@@ -181,68 +199,63 @@ function TravelSegment({
           <span className="tabular-nums text-fg-muted">
             {trip.photoCount.toLocaleString()} 张
           </span>
-          <button
-            type="button"
-            className="btn btn-sm btn-outline"
-            onClick={() => setExpanded((value) => !value)}
-          >
-            {expanded ? "收起照片" : `看这 ${trip.photoCount.toLocaleString()} 张`}
-          </button>
         </span>
       </div>
 
-      {trip.bandResourceIds.length > 0 ? (
-        <div className="travel-segment__band">
-          {trip.bandResourceIds.map((id) => (
-            <button
-              key={id}
-              type="button"
-              className="travel-segment__photo"
-              onClick={() => setViewerResourceId(id)}
-              aria-label="看这一段的照片"
-            >
-              <ThumbImage
-                fileId={id}
-                alt=""
-                displayWidth={240}
-                className="h-full w-full object-cover"
-              />
-            </button>
-          ))}
-        </div>
-      ) : null}
+      {selected ? (
+        <>
+          {trip.bandResourceIds.length > 0 ? (
+            <div className="travel-segment__band">
+              {trip.bandResourceIds.map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  className="travel-segment__photo"
+                  onClick={() => setViewerResourceId(id)}
+                  aria-label="看这一段的照片"
+                >
+                  <ThumbImage
+                    fileId={id}
+                    alt=""
+                    displayWidth={240}
+                    className="h-full w-full object-cover"
+                  />
+                </button>
+              ))}
+            </div>
+          ) : null}
 
-      {expanded ? (
-        <div className="travel-segment__grid">
-          {media.isError ? (
-            <p className="py-8 text-center text-body text-fg-muted">
-              这一段的照片暂时读不出来。
-            </p>
-          ) : items.length === 0 && !media.isLoading ? (
-            <p className="py-8 text-center text-body text-fg-muted">
-              这一段没有照片。
-            </p>
-          ) : (
-            <PhotoWall
-              items={items}
-              total={total}
-              targetHeight={wallTargetHeight(density)}
-              hasNextPage={media.hasNextPage ?? false}
-              isLoadingMore={media.isFetchingNextPage}
-              onLoadMore={() => void media.fetchNextPage({ cancelRefetch: false })}
-              onOpen={(_item, index) => setViewerResourceId(items[index]?.id ?? null)}
-              albumLabel={(item) => item.albumName}
-              isPicked={picks.isPicked}
-              onTogglePick={(item) => {
-                void picks
-                  .toggle(item.id)
-                  .catch(() =>
-                    pushToast({ kind: "error", message: "精选操作失败" }),
-                  );
-              }}
-            />
-          )}
-        </div>
+          <div className="travel-segment__grid">
+            {media.isError ? (
+              <p className="py-8 text-center text-body text-fg-muted">
+                这一段的照片暂时读不出来。
+              </p>
+            ) : items.length === 0 && !media.isLoading ? (
+              <p className="py-8 text-center text-body text-fg-muted">
+                这一段没有照片。
+              </p>
+            ) : (
+              <PhotoWall
+                items={items}
+                total={total}
+                targetHeight={wallTargetHeight(density)}
+                hasNextPage={media.hasNextPage ?? false}
+                isLoadingMore={media.isFetchingNextPage}
+                onLoadMore={() => void media.fetchNextPage({ cancelRefetch: false })}
+                onOpen={(_item, index) => setViewerResourceId(items[index]?.id ?? null)}
+                albumLabel={(item) => item.albumName}
+                isPicked={picks.isPicked}
+                onTogglePick={(item) => {
+                  void picks
+                    .toggle(item.id)
+                    .catch(() =>
+                      pushToast({ kind: "error", message: "精选操作失败" }),
+                    );
+                }}
+              />
+            )}
+          </div>
+        </>
       ) : null}
 
       {viewerIndex !== null && viewerIndex >= 0 ? (
