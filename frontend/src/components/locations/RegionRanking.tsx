@@ -38,7 +38,7 @@ export default function RegionRanking({
     return left.name.localeCompare(right.name, "zh-CN");
   });
   return (
-    <aside className="flex min-h-[320px] min-w-0 flex-col overflow-hidden rounded-2xl border border-border-faint bg-bg-elevated">
+    <aside className="flex max-h-[min(72vh,720px)] min-h-[320px] min-w-0 flex-col overflow-hidden rounded-2xl border border-border-faint bg-bg-elevated">
       <div className="shrink-0 border-b border-border-faint px-5 py-4">
         <p className="page-eyebrow">当前层级</p>
         <h2 className="mt-1 font-display text-section font-medium text-fg">
@@ -67,7 +67,9 @@ export default function RegionRanking({
                   <span className="h-1 w-16 shrink-0 overflow-hidden rounded-full bg-bg-subtle">
                     <span
                       className="block h-full rounded-full bg-brand"
-                      style={{ width: `${Math.max(share * 100, region.photoCount > 0 ? 2 : 0)}%` }}
+                      style={{
+                        width: `${Math.max(share * 100, region.photoCount > 0 ? 2 : 0)}%`,
+                      }}
                     />
                   </span>
                   <span className="shrink-0 text-meta tabular-nums text-fg-muted">

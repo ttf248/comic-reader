@@ -6,6 +6,7 @@ import {
   type KeyboardEvent,
   type MouseEvent,
 } from "react";
+import { useElementSize } from "../../hooks/useElementSize";
 import {
   createMapProjection,
   levelOpacity,
@@ -39,6 +40,17 @@ interface TooltipState {
 }
 
 /**
+ * 把提示框留在容器里。
+ *
+ * 提示框以指针为中心，贴着容器边缘时会有一半跑到卡片外面。
+ */
+function clampTooltipX(x: number, containerWidth: number): number {
+  const margin = 76;
+  if (containerWidth <= margin * 2) return Math.max(x, margin);
+  return Math.min(Math.max(x, margin), containerWidth - margin);
+}
+
+/**
  * 层级无关的行政区照片地图。
  *
  * 地图本身只是形状，键盘与读屏用户靠右边的排行列表进入 —— 所以这里
@@ -54,6 +66,8 @@ export default function RegionMap({
   onLevelUp,
 }: RegionMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const { ref: sizeRef, width: containerWidth } =
+    useElementSize<HTMLDivElement>();
   const [focusIndex, setFocusIndex] = useState(0);
   const [tooltip, setTooltip] = useState<TooltipState | null>(null);
 
@@ -89,7 +103,7 @@ export default function RegionMap({
       const bounds = container.getBoundingClientRect();
       setTooltip({
         region,
-        x: event.clientX - bounds.left,
+        x: clampTooltipX(event.clientX - bounds.left, bounds.width),
         y: event.clientY - bounds.top,
       });
     },
@@ -158,8 +172,21 @@ export default function RegionMap({
     );
   }
 
+  // 名字按屏幕上的实际字号给，不随 SVG 缩放：窄屏上 17 个单位只有
+  // 六个像素，根本看不清。
+  const labelFontSize =
+    containerWidth > 0
+      ? Math.min(34, (12 * projection.width) / containerWidth)
+      : 17;
+
   return (
-    <div ref={containerRef} className="relative px-2 py-3 sm:px-4">
+    <div
+      ref={(node) => {
+        containerRef.current = node;
+        sizeRef(node);
+      }}
+      className="relative px-2 py-3 sm:px-4"
+    >
       <svg
         role="group"
         aria-label={`${levelLabel}${levelName}照片地图，可用方向键在区域间移动，回车下钻，Esc 返回上一级`}
@@ -168,7 +195,12 @@ export default function RegionMap({
       >
         <g>
           {paths.map(({ region, path }, index) => {
-            const opacity = levelOpacity(region.photoCount, levelTotal);
+            const hasPhotos = region.photoCount > 0;
+            // 没有照片的区域画成中性底色，而不是透明 ——
+            // 透明会让它从图上消失，看起来像缺了一块。
+            const opacity = hasPhotos
+              ? levelOpacity(region.photoCount, levelTotal)
+              : 1;
             const share = shareOf(region.photoCount, levelTotal);
             const percent = `${(share * 100).toFixed(share > 0 && share < 0.01 ? 2 : 1)}%`;
             return (
@@ -184,14 +216,16 @@ export default function RegionMap({
                 onMouseMove={(event) => showTooltip(region, event)}
                 onMouseLeave={() => setTooltip(null)}
                 onFocus={(event) => {
-                  const bounds =
-                    event.currentTarget.getBoundingClientRect();
+                  const bounds = event.currentTarget.getBoundingClientRect();
                   const container =
                     containerRef.current?.getBoundingClientRect();
                   if (!container) return;
                   setTooltip({
                     region,
-                    x: bounds.left - container.left + bounds.width / 2,
+                    x: clampTooltipX(
+                      bounds.left - container.left + bounds.width / 2,
+                      container.width,
+                    ),
                     y: bounds.top - container.top,
                   });
                 }}
@@ -201,9 +235,9 @@ export default function RegionMap({
                 <path
                   d={path}
                   className={
-                    region.photoCount === 0
-                      ? "fill-bg-subtle group-focus-visible:stroke-brand-ink"
-                      : "fill-brand group-hover:fill-brand-ink group-focus-visible:stroke-brand-ink"
+                    hasPhotos
+                      ? "fill-brand group-hover:fill-brand-ink group-focus-visible:stroke-brand-ink"
+                      : "fill-bg-subtle group-focus-visible:stroke-brand-ink"
                   }
                   fillOpacity={opacity}
                   stroke={region.photoCount === 0 ? "border-strong" : "brand"}
@@ -235,11 +269,11 @@ export default function RegionMap({
                   y={y}
                   textAnchor="middle"
                   dominantBaseline="middle"
-                  fontSize={17}
+                  fontSize={labelFontSize}
                   className="pointer-events-none select-none"
                   fill="var(--fg)"
                   stroke="var(--bg-elevated)"
-                  strokeWidth={3}
+                  strokeWidth={labelFontSize * 0.18}
                   paintOrder="stroke"
                 >
                   {region.name}
@@ -257,13 +291,12 @@ export default function RegionMap({
             top: tooltip.y - 10,
           }}
         >
-          <p className="text-label font-medium text-fg">{tooltip.region.name}</p>
+          <p className="text-label font-medium text-fg">
+            {tooltip.region.name}
+          </p>
           <p className="mt-0.5 text-meta tabular-nums text-fg-muted">
             {tooltip.region.photoCount.toLocaleString()} 张 · 占本层{" "}
-            {(
-              shareOf(tooltip.region.photoCount, levelTotal) * 100
-            ).toFixed(1)}
-            %
+            {(shareOf(tooltip.region.photoCount, levelTotal) * 100).toFixed(1)}%
           </p>
         </div>
       ) : null}

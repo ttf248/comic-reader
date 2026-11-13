@@ -63,8 +63,7 @@ export function createMapProjection(regions: MapRegion[]): MapProjection {
 
   // 经度按本层中点纬度的余弦收缩，避免高纬地区被拉得过宽。
   const referenceLatitude = (minLatitude + maxLatitude) / 2;
-  const longitudeScale =
-    Math.cos((referenceLatitude * Math.PI) / 180) || 1;
+  const longitudeScale = Math.cos((referenceLatitude * Math.PI) / 180) || 1;
   const scaledMin = minLongitude * longitudeScale;
   const scaledMax = maxLongitude * longitudeScale;
   const spanX = Math.max(scaledMax - scaledMin, 1e-6);
@@ -94,7 +93,9 @@ export function geometryPolygons(
 }
 
 /** 多边形里最高的纬度，用来判断它是不是远离大陆的碎块。 */
-export function polygonMaximumLatitude(polygon: ChinaLocationPoint[][]): number {
+export function polygonMaximumLatitude(
+  polygon: ChinaLocationPoint[][],
+): number {
   let maximum = Number.NEGATIVE_INFINITY;
   for (const ring of polygon) {
     for (const [, latitude] of ring) maximum = Math.max(maximum, latitude);
@@ -174,7 +175,9 @@ function polygonArea(ring: ChinaLocationPoint[]): number {
   return sum / 2;
 }
 
-function polygonCentroid(ring: ChinaLocationPoint[]): ChinaLocationPoint | null {
+function polygonCentroid(
+  ring: ChinaLocationPoint[],
+): ChinaLocationPoint | null {
   let twiceArea = 0;
   let x = 0;
   let y = 0;
@@ -217,8 +220,7 @@ function pointInRing(point: ChinaLocationPoint, ring: ChinaLocationPoint[]) {
     const [xi, yi] = ring[i];
     const [xj, yj] = ring[j];
     if (yi > point[1] !== yj > point[1]) {
-      const crossing =
-        ((xj - xi) * (point[1] - yi)) / (yj - yi) + xi;
+      const crossing = ((xj - xi) * (point[1] - yi)) / (yj - yi) + xi;
       if (point[0] < crossing) inside = !inside;
     }
   }

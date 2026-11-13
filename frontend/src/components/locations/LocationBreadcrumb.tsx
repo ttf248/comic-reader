@@ -36,21 +36,30 @@ export default function LocationBreadcrumb({
             <ChevronLeftIcon size={13} />
             <span>返回</span>
           </button>
-          <span className="hidden h-4 w-px shrink-0 bg-border sm:block" aria-hidden="true" />
+          <span
+            className="hidden h-4 w-px shrink-0 bg-border sm:block"
+            aria-hidden="true"
+          />
         </>
       ) : null}
       <nav aria-label="地点层级" className="flex min-w-0 items-center gap-1">
         {chain.map((crumb, index) => {
           const isCurrent = index === chain.length - 1;
           return (
-            <span key={crumb.adcode ?? "nation"} className="flex min-w-0 items-center gap-1">
+            <span
+              key={crumb.adcode ?? "nation"}
+              className="flex min-w-0 items-center gap-1"
+            >
               {index > 0 ? (
                 <span className="shrink-0 text-fg-subtle" aria-hidden="true">
                   ／
                 </span>
               ) : null}
               {isCurrent ? (
-                <span aria-current="page" className="truncate text-body text-fg">
+                <span
+                  aria-current="page"
+                  className="truncate text-body text-fg"
+                >
                   {crumb.name}
                 </span>
               ) : (

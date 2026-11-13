@@ -106,7 +106,8 @@ export default function ChinaLocations() {
   );
 
   // 叶子区域没有下一级边界，直接落到它的照片墙。
-  const isLeaf = !isNationLevel && regionsQuery.isSuccess && childRegions.length === 0;
+  const isLeaf =
+    !isNationLevel && regionsQuery.isSuccess && childRegions.length === 0;
 
   const levelUp = useCallback(() => {
     if (isNationLevel) return;
@@ -121,7 +122,9 @@ export default function ChinaLocations() {
     [gotoRegion],
   );
 
-  const loading = isNationLevel ? summaryQuery.isLoading : regionsQuery.isLoading;
+  const loading = isNationLevel
+    ? summaryQuery.isLoading
+    : regionsQuery.isLoading;
   const error = isNationLevel ? summaryQuery.isError : regionsQuery.isError;
 
   return (
@@ -141,7 +144,11 @@ export default function ChinaLocations() {
             <button
               type="button"
               className="btn btn-sm btn-outline"
-              onClick={() => void (isNationLevel ? summaryQuery.refetch() : regionsQuery.refetch())}
+              onClick={() =>
+                void (isNationLevel
+                  ? summaryQuery.refetch()
+                  : regionsQuery.refetch())
+              }
             >
               重新加载
             </button>
@@ -150,10 +157,28 @@ export default function ChinaLocations() {
 
         {summary ? (
           <>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              <LocationStat label="带 GPS 照片" value={summary.gpsPhotoCount} />
-              <LocationStat label="匹配到省份" value={summary.chinaPhotoCount} />
-              <LocationStat label="未匹配省份" value={summary.unassignedPhotoCount} />
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-1 rounded-xl border border-border-faint bg-bg-elevated px-4 py-2.5 text-meta text-fg-muted">
+              <span>
+                带 GPS 照片{" "}
+                <span className="tabular-nums text-fg">
+                  {summary.gpsPhotoCount.toLocaleString()}
+                </span>{" "}
+                张
+              </span>
+              <span>
+                匹配到省份{" "}
+                <span className="tabular-nums text-fg">
+                  {summary.chinaPhotoCount.toLocaleString()}
+                </span>{" "}
+                张
+              </span>
+              <span>
+                未匹配省份{" "}
+                <span className="tabular-nums text-fg">
+                  {summary.unassignedPhotoCount.toLocaleString()}
+                </span>{" "}
+                张
+              </span>
             </div>
             {summary.gpsPhotoCount === 0 ? (
               <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border-faint bg-bg-elevated px-4 py-3">
@@ -171,8 +196,17 @@ export default function ChinaLocations() {
                 </Link>
               </div>
             ) : null}
-            <LocationBreadcrumb chain={chain} onNavigate={gotoRegion} />
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.75fr)]">
+            {/* 全国层级没有上级，面包屑只剩一个词，没有信息量。 */}
+            {chain.length > 1 ? (
+              <LocationBreadcrumb chain={chain} onNavigate={gotoRegion} />
+            ) : null}
+            <div
+              className={`grid grid-cols-1 items-start gap-4 ${
+                isLeaf
+                  ? ""
+                  : "xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.75fr)]"
+              }`}
+            >
               <section
                 aria-label="行政区照片地图"
                 className="min-w-0 overflow-hidden rounded-2xl border border-border-faint bg-bg-elevated"
@@ -187,7 +221,9 @@ export default function ChinaLocations() {
                     <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border-faint px-4 py-4 sm:px-5">
                       <div className="min-w-0">
                         <h2 className="font-display text-label font-medium text-fg">
-                          {isNationLevel ? "全国省级照片地图" : `${levelLabel}地图`}
+                          {isNationLevel
+                            ? "全国省级照片地图"
+                            : `${levelLabel}地图`}
                         </h2>
                         <p className="mt-1 text-meta text-fg-muted">
                           {isNationLevel
@@ -232,7 +268,9 @@ export default function ChinaLocations() {
                 <RegionRanking
                   regions={rankingRegions}
                   levelTotal={levelTotal}
-                  title={isNationLevel ? "省份排行" : `${levelLabel}${levelName}排行`}
+                  title={
+                    isNationLevel ? "省份排行" : `${levelLabel}${levelName}排行`
+                  }
                   onSelect={handleSelect}
                 />
               ) : null}
@@ -248,18 +286,6 @@ export default function ChinaLocations() {
           </div>
         ) : null}
       </section>
-    </div>
-  );
-}
-
-function LocationStat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-xl border border-border-faint bg-bg-elevated px-4 py-3">
-      <p className="text-meta text-fg-muted">{label}</p>
-      <p className="mt-1 font-display text-section tabular-nums text-fg">
-        {value.toLocaleString()}
-        <span className="ml-1 text-meta font-normal">张</span>
-      </p>
     </div>
   );
 }

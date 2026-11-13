@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
-import { useInfiniteQuery } from "@tanstack/react-query";
 import PhotoWall from "../wall/PhotoWall";
 import PhotoViewer from "../wall/PhotoViewer";
-import { aiJobsApi, type GPSLocationMedia } from "../../api/aiJobs";
+import { type GPSLocationMedia } from "../../api/aiJobs";
+import { useChinaRegionMedia } from "../../hooks/useChinaLocations";
 import { usePicks } from "../../hooks/usePicks";
 import { usePhotoStore, wallTargetHeight } from "../../store/photoStore";
 import { useUIStore } from "../../store/uiStore";
@@ -20,20 +20,15 @@ interface RegionPhotoWallProps {
  *
  * 地图的最后一层就是照片本身：看完分布就落到照片，而不是停在数字上。
  */
-export default function RegionPhotoWall({ adcode, name }: RegionPhotoWallProps) {
+export default function RegionPhotoWall({
+  adcode,
+  name,
+}: RegionPhotoWallProps) {
   const density = usePhotoStore((state) => state.density);
   const picks = usePicks();
   const pushToast = useUIStore((state) => state.pushToast);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
-  const query = useInfiniteQuery({
-    queryKey: ["china-locations", "region-media", adcode],
-    queryFn: ({ pageParam }) =>
-      aiJobsApi
-        .chinaRegionMedia(adcode, pageParam)
-        .then((result) => result.page),
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (page) => page.nextCursor,
-  });
+  const query = useChinaRegionMedia(adcode);
 
   const items = useMemo<GPSLocationMedia[]>(
     () => query.data?.pages.flatMap((page) => page.items) ?? [],
@@ -43,9 +38,11 @@ export default function RegionPhotoWall({ adcode, name }: RegionPhotoWallProps) 
   const loadMore = () => void query.fetchNextPage({ cancelRefetch: false });
 
   return (
-    <div className="flex min-h-[420px] flex-col">
+    <div className="flex h-[min(72vh,720px)] min-h-[420px] flex-col">
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-border-faint px-5 py-4">
-        <h2 className="font-display text-section font-medium text-fg">{name}</h2>
+        <h2 className="font-display text-section font-medium text-fg">
+          {name}
+        </h2>
         <span className="text-label font-medium tabular-nums text-brand-ink">
           {total.toLocaleString()} 张
         </span>

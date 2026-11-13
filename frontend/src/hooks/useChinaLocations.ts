@@ -1,23 +1,21 @@
 import {
   useInfiniteQuery,
   useQuery,
-  type UseInfiniteQueryResult,
   type UseQueryResult,
 } from "@tanstack/react-query";
 import { aiJobsApi } from "../api/aiJobs";
 import type { ChinaLocationRegions, ChinaLocationSummary } from "../api/aiJobs";
-import type { LibraryFeedItem, LibraryPage } from "../api/library";
 
 /** 全国省级地图的查询键。 */
-export const chinaSummaryQueryKey = ["china-locations"] as const;
+const chinaSummaryQueryKey = ["china-locations"] as const;
 
 /** 某个区域的下一级地图的查询键。 */
-export function chinaRegionsQueryKey(adcode: number) {
+function chinaRegionsQueryKey(adcode: number) {
   return ["china-locations", "regions", adcode] as const;
 }
 
 /** 某个区域的照片墙查询键。 */
-export function chinaRegionMediaQueryKey(adcode: number) {
+function chinaRegionMediaQueryKey(adcode: number) {
   return ["china-locations", "region-media", adcode] as const;
 }
 
@@ -47,20 +45,15 @@ export function useChinaRegions(
 }
 
 /** 某个区域的照片墙。 */
-export function useChinaRegionMedia(
-  adcode: number | null,
-): UseInfiniteQueryResult<{
-  page: LibraryPage<LibraryFeedItem> & {
-    albums: { id: string; name: string; count: number }[];
-    region: { adcode: number; name: string; photoCount: number };
-  };
-}> {
+export function useChinaRegionMedia(adcode: number | null) {
   return useInfiniteQuery({
     queryKey: chinaRegionMediaQueryKey(adcode ?? 0),
     queryFn: ({ pageParam }) =>
-      aiJobsApi.chinaRegionMedia(adcode as number, pageParam),
+      aiJobsApi
+        .chinaRegionMedia(adcode as number, pageParam)
+        .then((result) => result.page),
     initialPageParam: undefined as string | undefined,
-    getNextPageParam: (page) => page.page.nextCursor,
+    getNextPageParam: (page) => page.nextCursor,
     enabled: adcode !== null,
   });
 }

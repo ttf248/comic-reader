@@ -104,9 +104,15 @@ EXIF 解析器保存拍摄墙上时间、朝向、相机信息和 GPS 附属字�
 
 ## EXIF/GPS 与离线地点地图
 
-地点页同时使用两套本地数据：旧的 Geohash 精度 5 分组为语义筛选和地点照片分页提供稳定 ID；省级地图接口则读取嵌入的省、市、区县边界，将有效 GPS 匹配到省份及最细可用的区县（无区县边界命中时退回城市），分别统计照片数。每次请求都从当前 catalog revision 重新筛选元数据，要求资源仍是图片、路径通过 `PathValidator`，且大小与修改时间戳仍匹配；地图响应只含行政边界和聚合数量，不返回原始照片坐标或文件路径。EXIF GPS 默认按 WGS84 处理并转为边界使用的 GCJ-02；显式标记为 GCJ-02 的坐标不重复转换，未知 datum 不参与地图匹配。
+地点页同时使用两套本地数据：旧的 Geohash 精度 5 分组为语义筛选和地点照片分页提供稳定 ID；地图接口则读取嵌入的省、市、区县边界，将有效 GPS 匹配到省份及最细可用的下级区域（无更细边界命中时退回城市），分别统计照片数。每次匹配都从当前 catalog revision 重新筛选元数据，要求资源仍是图片、路径通过 `PathValidator`，且大小与修改时间戳仍匹配；地图响应只含行政边界和聚合数量，不返回原始照片坐标或文件路径。EXIF GPS 默认按 WGS84 处理并转为边界使用的 GCJ-02；显式标记为 GCJ-02 的坐标不重复转换，未知 datum 不参与地图匹配。
 
-离线边界文件 `backend/internal/services/geodata/china-admin.geojson.gz` 来自阿里云 DataV GeoAtlas `areas_v3`（数据更新于 2021 年 5 月），其官方说明称数据来源于高德地图并限学习交流用途，商业使用需联系数据权利方。地图只使用省份几何绘制底图，城市/区县几何用于服务端点位匹配；当前子区域数据不含台湾。地图渲染与坐标匹配不发起外部地图、反向地理编码或 AI 请求。
+离线边界文件 `backend/internal/services/geodata/china-admin.geojson.gz` 来自阿里云 DataV GeoAtlas `areas_v3`（数据更新于 2021 年 5 月），其官方说明称数据来源于高德地图并限学习交流用途，商业使用需联系数据权利方。地图渲染与坐标匹配不发起外部地图、反向地理编码或 AI 请求。
+
+**几何只有两级。** 这份数据里 34 个省级要素之下是 363 个地级市与 112 个区县，而区县只存在于京、津、沪、渝、港、澳六地（它们的下级直接挂在本级区划码下），其余省份只有地级市，没有区县几何。因此地图的下钻深度是「全国 → 省 → 市/区县」两级，再往下就是叶子；台湾省没有下级，也按叶子处理。页面据此如实写明每层的区域粒度，不暗示还能再点一层。
+
+**几何按需下发，计数与几何同源。** `GET /api/locations/china` 返回 34 个省的绘图几何（约 570 KB 原始字节，gzip 后约 150 KB）；`GET /api/locations/china/regions/:adcode` 返回该区域的下一级几何，单省约 117 KB。两者的照片数都出自同一次匹配，不存在「计数来自一次快照、边界来自另一次」的可能。匹配结果按 `(catalog revision, 分析记录版本)` 缓存，重复查询不再重跑整库点位判定；分析记录的版本号由 `AIJobService.RecordsRevision()` 给出，记录增删改时递增，缓存因此不会给出过期计数。边界数据的内容指纹（嵌入文件的 sha256 前 8 字节）参与端点 ETag：换了边界文件，缓存自动失效，不依赖人记得改版本常量。
+
+
 
 ## 媒体管线
 
@@ -219,7 +225,8 @@ SIGINT/SIGTERM 触发停止接收连接、取消扫描/转码并强制刷新扫�
 ### 查询、导航与网格
 
 - TanStack Query 管理库、媒体、偏好、收藏与历史；Zustand 管理本机 UI、阅读器和扫描连接会话。主题与 Toast 在应用层统一挂载，阅读器独立于 AppShell 但仍有错误边界与访问门禁。
-- 路由在 `App.tsx` 懒加载，**模式进 URL 路径**：`/photo`（照片库）、`/photo/recents`、`/photo/favorites`、`/photo/picks`（精选照片）、`/photo/albums/*`、`/photo/tags/*`；`/comic`（漫画库）、`/comic/unread`、`/comic/recents`、`/comic/favorites`、`/comic/albums/*`、`/comic/tags/*`；漫画阅读器 `/comic/read/:albumId` 使用相册 ID 和 0-based index，视频加 `type=video`；设置页 `/settings` 与模式无关。根路径 `/` 按服务端记住的偏好落到某一侧。标签按单个路径段编码，路径段只解码一次（从原始 pathname 切段，不用 `useParams`），直接打开链接的返回有应用内兜底。
+- 路由在 `App.tsx` 懒加载，**模式进 URL 路径**：`/photo`（照片库）、`/photo/recents`、`/photo/favorites`、`/photo/picks`（精选照片）、`/photo/albums/*`、`/photo/tags/*`、`/photo/locations`（离线地点地图）、`/photo/people`（人物候选）；`/comic`（漫画库）、`/comic/unread`、`/comic/recents`、`/comic/favorites`、`/comic/albums/*`、`/comic/tags/*`；漫画阅读器 `/comic/read/:albumId` 使用相册 ID 和 0-based index，视频加 `type=video`；设置页 `/settings` 与模式无关。根路径 `/` 按服务端记住的偏好落到某一侧。标签按单个路径段编码，路径段只解码一次（从原始 pathname 切段，不用 `useParams`），直接打开链接的返回有应用内兜底。
+- 地点地图的下钻状态放查询参数：`/photo/locations?adcode=<六位区划码>`。`adcode` 指向当前聚焦的区域，页面显示它的下一级地图；它没有下一级（叶子）时显示该区域的照片墙。它不用路径段，因为同一段路径上已经有坐标聚类相册 ID（`/photo/locations/:locationId`），两套 ID 规则不可混用。面包屑的祖先链由区划父子关系推导，祖先可点，「返回」回到上一级地图而不是退出页面。
 - **模式有且只有一个真相源：URL 路径前缀。** 服务端 `Prefs.appMode` 只决定根路径落到哪一侧；前端 `appModeStore` 只镜像这个偏好，不持有「当前模式」。`WorkbenchModeProvider`（`components/layout/`）挂在应用最外层，从 `useLocation` 推导模式并经上下文下发，因此整屏脱离外壳的阅读器也在同一套上下文里。切换模式 = 导航到对侧对应页 + 写回偏好，两件事缺一不可。
 - 模式切换的语义只有一张表（`utils/path.ts` 的 `counterpartRoute`）：两侧都有的同名页（最近 / 收藏 / 标签）一一对应；相册与阅读器只属于一侧，未读只属于漫画侧，精选只属于照片侧，它们都回落到对侧首页。
 - 相册入口按内容属性分派：照片目录的相册 `/photo/albums/<相册 id>` 直接渲染照片墙，漫画目录的相册重定向到阅读器。属性由服务端给出（所属目录的 `kind`），前端不按图片数量推断。

@@ -1,11 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import {
-  MemoryRouter,
-  Route,
-  Routes,
-  useLocation,
-} from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import ChinaLocations from "./ChinaLocations";
 import { aiJobsApi, type ChinaLocationGeometry } from "../api/aiJobs";
@@ -151,11 +146,13 @@ describe("拍摄地点逐级下钻", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(aiJobsApi.chinaLocations).mockResolvedValue(summary);
-    vi.mocked(aiJobsApi.chinaRegions).mockImplementation(async (adcode: number) => {
-      if (adcode === 330000) return zhejiang;
-      if (adcode === 330100) return hangzhou;
-      throw new Error(`unexpected adcode ${adcode}`);
-    });
+    vi.mocked(aiJobsApi.chinaRegions).mockImplementation(
+      async (adcode: number) => {
+        if (adcode === 330000) return zhejiang;
+        if (adcode === 330100) return hangzhou;
+        throw new Error(`unexpected adcode ${adcode}`);
+      },
+    );
     vi.mocked(aiJobsApi.chinaRegionMedia).mockResolvedValue({
       ok: true,
       page: {
@@ -195,10 +192,13 @@ describe("拍摄地点逐级下钻", () => {
     expect(province).toBeInTheDocument();
     expect(screen.queryByText("杭州市")).not.toBeInTheDocument();
     expect(screen.getByText("基准：全国 · 8 张")).toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: "地点层级" })).toHaveTextContent(
-      "全国",
-    );
-    expect(screen.queryByRole("button", { name: "返回" })).not.toBeInTheDocument();
+    // 全国层级没有上级，面包屑与返回按钮都不该出现。
+    expect(
+      screen.queryByRole("navigation", { name: "地点层级" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "返回" }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByText(/坐标\s+\d/)).not.toBeInTheDocument();
   });
 
