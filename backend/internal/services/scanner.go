@@ -371,6 +371,8 @@ type directoryScanResult struct {
 	err      error
 }
 
+const noMediaMarkerFile = ".nomedia"
+
 // scanDirectoryTree 用一个固定工作池读取整棵目录树。协调器是唯一会向
 // jobs 写入的协程，worker 永远不等待自己派生的子任务，因而不会死锁。
 func (s *Scanner) scanDirectoryTree(
@@ -459,6 +461,9 @@ func (s *Scanner) inspectDirectory(
 	exclude ExcludeConfig,
 ) directoryScanResult {
 	result := directoryScanResult{record: directoryRecord{path: task.path}}
+	if directoryHasNoMediaMarker(task.path) {
+		return result
+	}
 	entries, err := os.ReadDir(task.path)
 	if err != nil {
 		if rootErr := root.validate(); rootErr != nil {
@@ -546,6 +551,11 @@ func (s *Scanner) inspectDirectory(
 		return naturalLess(filepath.Base(result.children[i].path), filepath.Base(result.children[j].path))
 	})
 	return result
+}
+
+func directoryHasNoMediaMarker(path string) bool {
+	info, err := os.Lstat(filepath.Join(path, noMediaMarkerFile))
+	return err == nil && info.Mode().IsRegular()
 }
 
 func buildRootResult(root string, records map[string]directoryRecord) ([]models.Album, []models.Collection) {
