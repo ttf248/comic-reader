@@ -444,14 +444,27 @@ describe("足迹页", () => {
     expect(preview.textContent).toContain("上海市");
   });
 
-  it("「地方」列出去过的地方", async () => {
+  it("地图可以切到完整地图", async () => {
     renderPage();
 
-    fireEvent.click(await screen.findByRole("button", { name: "地方" }));
+    const map = await screen.findByRole("img", { name: /小地图/ });
+    const scope = screen.getByRole("radiogroup", { name: "地图范围" });
+    // 缺省是只看有数据的区域。
+    expect(
+      within(scope).getByRole("radio", { name: "有数据" }).getAttribute("aria-checked"),
+    ).toBe("true");
 
-    const panel = await screen.findByRole("complementary", { name: "去过的地方" });
-    expect(panel.textContent).toContain("杭州市");
-    expect(panel.textContent).toContain("5 张");
+    const zoomedWidth = Number(
+      (map.getAttribute("viewBox") ?? "").split(" ")[2],
+    );
+
+    fireEvent.click(within(scope).getByRole("radio", { name: "完整地图" }));
+
+    await waitFor(() => {
+      const fullWidth = Number((map.getAttribute("viewBox") ?? "").split(" ")[2]);
+      // 完整地图的画面更宽：不再裁到照片的那一片。
+      expect(fullWidth).toBeGreaterThan(zoomedWidth);
+    });
   });
 
   it("切归并粒度会换一层地方与行程", async () => {

@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import Segmented from "../components/common/Segmented";
 import TravelMiniMap from "../components/travels/TravelMiniMap";
-import TravelPlaceList from "../components/travels/TravelPlaceList";
+import type { MapScope } from "../components/travels/TravelMiniMap";
 import TravelStats from "../components/travels/TravelStats";
 import TravelTimeline from "../components/travels/TravelTimeline";
 import type { TravelSpan } from "../components/travels/TravelTimeline";
@@ -74,7 +74,8 @@ export default function Travels() {
   const span = parseSpan(searchParams.get("span"));
   const level = (searchParams.get("level") as PlaceLevel | null) ?? "city";
   const selectedTripId = searchParams.get("trip");
-  const [placeListOpen, setPlaceListOpen] = useState(false);
+  // 地图画到哪儿：只看有数据的区域，还是整张地图。
+  const [mapScope, setMapScope] = useState<MapScope>("data");
 
   // 两份汇总：一份不带区间（时间轴要知道整条历史有多长，才画得出那把
   // 尺子），一份带区间（数字台用）。
@@ -329,22 +330,15 @@ export default function Travels() {
         <aside className="travel-layout__aside">
           <div className="travel-aside__bar">
             <span className="travel-aside__label">足迹地图</span>
-            <button
-              type="button"
-              className="btn btn-sm btn-outline"
-              aria-pressed={placeListOpen}
-              onClick={() => setPlaceListOpen((value) => !value)}
-            >
-              地方
-            </button>
-            {placeListOpen ? (
-              <TravelPlaceList
-                places={places}
-                anchor="menu"
-                onClose={() => setPlaceListOpen(false)}
-                onOpenPlace={openPlace}
-              />
-            ) : null}
+            <Segmented
+              label="地图范围"
+              value={mapScope}
+              onChange={(value) => setMapScope(value)}
+              options={[
+                { value: "data", label: "有数据" },
+                { value: "full", label: "完整地图" },
+              ]}
+            />
           </div>
           <div className="travel-aside__map">
             <TravelMiniMap
@@ -353,6 +347,7 @@ export default function Travels() {
               points={points}
               levelTotal={levelTotal}
               scopeLabel="足迹"
+              scope={mapScope}
             />
           </div>
         </aside>

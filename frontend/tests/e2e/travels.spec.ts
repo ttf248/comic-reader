@@ -137,16 +137,22 @@ test("悬停一段行程，浮出带箭头的轨迹图", async ({ page }) => {
   await expect(preview.locator(".travel-preview__stop")).toHaveCount(2);
 });
 
-test("「地方」列出去过的地方", async ({ page }) => {
+test("地图可以切到完整地图", async ({ page }) => {
   await page.goto("/photo/travels");
 
-  await page.getByRole("button", { name: "地方" }).click();
+  const map = page.getByRole("img", { name: /小地图/ });
+  const scope = page.getByRole("radiogroup", { name: "地图范围" });
+  // 缺省是只看有数据的区域。
+  await expect(scope.getByRole("radio", { name: "有数据" })).toBeChecked();
 
-  const panel = page.getByRole("complementary", { name: "去过的地方" });
-  await expect(panel).toBeVisible();
-  await expect(panel.getByText("杭州市")).toBeVisible();
-  await expect(panel.getByText("上海市")).toBeVisible();
-  await expect(panel.getByText("北京市")).toBeVisible();
+  const zoomed = Number((await map.getAttribute("viewBox"))?.split(" ")[2]);
+
+  await scope.getByRole("radio", { name: "完整地图" }).click();
+
+  await expect(scope.getByRole("radio", { name: "完整地图" })).toBeChecked();
+  // 完整地图的画面更宽：不再裁到照片的那一片。
+  const full = Number((await map.getAttribute("viewBox"))?.split(" ")[2]);
+  expect(full).toBeGreaterThan(zoomed);
 });
 
 test("点地名进这个地方，并且带着筛选条件", async ({ page }) => {

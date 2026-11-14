@@ -2106,7 +2106,7 @@ button:not(:disabled):active {
 
   /* --- 地图：正文右栏的那一块 ---
      只读，不提供操作：几百像素宽的图上，一个市只有几个像素宽，
-     拖不动也点不准。要去某个地方，从旁边的「地方」清单进。 */
+     拖不动也点不准。 */
   .travel-mini-map {
     position: relative;
     display: flex;
@@ -2126,70 +2126,27 @@ button:not(:disabled):active {
     padding-inline: 12px;
     text-align: center;
   }
+  /* 参照层：只画线，不填色（完整地图模式下铺成底图）。 */
+  .travel-mini-map__base {
+    fill: none;
+    stroke: var(--border-strong);
+  }
+  .travel-mini-map__base--filled {
+    fill: color-mix(in srgb, var(--fg) 7%, transparent);
+  }
+  /* 去过的地方：按张数深浅。 */
+  .travel-mini-map__region {
+    fill: var(--brand);
+    stroke: var(--brand);
+  }
+  /* 没去过的地方：完整地图模式下当底图，整张地图才看得出形状。 */
+  .travel-mini-map__empty {
+    fill: color-mix(in srgb, var(--fg) 7%, transparent);
+    stroke: var(--border-strong);
+  }
   /* 照片位置：一层泛开的光。 */
   .travel-mini-map__point {
     fill: var(--brand);
-  }
-
-  /* --- 地方清单 ---
-     浮在小地图旁边：地图回答「在哪儿」，清单回答「叫什么名字」—— 地图上
-     的形状认不出是杭州还是绍兴，得有一份带名字的清单。 */
-  .travel-place-list {
-    position: absolute;
-    top: 12px;
-    left: 12px;
-    z-index: 20;
-    width: min(320px, calc(100% - 24px));
-    max-height: min(52vh, 620px);
-    overflow-y: auto;
-    padding: 14px 16px 16px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-tile);
-    background: var(--bg-elevated);
-    box-shadow: var(--shadow-lg);
-  }
-  /* 从地图上方那块窄栏里展开的菜单：往左开，地图留在原地不遮。 */
-  .travel-place-list--menu {
-    top: calc(100% + 6px);
-    right: 100%;
-    left: auto;
-    margin-right: 12px;
-    width: min(320px, calc(100vw - 48px));
-    max-height: min(56vh, 520px);
-  }
-  .travel-place-list__items {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    margin-top: 12px;
-  }
-  .travel-place-list__item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    padding: 6px;
-    border-radius: var(--radius-media);
-    text-align: left;
-  }
-  .travel-place-list__item:hover {
-    background: var(--bg-subtle);
-  }
-  .travel-place-list__mosaic {
-    display: flex;
-    flex: none;
-    gap: 1px;
-    width: 72px;
-    height: 48px;
-    overflow: hidden;
-    border-radius: var(--radius-media);
-    background: var(--bg-media);
-  }
-  .travel-place-list__mosaic img {
-    min-width: 0;
-    flex: 1;
-    height: 100%;
-    object-fit: cover;
   }
 
   /* --- 时间轴：一条月格纹理带 ---
@@ -2623,9 +2580,6 @@ button:not(:disabled):active {
       /* 窄屏上地图是个大块：压扁一点，别把行程挤到屏幕外。 */
       aspect-ratio: 4 / 3;
       max-height: 46vh;
-    }
-    .travel-place-list {
-      max-height: min(42vh, 420px);
     }
   }
 

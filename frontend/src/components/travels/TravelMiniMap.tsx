@@ -26,7 +26,16 @@ interface TravelMiniMapProps {
   levelTotal: number;
   /** 这一层的说法。 */
   scopeLabel: string;
+  /**
+   * 地图范围。
+   *
+   * data 是裁到照片真正在的那一片；full 是整张地图，一个区划都不裁掉。
+   */
+  scope: MapScope;
 }
+
+/** 地图画到哪儿。 */
+export type MapScope = "data" | "full";
 
 /**
  * 地图：正文右栏的那一块。
@@ -35,8 +44,8 @@ interface TravelMiniMapProps {
  * 所以地图做成右栏里的一块，滚动时跟着：去过的地方按张数深浅着色，
  * 照片集中的位置泛出一点光。
  *
- * 这个尺寸下画不出行政区的细节，也不需要 —— 它是一眼扫过去的方位感，
- * 不是用来读图的，更不是用来点的。要去某个地方，从旁边的「地方」清单进。
+ * 两种范围：裁到照片真正在的那一片（默认，画面里全是去过的地方），
+ * 或者整张地图（一个区划都不裁掉，看得见省界的全貌）。
  */
 export default function TravelMiniMap({
   regions,
@@ -44,6 +53,7 @@ export default function TravelMiniMap({
   points,
   levelTotal,
   scopeLabel,
+  scope,
 }: TravelMiniMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -87,13 +97,28 @@ export default function TravelMiniMap({
   );
 
   const viewBox = useMemo(() => {
+    // 完整地图：整张铺在画面里，一个区划都不裁掉。取大的一边，内容
+    // 整个留下，多出来的一边留白。
+    if (scope === "full") {
+      return projection.viewBoxFor(
+        {
+          centerX: projection.worldWidth / 2,
+          centerY: projection.worldHeight / 2,
+          width: Math.max(
+            projection.worldWidth,
+            projection.worldHeight / aspect,
+          ),
+        },
+        aspect,
+      );
+    }
     if (!contentBounds) return projection.viewBox;
     // contain：内容整个留下。这个尺寸下宁可两边留白，也不要切掉
     // 最远的那几张照片。
     const viewport = photoViewport(projection, contentBounds, aspect, "contain");
     const height = viewport.width * aspect;
     return `${viewport.centerX - viewport.width / 2} ${viewport.centerY - height / 2} ${viewport.width} ${height}`;
-  }, [aspect, contentBounds, projection]);
+  }, [aspect, contentBounds, projection, scope]);
 
   // 屏幕像素 → 基坐标的比例。点按屏幕像素画，才不会在放大时糊成一坨。
   const scale = useMemo(() => {
@@ -154,13 +179,18 @@ export default function TravelMiniMap({
           viewBox={viewBox}
           preserveAspectRatio="xMidYMid meet"
         >
-          {/* 参照层：全国省界，只说明方位。 */}
+          {/* 参照层：全国省界，只说明方位。完整地图模式下它铺成底图，
+              整张地图才看得出国家的形状。 */}
           <g aria-hidden="true">
             {backdropPaths.map(({ region, path }) => (
               <path
                 key={`backdrop-${region.adcode}`}
                 d={path}
-                className="fill-none stroke-border-strong"
+                className={
+                  scope === "full"
+                    ? "travel-mini-map__base travel-mini-map__base--filled"
+                    : "travel-mini-map__base"
+                }
                 strokeWidth={1}
                 strokeLinejoin="round"
                 fillRule="evenodd"
@@ -168,7 +198,8 @@ export default function TravelMiniMap({
               />
             ))}
           </g>
-          {/* 去过的地方：按张数深浅。 */}
+          {/* 去过的地方：按张数深浅。没去过的在完整地图模式下铺成底色，
+              否则整张地图只剩几个色块，看不出这是哪儿。 */}
           <g aria-hidden="true">
             {paths.map(({ region, path }) => {
               const hasPhotos = region.photoCount > 0;
@@ -180,9 +211,12 @@ export default function TravelMiniMap({
                 <path
                   key={region.adcode}
                   d={path}
-                  className="fill-brand"
-                  fillOpacity={opacity}
-                  stroke="brand"
+                  className={
+                    hasPhotos
+                      ? "travel-mini-map__region"
+                      : "travel-mini-map__empty"
+                  }
+                  fillOpacity={hasPhotos ? opacity : undefined}
                   strokeWidth={1}
                   strokeLinejoin="round"
                   fillRule="evenodd"
