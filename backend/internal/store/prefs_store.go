@@ -284,6 +284,38 @@ func (s *PrefsStore) ClearHistory() error {
 	return s.commitLocked(next)
 }
 
+// DeleteHistory 删除指定相册的单条最近访问记录。
+func (s *PrefsStore) DeleteHistory(albumID string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.ensureLoaded(); err != nil {
+		return false, err
+	}
+	if !models.IsAlbumID(albumID) {
+		return false, errors.New("invalid history album id")
+	}
+
+	filtered := make([]models.HistoryEntry, 0, len(s.cached.History))
+	removed := false
+	for _, entry := range s.cached.History {
+		if entry.AlbumID == albumID {
+			removed = true
+			continue
+		}
+		filtered = append(filtered, entry)
+	}
+	if !removed {
+		return false, nil
+	}
+
+	next := clonePrefs(s.cached)
+	next.History = filtered
+	if err := s.commitLocked(next); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 // ---- 内部 ----
 
 // ensureLoaded 必须在已持锁时调用。

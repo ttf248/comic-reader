@@ -1,8 +1,24 @@
 import { Link } from "react-router-dom";
+import { useState } from "react";
 import type { CardData } from "../album/AlbumGrid";
+import ContextMenu, { type AnyMenuItem } from "../album/ContextMenu";
 import Cover from "../home/Cover";
-import { ChevronRightIcon } from "../common/Icon";
+import { ChevronRightIcon, TrashIcon } from "../common/Icon";
+import { decodeFavPath } from "../../utils/path";
 import { mediaCountLabel } from "../../utils/mediaCount";
+
+const REMOVE_HISTORY_ITEMS: AnyMenuItem[] = [
+  {
+    id: "remove-history",
+    label: "删除浏览记录",
+    icon: <TrashIcon size={12} />,
+  },
+];
+
+interface Props {
+  cards: CardData[];
+  onRemoveHistory?: (albumId: string) => void;
+}
 
 /**
  * 浏览足迹：把最近看过的相册排成一条时间线。
@@ -16,35 +32,67 @@ import { mediaCountLabel } from "../../utils/mediaCount";
  * 「刚才在做什么」的线索。漫画侧是「最近阅读」，那儿的进度与
  * 已读状态由封面与进度条承担，仍然用网格。
  */
-export default function FootprintTimeline({ cards }: { cards: CardData[] }) {
+export default function FootprintTimeline({ cards, onRemoveHistory }: Props) {
+  const [menu, setMenu] = useState<{
+    x: number;
+    y: number;
+    albumId: string;
+  } | null>(null);
+
   return (
-    <ol className="footprint">
-      {cards.map((card) => (
-        <li key={card.id} className="footprint__row">
-          <span className="footprint__stamp">{stamp(card.lastSeenAt)}</span>
-          <span className="footprint__node" aria-hidden="true" />
-          <Link to={card.to} className="footprint__item group/footprint">
-            <span className="footprint__print">
-              <Cover card={card} />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="footprint__title block truncate">
-                {card.displayTitle ?? card.title}
+    <>
+      <ol className="footprint">
+        {cards.map((card) => (
+          <li
+            key={card.id}
+            className="footprint__row"
+            onContextMenu={(event) => {
+              if (!onRemoveHistory) return;
+              event.preventDefault();
+              setMenu({
+                x: event.clientX,
+                y: event.clientY,
+                albumId: decodeFavPath(card.to),
+              });
+            }}
+          >
+            <span className="footprint__stamp">{stamp(card.lastSeenAt)}</span>
+            <span className="footprint__node" aria-hidden="true" />
+            <Link to={card.to} className="footprint__item group/footprint">
+              <span className="footprint__print">
+                <Cover card={card} />
               </span>
-            </span>
-            {/* 数量单独一列，右对齐：整列上下对齐，扫读时一眼看到
+              <span className="min-w-0 flex-1">
+                <span className="footprint__title block truncate">
+                  {card.displayTitle ?? card.title}
+                </span>
+              </span>
+              {/* 数量单独一列，右对齐：整列上下对齐，扫读时一眼看到
                 「看过的量」；压在名字下面就成了随手的一行小字。 */}
-            <span className="footprint__meta tabular-nums shrink-0">
-              {mediaCountLabel(card)}
-            </span>
-            <ChevronRightIcon
-              size={14}
-              className="shrink-0 text-fg-subtle opacity-0 transition-opacity group-hover/footprint:opacity-100"
-            />
-          </Link>
-        </li>
-      ))}
-    </ol>
+              <span className="footprint__meta tabular-nums shrink-0">
+                {mediaCountLabel(card)}
+              </span>
+              <ChevronRightIcon
+                size={14}
+                className="shrink-0 text-fg-subtle opacity-0 transition-opacity group-hover/footprint:opacity-100"
+              />
+            </Link>
+          </li>
+        ))}
+      </ol>
+      {menu && onRemoveHistory && (
+        <ContextMenu
+          x={menu.x}
+          y={menu.y}
+          items={REMOVE_HISTORY_ITEMS}
+          onClose={() => setMenu(null)}
+          onSelect={(id) => {
+            if (id === "remove-history") onRemoveHistory(menu.albumId);
+            setMenu(null);
+          }}
+        />
+      )}
+    </>
   );
 }
 

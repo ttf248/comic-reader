@@ -1,8 +1,11 @@
 import PageHeading from "../components/common/PageHeading";
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { useSearchStore } from "../store/searchStore";
 import { useUIStore } from "../store/uiStore";
+import { historyApi, type Prefs } from "../api/prefs";
+import { syncHistoryCache } from "../utils/historyCache";
 import { useHistoryCards } from "../hooks/useHistory";
 import { useImageActivities } from "../hooks/useImageActivity";
 import { useAppMode } from "../hooks/useAppMode";
@@ -23,7 +26,9 @@ import { cardMatchesQuery } from "../utils/libraryCard";
 // 最近访问：从后端 history 列表中读取。带阅读进度。
 export default function Recents() {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const viewMode = useUIStore((s) => s.viewMode);
+  const pushToast = useUIStore((s) => s.pushToast);
   const query = useSearchStore((s) => s.query);
   const sortBy = useSearchStore((s) => s.sortBy);
   const sortTouched = useSearchStore((s) => s.sortTouched);
@@ -39,6 +44,38 @@ export default function Recents() {
   // 访问历史按当前工作台收敛：照片侧只列照片相册。
   const { history, cards, resolvedCount, historyQuery, nodesQuery } =
     useHistoryCards(mode);
+
+  const removeHistory = useCallback(
+    (albumId: string) => {
+      void historyApi
+        .remove(albumId)
+        .then(() => {
+          const cached = queryClient.getQueryData<{
+            history: Prefs["history"];
+          }>(["history"]);
+          const current = cached?.history ?? history;
+          syncHistoryCache(
+            queryClient,
+            current.filter((entry) => entry.albumId !== albumId),
+          );
+          pushToast({
+            kind: "success",
+            message:
+              mode === "photo" ? "已删除最近浏览记录" : "已删除最近阅读记录",
+          });
+        })
+        .catch(() =>
+          pushToast({
+            kind: "error",
+            message:
+              mode === "photo"
+                ? "删除最近浏览记录失败，请稍后重试"
+                : "删除最近阅读记录失败，请稍后重试",
+          }),
+        );
+    },
+    [history, mode, pushToast, queryClient],
+  );
 
   const progressPaths = useMemo(
     () => cards.map((c) => decodeFavPath(c.to)).filter(Boolean),
@@ -253,9 +290,17 @@ export default function Recents() {
             {mode === "photo" ? (
               /* 照片侧按时间排：这一页问的是「我刚才在翻什么」，
                  网格把时间压到卡片角落的小字里，时间线才读得出来。 */
-              <FootprintTimeline cards={filtered} />
+              <FootprintTimeline
+                cards={filtered}
+                onRemoveHistory={removeHistory}
+              />
             ) : (
-              <AlbumGrid items={filtered} variant={viewMode} showLastSeen />
+              <AlbumGrid
+                items={filtered}
+                variant={viewMode}
+                showLastSeen
+                onRemoveHistory={removeHistory}
+              />
             )}
           </div>
         </section>

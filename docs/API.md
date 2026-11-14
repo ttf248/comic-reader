@@ -747,7 +747,8 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 - `GET /api/favorites`：返回 `{ "favorites": ["<resourceId>"] }`。
 - `POST /api/favorites`、`DELETE /api/favorites`：body 为 `{ "resourceId": "a_... | c_... | smart:<tag>" }`。
 - `POST /api/favorites/prune`：按当前资源目录移除已失效相册/集合 ID，返回 `{ "removed": ["<resourceId>"] }`，不访问 ID 对应的文件路径；智能标签保留。资源目录尚未完成首次加载时返回 `409`，不会删除收藏。
-- `GET /api/history`、`DELETE /api/history`。
+- `GET /api/history`、`DELETE /api/history` 清空全部最近访问记录。
+- `DELETE /api/history/:albumId` 幂等删除指定相册的最近访问记录，返回 `{ "ok": true, "removed": boolean }`；非法 ID 返回 `400 invalid_album_id`。
 - `POST /api/history`：body 为 `{ "albumId": "a_...", "name": "...", "imageCount": 42 }`。
 
 媒体活动使用复合标识：漫画阅读为 `albumId + mediaKind=image`，视频为

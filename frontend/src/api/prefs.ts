@@ -55,5 +55,10 @@ export const historyApi = {
       method: "POST",
       body: entry,
     }),
+  remove: (albumId: string) =>
+    api<{ ok: boolean; removed: boolean }>(
+      `/api/history/${encodeURIComponent(albumId)}`,
+      { method: "DELETE" },
+    ),
   clear: () => api<{ ok: boolean }>("/api/history", { method: "DELETE" }),
 };

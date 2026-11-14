@@ -171,6 +171,21 @@ func HistoryClearHandler(s *store.PrefsStore) fiber.Handler {
 	}
 }
 
+// HistoryDeleteHandler DELETE /api/history/:albumId 幂等删除单条最近访问记录。
+func HistoryDeleteHandler(s *store.PrefsStore) fiber.Handler {
+	return func(c *fiber.Ctx) error {
+		albumID := c.Params("albumId")
+		if !models.IsAlbumID(albumID) {
+			return writeError(c, fiber.StatusBadRequest, "invalid_album_id", "album id is invalid")
+		}
+		removed, err := s.DeleteHistory(albumID)
+		if err != nil {
+			return prefsInternalError(c)
+		}
+		return c.JSON(fiber.Map{"ok": true, "removed": removed})
+	}
+}
+
 // FavoritesPruneHandler POST /api/favorites/prune
 //
 // 移除当前资源目录中已不存在的收藏；智能标签保留，避免临时空标签丢失。

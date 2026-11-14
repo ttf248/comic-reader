@@ -19,6 +19,7 @@ import {
   InfoIcon,
   CheckIcon,
   RewindIcon,
+  TrashIcon,
 } from "../common/Icon";
 
 interface Props {
@@ -27,6 +28,7 @@ interface Props {
   y: number;
   onClose: () => void;
   onShowProperties: (id: string) => void;
+  onRemoveHistory?: (albumId: string) => void;
 }
 
 // 所有卡片的操作入口；仅展开时订阅操作依赖，网格和列表不再叠加两份菜单。
@@ -36,6 +38,7 @@ export default function AlbumContextMenu({
   y,
   onClose,
   onShowProperties,
+  onRemoveHistory,
 }: Props) {
   const actions = useAlbumActions(item);
   const { favorites, toggle } = useFavorites();
@@ -72,6 +75,16 @@ export default function AlbumContextMenu({
         label: `取消${copy.finishedLabel}`,
         icon: <RewindIcon size={12} />,
         disabled: !completed,
+      },
+    );
+  }
+  if (isAlbum && onRemoveHistory) {
+    items.push(
+      { id: "separator", separator: true },
+      {
+        id: "remove-history",
+        label: isComic ? "删除最近阅读记录" : "删除最近浏览记录",
+        icon: <TrashIcon size={12} />,
       },
     );
   }
@@ -175,7 +188,8 @@ export default function AlbumContextMenu({
               .catch(() => pushToast({ kind: "error", message: "标记失败" }));
             break;
           case "unmark-read":
-            void resetRead.mutateAsync({ albumId: resourceId })
+            void resetRead
+              .mutateAsync({ albumId: resourceId })
               .then(() =>
                 pushToast({
                   kind: "success",
@@ -184,6 +198,9 @@ export default function AlbumContextMenu({
                 }),
               )
               .catch(() => pushToast({ kind: "error", message: "重置失败" }));
+            break;
+          case "remove-history":
+            onRemoveHistory?.(resourceId);
             break;
         }
         onClose();

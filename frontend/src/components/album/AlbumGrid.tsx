@@ -31,6 +31,8 @@ interface Props {
   variant?: ViewMode;
   /** 把「上次 X · 看到 Y/Z」显示在每张卡上（仅 Recents 列表传 true） */
   showLastSeen?: boolean;
+  /** 在最近访问页的右键菜单中提供删除该条历史的操作。 */
+  onRemoveHistory?: (albumId: string) => void;
   /** 是否显示「新」角标（整页都是未读的列表关掉） */
   showUnreadBadge?: boolean;
   /**
@@ -79,6 +81,7 @@ export default function AlbumGrid({
   empty,
   variant = "grid",
   showLastSeen,
+  onRemoveHistory,
   showUnreadBadge = true,
   coverRatio,
   density = "default",
@@ -251,6 +254,7 @@ export default function AlbumGrid({
           item={menu.item}
           x={menu.x}
           y={menu.y}
+          onRemoveHistory={onRemoveHistory}
           onClose={() => setMenu(null)}
           onShowProperties={setPropertiesId}
         />

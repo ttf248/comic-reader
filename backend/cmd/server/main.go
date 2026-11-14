@@ -525,6 +525,7 @@ func main() {
 	api.Post("/favorites/prune", handlers.FavoritesPruneHandler(prefs, resourceCatalog))
 	api.Get("/history", handlers.HistoryListHandler(prefs))
 	api.Post("/history", handlers.HistoryAddHandler(prefs))
+	api.Delete("/history/:albumId", handlers.HistoryDeleteHandler(prefs))
 	api.Delete("/history", handlers.HistoryClearHandler(prefs))
 
 	// 照片级精选（与上面的相册级收藏是两份数据）
