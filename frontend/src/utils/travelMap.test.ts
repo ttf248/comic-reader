@@ -3,7 +3,6 @@ import type { ChinaLocationGeometry } from "../api/aiJobs";
 import {
   boundsOfPhotos,
   createMapProjection,
-  fillMonthRange,
   fitViewport,
   levelOpacity,
   monthBuckets,
@@ -243,19 +242,5 @@ describe("离线地图几何", () => {
     expect(monthIndex("2019-05")).toBe(monthIndex("2019-05"));
     expect(monthIndex("2020-05") - monthIndex("2019-05")).toBe(12);
     expect(monthKey(monthIndex("2019-05"))).toBe("2019-05");
-  });
-
-  it("空档的月份也要占位，否则稀疏的年份会被压扁", () => {
-    const filled = fillMonthRange([
-      { month: "2019-01", count: 3 },
-      { month: "2019-04", count: 2 },
-    ]);
-    expect(filled.map((entry) => entry.month)).toEqual([
-      "2019-01",
-      "2019-02",
-      "2019-03",
-      "2019-04",
-    ]);
-    expect(filled[1].count).toBe(0);
   });
 });

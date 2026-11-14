@@ -316,63 +316,43 @@ describe("足迹页", () => {
     });
   });
 
-  it("时间轴是一排月格，两端各有一个刷手", async () => {
+  it("跨度筛选并进抬头，排在规模信息的左边", async () => {
     renderPage();
 
-    const timeline = await screen.findByRole("region", { name: "时间轴" });
-    const handles = within(timeline).getAllByRole("slider");
-    expect(handles.length).toBe(2);
-    // 尺子是整条历史：2019-05 到 2021-06。
-    expect(handles[0].getAttribute("aria-valuetext")).toBe("2019-05");
-    expect(handles[1].getAttribute("aria-valuetext")).toBe("2021-06");
-
-    // 一格一个月：2019-05 到 2021-06 共 26 个月，空档的月份也占位。
-    const cells = timeline.querySelectorAll(".travel-timeline__cell");
-    expect(cells.length).toBe(26);
-
-    // 每段行程是格子上方的一颗钉。
+    const spans = await screen.findByRole("radiogroup", { name: "时间跨度" });
+    const stats = spans.closest(".travel-stats") as HTMLElement;
+    expect(stats).toBeTruthy();
+    // 筛选就在规模带里，排在主数字前面：范围在左，体量在右。
+    const scope = stats.querySelector(".travel-stats__scope") as HTMLElement;
+    expect(scope.contains(spans)).toBe(true);
+    const hero = stats.querySelector(".travel-stats__hero") as HTMLElement;
     expect(
-      within(timeline).getByRole("button", {
-        name: /2019-05-02 至 2019-05-05，4 天，6 张照片/,
-      }),
+      scope.compareDocumentPosition(hero) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+
+    // 月格带整块删了：这一页不再有「时间轴」这块东西。
+    expect(screen.queryByRole("region", { name: "时间轴" })).toBeNull();
   });
 
   it("时间跨度可以切换，默认是最近五年", async () => {
     renderPage();
 
-    const timeline = await screen.findByRole("region", { name: "时间轴" });
-    const spans = within(timeline).getByRole("radiogroup", { name: "时间跨度" });
+    const spans = await screen.findByRole("radiogroup", { name: "时间跨度" });
     // 缺省是最近五年：不用等全库的历史铺开。
     expect(within(spans).getByRole("radio", { name: "5年" }).getAttribute("aria-checked")).toBe("true");
-    // 夹具里的历史只有 26 个月，五年已经全罩住了。
-    expect(timeline.querySelectorAll(".travel-timeline__cell").length).toBe(26);
+    // 五年罩住了夹具里的两段行程。
+    await waitFor(() => {
+      expect(document.querySelectorAll(".travel-trips__year").length).toBe(2);
+    });
 
-    // 换成最近一年，就只剩十二个月。
+    // 换成最近一年，2019 年那一段落在范围外，行程目录只剩 2021。
     fireEvent.click(within(spans).getByRole("radio", { name: "1年" }));
 
     await waitFor(() => {
-      expect(
-        within(timeline).getAllByRole("slider")[0].getAttribute("aria-valuetext"),
-      ).toBe("2020-07");
+      expect(document.querySelectorAll(".travel-trips__year").length).toBe(1);
     });
-    expect(timeline.querySelectorAll(".travel-timeline__cell").length).toBe(12);
     // 跨度写进地址，刷新与分享都带着它。
     expect(screen.getByTestId("location-search").textContent).toContain("span=1y");
-  });
-
-  it("拖动刷手把时间区间写进地址", async () => {
-    renderPage();
-
-    const timeline = await screen.findByRole("region", { name: "时间轴" });
-    const handle = within(timeline).getAllByRole("slider")[0];
-    fireEvent.keyDown(handle, { key: "ArrowRight" });
-
-    await waitFor(() => {
-      expect(screen.getByTestId("location-search").textContent).toContain(
-        "from=2019-06",
-      );
-    });
   });
 
   it("行程按年份倒序，一段一张卡片", async () => {

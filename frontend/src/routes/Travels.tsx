@@ -4,8 +4,6 @@ import Segmented from "../components/common/Segmented";
 import TravelMiniMap from "../components/travels/TravelMiniMap";
 import type { MapScope } from "../components/travels/TravelMiniMap";
 import TravelStats from "../components/travels/TravelStats";
-import TravelTimeline from "../components/travels/TravelTimeline";
-import type { TravelSpan } from "../components/travels/TravelTimeline";
 import TravelTrips from "../components/travels/TravelTrips";
 import {
   useChinaFeatures,
@@ -30,11 +28,13 @@ function parseMonth(raw: string | null): string | null {
 }
 
 /**
- * 时间轴的跨度。
+ * 时间的跨度。
  *
  * 缺省是最近五年：十几年的历史一次铺开，格子会细到读不出来；想看更早
  * 的再按按钮。
  */
+type TravelSpan = "1y" | "3y" | "5y" | "10y" | "all";
+
 function parseSpan(raw: string | null): TravelSpan {
   return raw === "1y" || raw === "3y" || raw === "10y" || raw === "all"
     ? raw
@@ -61,10 +61,9 @@ const MINI_MAP_CELL = 0.2;
 /**
  * 足迹：我去过哪些地方，什么时候去的。
  *
- * 抬头只说两件事：这是哪个页面、这个库有多大。真正的内容分两栏：左边是
- * 一条按真实时间比例铺开的月格带（拖两端可以圈出一段时间）和这段时间
- * 里的行程；右边是地图，占着一条竖直的窄栏，滚动时一直跟着 ——
- * 去过的地方按张数深浅着色，照片真正的位置泛成一层光。
+ * 抬头一条带：左边是跨度筛选，中间是这个库有多大，右边是粒度。正文分两
+ * 栏：左边是这段时间里的行程，右边是地图，占着一条竖直的窄栏，滚动时一
+ * 直跟着 —— 去过的地方按张数深浅着色，照片真正的位置泛成一层光。
  */
 export default function Travels() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -77,8 +76,8 @@ export default function Travels() {
   // 地图画到哪儿：只看有数据的区域，还是整张地图。
   const [mapScope, setMapScope] = useState<MapScope>("data");
 
-  // 两份汇总：一份不带区间（时间轴要知道整条历史有多长，才画得出那把
-  // 尺子），一份带区间（数字台用）。
+  // 两份汇总：一份不带区间（跨度要锚在有照片的最后一月上，得知道整条历史
+  // 有多长），一份带区间（数字台用）。
   const wholeQuery = useChinaSummaryAll();
   const whole = wholeQuery.data;
 
@@ -124,28 +123,13 @@ export default function Travels() {
   const pointsQuery = useChinaPoints(timeRange, MINI_MAP_CELL);
   const points = useMemo(() => pointsQuery.data?.items ?? [], [pointsQuery.data]);
 
-  const setRange = useCallback(
-    (nextFrom: string | null, nextTo: string | null) => {
-      const next = new URLSearchParams(searchParams);
-      if (nextFrom && nextTo) {
-        next.set("from", nextFrom);
-        next.set("to", nextTo);
-      } else {
-        next.delete("from");
-        next.delete("to");
-      }
-      setSearchParams(next, { replace: true });
-    },
-    [searchParams, setSearchParams],
-  );
-
   const setSpan = useCallback(
     (next: TravelSpan) => {
       const nextParams = new URLSearchParams(searchParams);
       // 缺省就是最近五年，不写进地址。
       if (next === "5y") nextParams.delete("span");
       else nextParams.set("span", next);
-      // 换跨度等于换了一个范围：刷手圈出的区间留在里面会打架。
+      // 换跨度等于换了一个范围：地址里带着的区间留在里面会打架。
       nextParams.delete("from");
       nextParams.delete("to");
       setSearchParams(nextParams, { replace: true });
@@ -260,14 +244,28 @@ export default function Travels() {
               有一个标题，否则读屏用户进来时不知道自己在哪。 */}
           <h1 className="sr-only">足迹</h1>
           <div className="travel-head">
-            {/* 规模：说的是这个库的事实，不随区间变。 */}
+            {/* 规模带：说的是这个库的事实，不随区间变。跨度筛选排在最左边
+                —— 它管的是范围，规模管的是体量，两件事并成一行。 */}
             <TravelStats
               totalPhotos={whole?.totalPhotoCount ?? null}
               gpsPhotos={whole?.gpsPhotoCount ?? 0}
               provinces={whole?.provinceCount ?? 0}
               cities={whole?.cityCount ?? 0}
               untimed={untimedCount}
-            />
+            >
+              <Segmented
+                label="时间跨度"
+                value={span}
+                onChange={setSpan}
+                options={[
+                  { value: "1y", label: "1年" },
+                  { value: "3y", label: "3年" },
+                  { value: "5y", label: "5年" },
+                  { value: "10y", label: "10年" },
+                  { value: "all", label: "全部" },
+                ]}
+              />
+            </TravelStats>
 
             {/* 粒度是整页的：地图上的区划与行程的切法都跟着它变。 */}
             <div className="travel-head__actions">
@@ -308,22 +306,6 @@ export default function Travels() {
       ) : null}
 
       <div className="page-bleed travel-layout">
-        <div className="travel-layout__timeline">
-          {whole ? (
-            <TravelTimeline
-              months={whole.months}
-              trips={windowTrips}
-              span={span}
-              from={from}
-              to={to}
-              onChange={setRange}
-              onChangeSpan={setSpan}
-              onSelectTrip={(trip) => selectTrip(trip.id)}
-              selectedTripId={selectedTripId}
-            />
-          ) : null}
-        </div>
-
         {/* 地图占着右栏，滚动时一直跟着 —— 读行程的时候手边得有个方位。 */}
         <aside className="travel-layout__aside">
           <div className="travel-aside__bar">

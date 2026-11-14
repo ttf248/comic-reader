@@ -539,28 +539,6 @@ export function monthKey(index: number): string {
   return `${String(year).padStart(4, "0")}-${String(value).padStart(2, "0")}`;
 }
 
-/**
- * 补齐两个月之间的空档。
- *
- * 逐月分布里只有有照片的月份。时间带按真实时间比例铺开，缺一个月的位置
- * 就会让后面的月份整体前移 —— 稀疏的那几年会被压扁，看不出那几年其实
- * 没怎么出门。
- */
-export function fillMonthRange(months: MonthCount[]): MonthCount[] {
-  const known = new Map(months.map((entry) => [entry.month, entry.count]));
-  const keys = [...known.keys()].filter((key) => Number.isFinite(monthIndex(key)));
-  if (keys.length === 0) return [];
-  const indexes = keys.map(monthIndex).sort((left, right) => left - right);
-  const first = indexes[0];
-  const last = indexes[indexes.length - 1];
-  const filled: MonthCount[] = [];
-  for (let index = first; index <= last; index += 1) {
-    const key = monthKey(index);
-    filled.push({ month: key, count: known.get(key) ?? 0 });
-  }
-  return filled;
-}
-
 function polygonArea(ring: ChinaLocationPoint[]): number {
   let sum = 0;
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i, i += 1) {

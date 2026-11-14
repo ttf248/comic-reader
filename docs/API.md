@@ -454,7 +454,7 @@ LAN 模式下未认证响应只包含 `status` 与 `accessMode`，避免公开�
 
 - `months`：当前区间内的逐月分布，每项为 `{ "month": "2024-06", "count": 123 }`，按月份升序；
 - `trajectory`：当前区间内的停靠序列，每项为 `{ "at", "until", "adcode", "name", "photoCount" }`（`at`/`until` 是该段首尾照片的拍摄日期）。停靠点只给区划码与名称，不含照片坐标；
-- `untimedPhotoCount`：有位置但拍摄时间不可信（解析不出、年份早于 1990 或晚于当下）的照片数。这些照片照常计入空间统计，但不进时间轴、轨迹与到访。
+- `untimedPhotoCount`：有位置但拍摄时间不可信（解析不出、年份早于 1990 或晚于当下）的照片数。这些照片照常计入空间统计，但不进逐月分布、轨迹与到访。
 
 ### `GET /api/locations/china/regions/:adcode`
 
