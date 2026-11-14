@@ -19,7 +19,8 @@ test("侧栏的足迹入口打开的是新的地点页", async ({ page }) => {
 
   await page.getByRole("link", { name: "足迹" }).click();
   await expect(page).toHaveURL(/\/photo\/travels$/);
-  await expect(page.getByRole("heading", { name: "足迹" })).toBeVisible();
+  // 页面名不再显示在内容区，进来看到的是时间轴与地图。
+  await expect(page.getByRole("region", { name: "时间轴" })).toBeVisible();
 });
 
 test("地图在正文右栏，照片位置画成点云", async ({ page }) => {

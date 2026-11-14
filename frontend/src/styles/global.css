@@ -1881,44 +1881,25 @@ button:not(:disabled):active {
      足迹页：数字台、时间轴、地点卡、行程、紧凑地图
      ========================================================== */
 
-  /* --- 抬头：左边标题，右边规模 ---
+  /* --- 抬头：一行规模带，一行控件 ---
      地图不在抬头里了：它升格成正文右栏的一块，随页面滚动一直跟着。
-     抬头于是只剩两件事 —— 这是哪个页面、这个库有多大。
-     眉标、标题、规模、控件各占一格，不必再套一层 div。 */
+     抬头于是只剩两件事 —— 这个库有多大、按哪一层归并。页面叫什么由侧栏
+     那一项说明，不必在内容区再写一遍。 */
   .travel-head {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    grid-template-areas:
-      "eyebrow stats"
-      "title   stats"
-      "actions actions";
-    align-items: end;
-    row-gap: 6px;
+    align-items: center;
     column-gap: clamp(20px, 3vw, 44px);
-    padding-block: 20px 18px;
-  }
-  .travel-head .page-eyebrow {
-    grid-area: eyebrow;
-  }
-  .travel-head__title {
-    grid-area: title;
-    font-family: var(--font-display);
-    font-size: clamp(24px, 2.2vw, 30px);
-    line-height: 1.2;
-    font-weight: 600;
-    letter-spacing: -0.02em;
-    color: var(--fg);
+    padding-block: 16px;
   }
 
   /* --- 规模条：一个主数字 + 一句补充 ---
      一排同样大小的数字读不出主次；主数字（全库照片总数）是分母，
      其余是从这个分母里分出来的说法。 */
   .travel-stats {
-    grid-area: stats;
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
-    justify-content: flex-end;
     gap: 6px 20px;
   }
   .travel-stats__hero {
@@ -1955,12 +1936,11 @@ button:not(:disabled):active {
     font-variant-numeric: tabular-nums;
   }
   .travel-head__actions {
-    grid-area: actions;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 10px;
-    margin-top: 8px;
+    justify-self: end;
   }
 
   /* --- 正文分栏：左时间轴与行程，右地图 ---
@@ -2567,19 +2547,14 @@ button:not(:disabled):active {
   }
 
   @media (max-width: 1023px) {
-    /* 窄屏上抬头变一栏：规模跟在标题下面，粒度控件在最后。 */
+    /* 窄屏上抬头变一栏：规模在上，粒度控件在下。 */
     .travel-head {
       grid-template-columns: minmax(0, 1fr);
-      grid-template-areas:
-        "eyebrow"
-        "title"
-        "stats"
-        "actions";
-      row-gap: 6px;
+      row-gap: 12px;
       column-gap: 16px;
     }
-    .travel-stats {
-      justify-content: flex-start;
+    .travel-head__actions {
+      justify-self: start;
     }
     /* 正文也变一栏：地图夹在时间轴与行程之间，不再钉在边上。 */
     .travel-layout {

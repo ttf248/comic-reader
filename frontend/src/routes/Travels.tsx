@@ -256,10 +256,10 @@ export default function Travels() {
     <div className="h-full overflow-y-auto pb-12">
       <header className="border-b border-border-faint bg-bg">
         <div className="page-bleed">
+          {/* 页面名不再显示在内容区（侧栏那一项已经说明了），但这一页仍要
+              有一个标题，否则读屏用户进来时不知道自己在哪。 */}
+          <h1 className="sr-only">足迹</h1>
           <div className="travel-head">
-            <p className="page-eyebrow">离线解析</p>
-            <h1 className="travel-head__title">足迹</h1>
-
             {/* 规模：说的是这个库的事实，不随区间变。 */}
             <TravelStats
               totalPhotos={whole?.totalPhotoCount ?? null}
