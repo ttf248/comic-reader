@@ -308,7 +308,9 @@ func estimateMedianRate(samples []aiEstimateSample, version string) (rate float6
 		return 0, 0, 0
 	}
 	layers := []func(aiEstimateSample) bool{
-		func(s aiEstimateSample) bool { return s.moduleVersion == version && s.images >= aiEstimateMinSampleImages },
+		func(s aiEstimateSample) bool {
+			return s.moduleVersion == version && s.images >= aiEstimateMinSampleImages
+		},
 		func(s aiEstimateSample) bool { return s.moduleVersion == version },
 		func(s aiEstimateSample) bool { return s.images >= aiEstimateMinSampleImages },
 		func(aiEstimateSample) bool { return true },
