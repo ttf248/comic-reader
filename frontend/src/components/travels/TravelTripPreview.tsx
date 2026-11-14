@@ -18,11 +18,11 @@ interface TravelTripPreviewProps {
   backdrop?: MapRegion[];
 }
 
-/** 预览图的画布宽（高按 160/300 的比例）。 */
-const CANVAS_WIDTH = 300;
+/** 预览图的画布宽。 */
+const CANVAS_WIDTH = 420;
 
 /** 预览图的画布高。 */
-const CANVAS_HEIGHT = 160;
+const CANVAS_HEIGHT = 220;
 
 /**
  * 只有一个停留点时的最小视野。
@@ -98,7 +98,10 @@ export default function TravelTripPreview({
     [projection, stopRegions],
   );
 
-  // 视野：把这一段的落点整个装进画布，四周留出标记的余量。
+  // 视野：把这一段的落点与轮廓整个装进画布，四周留出标记的余量。
+  //
+  // 只按落点算视野是不够的 —— 一个省的轮廓比它的重心大得多，按落点裁
+  // 会把边缘切掉一半，地图看着像缺了一块。轮廓与落点一起算，才看得全。
   const view = useMemo(() => {
     const points = anchors.filter((point): point is [number, number] => point !== null);
     if (points.length === 0) return null;
@@ -106,11 +109,25 @@ export default function TravelTripPreview({
     let maxX = Number.NEGATIVE_INFINITY;
     let minY = Number.POSITIVE_INFINITY;
     let maxY = Number.NEGATIVE_INFINITY;
-    for (const [x, y] of points) {
+    const grow = (x: number, y: number) => {
       minX = Math.min(minX, x);
       maxX = Math.max(maxX, x);
       minY = Math.min(minY, y);
       maxY = Math.max(maxY, y);
+    };
+    for (const [x, y] of points) grow(x, y);
+    // 轮廓的每个顶点都要在画面里。
+    for (const region of stopRegions) {
+      if (!region?.geometry) continue;
+      for (const polygon of geometryPolygons(region.geometry)) {
+        if (polygonMaximumLatitude(polygon) < MIN_RENDER_LATITUDE) continue;
+        for (const ring of polygon) {
+          for (const point of ring) {
+            const [x, y] = projection.project(point);
+            grow(x, y);
+          }
+        }
+      }
     }
     const contentWidth = Math.max(maxX - minX, MIN_WORLD_WIDTH);
     const contentHeight = Math.max(maxY - minY, MIN_WORLD_WIDTH);
@@ -127,7 +144,7 @@ export default function TravelTripPreview({
       top: (minY + maxY) / 2 - viewHeight / 2,
       unit,
     };
-  }, [anchors]);
+  }, [anchors, projection, stopRegions]);
 
   /** 基坐标 → 画布坐标。 */
   const toCanvas = useMemo(() => {

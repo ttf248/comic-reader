@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChinaTrip } from "../../api/aiJobs";
 import { useChinaTripMedia } from "../../hooks/useChinaLocations";
 import { usePicks } from "../../hooks/usePicks";
@@ -35,6 +35,14 @@ interface TravelTripsProps {
  * 摆前几个，末尾报一句「还有 N 处」；展开时整条地点链都摆出来。
  */
 const MAX_STOPS = 4;
+
+/**
+ * 浮层往下展开时至少要留出的高度。
+ *
+ * 浮层有一张地图加一张站点表，比卡片高得多。卡片靠下时往下展开会掉出
+ * 视口 —— 那时候翻到卡片上方去。
+ */
+const PREVIEW_MIN_SPACE = 460;
 
 /**
  * 行程目录：按时间倒序读的一段段行程。
@@ -141,9 +149,22 @@ function TravelTripCard({
 }: TravelTripCardProps) {
   const [viewerResourceId, setViewerResourceId] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewAbove, setPreviewAbove] = useState(false);
+  const cardRef = useRef<HTMLElement | null>(null);
   const density = usePhotoStore((state) => state.density);
   const picks = usePicks();
   const pushToast = useUIStore((state) => state.pushToast);
+
+  // 浮层往下展开还是往上翻：卡片靠下时往下会掉出视口。
+  const openPreview = () => {
+    const element = cardRef.current;
+    if (element) {
+      const rect = element.getBoundingClientRect();
+      const below = window.innerHeight - rect.bottom;
+      setPreviewAbove(below < PREVIEW_MIN_SPACE && rect.top > below);
+    }
+    setPreviewOpen(true);
+  };
 
   // 只有这一段被展开或被点开时才去取照片。
   //
@@ -185,11 +206,12 @@ function TravelTripCard({
   return (
     <section
       className="travel-trip-card"
+      ref={cardRef}
       data-selected={selected ? "true" : undefined}
       aria-label={`${trip.startedAt} 至 ${trip.endedAt}`}
-      onMouseEnter={() => setPreviewOpen(true)}
+      onMouseEnter={openPreview}
       onMouseLeave={() => setPreviewOpen(false)}
-      onFocus={() => setPreviewOpen(true)}
+      onFocus={openPreview}
       onBlur={(event) => {
         // 焦点还在这张卡里就别收：地点链上的按钮挨个 Tab 时预览要留着。
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
@@ -255,7 +277,11 @@ function TravelTripCard({
       {/* 悬停时浮出来的轨迹图：这一段按次序走过哪些地方。 */}
       {previewOpen ? (
         <div
-          className="travel-trip-card__preview"
+          className={
+            previewAbove
+              ? "travel-trip-card__preview travel-trip-card__preview--above"
+              : "travel-trip-card__preview"
+          }
           role="group"
           aria-label="这一段的行程轨迹"
         >

@@ -124,6 +124,11 @@ test("悬停一段行程，浮出带箭头的轨迹图", async ({ page }) => {
 
   const preview = page.locator(".travel-trip-card__preview");
   await expect(preview).toBeVisible();
+  // 浮层要够大：地图得看得全。
+  const box = await preview.boundingBox();
+  expect(box!.width).toBeGreaterThanOrEqual(400);
+  const map = await preview.locator(".travel-preview__map").boundingBox();
+  expect(map!.width).toBeGreaterThanOrEqual(380);
   // 临时库里那一段是杭州 → 上海：两站、一段轨迹、一个箭头。
   await expect(preview.locator(".travel-preview__step")).toHaveCount(2);
   await expect(preview.locator(".travel-preview__route")).toHaveCount(1);

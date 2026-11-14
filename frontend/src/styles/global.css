@@ -2501,13 +2501,29 @@ button:not(:disabled):active {
     top: calc(100% + 6px);
     left: 0;
     z-index: 30;
-    width: min(340px, 100%);
-    padding: 10px 12px 12px;
+    width: min(460px, 100%);
+    padding: 12px 14px 14px;
     border: 1px solid var(--border);
     border-radius: var(--radius-tile);
     background: var(--bg-elevated);
     box-shadow: var(--shadow-lg);
     pointer-events: none;
+  }
+  /* 两栏排布时，右栏那张卡片的浮层往右顶齐：浮层比卡片宽，不顶齐就会
+     伸出行列，把页面撑出横向滚动条。 */
+  @media (min-width: 640px) {
+    .travel-trip-card__preview {
+      width: 460px;
+    }
+    .travel-trips__list > li:nth-child(even) .travel-trip-card__preview {
+      right: 0;
+      left: auto;
+    }
+  }
+  /* 卡片靠下时浮层往上翻，别掉出视口。 */
+  .travel-trip-card__preview--above {
+    top: auto;
+    bottom: calc(100% + 6px);
   }
   .travel-preview__map {
     display: block;
