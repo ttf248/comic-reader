@@ -257,10 +257,8 @@ export default function Travels() {
       <header className="border-b border-border-faint bg-bg">
         <div className="page-bleed">
           <div className="travel-head">
-            <div className="min-w-0">
-              <p className="page-eyebrow">离线解析</p>
-              <h1 className="travel-head__title">足迹</h1>
-            </div>
+            <p className="page-eyebrow">离线解析</p>
+            <h1 className="travel-head__title">足迹</h1>
 
             {/* 规模：说的是这个库的事实，不随区间变。 */}
             <TravelStats
